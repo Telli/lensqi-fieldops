@@ -1,42 +1,28 @@
-# LensQi FieldOps — Vendor Knowledge & Diagnostic Adapters
+# LensQi FieldOps
 
-**Kiro-style implementation add-on** for the LensQi FieldOps / FieldProof Engine v1.1 public hackathon project. Prepared October 27, 2026. **These are specifications and example data, not an implemented app feature.**
+**See the problem. Prove the solution.** A visual AI agent for field technicians that turns observations of physical
+equipment into traceable, verified maintenance outcomes. Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
 
-## What it adds
+The agent (Muse Spark 1.3) proposes hypotheses, evidence requests and pre-registered predictions; SAM 3.1 localizes the
+cited region; code owns every state transition and the fail-closed dual-proof verification gate. A repair is **Verified
+Complete** only when fresh post-repair visual evidence and an independent read-only diagnostic agree and a technician
+acknowledges. Documentation guides the investigation; it is never evidence that a repair succeeded.
 
-- **Vendor Knowledge Packs:** exact manufacturer/product-code applicability, firmware and revision limitations, short paraphrased fact cards, source URLs, section locators, version/digest provenance.
-- **Grounded AI troubleshooting:** Muse Spark receives only applicable curated source facts and site-specific expected state, and proposes **approved** evidence requests or diagnostics.
-- **Safe diagnostics:** existing fixture-bound HTTP health/simulation probe plus an **optional, future** MikroTik RouterOS v7 read-only REST GET adapter.
-- **Predict, then measure:** before any approved diagnostic runs, Muse must pre-register a falsifiable prediction from a closed value set; Core scores it against the measurement. SAM 3.1 segments the cited region before and after the repair so Core can reject re-submitted or unchanged photos without trusting prose.
-- **Traceable verification:** parent FieldProof engine owns state transitions; documentation and link status never replace post-repair visual evidence, independent diagnostics or technician acknowledgement.
+**Status (2026-10-28):** specifications complete; vendor-knowledge layer and Muse client implemented with 68 passing tests;
+Stage One gate passed with genuine Meta model calls (`docs/evidence/`). Inspection state machine, SAM, probes,
+verification and receipts are in progress per `.kiro/specs/lensqi-fieldops/tasks.md`.
 
-## Files to copy into the new public repository
+## Read first
 
-```text
-.kiro/specs/vendor-knowledge-and-diagnostics/
-  requirements.md             # EARS-style stories, mandatory cases, acceptance criteria
-  design.md                   # architecture, C# contracts, API proposal, policy boundaries
-  tasks.md                    # dependency-ordered P0/P1/P2 coding checklist
-fixtures/vendor-knowledge/
-  knowledge-pack.schema.json  # normative v1 JSON Schema for packs
-  fixture-binding.schema.json # normative v1 JSON Schema for the site fixture overlay
-  lab-switch-01.synthetic.json
-  mikrotik-hex-s-rb760igs.routeros7.json
-  fixture-binding-example.json
-scripts/
-  validate_vendor_packs.py          # validator: schemas + cross-reference invariants + binding
-  test_sample_pack_constraints.py   # 19 negative cases the runtime loader must also reject
-  requirements.txt                  # Python jsonschema dependency
-docs/
-  CODEX_VENDOR_KNOWLEDGE.md
-  SOURCES_AND_RIGHTS.md
-  INTEGRATION_NOTES.md
-  SPEC_REVIEW_2026-10-27.md   # review findings, fixes applied, suggested features
-  HACKATHON_FIT_ASSESSMENT.md # fit against the participant guide, frontier features, demo sequence
-  LENSIQ_REUSE_ASSESSMENT.md  # what may be imported from the private monorepo and how to label it
-```
-
-This checkout **is** the public repository <https://github.com/Telli/lensqi-fieldops>. The parent FieldOps v1.1 specs under `.kiro/specs/lensqi-fieldops/` are not yet present here and must be added alongside this spec, not in place of it. Do not import LensIQ domain code; one labeled infrastructure-scaffolding import commit is permitted (see `docs/LENSIQ_REUSE_ASSESSMENT.md` and `docs/SOURCES_AND_RIGHTS.md`).
+| Document | Purpose |
+|---|---|
+| [PRD.md](PRD.md) | Product requirements v1.1: scope, state machine, trust invariants, schedule |
+| [.kiro/specs/lensqi-fieldops/](.kiro/specs/lensqi-fieldops/) | Parent spec: requirements, design, day-by-day tasks |
+| [.kiro/specs/vendor-knowledge-and-diagnostics/](.kiro/specs/vendor-knowledge-and-diagnostics/) | Child spec: vendor knowledge packs, grounded proposals, predictions, change evidence |
+| [docs/HACKATHON_CONTRIBUTIONS.md](docs/HACKATHON_CONTRIBUTIONS.md) | Event-period work ledger, commit by commit |
+| [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Provenance: no private source copied; third-party inputs |
+| [docs/DEMO_AND_EVALUATION.md](docs/DEMO_AND_EVALUATION.md) | Three-minute demo story and benchmark plan |
+| [docs/evidence/](docs/evidence/) | Recorded genuine Meta model calls with digests |
 
 ## Build and test
 
@@ -48,34 +34,54 @@ dotnet test --nologo
 dotnet run --project src/LensQi.FieldOps.Api
 ```
 
-The API loads every pack under `fixtures/vendor-knowledge/` at startup and refuses to start if any pack or binding is invalid. `GET /api/vendors/knowledge-packs` lists installed packs with their byte-exact SHA-256. Implemented so far: VK-T01–VK-T04 (schema loader, digests, exact applicability, bounded resolution); see `tasks.md` for the live checklist.
+The API loads every knowledge pack under `fixtures/vendor-knowledge/` at startup and refuses to start if any pack or
+binding is invalid. `GET /api/vendors/knowledge-packs` lists installed packs with byte-exact SHA-256.
 
-## Start here
-
-1. Read `.kiro/specs/vendor-knowledge-and-diagnostics/requirements.md`.
-2. Read `.kiro/specs/vendor-knowledge-and-diagnostics/design.md` and confirm types against the currently implemented FieldProof code.
-3. Implement tasks in `tasks.md` in order, starting with schema+asset applicability and ending with live device adapters **only if** the core demo is already sound.
-4. Optionally validate example JSON:
+Fixture validators (Python 3.10+):
 
 ```bash
 python -m pip install -r scripts/requirements.txt
-python scripts/validate_vendor_packs.py
-python scripts/test_sample_pack_constraints.py
 ```
 
-## Scope of the two example packs
+```bash
+python scripts/validate_expected_twin.py && python scripts/validate_vendor_packs.py
+```
 
-- `lab-switch-01.synthetic.json` is **original synthetic test material**, designed to match the fictional `LAB-RACK-01` fixture from the FieldOps v1.1 Kiro kit. Its source URL is null and its claims are not about real hardware.
-- `mikrotik-hex-s-rb760igs.routeros7.json` is a **vendor-linked reference** using public, official MikroTik URLs and concise paraphrases. It **does not** enable a live RouterOS device connection; real model/firmware and administrative permissions must be confirmed independently.
+```bash
+python scripts/test_expected_twin_constraints.py && python scripts/test_sample_pack_constraints.py
+```
+
+## Meta model calls
+
+Copy `.env.example` to `.env` and set `MODEL_API_KEY` (the file is gitignored; the key is never accepted from a request).
+Then run the Stage One gate, which makes two genuine `muse-spark-1.3` structured-output calls grounded in the synthetic
+pack, validates them server-side, and writes an evidence record:
+
+```bash
+dotnet run --project tools/LensQi.FieldOps.StageOneGate
+```
+
+## Layout
+
+```text
+src/LensQi.FieldOps.Core         pure contracts, applicability, resolver, proposal validation (no provider deps)
+src/LensQi.FieldOps.Api          minimal API, pack loader, startup validation
+src/LensQi.FieldOps.Meta         MuseSparkChatClient, grounding composer, proposal service (SAM adapter next)
+src/LensQi.FieldOps.Diagnostics  allowlisted read-only probes (in progress)
+tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner
+fixtures/telecom-lab             expected twin + schema (synthetic LAB-RACK-01)
+fixtures/vendor-knowledge        knowledge packs, schemas, fixture binding
+scripts/                         fixture validators and negative tests
+```
 
 ## Non-negotiable claims
 
-- `running=true` on an interface is a specific measured link-state report, not proof of correct cabling or application reachability.
-- Documentation citations are not evidence that physical equipment was repaired.
-- A JSON/SHA-256 receipt detects tampering **within its included artifact bundle**, not fabrication of the original observation.
-- Never treat simulated/replay data as `VerifiedCompleteLive`.
-- Model API calls and hardware actions have **not** been executed to create these specifications.
+- `running=true` on an interface or HTTP 200 from an endpoint is a specific measured result, not proof of correct cabling.
+- Documentation citations and model predictions are not evidence that physical equipment was repaired.
+- A SHA-256 receipt detects tampering within its bundle, not fabrication of the original observation.
+- Simulated or replayed data is never labelled `VerifiedCompleteLive`.
 
-## Integration strategy
+## Provenance
 
-P0 is a compact extension: one knowledge resolver, one versioned schema/pack registry, a few typed fields on an inspection event, and citation display in the existing Android screen/receipt. A separate database or multi-agent runtime is unnecessary. Keep the main false-repair verification demonstration on schedule for November 4.
+New public repository created during the event. No source from the private `Telli/LensIQ-Monorepo` is copied
+(PRD §4A, `docs/SOURCES_AND_RIGHTS.md`, `docs/COMPONENT_REUSE.md`). Licensed under AGPL-3.0-only.

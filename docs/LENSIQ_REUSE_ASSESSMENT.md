@@ -44,8 +44,8 @@ That is good news under the hackathon rules. Everything judges will look at in F
 - **One import commit.** Land every Tier 1 file in a single first commit titled along the lines of "Import pre-existing infrastructure scaffolding from LensIQ (not hackathon work)", before any feature commit. Judges then have one SHA to exclude, and `git log --since` shows only hackathon work after it.
 - **Header on every imported file.** Two lines: origin repository and date, plus "infrastructure only; adapted". Keep imported files in `tests/Fixtures/`, `Shared/`, `.github/` so the separation is visible in the tree, not only in a document.
 - **Never in the video.** Test fixtures and CI are not demo material anyway.
-- **Kit policy.** `docs/CODEX_VENDOR_KNOWLEDGE.md` and `docs/SOURCES_AND_RIGHTS.md` now state this rule: infrastructure scaffolding may be imported in one labeled commit; all domain code is new. This document is the allow and deny list those policies point to.
+- **Policy (reverted October 28, 2026).** The PRD (§4A) and `docs/COMPONENT_REUSE.md` forbid copying any pre-event private source until the indie-track rule is clarified in writing. That stance is adopted; the one-labelled-import-commit allowance proposed here on October 27 is withdrawn. Nothing was imported. This document stays as the record of what would be eligible if the rule is clarified, and of what must never be reused. The useful utilities were reimplemented fresh in this repository.
 
-## 6. Net effect
+## 6. Net effect (historical)
 
-Importing Tier 1 saves roughly one working day and removes the two classes of early-hackathon failure that waste the most time: a flaky test database and a hand-rolled fake model client. It adds no judging risk if the import is a single labeled commit. Everything that scores, from the knowledge resolver to predictions, change evidence and receipts, is written during the event.
+Importing Tier 1 would have saved roughly one working day and removes the two classes of early-hackathon failure that waste the most time: a flaky test database and a hand-rolled fake model client. It adds no judging risk if the import is a single labeled commit. Everything that scores, from the knowledge resolver to predictions, change evidence and receipts, is written during the event.

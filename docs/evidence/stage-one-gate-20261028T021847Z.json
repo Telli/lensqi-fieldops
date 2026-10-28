@@ -1,0 +1,93 @@
+{
+  "kind": "stage-one-gate",
+  "recordedAtUtc": "2026-10-28T02:18:47.354916+00:00",
+  "apiBase": "https://api.meta.ai/v1/",
+  "model": "muse-spark-1.3",
+  "reasoningEffort": "low",
+  "maxOutputTokens": 6000,
+  "pack": {
+    "packId": "lab-switch-01.synthetic",
+    "packSha256": "f61d928056adcf26ebd68efd8dd6a8c73f74eb2a4c13a583470c016e17b74251",
+    "packRevision": 1
+  },
+  "binding": {
+    "fixtureId": "LAB-RACK-01",
+    "assetId": "LAB-SW-01",
+    "approvedDiagnostics": [
+      "NODE-A-HEALTH"
+    ]
+  },
+  "applicableFactIds": [
+    "LAB-PORT-MAP-01",
+    "LAB-HEALTH-CHECK-01",
+    "LAB-CLAIM-BOUNDARY-01"
+  ],
+  "systemPromptSha256": "6e6ffb42865b3bfc061e382b89e18afb6c1a21cc755c7df3a731940d9ac12609",
+  "scenarios": [
+    {
+      "scenario": "occluded-port-labels",
+      "observation": "Technician photographed the front of LAB-SW-01 in LAB-RACK-01. A single yellow patch cable is plugged into one of the lower connectors, but the printed labels P1, P2 and P3 are partly hidden behind a cable tie, so the occupied port cannot be read. No repair has been performed yet.",
+      "modelId": "muse-spark-1.3",
+      "promptSha256": "9632a83a1e2882bf933131a63f60d33d71f030a22e0955d787a5cee4f7832cac",
+      "responseSha256": "55e2b1326b91b6d56a7000c2d841b7be9499dfc8416276fc3147dbc5b2839af1",
+      "usage": {
+        "input": 1417,
+        "output": 856,
+        "reasoning": 734
+      },
+      "accepted": true,
+      "proposal": {
+        "assetId": "LAB-SW-01",
+        "usedFactIds": [
+          "LAB-PORT-MAP-01"
+        ],
+        "hypothesis": "The yellow cable is expected in P2, but the P1, P2 and P3 labels are obscured so the occupied port cannot be confirmed.",
+        "requestedVisualEvidence": "Capture a straight-on close-up photo of the front of LAB-SW-01 showing the yellow cable connector and the printed P1, P2 and P3 labels clearly readable.",
+        "proposedDiagnosticId": null,
+        "nextAction": 0,
+        "prediction": null
+      },
+      "rejections": [],
+      "parseError": null,
+      "rawResponse": "{\u0022assetId\u0022:\u0022LAB-SW-01\u0022,\u0022hypothesis\u0022:\u0022The yellow cable is expected in P2, but the P1, P2 and P3 labels are obscured so the occupied port cannot be confirmed.\u0022,\u0022nextAction\u0022:\u0022RequestView\u0022,\u0022prediction\u0022:null,\u0022proposedDiagnosticId\u0022:null,\u0022requestedVisualEvidence\u0022:\u0022Capture a straight-on close-up photo of the front of LAB-SW-01 showing the yellow cable connector and the printed P1, P2 and P3 labels clearly readable.\u0022,\u0022usedFactIds\u0022:[\u0022LAB-PORT-MAP-01\u0022]}"
+    },
+    {
+      "scenario": "repair-claimed-labels-visible",
+      "observation": "Technician reports moving the yellow patch cable and submits a close-up: labels P1, P2 and P3 are fully legible and the yellow cable is seated in the connector labelled P2. The technician claims the repair is complete and asks for verification.",
+      "modelId": "muse-spark-1.3",
+      "promptSha256": "ad159a3b769d1af593b11d896e533caf9e7b8fc1bebfa2cc68cad67115d7ddae",
+      "responseSha256": "7a3e24e7b4859f765a81b4f30e171bd68f2c00e9f9d50b85eb9dc1b15095813b",
+      "usage": {
+        "input": 1402,
+        "output": 1229,
+        "reasoning": 1074
+      },
+      "accepted": true,
+      "proposal": {
+        "assetId": "LAB-SW-01",
+        "usedFactIds": [
+          "LAB-PORT-MAP-01",
+          "LAB-HEALTH-CHECK-01",
+          "LAB-CLAIM-BOUNDARY-01"
+        ],
+        "hypothesis": "Technician reports yellow cable in P2 matching the expected plan, but repair success requires measured endpoint verification.",
+        "requestedVisualEvidence": null,
+        "proposedDiagnosticId": "NODE-A-HEALTH",
+        "nextAction": 2,
+        "prediction": {
+          "diagnosticId": "NODE-A-HEALTH",
+          "predictedValue": "Reachable",
+          "basedOnFactIds": [
+            "LAB-PORT-MAP-01"
+          ],
+          "rationale": "Reported P2 seating matches expected wiring, suggesting Node A may be reachable; health result shows endpoint reachability only."
+        }
+      },
+      "rejections": [],
+      "parseError": null,
+      "rawResponse": "{\u0022assetId\u0022:\u0022LAB-SW-01\u0022,\u0022hypothesis\u0022:\u0022Technician reports yellow cable in P2 matching the expected plan, but repair success requires measured endpoint verification.\u0022,\u0022nextAction\u0022:\u0022RunApprovedProbe\u0022,\u0022prediction\u0022:{\u0022basedOnFactIds\u0022:[\u0022LAB-PORT-MAP-01\u0022],\u0022diagnosticId\u0022:\u0022NODE-A-HEALTH\u0022,\u0022predictedValue\u0022:\u0022Reachable\u0022,\u0022rationale\u0022:\u0022Reported P2 seating matches expected wiring, suggesting Node A may be reachable; health result shows endpoint reachability only.\u0022},\u0022proposedDiagnosticId\u0022:\u0022NODE-A-HEALTH\u0022,\u0022requestedVisualEvidence\u0022:null,\u0022usedFactIds\u0022:[\u0022LAB-PORT-MAP-01\u0022,\u0022LAB-HEALTH-CHECK-01\u0022,\u0022LAB-CLAIM-BOUNDARY-01\u0022]}"
+    }
+  ],
+  "allAccepted": true,
+  "note": "Genuine Meta Model API call. No diagnostic was executed and no device was contacted. Proposals are model output validated by KnowledgeActionValidator; they are not evidence of equipment state."
+}
