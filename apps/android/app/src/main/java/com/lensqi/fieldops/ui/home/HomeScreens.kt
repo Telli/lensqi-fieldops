@@ -53,6 +53,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -272,11 +274,31 @@ fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
         item { Text("Assets", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
         s.fixtures.forEach { f ->
             item { SectionTitle(f.fixtureId) }
-            items(f.assets, key = { "a-" + it.assetId }) { a ->
-                val n = s.inspections.count { it.assetId == a.assetId }
-                Panel(Modifier.clickable { onOpenAsset(a.assetId) }) {
-                    Text(a.displayName, fontWeight = FontWeight.Medium)
-                    Text("${a.assetId} · $n inspection${if (n == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall)
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Fo.Surface).border(1.dp, Fo.Border, RoundedCornerShape(18.dp))) {
+                    f.assets.forEachIndexed { i, a ->
+                        if (i > 0) HorizontalDivider(color = Fo.Border)
+                        val latest = s.inspections.firstOrNull { it.assetId == a.assetId }
+                        val dot = when (latest?.stage) {
+                            null -> Fo.Muted
+                            InspectionStage.VerifiedComplete -> Fo.Success
+                            InspectionStage.FaultConfirmed, InspectionStage.VerificationFailed, InspectionStage.AwaitingRepair -> Fo.Failure
+                            else -> Fo.Warning
+                        }
+                        Row(Modifier.fillMaxWidth().clickable { onOpenAsset(a.assetId) }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box {
+                                Box(Modifier.size(44.dp).background(Fo.Primary.copy(alpha = 0.12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.Inventory2, null, tint = Fo.Primary, modifier = Modifier.size(20.dp))
+                                }
+                                Box(Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp).size(11.dp).background(Fo.Surface, CircleShape).padding(2.dp).background(dot, CircleShape))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(a.displayName, fontWeight = FontWeight.Medium, maxLines = 1)
+                                Text(latest?.let { "${stageLabel(it.stage)} · ${whenText(it.updatedAt)}" } ?: "Not inspected yet", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                            }
+                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Fo.Muted)
+                        }
+                    }
                 }
             }
         }

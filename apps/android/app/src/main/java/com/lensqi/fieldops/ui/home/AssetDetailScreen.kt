@@ -21,6 +21,22 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.lensqi.fieldops.data.api.InspectionStage
+import com.lensqi.fieldops.ui.common.EvidenceBadge
+import com.lensqi.fieldops.ui.common.stageLabel
+import com.lensqi.fieldops.ui.common.stageState
+import com.lensqi.fieldops.ui.theme.FoDark
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,21 +58,42 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
     val asset = fixture?.assets?.firstOrNull { it.assetId == assetId }
     val links = fixture?.connections?.filter { it.fromAssetId == assetId || it.toAssetId == assetId }.orEmpty()
     val history = s.inspections.filter { it.assetId == assetId }
+    val open = history.firstOrNull { it.stage != InspectionStage.VerifiedComplete && it.stage != InspectionStage.Inconclusive }
+    LaunchedEffect(assetId, s.inspections.size) { vm.loadAssetPhoto(assetId) }
     Column {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
-            Text("Asset", style = MaterialTheme.typography.titleMedium)
+            Text(asset?.displayName ?: "Asset", style = MaterialTheme.typography.titleMedium)
         }
         HorizontalDivider(color = Fo.Border)
         LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
-                Column(Modifier.padding(top = 12.dp)) {
-                    Text(assetId, color = Fo.Primary, fontSize = 12.sp)
-                    Text(asset?.displayName ?: "Not in the site record", style = MaterialTheme.typography.headlineSmall)
-                    asset?.let { Text("${it.kind.replace('_', ' ')} · ${fixture.fixtureId}", style = MaterialTheme.typography.bodySmall) }
+                // The latest photo first, uncropped. Outlines are on the inspection's own page.
+                Box(Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(FoDark.Overlay)) {
+                    val url = s.assetPhotos[assetId]
+                    if (url != null) AsyncImage(url, "Latest photo", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Fit)
+                    else Column(
+                        Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(enabled = fixture != null) { fixture?.let { onStart(it.fixtureId, assetId) } },
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(Icons.Outlined.CameraAlt, null, tint = FoDark.Muted, modifier = Modifier.size(36.dp))
+                        Text(if (history.any { it.photos > 0 }) "Loading the latest photo…" else "No photos yet · scan it", color = FoDark.Muted, fontSize = 13.sp)
+                    }
+                    if (url != null) Text("Latest photo", fontSize = 11.sp, color = FoDark.Foreground,
+                        modifier = Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.65f)).padding(horizontal = 10.dp, vertical = 4.dp))
                 }
             }
-            if (fixture != null) item { PrimaryButton("Start an inspection", { onStart(fixture.fixtureId, assetId) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.QrCodeScanner) }
+            item {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f)) {
+                        Text(asset?.displayName ?: "Not in the site record", style = MaterialTheme.typography.headlineSmall)
+                        asset?.let { Text("$assetId · ${it.kind.replace('_', ' ')} · ${fixture.fixtureId}", style = MaterialTheme.typography.bodySmall) }
+                    }
+                    history.firstOrNull()?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage)) }
+                }
+            }
+            if (open != null) item { PrimaryButton("Continue the open inspection", { onOpen(open.inspectionId) }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward) }
+            else if (fixture != null) item { PrimaryButton("Start an inspection", { onStart(fixture.fixtureId, assetId) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.QrCodeScanner) }
             item { SectionTitle("Expected installation state") }
             item {
                 Panel {
@@ -82,7 +119,7 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
             }
             item { SectionTitle("History · ${history.size}") }
             if (history.isEmpty()) item { Text("Not inspected yet.", style = MaterialTheme.typography.bodySmall) }
-            items(history.take(10), key = { it.inspectionId }) { h -> InspectionCard(h, asset?.displayName) { onOpen(it) } }
+            items(history.take(5), key = { it.inspectionId }) { h -> InspectionCard(h, asset?.displayName) { onOpen(it) } }
             item { Spacer(Modifier.width(1.dp).height(24.dp)) }
         }
     }

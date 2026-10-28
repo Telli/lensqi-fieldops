@@ -90,3 +90,6 @@ fun reasonText(s: InspectionSummary): String = when {
     s.stage == InspectionStage.AwaitingRepair || s.stage == InspectionStage.FaultConfirmed -> s.workOrder ?: "Fault confirmed. Plan the fix."
     else -> "LensQi needs a better view."
 }
+
+/** The four gates of repair verification, in order. The server enforces each one; the bar only shows where you are. */
+val verifySteps = listOf("Photo", "Review", "Confirm", "Verify")

@@ -33,6 +33,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.lensqi.fieldops.ui.common.LensQiMark
+import com.lensqi.fieldops.ui.common.aiSummary
+import com.lensqi.fieldops.ui.common.nextMove
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -123,30 +131,37 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
 
         Column(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(18.dp)).padding(14.dp)
+                .clip(RoundedCornerShape(26.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(26.dp)).padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                when {
-                    r.awaitingUpload -> "Saved on this phone"
-                    !r.done -> "LensQi is looking…"
-                    rejected -> "Photo not accepted"
-                    r.afterRepair -> "Photo accepted"
-                    else -> "Here's what LensQi sees"
-                },
-                fontWeight = FontWeight.Medium, fontSize = 15.sp,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                r.steps.forEach { st ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        when (st.state) {
-                            StepState.Done -> Icon(Icons.Outlined.Check, null, tint = FoDark.Primary, modifier = Modifier.size(13.dp))
-                            StepState.Doing -> CircularProgressIndicator(Modifier.size(11.dp), color = FoDark.Foreground, strokeWidth = 1.5.dp)
-                            StepState.Skipped -> Icon(Icons.Outlined.WarningAmber, null, tint = FoDark.Warning, modifier = Modifier.size(13.dp))
-                            StepState.Todo -> {}
+            // LensQi's read of the photo and the next move, from the server's assessment and change check.
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LensQiMark()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (r.done && !r.awaitingUpload) Text(aiSummary(view, assessment), fontSize = 13.sp, lineHeight = 19.sp, color = FoDark.Muted)
+                    Text(
+                        when {
+                            r.awaitingUpload -> "Saved on this phone"
+                            !r.done -> if (r.afterRepair) "Comparing with the photo from before…" else "Looking at your photo…"
+                            rejected -> "Photo not accepted"
+                            r.afterRepair -> "Photo accepted"
+                            else -> nextMove(view, assessment)?.title ?: "Here's what I see"
+                        },
+                        fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 24.sp, color = if (rejected) FoDark.Failure else FoDark.Foreground,
+                    )
+                    if (!r.done || r.steps.any { it.state == StepState.Skipped }) FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        r.steps.forEach { st ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                when (st.state) {
+                                    StepState.Done -> Icon(Icons.Outlined.Check, null, tint = FoDark.Primary, modifier = Modifier.size(13.dp))
+                                    StepState.Doing -> CircularProgressIndicator(Modifier.size(11.dp), color = FoDark.Foreground, strokeWidth = 1.5.dp)
+                                    StepState.Skipped -> Icon(Icons.Outlined.WarningAmber, null, tint = FoDark.Warning, modifier = Modifier.size(13.dp))
+                                    StepState.Todo -> {}
+                                }
+                                Text(st.label, fontSize = 11.sp, color = when (st.state) { StepState.Done -> FoDark.Primary; StepState.Doing -> FoDark.Foreground; else -> FoDark.Muted })
+                            }
                         }
-                        Text(st.label, fontSize = 11.sp, color = when (st.state) { StepState.Done -> FoDark.Primary; StepState.Doing -> FoDark.Foreground; else -> FoDark.Muted })
                     }
                 }
             }
@@ -154,29 +169,34 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                 Icon(Icons.Outlined.CloudOff, null, tint = FoDark.Warning, modifier = Modifier.size(16.dp))
                 Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = FoDark.Warning)
             }
-            if (r.done) {
-                change?.let { c ->
-                    val t = changeText(c.verdict)
-                    EvidenceBadge(t.state, t.label)
-                    Text(t.detail, fontSize = 12.sp)
+            val findings = assessment?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }.orEmpty()
+            if (r.done && (findings.isNotEmpty() || change != null || (!r.afterRepair && s.outlines.isEmpty()))) {
+                var open by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (open) "Hide details" else if (tags.isNotEmpty()) "Details · tap a label on the photo for the reason" else "Details", fontSize = 12.sp, color = FoDark.Muted, modifier = Modifier.weight(1f))
+                    Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = FoDark.Muted, modifier = Modifier.size(18.dp))
                 }
-                assessment?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }?.forEach { h ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> FoDark.Primary; ObservationStatus.Conflicting -> FoDark.Failure; else -> FoDark.Warning }, CircleShape))
-                        Column {
-                            Text("${featureName(h.featureId)} · ${observationLabel(h.status).second}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            Text(h.reason, fontSize = 12.sp, color = FoDark.Muted)
+                if (open) {
+                    change?.let { c ->
+                        val t = changeText(c.verdict)
+                        EvidenceBadge(t.state, t.label)
+                        Text(c.reason, fontSize = 12.sp, color = FoDark.Muted)
+                    }
+                    findings.forEach { h ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> FoDark.Primary; ObservationStatus.Conflicting -> FoDark.Failure; else -> FoDark.Warning }, CircleShape))
+                            Column {
+                                Text("${featureName(h.featureId)} · ${observationLabel(h.status).second}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text(h.reason, fontSize = 12.sp, color = FoDark.Muted)
+                            }
                         }
                     }
+                    if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
                 }
-                if (assessment?.nextAction == ProposedNextAction.RequestView && !assessment.requestedView.isNullOrBlank())
-                    Text("Next: ${sentence(assessment.requestedView)}", fontSize = 12.sp, color = FoDark.Warning)
-                if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
-                if (tags.isNotEmpty()) Text("Tap a label on the photo for the AI's reason.", fontSize = 11.sp, color = FoDark.Muted)
             }
             if (rejected) PrimaryButton("Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             else if (r.done || r.awaitingUpload)
-                PrimaryButton(if (r.afterRepair) "Continue to verification" else "Continue investigation", { vm.closeReview(); onContinue() }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward)
+                PrimaryButton(if (r.afterRepair) "Continue to verification" else "Continue", { vm.closeReview(); onContinue() }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward)
             else SecondaryButton("Cancel", { vm.cancel(); vm.closeReview(); onContinue() }, Modifier.fillMaxWidth())
         }
     }

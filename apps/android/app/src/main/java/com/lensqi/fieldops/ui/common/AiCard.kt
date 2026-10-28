@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,19 +36,19 @@ fun LensQiMark(size: Int = 28) {
     ) { Icon(Icons.Outlined.AutoAwesome, "LensQi", tint = Fo.OnPrimary, modifier = Modifier.size((size * 0.5).dp)) }
 }
 
-/** The one AI card per screen: what LensQi sees, the next move, and the single action that does it. */
+/** The one AI card per screen: what LensQi sees, the next move, and the single action that does it. [tone] marks a decided outcome. */
 @Composable
-fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Modifier, actions: (@Composable ColumnScope.() -> Unit)? = null) {
+fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Modifier, tone: Color? = null, actions: (@Composable ColumnScope.() -> Unit)? = null) {
     Column(
         modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Fo.Elevated, Fo.Surface)), RoundedCornerShape(26.dp))
-            .border(1.dp, Fo.Border, RoundedCornerShape(26.dp)).padding(16.dp),
+            .border(1.dp, tone?.copy(alpha = 0.45f) ?: Fo.Border, RoundedCornerShape(26.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             LensQiMark()
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 says?.let { Text(it, fontSize = 13.sp, lineHeight = 19.sp, color = Fo.Muted) }
-                title?.let { Text(it, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold) }
+                title?.let { Text(it, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = tone ?: Color.Unspecified) }
                 hint?.let { Text(it, fontSize = 12.sp, color = Fo.Muted) }
             }
         }
@@ -57,15 +58,15 @@ fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Mo
 
 /** Five quiet segments instead of a stepper. */
 @Composable
-fun ProgressSegments(step: Int) {
+fun ProgressSegments(step: Int, steps: List<String> = progressSteps) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            progressSteps.forEachIndexed { k, _ ->
+            steps.forEachIndexed { k, _ ->
                 Box(Modifier.weight(1f).height(4.dp).background(if (k < step) Fo.Primary else if (k == step) Fo.Primary.copy(alpha = 0.35f) else Fo.Border, RoundedCornerShape(2.dp)))
             }
         }
         Row {
-            progressSteps.forEachIndexed { k, s ->
+            steps.forEachIndexed { k, s ->
                 Text(s.uppercase(), fontSize = 9.sp, letterSpacing = 0.8.sp, modifier = Modifier.weight(1f),
                     color = if (k < step) Fo.Foreground else if (k == step) Fo.Primary else Fo.Muted)
             }

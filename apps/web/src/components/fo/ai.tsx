@@ -12,15 +12,19 @@ export function LensQiMark({ className }: { className?: string }) {
   );
 }
 
-/** The one AI card per screen: what LensQi sees, what to do next, and the single action that does it. */
-export function AiCard({ says, title, hint, children, className }: { says?: string; title?: string; hint?: string; children?: ReactNode; className?: string }) {
+type Tone = "success" | "failure" | "warning";
+const toneEdge: Record<Tone, string> = { success: "border-success/40", failure: "border-failure/45", warning: "border-warning/45" };
+const toneText: Record<Tone, string> = { success: "text-success", failure: "text-failure", warning: "text-warning" };
+
+/** The one AI card per screen: what LensQi sees, what to do next, and the single action that does it. A tone marks a decided outcome. */
+export function AiCard({ says, title, hint, tone, children, className }: { says?: string; title?: string; hint?: string; tone?: Tone; children?: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-3xl border border-border bg-gradient-to-b from-elevated to-surface p-4 shadow-sm", className)}>
+    <section className={cn("rounded-3xl border border-border bg-gradient-to-b from-elevated to-surface p-4 shadow-sm", tone && toneEdge[tone], className)}>
       <div className="flex items-start gap-3">
         <LensQiMark />
         <div className="min-w-0 flex-1 space-y-1">
           {says && <p className="text-[13px] leading-relaxed text-muted-foreground">{says}</p>}
-          {title && <h2 className="text-lg font-semibold leading-snug tracking-tight">{title}</h2>}
+          {title && <h2 className={cn("text-lg font-semibold leading-snug tracking-tight", tone && toneText[tone])}>{title}</h2>}
           {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         </div>
       </div>
@@ -30,14 +34,14 @@ export function AiCard({ says, title, hint, children, className }: { says?: stri
 }
 
 /** Five quiet segments instead of a stepper: where this inspection is, at a glance. */
-export function Progress({ step }: { step: number }) {
+export function Progress({ step, steps = progressSteps }: { step: number; steps?: readonly string[] }) {
   return (
     <div className="space-y-1.5">
       <div className="flex gap-1">
-        {progressSteps.map((s, k) => <span key={s} className={cn("h-1 flex-1 rounded-full", k < step ? "bg-primary" : k === step ? "bg-primary/35" : "bg-border")} />)}
+        {steps.map((s, k) => <span key={s} className={cn("h-1 flex-1 rounded-full", k < step ? "bg-primary" : k === step ? "bg-primary/35" : "bg-border")} />)}
       </div>
-      <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-        {progressSteps.map((s, k) => <span key={s} className={cn(k < step && "text-foreground", k === step && "text-primary")}>{s}</span>)}
+      <div className="flex gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        {steps.map((s, k) => <span key={s} className={cn("flex-1", k < step && "text-foreground", k === step && "text-primary")}>{s}</span>)}
       </div>
     </div>
   );
