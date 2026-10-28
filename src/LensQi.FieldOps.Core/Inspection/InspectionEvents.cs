@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using LensQi.FieldOps.Core.Knowledge;
 
 namespace LensQi.FieldOps.Core.Inspection;
@@ -6,9 +7,25 @@ namespace LensQi.FieldOps.Core.Inspection;
 /// Append-only inspection events (PRD FR-09, design "State / evidence workflow"). Every event carries a server-owned
 /// timestamp and the fixture digest in force. Events are never updated in place; state is a replay of the list.
 /// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(InspectionCreated), "InspectionCreated")]
+[JsonDerivedType(typeof(PhotoRecorded), "PhotoRecorded")]
+[JsonDerivedType(typeof(SegmentationRecorded), "SegmentationRecorded")]
+[JsonDerivedType(typeof(AssessmentRecorded), "AssessmentRecorded")]
+[JsonDerivedType(typeof(ViewRequested), "ViewRequested")]
+[JsonDerivedType(typeof(ViewDeclined), "ViewDeclined")]
+[JsonDerivedType(typeof(PredictionRegistered), "PredictionRegistered")]
+[JsonDerivedType(typeof(DiagnosticCompleted), "DiagnosticCompleted")]
+[JsonDerivedType(typeof(PredictionScored), "PredictionScored")]
+[JsonDerivedType(typeof(WorkOrderDrafted), "WorkOrderDrafted")]
+[JsonDerivedType(typeof(RepairClaimed), "RepairClaimed")]
+[JsonDerivedType(typeof(ChecklistReviewed), "ChecklistReviewed")]
+[JsonDerivedType(typeof(TechnicianAcknowledged), "TechnicianAcknowledged")]
+[JsonDerivedType(typeof(VerificationEvaluated), "VerificationEvaluated")]
+[JsonDerivedType(typeof(StageChanged), "StageChanged")]
 public abstract record InspectionEvent(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest)
 {
-    public string Kind => GetType().Name;
+    [JsonIgnore] public string EventKind => GetType().Name;
 }
 
 public sealed record InspectionCreated(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
