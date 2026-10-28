@@ -17,7 +17,7 @@ public interface ISamOutputParser
 /// Runs Meta's meta-sam-parser through a local Python process. Model grammar never enters C#; the sidecar emits typed JSON.
 /// Also performs the pixel crop with Pillow so .NET needs no image codec. Never exposed over the network.
 /// </summary>
-public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper, IImageQualityAnalyzer
+public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper, IImageAnalyzer
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -76,14 +76,16 @@ public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOut
         return new CropResult(outputPath, new CropTransform(sourceEvidenceId, sourceSha256, r.GetProperty("imageWidth").GetInt32(), r.GetProperty("imageHeight").GetInt32(), actual, 1.0));
     }
 
-    public async Task<ImageQualitySignals?> AnalyzeAsync(string imagePath, CancellationToken ct)
+    public async Task<ImageMeasurement?> MeasureAsync(string imagePath, CancellationToken ct)
     {
         try
         {
             var (stdout, _) = await RunAsync(["-I", Path.Combine(ScriptDirectory, "image_quality.py"), "--image", imagePath], null, ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(stdout);
             var r = doc.RootElement;
-            return new ImageQualitySignals(r.GetProperty("blurLaplacianVariance").GetDouble(), r.GetProperty("meanLuminance").GetDouble(), r.GetProperty("version").GetString() ?? "image-quality/unknown");
+            var quality = new ImageQualitySignals(r.GetProperty("blurLaplacianVariance").GetDouble(), r.GetProperty("meanLuminance").GetDouble(), r.GetProperty("version").GetString() ?? "image-quality/unknown");
+            var hash = r.TryGetProperty("dhash64", out var h) && h.GetString() is { Length: 16 } hex ? hex : null;
+            return new ImageMeasurement(quality, hash);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonException or KeyNotFoundException or System.ComponentModel.Win32Exception or TimeoutException)
         {

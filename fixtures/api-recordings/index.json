@@ -32,210 +32,231 @@
     {
       "file": "05-observation-initial.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/observations",
+      "path": "/v1/inspections/I-7ba6f25c240f/observations",
       "status": 200,
       "label": "photo evidence"
     },
     {
       "file": "06-investigate.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/investigate",
+      "path": "/v1/inspections/I-7ba6f25c240f/investigate",
       "status": 200,
       "label": "LIVE_META muse"
     },
     {
       "file": "07-segment.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/segment",
+      "path": "/v1/inspections/I-7ba6f25c240f/segment",
       "status": 200,
       "label": "LIVE_META sam"
     },
     {
       "file": "08-knowledge.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe/knowledge",
+      "path": "/v1/inspections/I-7ba6f25c240f/knowledge",
       "status": 200,
       "label": "documented"
     },
     {
       "file": "09-diagnostic-run-down.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/diagnostics/NODE-A-HEALTH:run",
+      "path": "/v1/inspections/I-7ba6f25c240f/diagnostics/NODE-A-HEALTH:run",
       "status": 200,
       "label": "SIMULATED_PROBE"
     },
     {
       "file": "10-work-order.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/work-order",
+      "path": "/v1/inspections/I-7ba6f25c240f/work-order",
       "status": 200,
       "label": ""
     },
     {
       "file": "11-repair-claim-1.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/repair-claims",
+      "path": "/v1/inspections/I-7ba6f25c240f/repair-claims",
       "status": 200,
       "label": ""
     },
     {
-      "file": "12-observation-post-claim-1.json",
+      "file": "12-observation-duplicate.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/observations",
+      "path": "/v1/inspections/I-7ba6f25c240f/observations",
       "status": 200,
       "label": "photo evidence"
     },
     {
-      "file": "13-checklist-1-switch_chassis_visible.json",
+      "file": "13-error-checklist-rejected.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
+      "status": 409,
+      "label": ""
+    },
+    {
+      "file": "14-observation-post-claim-1.json",
+      "method": "POST",
+      "path": "/v1/inspections/I-7ba6f25c240f/observations",
+      "status": 200,
+      "label": "photo evidence"
+    },
+    {
+      "file": "15-change-analysis.json",
+      "method": "GET",
+      "path": "/v1/inspections/I-7ba6f25c240f/claims/claim-8d957ed2be/change-analysis",
+      "status": 200,
+      "label": "measured (visual)"
+    },
+    {
+      "file": "16-checklist-1-switch_chassis_visible.json",
+      "method": "POST",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "14-checklist-1-yellow_cable_near_end_visible.json",
+      "file": "17-checklist-1-yellow_cable_near_end_visible.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "15-checklist-1-post_repair_view_captured.json",
+      "file": "18-checklist-1-post_repair_view_captured.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "16-acknowledge-1.json",
+      "file": "19-acknowledge-1.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/acknowledge",
+      "path": "/v1/inspections/I-7ba6f25c240f/acknowledge",
       "status": 200,
       "label": ""
     },
     {
-      "file": "17-verify-denied.json",
+      "file": "20-verify-denied.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/verify",
+      "path": "/v1/inspections/I-7ba6f25c240f/verify",
       "status": 200,
       "label": "SIMULATED_PROBE gate"
     },
     {
-      "file": "18-simulation-set-up.json",
+      "file": "21-simulation-set-up.json",
       "method": "POST",
       "path": "/v1/simulation/diagnostics/NODE-A-HEALTH",
       "status": 200,
       "label": "SIMULATED_PROBE"
     },
     {
-      "file": "19-repair-claim-2.json",
+      "file": "22-repair-claim-2.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/repair-claims",
+      "path": "/v1/inspections/I-7ba6f25c240f/repair-claims",
       "status": 200,
       "label": ""
     },
     {
-      "file": "20-observation-post-claim-2.json",
+      "file": "23-observation-post-claim-2.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/observations",
+      "path": "/v1/inspections/I-7ba6f25c240f/observations",
       "status": 200,
       "label": "photo evidence"
     },
     {
-      "file": "21-checklist-2-switch_chassis_visible.json",
+      "file": "24-checklist-2-switch_chassis_visible.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "22-checklist-2-yellow_cable_near_end_visible.json",
+      "file": "25-checklist-2-yellow_cable_near_end_visible.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "23-checklist-2-post_repair_view_captured.json",
+      "file": "26-checklist-2-post_repair_view_captured.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/checklist",
+      "path": "/v1/inspections/I-7ba6f25c240f/checklist",
       "status": 200,
       "label": ""
     },
     {
-      "file": "24-acknowledge-2.json",
+      "file": "27-acknowledge-2.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/acknowledge",
+      "path": "/v1/inspections/I-7ba6f25c240f/acknowledge",
       "status": 200,
       "label": ""
     },
     {
-      "file": "25-verify-verified.json",
+      "file": "28-verify-verified.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/verify",
+      "path": "/v1/inspections/I-7ba6f25c240f/verify",
       "status": 200,
       "label": "SIMULATED_PROBE gate"
     },
     {
-      "file": "26-inspection.json",
+      "file": "29-inspection.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe",
+      "path": "/v1/inspections/I-7ba6f25c240f",
       "status": 200,
       "label": ""
     },
     {
-      "file": "27-events.json",
+      "file": "30-events.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe/events",
+      "path": "/v1/inspections/I-7ba6f25c240f/events",
       "status": 200,
       "label": ""
     },
     {
-      "file": "28-artifacts.json",
+      "file": "31-artifacts.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe/artifacts",
+      "path": "/v1/inspections/I-7ba6f25c240f/artifacts",
       "status": 200,
       "label": ""
     },
     {
-      "file": "29-receipt.json",
+      "file": "32-receipt.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe/receipt",
+      "path": "/v1/inspections/I-7ba6f25c240f/receipt",
       "status": 200,
       "label": ""
     },
     {
-      "file": "30-receipt-verify.json",
+      "file": "33-receipt-verify.json",
       "method": "GET",
-      "path": "/v1/inspections/I-35a13d6978fe/receipt/verify",
+      "path": "/v1/inspections/I-7ba6f25c240f/receipt/verify",
       "status": 200,
       "label": ""
     },
     {
-      "file": "31-error-verify-closed.json",
+      "file": "34-error-verify-closed.json",
       "method": "POST",
-      "path": "/v1/inspections/I-35a13d6978fe/verify",
+      "path": "/v1/inspections/I-7ba6f25c240f/verify",
       "status": 409,
       "label": ""
     },
     {
-      "file": "32-error-not-found.json",
+      "file": "35-error-not-found.json",
       "method": "GET",
       "path": "/v1/inspections/I-doesnotexist",
       "status": 404,
       "label": ""
     },
     {
-      "file": "33-inspection-created-2.json",
+      "file": "36-inspection-created-2.json",
       "method": "POST",
       "path": "/v1/inspections",
       "status": 201,
       "label": ""
     },
     {
-      "file": "34-error-image-too-small.json",
+      "file": "37-error-image-too-small.json",
       "method": "POST",
-      "path": "/v1/inspections/I-e46ab29ea7ac/observations",
+      "path": "/v1/inspections/I-aac49b7d5196/observations",
       "status": 400,
       "label": ""
     }

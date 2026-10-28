@@ -44,6 +44,7 @@ import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.ObservationStatus
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VerificationResult
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
 import com.lensqi.fieldops.data.queue.CommandState
 import com.lensqi.fieldops.ui.common.SourceBadge
 import com.lensqi.fieldops.ui.common.Tag
@@ -52,7 +53,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.OffsetDateTime
 
 /** Screens 2–4 of the PRD as one scrolling inspection: capture, investigate and localize, repair and verify, receipt. */
 @Composable
@@ -111,8 +111,13 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
                             Text(p.evidenceId, style = MaterialTheme.typography.labelSmall)
                             Tag(p.origin.name, Provenance.Evidence)
                             p.quality?.let { q -> Text("blur ${"%.0f".format(q.blurLaplacianVariance)} · lum ${"%.0f".format(q.meanLuminance)} (signal)", style = MaterialTheme.typography.labelSmall) }
+                            view?.changeAnalyses?.lastOrNull { it.photoEvidenceId == p.evidenceId }?.let { c -> Tag(c.verdict.name, changeColor(c.verdict)) }
                         }
                     }
+                }
+                view?.changeAnalyses?.lastOrNull { it.claimId == view.currentClaimId }?.let { c ->
+                    Text("Change evidence (measured, visual) for ${c.photoEvidenceId}: ${c.reason}", style = MaterialTheme.typography.bodySmall,
+                        color = changeColor(c.verdict))
                 }
                 s.pending.forEach { c ->
                     val text = if (c.state == CommandState.Rejected) "Rejected ${c.errorCode}: ${c.errorMessage}" else "Awaiting upload · sha ${c.sha256?.take(12)}… · ${c.source} · try ${c.attempts}"
@@ -223,10 +228,10 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
 
         // Post-repair checklist and acknowledgement
         item {
-            // Same rule as the server: the newest photo observed after the current claim.
-            val postClaim = view?.let { v -> v.repairClaimedAt?.let { at -> v.photos.lastOrNull { OffsetDateTime.parse(it.observedAt).isAfter(OffsetDateTime.parse(at)) } } }
+            // The server names the post-repair photo it will count; a photo rejected by change evidence is never offered.
+            val postClaim = view?.acceptedPostRepairPhotoId?.let { id -> view.photos.firstOrNull { it.evidenceId == id } }
             Section("Post-repair review", "technician", MaterialTheme.colorScheme.primary) {
-                if (view == null || postClaim == null) Text("Capture a photo after the repair claim to review it.", style = MaterialTheme.typography.bodySmall)
+                if (view == null || postClaim == null) Text("Capture a new photo after the repair claim to review it. Re-submitted or unchanged photos are not accepted.", style = MaterialTheme.typography.bodySmall)
                 else {
                     Text("Reviewing ${postClaim.evidenceId}", style = MaterialTheme.typography.labelSmall)
                     s.fixture?.visualRequirements?.filter { it.mandatory }?.forEach { req ->
@@ -302,6 +307,12 @@ private fun stageColor(stage: InspectionStage) = when (stage) {
     InspectionStage.VerifiedComplete -> Provenance.Evidence
     InspectionStage.VerificationFailed, InspectionStage.Inconclusive -> Provenance.Denied
     else -> Provenance.Measured
+}
+
+private fun changeColor(v: VisualChangeVerdict) = when (v) {
+    VisualChangeVerdict.Changed -> Provenance.Measured
+    VisualChangeVerdict.DuplicateImage, VisualChangeVerdict.NoVisualChange -> Provenance.Denied
+    VisualChangeVerdict.Unscorable -> Color.Gray
 }
 
 private fun statusColor(status: ObservationStatus) = when (status) {

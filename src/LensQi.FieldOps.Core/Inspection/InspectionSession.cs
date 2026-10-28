@@ -44,7 +44,7 @@ public sealed class InspectionSession
     // ---------------- commands ----------------
 
     public IReadOnlyList<InspectionEvent> RecordPhoto(string requestId, string evidenceId, EvidenceOrigin origin, string artifactSha256,
-        DateTimeOffset observedAt, int width, int height, DateTimeOffset now, ImageQualitySignals? quality = null) =>
+        DateTimeOffset observedAt, int width, int height, DateTimeOffset now, ImageQualitySignals? quality = null, string? perceptualHash = null) =>
         Idempotent(requestId, () =>
         {
             Require(State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive), "Inspection is closed");
@@ -52,7 +52,7 @@ public sealed class InspectionSession
                 throw new InspectionConflictException(InspectionErrorCodes.DuplicateEvidence, $"Evidence '{evidenceId}' already recorded");
             if (origin is EvidenceOrigin.Muse or EvidenceOrigin.Sam or EvidenceOrigin.LiveLocalProbe or EvidenceOrigin.SimulatedProbe or EvidenceOrigin.ReplayProbe)
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, "A photo cannot originate from a model or probe");
-            var batch = new List<InspectionEvent> { new PhotoRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, origin, artifactSha256, observedAt, width, height, quality) };
+            var batch = new List<InspectionEvent> { new PhotoRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, origin, artifactSha256, observedAt, width, height, quality, perceptualHash) };
             var target = State.Stage switch
             {
                 InspectionStage.Created => InspectionStage.InitialScan,
@@ -199,7 +199,30 @@ public sealed class InspectionSession
             Require(_twin.Twin.VisualRequirements.Any(v => v.RequirementId == requirementId), $"Unknown visual requirement '{requirementId}'");
             Require(State.RepairClaimedAt is not null, "Checklist review applies after a repair claim");
             Require(State.Photos.Any(p => p.EvidenceId == reviewedByEvidenceId), "Review must cite a photo in this inspection");
+            if (State.IsRejectedForCurrentClaim(reviewedByEvidenceId))
+                throw new InspectionConflictException(InspectionErrorCodes.ChangeEvidenceRejected,
+                    $"Photo '{reviewedByEvidenceId}' was rejected by change analysis ({State.ChangeAnalyses.Last(a => a.PhotoEvidenceId == reviewedByEvidenceId).Verdict}); capture a new post-repair view");
             return Commit([new ChecklistReviewed(Next(), State.InspectionId, now, State.FixtureDigest, requirementId, status, reviewedByEvidenceId)]);
+        });
+
+    /// <summary>
+    /// Records change evidence for a post-repair photo (child VK-R12). DuplicateImage and NoVisualChange withdraw the photo
+    /// as post-repair evidence and return a ReadyToVerify session to NeedsEvidence, so no probe runs on a re-submitted or
+    /// unchanged photo. Changed and Unscorable never advance the stage.
+    /// </summary>
+    public IReadOnlyList<InspectionEvent> RecordVisualChange(string requestId, VisualChangeAnalysis analysis, DateTimeOffset now) =>
+        Idempotent(requestId, () =>
+        {
+            Require(State.CurrentClaimId is not null && analysis.ClaimId == State.CurrentClaimId, "Change analysis must belong to the current repair claim");
+            var photo = State.Photos.FirstOrDefault(p => p.EvidenceId == analysis.PhotoEvidenceId);
+            Require(photo is not null && photo.ObservedAt > State.RepairClaimedAt, "Change analysis must cite a photo taken after the repair claim");
+            Require(photo!.ArtifactSha256 == analysis.AfterImageDigest, "Change analysis digest does not match the photo");
+            if (analysis.ReferencePhotoEvidenceId is { } refId)
+                Require(State.Photos.Any(p => p.EvidenceId == refId), $"Reference photo '{refId}' is not part of this inspection");
+            var batch = new List<InspectionEvent> { new VisualChangeAnalyzed(Next(), State.InspectionId, now, State.FixtureDigest, analysis) };
+            if (analysis.RejectsPhoto && State.Stage == InspectionStage.ReadyToVerify)
+                batch.Add(Stage(InspectionStage.NeedsEvidence, $"{analysis.Verdict}: {analysis.Reason}", now, 1));
+            return Commit(batch);
         });
 
     public IReadOnlyList<InspectionEvent> Acknowledge(string requestId, DateTimeOffset now) =>

@@ -35,6 +35,7 @@ class RecordedContractTest {
         name == "artifacts" -> ListSerializer(String.serializer())
         name == "receipt" -> JsonObject.serializer()
         name == "receipt-verify" -> ReceiptVerification.serializer()
+        name == "change-analysis" -> VisualChangeAnalysis.serializer()
         name.startsWith("error-") -> ApiError.serializer()
         else -> error("No model mapped for recording '$name'; add one when the recorder grows")
     }
@@ -83,6 +84,19 @@ class RecordedContractTest {
         assertEquals(EvidenceOrigin.Phone, photo.origin)
         assertTrue(photo.width >= 320 && photo.height >= 240)
         assertNotNull(photo.quality)
+    }
+
+    @Test
+    fun change_evidence_rejects_a_resubmitted_photo_and_accepts_a_changed_one() {
+        val dup = json.decodeFromString(ObservationResponse.serializer(), Recordings.text("observation-duplicate"))
+        assertEquals(VisualChangeVerdict.DuplicateImage, dup.changeAnalysis!!.verdict)
+        assertEquals(InspectionStage.NeedsEvidence, dup.state.stage)
+        assertNull(dup.state.acceptedPostRepairPhotoId)
+
+        val moved = json.decodeFromString(ObservationResponse.serializer(), Recordings.text("observation-post-claim-1"))
+        assertTrue(moved.changeAnalysis!!.verdict in setOf(VisualChangeVerdict.Changed, VisualChangeVerdict.Unscorable))
+        assertEquals(moved.evidenceId, moved.state.acceptedPostRepairPhotoId)
+        assertEquals("change_evidence_rejected", json.decodeFromString(ApiError.serializer(), Recordings.text("error-checklist-rejected")).code)
     }
 
     @Test

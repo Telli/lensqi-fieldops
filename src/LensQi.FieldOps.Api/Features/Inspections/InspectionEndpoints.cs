@@ -52,7 +52,7 @@ public static class InspectionEndpoints
             store.Find(id) is { } s ? Results.Ok(s.Events) : ApiResults.NotFound($"Inspection '{id}' not found"));
 
         // FR-02: multipart upload of the original JPEG/PNG. Magic bytes decide the type; declared content type is ignored.
-        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, IImageQualityAnalyzer quality, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, IImageAnalyzer imaging, ChangeEvidenceService change, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
@@ -77,13 +77,32 @@ public static class InspectionEndpoints
             var evidenceId = "photo-" + Guid.NewGuid().ToString("N")[..10];
             var artifact = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
             // Blur and luminance are signals beside the evidence; a missing measurement never blocks the upload.
-            var signals = await quality.AnalyzeAsync(Path.Combine(files.DataDirectoryPath, artifact.RelativePath), ct);
+            var artifactPath = Path.Combine(files.DataDirectoryPath, artifact.RelativePath);
+            var measured = await imaging.MeasureAsync(artifactPath, ct);
             var requestId = RequestId(http, "observation:" + artifact.Sha256);
-            return await GuardAsync(() => store.ExecuteAsync(id, s =>
+            return await GuardAsync(async () =>
             {
-                var events = s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), signals);
-                return Task.FromResult(Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals, origin = origin.ToString(), events = events.Count, state = View(s) }));
-            }, ct));
+                var events = await store.ExecuteAsync(id, s => Task.FromResult(
+                    s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), measured?.Quality, measured?.PerceptualHash)), ct);
+                // VK-T26: a photo taken after the current claim gets change evidence before anyone can review or verify it.
+                // A replayed Idempotency-Key returns the earlier events and records no new photo, so nothing is analysed twice.
+                VisualChangeAnalysis? analysis = null;
+                var session = store.Find(id)!;
+                if (session.State.Photos.FirstOrDefault(p => p.EvidenceId == evidenceId) is { } photo && ChangeEvidenceService.Applies(session.State, photo))
+                {
+                    var result = await change.AnalyzeAsync(session.State, photo, artifactPath, ct);
+                    analysis = result.Analysis;
+                    await store.ExecuteAsync(id, s =>
+                    {
+                        if (result.AfterSegmentation is { } seg)
+                            s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow());
+                        return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
+                    }, ct);
+                }
+                var st = store.Find(id)!;
+                return Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = measured?.Quality, perceptualHash = measured?.PerceptualHash,
+                    changeAnalysis = analysis, origin = origin.ToString(), events = events.Count, state = View(st) });
+            });
         }).DisableAntiforgery();
 
         // FR-04: genuine Muse assessment of a photo already in the inspection; the Core validates and decides the stage.
@@ -110,6 +129,12 @@ public static class InspectionEndpoints
                 return Task.FromResult(Results.Ok(new { evidenceId, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, usage = outcome.Usage, assessment = outcome.Assessment, events = events.Count, state = View(s) }));
             }, ct));
         }).AsModelCall();
+
+        // Child design §8: latest change analysis for a repair claim; the analysis itself runs on evidence submission.
+        g.MapGet("/inspections/{id}/claims/{claimId}/change-analysis", (string id, string claimId, InspectionStore store) =>
+            store.Find(id) is not { } s ? ApiResults.NotFound($"Inspection '{id}' not found")
+            : s.State.ChangeAnalyses.LastOrDefault(a => a.ClaimId == claimId) is { } a ? Results.Ok(a)
+            : ApiResults.NotFound($"No change analysis for claim '{claimId}'"));
 
         g.MapPost("/inspections/{id}/segmentations", (string id, SegmentationRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s =>
@@ -208,7 +233,8 @@ public static class InspectionEndpoints
             inspectionId = st.InspectionId, st.FixtureId, st.FixtureRevision, st.FixtureDigest, st.AssetId,
             stage = st.Stage.ToString(), st.LastSequence, st.ViewRequests, st.CurrentClaimId, st.RepairClaimedAt, st.TechnicianAcknowledged,
             photos = st.Photos, diagnostics = st.Diagnostics.Select(d => new { d.EvidenceId, d.Result, source = d.Result.Source.ToString() }),
-            checklist = st.Checklist.Values, pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
+            checklist = st.Checklist.Values, segmentations = st.Segmentations, changeAnalyses = st.ChangeAnalyses,
+            acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
             lastDecision = st.LastDecision,
             outcomeKind = st.LastDecision?.OutcomeKind?.ToString(),
         };

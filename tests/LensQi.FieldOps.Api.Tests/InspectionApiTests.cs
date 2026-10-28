@@ -34,8 +34,8 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ISegmenter>(FakeSam);
             services.RemoveAll<IRoiCropper>();
             services.AddSingleton<IRoiCropper>(new FakeCropper());
-            services.RemoveAll<IImageQualityAnalyzer>();
-            services.AddSingleton<IImageQualityAnalyzer>(FakeQuality);
+            services.RemoveAll<IImageAnalyzer>();
+            services.AddSingleton<IImageAnalyzer>(FakeQuality);
         });
     }
 }
@@ -44,10 +44,19 @@ public sealed class FakeSegmenter : ISegmenter
 {
     public bool Match { get; set; } = true;
     public Exception? Throw { get; set; }
-    public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct) =>
-        Throw is { } ex ? Task.FromException<SegmentationOutcome>(ex) : Task.FromResult(Match
+    public int Calls { get; private set; }
+    /// <summary>When non-empty, each call returns the next queued mask set (empty = honest no-match).</summary>
+    public Queue<MaskRecord[]> Queued { get; } = new();
+    public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct)
+    {
+        Calls++;
+        if (Queued.TryDequeue(out var masks))
+            return Task.FromResult(new SegmentationOutcome(concept, "sam-3.1", "rq", masks.Length > 0 ? "<queued>" : "", "raw",
+                masks.Select(m => new BoxRecord(m.ObjectId, m.Left, m.Top, m.Right, m.Bottom, m.Confidence)).ToList(), masks, "fake", 0.1));
+        return Throw is { } ex ? Task.FromException<SegmentationOutcome>(ex) : Task.FromResult(Match
             ? new SegmentationOutcome(concept, "sam-3.1", "r1", "<0f>0<|box;...|>", "raw", [new BoxRecord("0", 10, 10, 30, 30, 0.9)], [new MaskRecord("0", 20, 20, 10, 10, 30, 30, new RleMask([20, 20], "0"), 0.9)], "fake", 0.1)
             : new SegmentationOutcome(concept, "sam-3.1", "r2", "", "raw", [], [], "n/a", 0.1));
+    }
 }
 
 public sealed class FakeCropper : IRoiCropper
@@ -184,8 +193,8 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         var claim = await Post($"/v1/inspections/{id}/repair-claims", new { description = "Reseated" });
         Assert.Equal("ReadyToVerify", claim.GetProperty("state").GetProperty("stage").GetString());
 
-        // fake fix: post-repair photo, checklist, ack, but the endpoint is still down
-        var p2 = await Upload(id);
+        // fake fix: a new post-repair photo, checklist, ack, but the endpoint is still down
+        var p2 = await Upload(id, TestImages.Png(640, 480, salt: 2));   // a new post-repair view, not the earlier photo
         foreach (var req in new[] { "switch_chassis_visible", "yellow_cable_near_end_visible", "post_repair_view_captured" })
             await Post($"/v1/inspections/{id}/checklist", new { requirementId = req, status = "Satisfied", photoEvidenceId = p2 });
         await Post($"/v1/inspections/{id}/acknowledge");
@@ -196,7 +205,7 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         // real fix
         await SetSimulation(true);
         await Post($"/v1/inspections/{id}/repair-claims", new { description = "Moved cable to P2" });
-        var p3 = await Upload(id);
+        var p3 = await Upload(id, TestImages.Png(640, 480, salt: 3));   // a new post-repair view, not the earlier photo
         foreach (var req in new[] { "switch_chassis_visible", "yellow_cable_near_end_visible", "post_repair_view_captured" })
             await Post($"/v1/inspections/{id}/checklist", new { requirementId = req, status = "Satisfied", photoEvidenceId = p3 });
         await Post($"/v1/inspections/{id}/acknowledge");
@@ -229,7 +238,7 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         await Post($"/v1/inspections/{id}/diagnostics/NODE-A-HEALTH:run");
         await Post($"/v1/inspections/{id}/repair-claims", new { description = "fix" });
         await SetSimulation(true);
-        var p1 = await Upload(id);
+        var p1 = await Upload(id, TestImages.Png(640, 480, salt: 4));   // a new post-repair view, not the earlier photo
         foreach (var req in new[] { "switch_chassis_visible", "yellow_cable_near_end_visible", "post_repair_view_captured" })
             await Post($"/v1/inspections/{id}/checklist", new { requirementId = req, status = "Satisfied", photoEvidenceId = p1 });
         await Post($"/v1/inspections/{id}/acknowledge");

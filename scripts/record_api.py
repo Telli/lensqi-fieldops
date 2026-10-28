@@ -83,22 +83,27 @@ def main() -> int:
     p = f"/v1/inspections/{iid}"
 
     r.call("simulation-set-down", "POST", "/v1/simulation/diagnostics/NODE-A-HEALTH", {"passed": False}, label="SIMULATED_PROBE")
-    first = r.upload("observation-initial", iid, IMAGES / "f01-seated-down.jpg")
+    r.upload("observation-initial", iid, IMAGES / "f02-wrong-port-down.jpg")
     r.call("investigate", "POST", p + "/investigate", label="LIVE_META muse")
     r.call("segment", "POST", p + "/segment", {"concept": "yellow ethernet cable"}, label="LIVE_META sam")
     r.call("knowledge", "GET", p + "/knowledge", label="documented")
     r.call("diagnostic-run-down", "POST", p + "/diagnostics/NODE-A-HEALTH:run", label="SIMULATED_PROBE")
-    r.call("work-order", "POST", p + "/work-order", {"summary": "Reseat the yellow cable at port 2"})
-    r.call("repair-claim-1", "POST", p + "/repair-claims", {"description": "Reseated the yellow cable"})
-    fake = r.upload("observation-post-claim-1", iid, IMAGES / "r01-repaired-clear.jpg")
+    r.call("work-order", "POST", p + "/work-order", {"summary": "Move the yellow cable to port 2"})
+    claim1 = r.call("repair-claim-1", "POST", p + "/repair-claims", {"description": "Moved the yellow cable to port 2"})
+    # change evidence (VK-T26): the pre-repair photo re-submitted is a duplicate; no SAM call, back to NeedsEvidence
+    dup = r.upload("observation-duplicate", iid, IMAGES / "f02-wrong-port-down.jpg")
+    r.call("error-checklist-rejected", "POST", p + "/checklist", {"requirementId": mandatory[0], "status": "Satisfied", "photoEvidenceId": dup["evidenceId"]}, expect=409)
+    # a visibly changed scene (cable now in P2) while the endpoint is still down: Changed, then denied by the diagnostic
+    fake = r.upload("observation-post-claim-1", iid, IMAGES / "f02-wrong-port-down-post.jpg")
+    r.call("change-analysis", "GET", f"{p}/claims/{claim1['claimId']}/change-analysis", label="measured (visual)")
     for req in mandatory:
         r.call(f"checklist-1-{req}", "POST", p + "/checklist", {"requirementId": req, "status": "Satisfied", "photoEvidenceId": fake["evidenceId"]})
     r.call("acknowledge-1", "POST", p + "/acknowledge")
     r.call("verify-denied", "POST", p + "/verify", label="SIMULATED_PROBE gate")
 
     r.call("simulation-set-up", "POST", "/v1/simulation/diagnostics/NODE-A-HEALTH", {"passed": True}, label="SIMULATED_PROBE")
-    r.call("repair-claim-2", "POST", p + "/repair-claims", {"description": "Moved the cable to port 2 and reseated it"})
-    real = r.upload("observation-post-claim-2", iid, IMAGES / "r03-repaired-rotated.jpg")
+    r.call("repair-claim-2", "POST", p + "/repair-claims", {"description": "Reseated the cable in port 2 and re-tested"})
+    real = r.upload("observation-post-claim-2", iid, IMAGES / "c03-clear-rotated.jpg")
     for req in mandatory:
         r.call(f"checklist-2-{req}", "POST", p + "/checklist", {"requirementId": req, "status": "Satisfied", "photoEvidenceId": real["evidenceId"]})
     r.call("acknowledge-2", "POST", p + "/acknowledge")

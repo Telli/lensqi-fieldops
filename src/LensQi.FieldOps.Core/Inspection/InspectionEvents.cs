@@ -23,6 +23,7 @@ namespace LensQi.FieldOps.Core.Inspection;
 [JsonDerivedType(typeof(TechnicianAcknowledged), "TechnicianAcknowledged")]
 [JsonDerivedType(typeof(VerificationEvaluated), "VerificationEvaluated")]
 [JsonDerivedType(typeof(StageChanged), "StageChanged")]
+[JsonDerivedType(typeof(VisualChangeAnalyzed), "VisualChangeAnalyzed")]
 public abstract record InspectionEvent(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest)
 {
     [JsonIgnore] public string EventKind => GetType().Name;
@@ -32,7 +33,7 @@ public sealed record InspectionCreated(long Sequence, string InspectionId, DateT
     string FixtureId, int FixtureRevision, string AssetId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record PhotoRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null, string? PerceptualHash = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record SegmentationRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
@@ -72,3 +73,7 @@ public sealed record VerificationEvaluated(long Sequence, string InspectionId, D
 
 public sealed record StageChanged(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     InspectionStage From, InspectionStage To, string Reason) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+
+/// <summary>Change evidence for one post-repair photo under the current claim (child VK-R12). Measured (visual), never a verification.</summary>
+public sealed record VisualChangeAnalyzed(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
+    VisualChangeAnalysis Analysis) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);

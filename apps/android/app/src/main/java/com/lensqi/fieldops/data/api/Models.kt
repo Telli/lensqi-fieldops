@@ -36,6 +36,25 @@ enum class VerificationResult { Verified, Denied, NeedsHumanReview }
 enum class VerificationOutcomeKind { VerifiedCompleteLive, VerifiedCompleteSimulated }
 
 @Serializable
+enum class VisualChangeVerdict { Changed, NoVisualChange, DuplicateImage, Unscorable }
+
+/** Server-computed change evidence for a post-repair photo (measured, visual). Never a verification by itself. */
+@Serializable
+data class VisualChangeAnalysis(
+    val claimId: String,
+    val photoEvidenceId: String,
+    val referencePhotoEvidenceId: String? = null,
+    val targetPrompt: String? = null,
+    val perceptualHashDistance: Int? = null,
+    val duplicateOfEvidenceId: String? = null,
+    val targetRegionIoU: Double? = null,
+    val componentShiftNormalized: Double? = null,
+    val verdict: VisualChangeVerdict,
+    val reason: String,
+    val thresholdsVersion: String,
+)
+
+@Serializable
 data class ApiError(val code: String, val message: String, val details: List<String>? = null)
 
 @Serializable
@@ -126,6 +145,9 @@ data class InspectionView(
     val checklist: List<ChecklistEntry>,
     val lastDecision: VerificationDecision? = null,
     val outcomeKind: VerificationOutcomeKind? = null,
+    val changeAnalyses: List<VisualChangeAnalysis> = emptyList(),
+    /** The post-repair photo the server will count for the current claim; null when none is accepted yet. */
+    val acceptedPostRepairPhotoId: String? = null,
 )
 
 @Serializable
@@ -137,6 +159,8 @@ data class ObservationResponse(
     val width: Int,
     val height: Int,
     val quality: ImageQuality? = null,
+    val perceptualHash: String? = null,
+    val changeAnalysis: VisualChangeAnalysis? = null,
     val origin: EvidenceOrigin,
     val events: Int,
     val state: InspectionView,
