@@ -49,10 +49,10 @@ async function refresh() {
   $("events").innerHTML = ev.map(e => `<li><b>${esc(e.kind)}</b>${e.kind === "StageChanged" ? ` ${esc(e.from)} → ${esc(e.to)}: ${esc(e.reason)}` : ""} <span>${new Date(e.occurredAt).toLocaleTimeString()}</span></li>`).join("");
   $("receiptLinks").innerHTML = `<a href="/v1/inspections/${inspectionId}/receipt.html" target="_blank"><button>Open receipt</button></a> <a href="/v1/inspections/${inspectionId}/receipt" target="_blank"><button class="ghost">JSON</button></a> <button id="verifyReceipt" class="ghost">Verify bundle</button>`;
   $("verifyReceipt").onclick = async () => { const v = await api("GET", `/v1/inspections/${inspectionId}/receipt/verify`); banner(v.isValid ? "ok" : "bad", v.isValid ? "Receipt bundle integrity: PASS" : "Receipt bundle integrity: FAIL", (v.isValid ? v.checks : v.failures).join(" · ")); };
-  // Change evidence (VK-T26) for the newest photo under the current claim outranks an older decision banner.
+  // Whichever came last in the event trail wins the banner: change evidence (VK-T26) for the current claim, or a decision.
   const change = (state.changeAnalyses || []).at(-1);
-  const latestPhoto = state.photos.at(-1);
-  if (change && change.claimId === state.currentClaimId && latestPhoto && change.photoEvidenceId === latestPhoto.evidenceId) {
+  const lastIndex = (kind) => ev.map(e => e.kind).lastIndexOf(kind);
+  if (change && change.claimId === state.currentClaimId && lastIndex("VisualChangeAnalyzed") > lastIndex("VerificationEvaluated")) {
     const rejected = change.verdict === "DuplicateImage" || change.verdict === "NoVisualChange";
     banner(rejected ? "bad" : change.verdict === "Changed" ? "review" : "sim",
       `CHANGE EVIDENCE: ${change.verdict}` + (rejected ? " · photo not accepted, capture a new view" : " · measured (visual), not a verification"),

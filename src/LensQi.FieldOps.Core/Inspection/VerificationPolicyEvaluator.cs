@@ -8,6 +8,9 @@ public static class VerificationPolicyEvaluator
 {
     public const string PolicyVersion = "fieldproof-policy/1.2";
 
+    /// <summary>Every denial caused by a fresh failing diagnostic starts with this; the session maps it to VerificationFailed.</summary>
+    public const string DiagnosticFailedPrefix = "Diagnostic failed after the repair claim";
+
     public static VerificationDecision Evaluate(InspectionState state, LoadedExpectedTwin loaded, DateTimeOffset now)
     {
         var twin = loaded.Twin;
@@ -67,7 +70,8 @@ public static class VerificationPolicyEvaluator
                 if (r.Passed is null)
                     return Deny($"Diagnostic '{diag.DiagnosticId}' was unavailable; no measurement to verify against");
                 if (r.Passed == false)
-                    return Deny($"Diagnostic '{diag.DiagnosticId}' still fails: {diag.ClaimVerified ?? "approved check"} not satisfied");
+                    return Deny($"{DiagnosticFailedPrefix}: {diag.DiagnosticId} measured {r.NormalizedValue ?? "a failure"} ({r.Source} probe). " +
+                        $"Still required: “{diag.ClaimVerified ?? $"{diag.DiagnosticId} passes"}”");
                 claims.Add(diag.ClaimVerified ?? $"Diagnostic {diag.DiagnosticId} passed at test time");
                 if (r.Source != policy.VerifiedLiveRequiresSource) weakestSource = r.Source;
             }

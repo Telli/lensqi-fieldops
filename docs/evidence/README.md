@@ -27,6 +27,7 @@ labels, and nothing is described more strongly than its label allows.
 | `ui/03-verified-and-receipt-pass.jpg` | `VERIFIED COMPLETE · SIMULATED` banner and the receipt bundle re-verified. | `SIMULATED_PROBE` |
 | `ui/04-sam-overlay-and-crop.jpg`, `ui/04b-roi-crop-original-pixels.jpg` | SAM mask and box on the original photo, and the ROI crop cut from original pixels. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 | `ui/05-change-evidence-duplicate.jpg` | A re-submitted post-repair photo: banner **CHANGE EVIDENCE: DuplicateImage**, stage back to NeedsEvidence, tag on the photo. | `SYNTHETIC_IMAGE`, `SIMULATED_PROBE` |
+| `ui/06-fake-fix-denied-reason.png` | The denial banner after a new post-repair photo while the endpoint is still down: "Diagnostic failed after the repair claim: NODE-A-HEALTH measured Unreachable (Simulated probe)", with the check still required. | `SIMULATED_PROBE` |
 
 ## Android client
 
