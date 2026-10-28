@@ -45,6 +45,7 @@ feature commit, not at submission time.
 | 2026-10-28T00:04:56-07:00 | `df27d13` | InspectionStore rehydrates persisted inspections at startup, fail closed per log | dotnet 142/142; live restart rehydrated 98/98 logs, none skipped | None |
 | 2026-10-28T00:38:17-07:00 | `d9c0b48` | Technician web app and operations dashboard rebuilt to the owner's design on the real API (apps/web), list endpoint, SPA fallback | dotnet 150/150; full hero flow walked through in the browser on I-60601b447fa5; stills docs/evidence/ui-v2/01-09; build byte-identical | None |
 | 2026-10-28T01:03:50-07:00 | `c79a5f5` | Android app restyled to the owner's design: home tabs, investigation stepper, repair verification, camera, embedded designed receipt | Android unit tests 52/52, dotnet 150/150, secret scan PASS, emulator hero flow (same photo blocked, failed then verified Simulated, receipt intact 10 checks) docs/evidence/android/17-23 | None |
+| 2026-10-28T01:57:05-07:00 | `e8bf6c6` | AR overlay from real SAM/Muse results (web and Android): labels pinned to SAM boxes, target-region guide, asset-match pill, Android post-capture review, web hands-free view | Browser on fresh inspections with live Muse/SAM (docs/evidence/ui-v2/10-12); Android unit tests incl. ArTagsTest; emulator review screen (docs/evidence/android/25) | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
