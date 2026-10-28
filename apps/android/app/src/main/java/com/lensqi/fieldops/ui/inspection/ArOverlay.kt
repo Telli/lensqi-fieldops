@@ -59,9 +59,12 @@ import com.lensqi.fieldops.ui.theme.FoDark
 /** A label pinned to a part SAM outlined. Tags exist only where a real outline exists; nothing is placed by guesswork. */
 data class ArTag(val concept: String, val label: String, val tone: Color, val detail: String, val box: SegmentBox, val cropFile: String? = null)
 
-/** Findings and capture guidance can describe only the photo cited by the assessment. */
-fun assessmentForPhoto(assessment: VisualAssessment?, photoEvidenceId: String?): VisualAssessment? =
-    assessment?.takeIf { photoEvidenceId != null && it.hypotheses.any { h -> h.evidenceIds.isEmpty() || photoEvidenceId in h.evidenceIds } }
+/** The assessment reduced to findings that cite this photo; null when none does. Other photos' findings never describe it. */
+fun assessmentForPhoto(assessment: VisualAssessment?, photoEvidenceId: String?): VisualAssessment? {
+    if (assessment == null || photoEvidenceId == null) return null
+    val cited = assessment.hypotheses.filter { photoEvidenceId in it.evidenceIds }
+    return if (cited.isEmpty()) null else assessment.copy(hypotheses = cited)
+}
 
 /** The fixture's outline prompts, repair target last: the server compares later photos against the last outline. */
 fun outlineOrder(fixture: Fixture?, assessment: VisualAssessment?): List<String> {

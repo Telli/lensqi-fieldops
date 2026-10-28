@@ -4,7 +4,7 @@ import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Gl
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { AiCard, Progress } from "@/components/fo/ai";
 import { ArFrame } from "@/components/fo/ar-frame";
-import { CheckRow, EvidenceBadge, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
+import { EvidenceBadge, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
 import { api, type ChecklistStatus, type Decision, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
 import { aiSummary, verifyGateIndex, verifySteps, type VerifyGate } from "@/lib/ai";
@@ -66,6 +66,10 @@ export default function Verify({ id }: { id: string }) {
   const gate: VerifyGate = !accepted ? "photo" : !allReviewed ? "review" : !i.technicianAcknowledged ? "confirm" : "run";
   const busy = review.isPending || ack.isPending || claim.isPending;
   const btn = "h-12 w-full rounded-2xl";
+  const simulated = decision?.outcomeKind === "VerifiedCompleteSimulated" || i.outcomeKind === "VerifiedCompleteSimulated";
+  const gateText = decision?.result === "Verified" ? (simulated ? "Complete · simulated check" : "Complete")
+    : decision?.result === "NeedsHumanReview" ? "Waiting for a reviewer" : "Not complete";
+  const gateTone = decision?.result === "Verified" ? "text-success" : decision?.result === "NeedsHumanReview" ? "text-warning" : "text-failure";
 
   const start = () => {
     setRunning(true);
@@ -157,34 +161,19 @@ export default function Verify({ id }: { id: string }) {
         {(running || decided) && (
           <div className="space-y-2.5">
             <div className="panel p-3" data-dual-proof-gate>
-              <div className="mb-2 flex items-center justify-between text-[11px]">
-                <span className="eyebrow">FieldProof Dual-Key Gate</span>
-                <span className={cn("inline-flex items-center gap-1 font-medium",
-                  running ? "text-muted-foreground" : decision?.result === "Verified" ? "text-success" : "text-failure")}>
-                  {decision?.result === "Verified" ? <ShieldCheck className="size-3.5" /> : <Lock className="size-3.5" />}
-                  {running ? "Evaluating both proofs…" : decision?.result === "Verified" ? "Dual-Proof Unlocked" : "Completion Locked"}
+              <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
+                <span className="eyebrow">Both proofs must pass</span>
+                <span className={cn("inline-flex items-center gap-1 font-medium", running ? "text-muted-foreground" : gateTone)}>
+                  {decision?.result === "Verified" ? <ShieldCheck className="size-3.5" /> : <Lock className="size-3.5" />}{gateText}
                 </span>
               </div>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center text-xs">
-                <div className={cn("rounded-lg border px-2.5 py-2",
-                  running ? "border-border bg-surface/50" : outcome.visual ? "border-success/50 bg-success/10 text-success" : "border-failure/50 bg-failure/10 text-failure")}>
-                  <div className="font-semibold">Key 1 · Visual Proof</div>
-                  <div className="mt-0.5 text-[10px] opacity-85">{running ? "Checking…" : outcome.visual ? "Passed & Reviewed" : "Failed / Incomplete"}</div>
-                </div>
-                <span className="font-mono text-xs text-muted-foreground">+</span>
-                <div className={cn("rounded-lg border px-2.5 py-2",
-                  running || outcome.diagnostic === null ? "border-border bg-surface/50 text-muted-foreground" : outcome.diagnostic ? "border-success/50 bg-success/10 text-success" : "border-failure/50 bg-failure/10 text-failure")}>
-                  <div className="font-semibold">Key 2 · Telemetry Probe</div>
-                  <div className="mt-0.5 text-[10px] opacity-85">{running ? "Probing…" : outcome.diagnostic === null ? "Awaiting Key 1" : outcome.diagnostic ? "Reachable" : "Failed (Unreachable)"}</div>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ProofKey title="1 · Repair photo" pass={running ? "pending" : outcome.visual}
+                  detail={running ? "Checking the new photo and your review…" : outcome.visual === false ? plainReason(decision!.reasons[0] ?? "") : "New photo accepted and every item reviewed."} />
+                <ProofKey title="2 · Equipment check" pass={running ? "pending" : outcome.diagnostic} badge={diag && <SourceBadge source={diag.source} />}
+                  detail={running ? "Fresh measurement of the approved endpoint…" : outcome.diagnostic === null ? "Not run: the repair photo has to pass first." : outcome.diagnostic ? `Endpoint reachable · ${fmtTime(diag?.result.completedAt)}` : `Endpoint still failing · ${fmtTime(diag?.result.completedAt)}`} />
               </div>
             </div>
-            <CheckRow label="Visual verification"
-              detail={running ? "Checking the new photo and your review…" : outcome.visual === false ? plainReason(decision!.reasons[0] ?? "") : "New photo accepted and every item reviewed."}
-              pass={running ? "pending" : outcome.visual} />
-            <CheckRow label="Equipment check"
-              detail={running ? "Fresh measurement of the approved endpoint…" : outcome.diagnostic === null ? "Not run: the visual check has to pass first." : outcome.diagnostic ? `Endpoint reachable · ${fmtTime(diag?.result.completedAt)}` : `Endpoint still failing · ${fmtTime(diag?.result.completedAt)}`}
-              pass={running ? "pending" : outcome.diagnostic} />
           </div>
         )}
 
@@ -274,6 +263,19 @@ function VerifyHero({ id, i, fixture, assessment, photoUrl, camera }: { id: stri
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** One of the two proofs the server requires, with its own pass state and, for the check, where the measurement came from. */
+function ProofKey({ title, detail, pass, badge }: { title: string; detail: string; pass: boolean | null | "pending"; badge?: React.ReactNode }) {
+  return (
+    <div className={cn("rounded-xl border p-3", pass === "pending" || pass === null ? "border-border" : pass ? "border-success/40 bg-success/5" : "border-failure/40 bg-failure/10")}>
+      <div className="flex items-center justify-between gap-2 text-sm font-medium">
+        <span className={cn(pass === true && "text-success", pass === false && "text-failure")}>{title}</span>
+        {badge}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }

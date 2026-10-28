@@ -34,9 +34,11 @@ export function targetConcept(fixture?: Fixture | null, assessment?: Assessment 
   return fixture?.visualRequirements.find((v) => v.requirementId === unclear?.featureId)?.segmentationPrompt ?? undefined;
 }
 
-/** Findings and capture guidance can describe only the photo cited by the assessment. */
+/** The assessment reduced to findings that cite this photo; undefined when none does. Other photos' findings never describe it. */
 export function assessmentForPhoto(assessment?: Assessment | null, photoEvidenceId?: string | null): Assessment | undefined {
-  return photoEvidenceId && assessment?.hypotheses.some((h) => h.evidenceIds.includes(photoEvidenceId)) ? assessment : undefined;
+  if (!assessment || !photoEvidenceId) return undefined;
+  const cited = assessment.hypotheses.filter((h) => h.evidenceIds.includes(photoEvidenceId));
+  return cited.length ? { ...assessment, hypotheses: cited } : undefined;
 }
 
 const mainBox = (g: SegmentationGeometry): Box | undefined =>

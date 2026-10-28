@@ -45,7 +45,8 @@ fun nextMove(v: InspectionView?, a: VisualAssessment?): Move? {
         InspectionStage.VerificationFailed -> return Move(MoveKind.Retry, "Still failing", "Check the connection again, then verify.")
         InspectionStage.AwaitingRepair -> return Move(MoveKind.Repair, "Do the repair", "Then tell me what you did.")
         InspectionStage.ReadyToVerify -> return Move(MoveKind.Verify, if (v.acceptedPostRepairPhotoId != null) "Review and verify" else "Photograph the repair", "A new photo and a fresh check both have to pass.")
-        InspectionStage.FaultConfirmed, InspectionStage.FaultSuspected -> return Move(MoveKind.Plan, "Fault confirmed", "Say how you'll fix it.")
+        InspectionStage.FaultConfirmed -> return Move(MoveKind.Plan, "Fault confirmed", "Say how you'll fix it.")
+        InspectionStage.FaultSuspected -> return Move(MoveKind.Check, "Fault suspected", "Run the approved check to confirm it on the equipment.")
         else -> {}
     }
     if (v.currentClaimId != null) return Move(MoveKind.Verify, "Photograph the repair", "The same photo as before won't count.")

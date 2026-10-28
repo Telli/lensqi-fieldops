@@ -10,8 +10,12 @@ import kotlin.math.*
     val label: String,
     val box: LiveBox,
     val confidence: Double? = null,
+    /** Camera-to-part distance measured by ARCore; never estimated. */
     val distanceCm: Int? = null,
     val spatialAnchored: Boolean = false,
+    /** Set only when the box comes from a world anchor with no live 2D track: seconds since a detection confirmed it. */
+    val seenSecondsAgo: Int? = null,
+    val depthSource: String? = null,
 )
 @Serializable data class LiveFinding(val featureId: String, val status: String, val reason: String)
 @Serializable data class LiveResponse(val frameId: String, val objects: List<LiveObject> = emptyList(), val recommendation: String? = null,

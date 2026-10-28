@@ -188,8 +188,8 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 - Muse or a fixed fixture rule nominates a concrete segmentable object (e.g., “network switch”, “yellow Ethernet cable”).
 - SAM 3.1 segments that object in the photo and returns boxes/masks. On no match, show **No region detected**, never a synthetic mask disguised as real.
 - Convert masks/boxes to original-image coordinates with documented transformations; Android draws a visible mask/box.
-- Compute a padded crop from the most relevant region; if a valid quadrilateral is detected, optionally rectify perspective. When ARCore depth/hit-testing is active on a supported phone, 2D SAM mask centroids may be projected onto 3D world-locked spatial anchors with measured camera-to-target distance; otherwise use 2D image-space tracking.
-- Request a more useful angle using qualitative guidance (“move slightly left”, “show both cable ends”) or, when ARCore depth/pose tracking is active, metric distance coaching (e.g., “move ~15 cm closer”).
+- Compute a padded crop from the most relevant region; if a valid quadrilateral is detected, optionally rectify perspective. When ARCore is active on a supported phone, a SAM box becomes a world-locked ARCore anchor only where ARCore measured depth inside it (Depth API or hit test), and its camera-to-part distance comes from ARCore's pose; otherwise use 2D image-space tracking and claim no distance.
+- Request a more useful angle using qualitative guidance (“move slightly left”, “show both cable ends”) or, only for parts ARCore has anchored with measured depth, distance coaching (e.g., “move about 15 cm closer”).
 
 **Acceptance:** Segmentation overlays align correctly on portrait/landscape test images; cropping retains fine label pixels and preserves an original-to-crop transform.
 
