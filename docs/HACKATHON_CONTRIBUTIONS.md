@@ -18,6 +18,9 @@ feature commit, not at submission time.
 | 2026-10-27T18:35:31-07:00 | `55b77be` | Meta: MuseSparkChatClient (Chat Completions, strict json_schema), grounding composer, GroundedProposalService; Core: proposal contracts, diagnostic registry, KnowledgeActionValidator (VK-T05, VK-T06); Stage One gate runner | 19 new tests, 67 total | None |
 | 2026-10-27T18:43:37-07:00 | `c5d0984` | Stage One gate PASSED: two genuine muse-spark-1.3 structured-output calls validated server-side; reasoning-token budget fix | LIVE_META evidence in docs/evidence/ | None |
 | 2026-10-27T19:04:56-07:00 | `69da6d2` | Docs: review of the v1.1 parent kit and PRD | n/a | None |
+| 2026-10-27T19:20:22-07:00 | `bb863be` | Merge the FieldOps v1.1 parent kit with review fixes | 19 twin negative cases; all fixture validators green | None |
+| 2026-10-27T19:20:22-07:00 | `df419e0` | Unify model next-action vocabulary on the parent ProposedNextAction enum | 68 tests; Stage One gate re-run PASS (LIVE_META) | None |
+| 2026-10-27T19:20:22-07:00 | `b53d2ea` | Adopt the PRD reuse stance, prior-art register, project README, new gate evidence | n/a | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
