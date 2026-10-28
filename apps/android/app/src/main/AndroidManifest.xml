@@ -5,10 +5,15 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
 
     <!-- Meta Wearables Device Access Toolkit: the glasses are reached over Bluetooth through the Meta AI app. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".FieldOpsApplication"
@@ -17,6 +22,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.FieldOps">
+        <service android:name=".wearables.GlassesLiveService" android:exported="false" android:foregroundServiceType="connectedDevice" android:stopWithTask="true" />
         <!-- Wearables Developer Center credentials, injected from local.properties (mwdat_application_id /
              mwdat_client_token). Empty by default; never commit real values. See docs/GLASSES.md. -->
         <meta-data
@@ -25,6 +31,11 @@
         <meta-data
             android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
             android:value="${mwdat_client_token}" />
+        <!-- ARCore is optional: supported phones get 3D world-locked spatial anchors and metric depth coaching;
+             other devices, emulators, and glasses use 2D tracking. -->
+        <meta-data
+            android:name="com.google.ar.core"
+            android:value="optional" />
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

@@ -1,4 +1,5 @@
 using LensQi.FieldOps.Api.Features.Inspections;
+using LensQi.FieldOps.Api.Features.LiveVision;
 using LensQi.FieldOps.Api.Features.Receipts;
 using LensQi.FieldOps.Api.Features.Segmentation;
 using LensQi.FieldOps.Api.Features.Simulation;
@@ -135,6 +136,7 @@ builder.Services.AddSingleton<ISegmenter>(sp => new SamSegmentationClient(sp.Get
 
 // T6.1: request timeouts and rate limits on the endpoints that spend Meta Model API calls.
 builder.Services.AddModelCallLimits(builder.Configuration);
+builder.Services.AddLiveVision(builder.Configuration);
 
 var app = builder.Build();
 
@@ -153,6 +155,7 @@ app.MapSimulation();
 app.MapReceipts();
 app.MapInspectionKnowledge();
 app.MapSegmentation();
+app.MapLiveVision();
 
 // Technician app and operations dashboard: a single-page app built from apps/web into wwwroot (no Node at runtime).
 app.UseDefaultFiles();

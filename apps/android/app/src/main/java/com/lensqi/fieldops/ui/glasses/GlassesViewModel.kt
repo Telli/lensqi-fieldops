@@ -9,6 +9,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lensqi.fieldops.wearables.GlassesPhoto
 import com.lensqi.fieldops.wearables.GlassesSource
+import com.lensqi.fieldops.wearables.GlassesLiveService
+import com.lensqi.fieldops.wearables.GlassesLiveStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -20,22 +22,31 @@ import javax.inject.Inject
 @HiltViewModel
 class GlassesViewModel @Inject constructor(
     private val source: GlassesSource,
+    private val liveStore: GlassesLiveStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     val state = source.state
     val shutter = source.shutter
+    val live = liveStore.state
 
     fun initialize() = source.initialize()
     fun register(activity: Activity) = source.startRegistration(activity)
     suspend fun cameraPermissionGranted() = source.cameraPermissionGranted()
     fun start() = source.startStreaming()
-    fun stop() = source.stopStreaming()
+    fun stop() { pauseLive(); source.stopStreaming() }
+    fun startLive(inspectionId: String) {
+        runCatching { GlassesLiveService.start(context, inspectionId) }
+            .onFailure { source.reportError("Could not start live assistance. Return to the glasses screen and try again.") }
+    }
+    fun pauseLive() { if (live.value.enabled) GlassesLiveService.pause(context) }
+    fun muteLive() = GlassesLiveService.mute(context)
     fun setSurface(surface: Surface?) = source.setPreviewSurface(surface)
     fun showHud(prompt: String, status: String?) = source.showHud(prompt, status)
     fun report(message: String?) = source.reportError(message)
 
     fun capture(onCaptured: (GlassesPhoto) -> Unit) {
         if (state.value.capturing || !state.value.streaming) return
+        pauseLive()
         viewModelScope.launch {
             runCatching { source.capturePhoto() }
                 .onSuccess(onCaptured)
@@ -43,8 +54,8 @@ class GlassesViewModel @Inject constructor(
         }
     }
 
-    fun enableMock(withDisplay: Boolean) = source.enableMock(withDisplay)
-    fun disableMock() = source.disableMock()
+    fun enableMock(withDisplay: Boolean) { stop(); source.enableMock(withDisplay) }
+    fun disableMock() { stop(); source.disableMock() }
     fun useMockPhoneCameraFeed() = source.useMockPhoneCameraFeed()
     fun pressMockCaptureButton() = source.pressMockCaptureButton()
     fun mockDisplayPreview(context: Context): View? = source.mockDisplayPreview(context)
@@ -68,6 +79,6 @@ class GlassesViewModel @Inject constructor(
 
     override fun onCleared() {
         source.setPreviewSurface(null)
-        source.stopStreaming()
+        stop()
     }
 }

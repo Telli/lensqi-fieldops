@@ -17,6 +17,11 @@ import retrofit2.http.Path
  * including one replayed from the offline queue, is applied once by the server.
  */
 interface FieldOpsApi {
+    @Multipart
+    @POST("v1/inspections/{id}/live/{kind}")
+    suspend fun liveFrame(@Path("id") id: String, @Path("kind") kind: String, @Part image: MultipartBody.Part,
+        @Part("frameId") frameId: RequestBody): com.lensqi.fieldops.domain.live.LiveResponse
+
     @GET("health")
     suspend fun health(): Health
 

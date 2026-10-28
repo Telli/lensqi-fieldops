@@ -1,102 +1,182 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Eye, EyeOff, X, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { decodeRle } from "@/lib/rle";
 import type { SegmentationGeometry } from "@/lib/api";
 import type { ArTag, Tone } from "@/lib/ar";
 
 const tagTone: Record<Tone, string> = {
-  primary: "border-primary/50 text-primary",
+  primary: "border-primary/60 text-primary",
   warning: "border-warning/60 text-warning",
   failure: "border-failure/60 text-failure",
-  success: "border-success/50 text-success",
+  success: "border-success/60 text-success",
 };
 
-/**
- * A captured frame with the AI's outlines drawn on the original pixels and a label pinned to each outlined part.
- * Overlays sit on the still photo they were computed from; they are never projected onto a moving camera feed.
- * `guide` darkens everything except the outlined part the AI wants a better view of.
- */
-export function ArFrame({ src, outlines, tags, guide, selected, onSelect, className, imgClassName, children }: {
+type FrameSize = { src: string; w: number; h: number; left: number; top: number; width: number; height: number };
+
+function resolveCropUrl(src: string, cropFile?: string | null): string | null {
+  if (!cropFile) return null;
+  if (src.includes("/artifacts/")) return `${src.slice(0, src.lastIndexOf("/") + 1)}${encodeURIComponent(cropFile)}`;
+  if (typeof window !== "undefined") {
+    const m = window.location.pathname.match(/\/(?:m\/i|ops\/inspections)\/([^/]+)/);
+    if (m?.[1]) return `/v1/inspections/${encodeURIComponent(m[1])}/artifacts/${encodeURIComponent(cropFile)}`;
+  }
+  return null;
+}
+
+/** Photo-bound overlays share the image's contained rectangle, including its letterboxing. */
+export function ArFrame({ src, outlines, tags, guide, selected, onSelect, interactive = true, className, imgClassName, children }: {
   src: string; outlines: SegmentationGeometry[]; tags: ArTag[]; guide?: { concept: string; label: string } | null;
-  selected?: string | null; onSelect?: (concept: string | null) => void; className?: string; imgClassName?: string; children?: React.ReactNode;
+  selected?: string | null; onSelect?: (concept: string | null) => void; interactive?: boolean;
+  className?: string; imgClassName?: string; children?: React.ReactNode;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const img = useRef<HTMLImageElement>(null);
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [size, setSize] = useState<FrameSize | null>(null);
+  const [selection, setSelection] = useState<{ src: string; concept: string | null } | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [failedCrop, setFailedCrop] = useState<string | null>(null);
+  const [zoomedCrop, setZoomedCrop] = useState(false);
+  const detailId = useId();
+  const current = selected !== undefined ? selected : selection?.src === src ? selection.concept : null;
+  const active = tags.find((t) => t.concept === current);
+  const cropUrl = resolveCropUrl(src, active?.cropFile);
+  const showCrop = !!cropUrl && failedCrop !== cropUrl;
+  const select = (concept: string | null) => { setSelection({ src, concept }); setZoomedCrop(false); onSelect?.(concept); };
+  const ready = size?.src === src ? size : null;
+
+  useEffect(() => {
+    const i = img.current;
+    if (!i) return;
+    const measure = () => {
+      if (!i.complete || !i.naturalWidth || !i.clientWidth || !i.clientHeight) return;
+      const scale = Math.min(i.clientWidth / i.naturalWidth, i.clientHeight / i.naturalHeight);
+      const width = i.naturalWidth * scale, height = i.naturalHeight * scale;
+      const next = { src, w: i.naturalWidth, h: i.naturalHeight, left: (i.clientWidth - width) / 2, top: (i.clientHeight - height) / 2, width, height };
+      setSize((prev) => prev && Object.keys(next).every((k) => prev[k as keyof FrameSize] === next[k as keyof FrameSize]) ? prev : next);
+    };
+    i.addEventListener("load", measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(i);
+    measure();
+    return () => { i.removeEventListener("load", measure); observer.disconnect(); };
+  }, [src]);
 
   useEffect(() => {
     const c = canvas.current;
-    if (!c || !size) return;
-    c.width = size.w; c.height = size.h;
-    const ctx = c.getContext("2d")!;
-    ctx.clearRect(0, 0, size.w, size.h);
+    if (!c || !ready) return;
+    c.width = ready.w; c.height = ready.h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
     const css = getComputedStyle(c);
     for (const g of outlines) {
       const tone = tags.find((t) => t.concept === g.concept)?.tone ?? "primary";
       const color = css.getPropertyValue(`--${tone}`).trim() || "#35d6e8";
-      const dim = selected && selected !== g.concept;
+      const dim = current && current !== g.concept;
       for (const m of g.masks) {
         const [mh, mw] = m.rle.size;
         const bits = decodeRle(m.rle.counts, mh, mw);
         const tile = document.createElement("canvas");
         tile.width = mw; tile.height = mh;
-        const t = tile.getContext("2d")!;
+        const t = tile.getContext("2d");
+        if (!t) continue;
+        const pixels = t.createImageData(mw, mh);
+        for (let p = 0; p < bits.length; p++) pixels.data[p * 4 + 3] = bits[p] ? 255 : 0;
+        t.putImageData(pixels, 0, 0);
+        t.globalCompositeOperation = "source-in";
         t.fillStyle = color;
-        for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) if (bits[y * mw + x]) t.fillRect(x, y, 1, 1);
-        ctx.globalAlpha = dim ? 0.12 : 0.34;
+        t.fillRect(0, 0, mw, mh);
+        ctx.globalAlpha = dim ? 0.08 : 0.28;
         ctx.drawImage(tile, m.left, m.top, m.right - m.left, m.bottom - m.top);
       }
-      ctx.globalAlpha = dim ? 0.35 : 1;
+      ctx.globalAlpha = dim ? 0.3 : 1;
       ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(3, size.w / 320);
-      ctx.setLineDash([size.w / 90, size.w / 140]);
+      ctx.lineWidth = Math.max(3, ready.w / 320);
+      ctx.setLineDash([ready.w / 90, ready.w / 140]);
       for (const b of g.boxes) ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
     }
     ctx.globalAlpha = 1;
-  }, [outlines, tags, size, selected]);
+  }, [outlines, tags, ready, current]);
 
   const pct = (v: number, of: number) => `${(100 * v) / of}%`;
-  const guideBox = guide && size ? tags.find((t) => t.concept === guide.concept)?.box : undefined;
-  const active = tags.find((t) => t.concept === selected);
+  const guideBox = guide ? tags.find((t) => t.concept === guide.concept)?.box : undefined;
+  const failed = failedSrc === src;
 
   return (
-    <figure className={cn("relative overflow-hidden", className)} onClick={() => onSelect?.(null)}>
-      <img ref={img} src={src} alt="Inspection photo" className={cn("block w-full", imgClassName)}
-        onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
-      <canvas ref={canvas} className={cn("pointer-events-none absolute inset-0 size-full animate-mask", imgClassName)} />
-      {size && guideBox && (
-        <div className="pointer-events-none absolute animate-mask rounded-lg border-2 border-dashed border-primary shadow-[0_0_0_9999px_color-mix(in_oklab,var(--overlay)_55%,transparent)]"
-          style={{ left: pct(guideBox.left, size.w), top: pct(guideBox.top, size.h), width: pct(guideBox.right - guideBox.left, size.w), height: pct(guideBox.bottom - guideBox.top, size.h) }}>
-          <span className="absolute inset-0 rounded-lg animate-ring" />
-        </div>
-      )}
-      {size && guideBox && (
-        // Outside the box so the reveal animation's clip never cuts the caption.
-        <span className="glass pointer-events-none absolute whitespace-nowrap rounded-md border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary"
-          style={{ left: `calc(${pct(guideBox.left, size.w)} + 4px)`, top: `calc(${pct(guideBox.bottom, size.h)} - 1.75rem)` }}>{guide!.label}</span>
-      )}
-      {size && tags.map((t, k) => {
-        const above = t.box.top / size.h > 0.12;
-        return (
-          <button key={t.concept} type="button" onClick={(e) => { e.stopPropagation(); onSelect?.(selected === t.concept ? null : t.concept); }}
-            className={cn("glass absolute flex max-w-[70%] items-center gap-1.5 truncate rounded-md border px-2 py-1 text-[10.5px] font-medium animate-rise", tagTone[t.tone], selected === t.concept && "ring-2 ring-primary/60")}
-            style={{
-              left: `min(${pct(t.box.left, size.w)}, 62%)`,
-              top: above ? `calc(${pct(t.box.top, size.h)} - 1.9rem)` : `calc(${pct(t.box.bottom, size.h)} + 0.35rem)`,
-              animationDelay: `${0.5 + k * 0.15}s`,
-            }}>
-            <span className="size-1.5 shrink-0 rounded-full bg-current" />
-            <span className="truncate">{t.label}</span>
-          </button>
-        );
-      })}
-      {active && (
-        <figcaption className="glass absolute inset-x-2 bottom-2 animate-rise rounded-lg border border-border p-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
-          <div className="font-medium">{active.label}</div>
-          <div className="mt-0.5 opacity-80">{active.detail}</div>
+    <figure className={cn("dark relative overflow-hidden bg-overlay text-overlay-foreground", className)}>
+      <div className="relative overflow-hidden" data-ar-photo>
+        <img ref={img} src={src} alt="Inspection photo" className={cn("block w-full object-contain", imgClassName)} onError={() => setFailedSrc(src)} />
+        {failed && <p role="status" className="p-4 text-sm">Photo could not load. Reopen the inspection to try again.</p>}
+        {ready && !failed && (
+          <div data-ar-overlay className={cn("pointer-events-none absolute", hidden && "invisible")} style={{ left: ready.left, top: ready.top, width: ready.width, height: ready.height }}>
+            <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 size-full" />
+            {guideBox && <div className="absolute rounded-lg border-2 border-dashed border-primary shadow-[0_0_0_9999px_color-mix(in_oklab,var(--overlay)_45%,transparent)]"
+              style={{ left: pct(guideBox.left, ready.w), top: pct(guideBox.top, ready.h), width: pct(guideBox.right - guideBox.left, ready.w), height: pct(guideBox.bottom - guideBox.top, ready.h) }} />}
+            {active && (
+              <div className="absolute rounded-md border border-primary/80 ring-2 ring-primary/30 transition-all duration-200"
+                style={{ left: pct(active.box.left, ready.w), top: pct(active.box.top, ready.h), width: pct(active.box.right - active.box.left, ready.w), height: pct(active.box.bottom - active.box.top, ready.h) }} />
+            )}
+            {tags.map((t, k) => {
+              const style = { left: `clamp(22px, ${pct(t.box.left, ready.w)}, calc(100% - 22px))`, top: `clamp(22px, ${pct(t.box.top, ready.h)}, calc(100% - 22px))` };
+              const pinClass = cn("absolute grid size-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 bg-overlay/95 text-sm font-semibold shadow-lg", tagTone[t.tone], current === t.concept && "ring-2 ring-overlay-foreground ring-offset-2 ring-offset-overlay");
+              return interactive ? (
+                <button key={t.concept} type="button" aria-label={`Part ${k + 1}: ${t.label}`} aria-pressed={current === t.concept} aria-controls={detailId}
+                  onClick={(e) => { e.stopPropagation(); select(current === t.concept ? null : t.concept); }}
+                  className={cn(pinClass, "pointer-events-auto focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary")} style={style}>{k + 1}</button>
+              ) : <span key={t.concept} className={pinClass} style={style} aria-label={t.label}>{k + 1}</span>;
+            })}
+          </div>
+        )}
+        {children}
+      </div>
+      {interactive && tags.length > 0 && !failed && (
+        <figcaption className="border-t border-overlay-foreground/15 bg-overlay px-3 pb-3">
+          <div className="flex items-center justify-between gap-2 text-[11px]">
+            <span className="text-overlay-foreground/65">AI outlines · captured photo</span>
+            <button type="button" onClick={() => setHidden(!hidden)} aria-pressed={!hidden} className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs hover:bg-overlay-foreground/10 focus-visible:outline-2 focus-visible:outline-primary">
+              {hidden ? <Eye className="size-4" /> : <EyeOff className="size-4" />}{hidden ? "Show outlines" : "Hide outlines"}
+            </button>
+          </div>
+          {guide && guideBox && <p className="mb-2 break-words text-xs text-primary">{guide.label}</p>}
+          <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Outlined parts">
+            {tags.map((t, k) => <button key={t.concept} type="button" onClick={() => select(current === t.concept ? null : t.concept)}
+              aria-pressed={current === t.concept} aria-controls={detailId}
+              className={cn("flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs focus-visible:outline-2 focus-visible:outline-primary", tagTone[t.tone], current === t.concept ? "bg-overlay-foreground/10" : "bg-transparent")}>
+              <span className="font-semibold">{k + 1}</span>{t.label}
+            </button>)}
+          </div>
+          <div id={detailId} aria-live="polite">
+            {active ? (
+              <div className="mt-2 space-y-2.5 rounded-xl bg-overlay-foreground/8 p-3 text-xs leading-relaxed">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{active.label}</p>
+                    <p className="mt-1 text-overlay-foreground/80">{active.detail}</p>
+                  </div>
+                  <button type="button" onClick={() => select(null)} aria-label="Close part details" className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-lg focus-visible:outline-2 focus-visible:outline-primary"><X className="size-4" /></button>
+                </div>
+                {showCrop && cropUrl && (
+                  <div className="overflow-hidden rounded-lg border border-overlay-foreground/15 bg-black/40 p-2" data-ar-loupe>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-overlay-foreground/75">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-primary">High-Res ROI Loupe · Original pixels</span>
+                      <button type="button" onClick={() => setZoomedCrop(!zoomedCrop)} aria-pressed={zoomedCrop}
+                        className="inline-flex min-h-8 items-center gap-1 rounded-md border border-overlay-foreground/20 px-2 py-0.5 text-[11px] hover:bg-overlay-foreground/10">
+                        {zoomedCrop ? <ZoomOut className="size-3.5" /> : <ZoomIn className="size-3.5" />}
+                        {zoomedCrop ? "1× Fit" : "2× Magnify"}
+                      </button>
+                    </div>
+                    <div className={cn("overflow-auto rounded border border-overlay-foreground/10 bg-black/60", zoomedCrop ? "max-h-56" : "max-h-32")}>
+                      <img src={cropUrl} alt={`High-resolution crop of ${active.concept}`} onError={() => setFailedCrop(cropUrl)}
+                        className={cn("mx-auto block transition-transform duration-200", zoomedCrop ? "w-[180%] max-w-none" : "max-h-28 w-auto object-contain")} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : <p className="mt-2 text-[11px] text-overlay-foreground/65">Select a numbered part to read the finding.</p>}
+          </div>
         </figcaption>
       )}
-      {children}
     </figure>
   );
 }

@@ -4,11 +4,12 @@ import { Camera, Terminal, Wrench, Loader2, BookOpen, ShieldCheck, Sparkles, Fil
 import { Button } from "@/components/ui/button";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { EvidenceBadge, Expandable, TechDetails } from "@/components/fo/primitives";
+import { ExpectedState } from "@/components/fo/expected-state";
 import { ArFrame } from "@/components/fo/ar-frame";
 import { AiCard, Progress } from "@/components/fo/ai";
 import { api } from "@/lib/api";
 import { aiSummary, nextMove, progress } from "@/lib/ai";
-import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
+import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { useAct } from "@/lib/hooks";
 import { lastPhoto, latestDiagnostic, useInspectionBundle } from "@/lib/inspection";
 import { featureName, fmtWhen, isPostRepairItem, observationState, stageLabel, stageState } from "@/lib/labels";
@@ -26,9 +27,10 @@ export default function Investigate({ id }: { id: string }) {
   const outlines = usePhotoOutlines(id, i, latest?.evidenceId);
   const diag = latestDiagnostic(i);
   const look = useAct(id, async () => {
+    const photoId = latest?.evidenceId;
     const inv = await api.investigate(id);
     let state = inv.state;
-    for (const c of outlineOrder(fixture, inv.assessment)) state = (await api.segment(id, c)).state;
+    for (const c of outlineOrder(fixture, inv.assessment)) state = (await api.segment(id, c, photoId)).state;
     return state;
   });
   const workOrder = useAct(id, (s: string) => api.workOrder(id, s), { success: "Plan saved" });
@@ -37,7 +39,7 @@ export default function Investigate({ id }: { id: string }) {
   if (!i) return <><TopBar title="Inspection" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
   const asset = fixture?.assets.find((a) => a.assetId === i.assetId);
-  const shown = i.currentClaimId ? undefined : assessment;
+  const shown = i.currentClaimId ? undefined : assessmentForPhoto(assessment, latest?.evidenceId);
   const move = nextMove(i, assessment);
   const target = targetConcept(fixture, shown);
   const findings = shown?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)) ?? [];
@@ -76,7 +78,7 @@ export default function Investigate({ id }: { id: string }) {
                 guide={target ? { concept: target, label: "Target region" } : null} />
             : <Link href={`/m/i/${id}/scan`} className="grid aspect-[4/3] place-items-center text-overlay-foreground/70"><span className="flex flex-col items-center gap-2 text-sm"><Camera className="size-9" />Tap to open the camera</span></Link>}
           {latest && (
-            <Link href={`/m/i/${id}/scan`} aria-label="New photo" className="glass absolute bottom-3 right-3 grid size-11 place-items-center rounded-full shadow-lg"><Camera className="size-5" /></Link>
+            <Link href={`/m/i/${id}/scan`} aria-label="New photo" className="glass absolute top-3 right-3 grid size-11 place-items-center rounded-full shadow-lg"><Camera className="size-5" /></Link>
           )}
           {i.photos.length > 1 && <span className="glass pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px]"><Images className="size-3" />{i.photos.length}</span>}
         </div>
@@ -103,9 +105,12 @@ export default function Investigate({ id }: { id: string }) {
             <Link href={`/m/i/${id}/diagnostics`} className="inline-flex items-center gap-1.5 text-primary"><Terminal className="size-4" /> {diag ? "Open the approved check" : "Run the approved check"}</Link>
           </Expandable>
           <Expandable title="Equipment and documentation">
-            <div className="flex flex-col gap-2">
-              <Link href={`/m/i/${id}/asset`} className="text-primary">Expected installation state</Link>
-              <Link href={`/m/i/${id}/knowledge`} className="inline-flex items-center gap-1.5 text-primary"><BookOpen className="size-4" /> Vendor knowledge</Link>
+            <div className="space-y-3">
+              <ExpectedState fixture={fixture} assetId={i.assetId} selectedConcept={selected} onSelectConcept={setSelected} />
+              <div className="flex flex-col gap-2">
+                <Link href={`/m/i/${id}/asset`} className="text-primary">Expected installation state</Link>
+                <Link href={`/m/i/${id}/knowledge`} className="inline-flex items-center gap-1.5 text-primary"><BookOpen className="size-4" /> Vendor knowledge</Link>
+              </div>
             </div>
           </Expandable>
           <TechDetails rows={[
