@@ -154,9 +154,23 @@ app.MapReceipts();
 app.MapInspectionKnowledge();
 app.MapSegmentation();
 
-// Browser inspection UI (P0 surface): static files under wwwroot, no build step.
+// Technician app and operations dashboard: a single-page app built from apps/web into wwwroot (no Node at runtime).
 app.UseDefaultFiles();
 app.UseStaticFiles();
+// Client-side routes (/m/..., /ops/...) load the app; API paths keep their JSON 404.
+app.MapFallback(async ctx =>
+{
+    var path = ctx.Request.Path.Value ?? "";
+    if (path.StartsWith("/v1", StringComparison.Ordinal) || path.StartsWith("/api", StringComparison.Ordinal) || path.StartsWith("/health", StringComparison.Ordinal) || Path.HasExtension(path))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+        await ctx.Response.WriteAsJsonAsync(LensQi.FieldOps.Api.Shared.ApiError.NotFound($"No route for {path}"));
+        return;
+    }
+    var index = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html");
+    ctx.Response.ContentType = "text/html; charset=utf-8";
+    await ctx.Response.SendFileAsync(index);
+});
 
 app.Run();
 

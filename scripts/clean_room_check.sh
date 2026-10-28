@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Clean-room reproducibility check (Track C). Clones the repository into an empty temporary directory and, using only
 # what is committed, runs: Python venv + fixture validators, dotnet test, the API on its own port and data directory,
+# a byte-for-byte rebuild of the web app bundle,
 # the hero flow over HTTP with the simulated probe (fake fixes caught, real fix verified), verify-receipt on the bundle
 # and on the shipped evidence bundles, and two genuine-call evaluation scenarios when a Meta key is available.
 # Prints PASS or FAIL. Integrators run it after every merge; a FAIL stops merges.
@@ -120,6 +121,17 @@ done
 TAMPER="$WORK/tampered"; cp -R "$DATA/receipts/$ID" "$TAMPER"
 F="$(ls "$TAMPER"/artifacts/* | head -1)"; printf '\x00' | dd of="$F" bs=1 seek=100 count=1 conv=notrunc 2>/dev/null
 if dotnet run --project tools/LensQi.FieldOps.VerifyReceipt --no-build -- "$TAMPER" >"$LOG/tamper.txt" 2>&1; then bad "a tampered bundle verified"; else ok "a one-byte flip in an artifact fails verification"; fi
+
+step "web app: the committed bundle in wwwroot rebuilds byte for byte from apps/web"
+if command -v npm >/dev/null 2>&1; then
+  if (cd apps/web && npm ci --no-audit --no-fund >"$LOG/npm.txt" 2>&1 && npx vite build --outDir "$WORK/web-dist" --emptyOutDir >>"$LOG/npm.txt" 2>&1 && npx tsc --noEmit -p . >>"$LOG/npm.txt" 2>&1); then
+    if diff <(cd src/LensQi.FieldOps.Api/wwwroot && find . -type f | sort | xargs shasum -a 256) <(cd "$WORK/web-dist" && find . -type f | sort | xargs shasum -a 256) >"$LOG/web-diff.txt"; then
+      ok "typecheck and build match the committed bundle ($(find src/LensQi.FieldOps.Api/wwwroot -type f | wc -l | tr -d ' ') files)"
+    else bad "committed wwwroot differs from a fresh build (run npm run build in apps/web and commit)"; head -5 "$LOG/web-diff.txt"; fi
+  else bad "web app build (see $LOG/npm.txt)"; tail -5 "$LOG/npm.txt"; fi
+else
+  SKIPS+=("web app rebuild (npm not installed)"); echo "   SKIPPED: npm not installed"
+fi
 
 step "evaluation: c01-clear-p2, f01-seated-down (genuine Muse Spark and SAM 3.1)"
 if [ "$META" = 0 ] || [ -z "$KEY" ]; then

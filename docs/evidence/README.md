@@ -18,7 +18,23 @@ labels, and nothing is described more strongly than its label allows.
 | `stage-one-gate-20261028T014314Z.json`, `stage-one-gate-20261028T021847Z.json` | Two grounded `muse-spark-1.3` proposals per run with strict JSON schema, prompt digest, fact IDs, server-side validation (`allAccepted: true`). No diagnostic was run. | `LIVE_META` |
 | `sam-spike-20261028T022522Z.json`, `sam-spike-20261028T022522Z-overlay.jpg` | First `sam-3.1` calls through the Responses API: raw output digest, parsed boxes and masks, overlay drawn on the original image. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 
-## Browser UI (P0 surface)
+## Web app (current)
+
+The rebuilt technician app and operations dashboard, walked through end to end on 2026-10-28 against the local API
+(genuine Muse and SAM calls, simulated endpoint, synthetic renders imported through the photo picker).
+
+| File | What it shows | Labels |
+|---|---|---|
+| `ui-v2/01-home.jpg` | Technician home: live counts, work needing verification, open inspections. | — |
+| `ui-v2/02-scan-ambiguous-ai-outline.jpg` | Camera result: SAM's mask and box on the cable, Muse unsure about the hidden connector, the requested next view. | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v2/03-investigate-requested-view.jpg` | Investigation stepper with the AI's requested view and guidance photo. | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v2/04-same-photo-rejected.jpg` | Post-repair photo re-submitted: "Photo not accepted · Same photo". | `SYNTHETIC_IMAGE` |
+| `ui-v2/05-fake-fix-verification-failed.jpg` | Visual check ✓, equipment check ✕, **Verification failed**. | `SIMULATED_PROBE` |
+| `ui-v2/06-real-fix-verified-simulated.jpg` | Both checks ✓, **Verified complete** with the simulated caveat. | `SIMULATED_PROBE` |
+| `ui-v2/07-fieldproof-receipt.jpg` | Receipt: discrepancy, technician actions, before/after with outlines, decisions ✕ ✓, checks with source badges. | `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
+| `ui-v2/08-ops-overview.jpg`, `ui-v2/09-ops-inspection-workspace.jpg` | Operations dashboard from real inspection data; workspace with photo, AI observations, verification state, timeline, receipt. | `SIMULATED_PROBE` |
+
+## Browser UI (first version, replaced)
 
 | File | What it shows | Labels |
 |---|---|---|

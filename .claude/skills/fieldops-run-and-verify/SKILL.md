@@ -15,7 +15,7 @@ Python helpers (once): `python3 -m venv .venv && .venv/bin/pip install -r script
 ```bash
 dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
 ```
-Open `http://127.0.0.1:5199/`. The launch config `.claude/launch.json` (`fieldops-api`) does the same for the preview pane. The API fails closed at startup on any invalid pack, binding or twin. Restarting keeps inspections: every `data/inspections/*.jsonl` log is replayed through `InspectionSession.Rehydrate`; a log with a different fixture digest, a sequence gap or bad JSON is left on disk and named in a startup warning. `/health` reports `diagnosticsMode`; the UI's demo controls exist only in `Simulated` mode.
+Open `http://127.0.0.1:5199/m` (technician app) or `/ops` (operations dashboard). The UI is `apps/web` (React + Tailwind + TanStack Query), built into `wwwroot` and committed: after any UI change run `cd apps/web && npm run build` and commit `wwwroot` too (the clean-room check diffs it against a fresh build). `npm run dev` serves on 5173 with a proxy to 5199. The launch config `.claude/launch.json` (`fieldops-api`) does the same for the preview pane. The API fails closed at startup on any invalid pack, binding or twin. Restarting keeps inspections: every `data/inspections/*.jsonl` log is replayed through `InspectionSession.Rehydrate`; a log with a different fixture digest, a sequence gap or bad JSON is left on disk and named in a startup warning. `/health` reports `diagnosticsMode`; the UI's demo controls exist only in `Simulated` mode.
 
 ## Hero flow over HTTP (curl), simulated probe
 1. `POST /v1/inspections {fixtureId:"LAB-RACK-01", assetId:"LAB-SW-01"}` → `inspectionId`

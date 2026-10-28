@@ -17,7 +17,7 @@ description: Architecture invariants, code layout, commit and ledger discipline 
 - `src/LensQi.FieldOps.Core` pure: contracts, `Inspection/` (events, state, session, policy, twin, RoiCrop), `Knowledge/` (packs, applicability, resolver, validator), `Receipts/`, `Diagnostics/` (registry contract). No provider or ASP.NET references.
 - `src/LensQi.FieldOps.Meta` Muse (`Muse/`), grounding (`Knowledge/`), visual assessment (`Vision/`), SAM + sidecar (`Segmentation/`).
 - `src/LensQi.FieldOps.Diagnostics` probes and dispatcher.
-- `src/LensQi.FieldOps.Api` minimal API: `Features/<Area>/<Area>Endpoints.cs` with a static `Map...` method, `Infrastructure/` stores and loaders, `wwwroot/` browser UI, `Program.cs` wiring.
+- `src/LensQi.FieldOps.Api` minimal API: `Features/<Area>/<Area>Endpoints.cs` with a static `Map...` method, `Infrastructure/` stores and loaders, `wwwroot/` the built web app (source in `apps/web`, never edit `wwwroot` by hand), `Program.cs` wiring.
 - `tools/` consoles: StageOneGate (Muse evidence), VerifyReceipt, Eval; `tools/sam-parser/` Python sidecar.
 - `fixtures/` twin, packs, schemas, eval scenarios; `scripts/` Python validators, ledger and secret helpers; `docs/evidence/` recorded genuine calls.
 

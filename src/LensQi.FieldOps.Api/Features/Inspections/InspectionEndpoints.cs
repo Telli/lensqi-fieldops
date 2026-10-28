@@ -45,6 +45,9 @@ public static class InspectionEndpoints
             });
         });
 
+        // Summaries for the technician home and the operations dashboard, newest first; derived from the event logs only.
+        g.MapGet("/inspections", (InspectionStore store) => Results.Ok(store.All.Select(Summary).OrderByDescending(x => x.UpdatedAt)));
+
         g.MapGet("/inspections/{id}", (string id, InspectionStore store) =>
             store.Find(id) is { } s ? Results.Ok(View(s)) : ApiResults.NotFound($"Inspection '{id}' not found"));
 
@@ -223,6 +226,19 @@ public static class InspectionEndpoints
         });
 
         return app;
+    }
+
+    public sealed record InspectionSummary(string InspectionId, string FixtureId, string AssetId, string Stage, string? OutcomeKind,
+        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, int Photos, int Diagnostics, string? LastDecision, string? LatestChange,
+        string? CurrentClaimId, string? WorkOrder, string? Claim);
+
+    public static InspectionSummary Summary(InspectionSession s)
+    {
+        var st = s.State;
+        return new InspectionSummary(st.InspectionId, st.FixtureId, st.AssetId, st.Stage.ToString(), st.LastDecision?.OutcomeKind?.ToString(),
+            s.Events[0].OccurredAt, s.Events[^1].OccurredAt, st.Photos.Count, st.Diagnostics.Count, st.LastDecision?.Result.ToString(),
+            st.ChangeAnalyses.LastOrDefault()?.Verdict.ToString(), st.CurrentClaimId,
+            s.Events.OfType<WorkOrderDrafted>().LastOrDefault()?.Summary, s.Events.OfType<RepairClaimed>().LastOrDefault()?.Description);
     }
 
     public static object View(InspectionSession s)
