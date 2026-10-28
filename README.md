@@ -11,7 +11,7 @@ acknowledges. Documentation guides the investigation; it is never evidence that 
 **Status (2026-10-28):** Core state machine, dual-proof verification, probes (simulated, replay, guarded live HTTP),
 inspection API, Muse visual assessment, vendor-knowledge grounding and hash-verified receipts are implemented with 99
 passing tests. Genuine Muse Spark and SAM 3.1 calls are recorded under `docs/evidence/`. Browser UI is the P0 surface. Open:
-evaluation run and video; see `.kiro/specs/lensqi-fieldops/tasks.md`.
+hardening pass, live owned probe, video; see `.kiro/specs/lensqi-fieldops/tasks.md` and the latest report in `docs/evaluation/`.
 
 ## Read first
 
@@ -65,6 +65,16 @@ dotnet run --project tools/LensQi.FieldOps.StageOneGate
 ## Browser inspection UI (P0 surface)
 
 Start the API and open <http://127.0.0.1:5199/>. The page is plain HTML and JavaScript served from `wwwroot`, no build step. It walks the loop in order: fixture and asset → photo (camera capture on phones) → Muse assessment with Observed / Suspected / Unknown / Conflicting badges → documentation facts with provenance labels and a grounded proposal → prediction and probe with a LIVE / SIMULATED / REPLAY badge → work order, repair claim, human-reviewed checklist, acknowledgement → Verify → receipt and bundle verification. Demo controls for the simulated endpoint appear only when the server runs in Simulated mode. Screenshots of a full run are in `docs/evidence/ui/`. Android is P1; no Android build is claimed.
+
+## Evaluation
+
+`fixtures/telecom-lab/eval/scenarios.json` holds 25 labelled scenarios over Pillow renders of the fictional switch (clear, ambiguous, fake fix, repaired, wrong asset), four of them held out. `tools/sam-parser/render_fixture.py` regenerates the images. With the API running in Simulated mode:
+
+```bash
+dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199
+```
+
+The runner makes genuine Muse Spark and SAM 3.1 calls, scores the deterministic expectations as hard pass/fail, reports model behaviour without asserting it as truth, compares a single-look baseline against the full loop on false completions, and writes `docs/evaluation/eval-<timestamp>.{json,md}`.
 
 ## Segmentation (SAM 3.1)
 

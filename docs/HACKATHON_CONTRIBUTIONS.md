@@ -38,6 +38,10 @@ feature commit, not at submission time.
 - [x] JSON/HTML evidence receipt with verifiable hashes: canonical-JSON manifest digest, per-artifact SHA-256, `verify-receipt` CLI; tamper tests (artifact byte, forged decision, dropped event) fail as required; sample bundle in `docs/evidence/receipt-sample/`
 - [x] Vendor-knowledge grounding: exact applicability, bounded cited retrieval, proposal validation (child spec VK-T01–T06)
 
+## Evaluation
+
+Latest run: `docs/evaluation/eval-20261028T032756Z.md` (25 synthetic scenarios, genuine Muse Spark and SAM 3.1 calls, Simulated probe). Rerun with `dotnet run --project tools/LensQi.FieldOps.Eval` against a running API.
+
 ## Separately disclosed existing project
 
 - Original private LensIQ heritage application: `Telli/LensIQ-Monorepo` before Oct 27, 2026. Product context only.
