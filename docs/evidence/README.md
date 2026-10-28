@@ -33,6 +33,9 @@ The rebuilt technician app and operations dashboard, walked through end to end o
 | `ui-v2/06-real-fix-verified-simulated.jpg` | Both checks ✓, **Verified complete** with the simulated caveat. | `SIMULATED_PROBE` |
 | `ui-v2/07-fieldproof-receipt.jpg` | Receipt: discrepancy, technician actions, before/after with outlines, decisions ✕ ✓, checks with source badges. | `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
 | `ui-v2/08-ops-overview.jpg`, `ui-v2/09-ops-inspection-workspace.jpg` | Operations dashboard from real inspection data; workspace with photo, AI observations, verification state, timeline, receipt. | `SIMULATED_PROBE` |
+| `ui-v2/10-ar-scan-outline-tags.jpg` | Web scan after capture: real SAM outline with a label pinned to its box, coloured by Muse's finding; asset pill from the AI's asset reading. SAM found no "network switch" region in this render, so that finding has no label (nothing placed by guesswork). | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v2/11-ar-target-region.jpg` | The AI asked for a closer view: the unclear part's outline is the target region, everything else darkened, amber "not clear" label. | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v2/12-hands-free-view.jpg` | Hands-free view (web): one spoken instruction from live state, latest photo with outlines and its source. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 
 ## Browser UI (first version, replaced)
 

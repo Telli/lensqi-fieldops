@@ -1,0 +1,166 @@
+package com.lensqi.fieldops.ui.inspection
+
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lensqi.fieldops.data.api.ObservationStatus
+import com.lensqi.fieldops.data.api.ProposedNextAction
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
+import com.lensqi.fieldops.ui.common.EvidenceBadge
+import com.lensqi.fieldops.ui.common.PrimaryButton
+import com.lensqi.fieldops.ui.common.SecondaryButton
+import com.lensqi.fieldops.ui.common.changeText
+import com.lensqi.fieldops.ui.common.featureName
+import com.lensqi.fieldops.ui.common.isPostRepairItem
+import com.lensqi.fieldops.ui.common.observationLabel
+import com.lensqi.fieldops.ui.common.sentence
+import com.lensqi.fieldops.ui.theme.Fo
+
+/**
+ * The frozen frame after the shutter, as in the design's camera: progress while the server works, then the photo with
+ * the AI's outlines and pinned labels, the asset match, and what to do next. Every result comes from the API.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -> Unit) {
+    val s by vm.state.collectAsStateWithLifecycle()
+    val r = s.review ?: return
+    val view = s.view
+    val local = remember(r.file) { runCatching { BitmapFactory.decodeFile(r.file.path, BitmapFactory.Options().apply { inSampleSize = 2 }) }.getOrNull() }
+    val outlinesReady = r.done && s.outlinePhotoId == r.photoId && s.outlineImage != null
+    val change = view?.changeAnalyses?.lastOrNull { it.photoEvidenceId == r.photoId }
+    val assessment = if (r.afterRepair) null else s.latestAssessment
+    val tags = if (outlinesReady) arTags(s.fixture, assessment, s.outlines, change) else emptyList()
+    val target = if (outlinesReady) targetConcept(s.fixture, assessment) else null
+    val rejected = change?.verdict == VisualChangeVerdict.DuplicateImage || change?.verdict == VisualChangeVerdict.NoVisualChange
+    val expected = s.fixture?.assets?.firstOrNull { it.assetId == view?.assetId }?.displayName ?: view?.assetId.orEmpty()
+    val glass = Color(0xCC0B0F14)
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick = { vm.closeReview(); onContinue() }, modifier = Modifier.clip(CircleShape).background(glass)) { Icon(Icons.Outlined.Close, "Close", tint = Fo.Foreground) }
+                Row(
+                    Modifier.weight(1f).clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val (dot, text) = when {
+                        r.afterRepair -> null to "$expected · post-repair photo"
+                        r.assetSeen == null && !r.done -> null to "Matching asset…"
+                        r.assetSeen != null && r.assetSeen != view?.assetId -> Fo.Warning to "Looks like ${r.assetSeen}, not $expected"
+                        r.assetSeen != null -> Fo.Success to "$expected · matches site record"
+                        else -> null to "$expected · from asset label"
+                    }
+                    dot?.let { Box(Modifier.size(7.dp).background(it, CircleShape)) }
+                    Text(text, fontSize = 12.sp, maxLines = 1, color = if (dot == Fo.Warning) Fo.Warning else Fo.Foreground)
+                }
+            }
+            Box(Modifier.fillMaxWidth()) {
+                if (outlinesReady) ArOverlay(s.outlineImage!!, s.outlines, tags, guide = target, guideLabel = "Target region")
+                else local?.let { Image(it.asImageBitmap(), "Captured photo", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                if (!r.done && !r.awaitingUpload) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = Fo.Primary, trackColor = Color.Transparent)
+            }
+        }
+
+        Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, Fo.Border, RoundedCornerShape(18.dp)).padding(14.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                when {
+                    r.awaitingUpload -> "Saved on this phone"
+                    !r.done -> "LensQi is looking…"
+                    rejected -> "Photo not accepted"
+                    r.afterRepair -> "Photo accepted"
+                    else -> "Here's what LensQi sees"
+                },
+                fontWeight = FontWeight.Medium, fontSize = 15.sp,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                r.steps.forEach { st ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        when (st.state) {
+                            StepState.Done -> Icon(Icons.Outlined.Check, null, tint = Fo.Primary, modifier = Modifier.size(13.dp))
+                            StepState.Doing -> CircularProgressIndicator(Modifier.size(11.dp), color = Fo.Foreground, strokeWidth = 1.5.dp)
+                            StepState.Skipped -> Icon(Icons.Outlined.WarningAmber, null, tint = Fo.Warning, modifier = Modifier.size(13.dp))
+                            StepState.Todo -> {}
+                        }
+                        Text(st.label, fontSize = 11.sp, color = when (st.state) { StepState.Done -> Fo.Primary; StepState.Doing -> Fo.Foreground; else -> Fo.Muted })
+                    }
+                }
+            }
+            if (r.awaitingUpload) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.CloudOff, null, tint = Fo.Warning, modifier = Modifier.size(16.dp))
+                Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = Fo.Warning)
+            }
+            if (r.done) {
+                change?.let { c ->
+                    val t = changeText(c.verdict)
+                    EvidenceBadge(t.state, t.label)
+                    Text(t.detail, fontSize = 12.sp)
+                }
+                assessment?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }?.forEach { h ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> Fo.Primary; ObservationStatus.Conflicting -> Fo.Failure; else -> Fo.Warning }, CircleShape))
+                        Column {
+                            Text("${featureName(h.featureId)} · ${observationLabel(h.status).second}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(h.reason, fontSize = 12.sp, color = Fo.Muted)
+                        }
+                    }
+                }
+                if (assessment?.nextAction == ProposedNextAction.RequestView && !assessment.requestedView.isNullOrBlank())
+                    Text("Next: ${sentence(assessment.requestedView)}", fontSize = 12.sp, color = Fo.Warning)
+                if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = Fo.Muted)
+                if (tags.isNotEmpty()) Text("Tap a label on the photo for the AI's reason.", fontSize = 11.sp, color = Fo.Muted)
+            }
+            if (rejected) PrimaryButton("Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+            else if (r.done || r.awaitingUpload)
+                PrimaryButton(if (r.afterRepair) "Continue to verification" else "Continue investigation", { vm.closeReview(); onContinue() }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward)
+            else SecondaryButton("Cancel", { vm.cancel(); vm.closeReview(); onContinue() }, Modifier.fillMaxWidth())
+        }
+    }
+}

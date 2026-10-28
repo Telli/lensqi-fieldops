@@ -114,12 +114,12 @@ private const val DIAG_FAILED = "Diagnostic failed after the repair claim"
  * Stage, verdicts and decisions are the server's; the screen only sends commands and shows what comes back.
  */
 @Composable
-fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit, vm: InspectionViewModel = hiltViewModel()) {
+fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit, onReview: () -> Unit = {}, vm: InspectionViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch { vm.queuePhoto(copyToCache(context, uri), origin = "RecordedFixture") }
+        if (uri != null) scope.launch { vm.captureForReview(copyToCache(context, uri), origin = "RecordedFixture"); onReview() }
     }
     val importPhoto = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val view = s.view
@@ -179,7 +179,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
     val needsView = a?.nextAction == ProposedNextAction.RequestView && view.stage == InspectionStage.NeedsEvidence
     val diag = view.diagnostics.lastOrNull()
     val canRepair = view.stage in listOf(InspectionStage.FaultConfirmed, InspectionStage.FaultSuspected, InspectionStage.AwaitingRepair)
-    val done = listOf(a != null, a != null, a != null && !needsView, s.segmentation?.matched == true, diag != null, false)
+    val done = listOf(a != null, a != null, a != null && !needsView, s.outlines.isNotEmpty(), diag != null, false)
     val active = done.indexOfFirst { !it }
 
     item {
@@ -227,15 +227,16 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
         }
     }
     item {
-        Step(4, "Part outlined", done[3], active == 3) {
-            val seg = s.segmentation
-            val img = s.segmentationImage
+        Step(4, "Parts outlined", done[3], active == 3) {
+            val img = s.outlineImage
             when {
-                seg?.matched == true && img != null -> {
-                    Muted("AI outline of the ${seg.concept}.")
-                    Box(Modifier.clip(RoundedCornerShape(12.dp))) { SegmentationOverlay(img, seg) }
+                s.outlines.isNotEmpty() && img != null && s.outlinePhotoId == view.photos.lastOrNull()?.evidenceId -> {
+                    Muted("AI outlines: ${s.outlines.joinToString { it.concept }}. Tap a label for the AI's reason.")
+                    Box(Modifier.clip(RoundedCornerShape(12.dp))) {
+                        ArOverlay(img, s.outlines, arTags(s.fixture, a, s.outlines), guide = if (needsView) targetConcept(s.fixture, a) else null)
+                    }
                 }
-                seg != null && !seg.matched -> Muted("No ${seg.concept} found in the latest photo. Nothing was guessed.")
+                a != null -> Muted("No part could be outlined in the latest photo. Nothing was guessed.")
                 else -> Muted("Outlined automatically when LensQi looks at a photo.")
             }
         }

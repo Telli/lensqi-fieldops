@@ -26,6 +26,7 @@ import com.lensqi.fieldops.data.api.apiCall
 import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.api.VisualAssessment
+import com.lensqi.fieldops.data.api.PhotoEvidence
 import com.lensqi.fieldops.ui.common.sentence
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
@@ -37,6 +38,8 @@ import com.lensqi.fieldops.data.settings.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +55,20 @@ import java.util.UUID
 import javax.inject.Inject
 
 /** Everything the inspection screen draws. Stage, decision and labels come from the server; nothing is derived locally. */
+enum class StepState { Todo, Doing, Done, Skipped }
+data class ReviewStep(val label: String, val state: StepState)
+
+/** The post-capture review: the frozen frame, what the server is doing with it, and what came back. */
+data class Review(
+    val file: File,
+    val afterRepair: Boolean,
+    val steps: List<ReviewStep>,
+    val photoId: String? = null,
+    val awaitingUpload: Boolean = false,
+    val assetSeen: String? = null,
+    val done: Boolean = false,
+)
+
 data class InspectionUi(
     val view: InspectionView? = null,
     val fixture: Fixture? = null,
@@ -77,6 +94,11 @@ data class InspectionUi(
     val attempts: List<VerificationResult> = emptyList(),
     /** Demo control state of the simulated endpoint (Simulated mode only). */
     val simUp: Boolean? = null,
+    /** Newest matched outline per part for the latest photo, and that photo's pixels. */
+    val outlines: List<Segmentation> = emptyList(),
+    val outlinePhotoId: String? = null,
+    val outlineImage: Bitmap? = null,
+    val review: Review? = null,
     val busy: String? = null,
     val error: String? = null,
 )
@@ -157,11 +179,15 @@ class InspectionViewModel @Inject constructor(
         local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
-        val seg = view.segmentations.lastOrNull { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }
-        if (seg != null && local.value.segmentation?.segmentationId != seg.evidenceId) {
-            val geometry = (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
-                ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
-            if (geometry != null) local.update { it.copy(segmentation = geometry, segmentationImage = loadArtifactBitmap(photo.evidenceId)) }
+        val latest = view.segmentations.filter { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }.associateBy { it.concept }.values.toList()
+        val ui = local.value
+        if (ui.outlinePhotoId != photo.evidenceId || ui.outlines.map { it.segmentationId }.toSet() != latest.map { it.evidenceId }.toSet()) {
+            val geometries = latest.mapNotNull { seg ->
+                (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
+                    ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
+            }
+            val image = ui.outlineImage.takeIf { ui.outlinePhotoId == photo.evidenceId } ?: loadArtifactBitmap(photo.evidenceId)
+            local.update { it.copy(outlines = geometries, outlinePhotoId = photo.evidenceId, outlineImage = image) }
         }
         if (local.value.diagnosticsMode == DiagnosticSource.Simulated) {
             val sim = (apiCall { api.simulation() } as? ApiOutcome.Ok)?.value
@@ -180,20 +206,70 @@ class InspectionViewModel @Inject constructor(
         }
     }
 
-    /** Muse looks at the latest photo, then SAM outlines the part it asks for (or the fixture's most specific prompt). */
+    /** Muse looks at the latest photo, then SAM outlines each part the site expects, repair target last. */
     fun assessAndOutline() = act("LensQi is looking at the photo…") {
-        var concept: String? = null
-        when (val r = apiCall { api.investigate(inspectionId, key()) }) {
-            is ApiOutcome.Ok -> { cache.put(r.value.state); concept = r.value.assessment.requestedSegmentationConcept; local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) } }
-            else -> report(r)
+        val assessment = when (val r = apiCall { api.investigate(inspectionId, key()) }) {
+            is ApiOutcome.Ok -> { cache.put(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
+            else -> { report(r); null }
         }
-        val prompts = local.value.fixture?.visualRequirements?.mapNotNull { it.segmentationPrompt }.orEmpty()
-        val target = concept ?: prompts.lastOrNull()
-        apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = target)) }.onOk { r ->
-            cache.put(r.state)
-            local.update { it.copy(segmentation = r.segmentation, segmentationImage = loadArtifactBitmap(r.segmentation.photoEvidenceId)) }
+        for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment))
+            apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept)) }.onOk { cache.put(it.state) }
+    }
+
+    /**
+     * After the shutter: queue the original photo, wait for the server to have it, then let Muse look and SAM outline
+     * (before a repair) or show the server's change check (after one). Offline, the photo stays queued and says so.
+     */
+    fun captureForReview(file: File, origin: String) {
+        val view = state.value.view
+        val afterRepair = view?.currentClaimId != null
+        val known = view?.photos?.map { it.evidenceId }?.toSet().orEmpty()
+        val labels = if (afterRepair) listOf("Saving photo", "Comparing with before") else listOf("Saving photo", "Observing", "Matching asset", "Outlining parts")
+        local.update { it.copy(error = null, review = Review(file, afterRepair, labels.mapIndexed { i, l -> ReviewStep(l, if (i == 0) StepState.Doing else StepState.Todo) })) }
+        running?.cancel()
+        running = viewModelScope.launch {
+            runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }
+            var photo: PhotoEvidence? = null
+            withTimeoutOrNull(45_000) {
+                while (photo == null) {
+                    queue.drain()
+                    (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.let { v -> cache.put(v); photo = v.photos.firstOrNull { it.evidenceId !in known } }
+                    if (photo == null) delay(1_500)
+                }
+            }
+            val uploaded = photo ?: run { reviewUpdate { it.copy(awaitingUpload = true) }; return@launch }
+            reviewStep(0, StepState.Done)
+            reviewUpdate { it.copy(photoId = uploaded.evidenceId) }
+            if (afterRepair) {
+                reviewStep(1, StepState.Done)
+            } else {
+                reviewStep(1, StepState.Doing)
+                val assessment = when (val r = apiCall { api.investigate(inspectionId, key()) }) {
+                    is ApiOutcome.Ok -> { cache.put(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
+                    else -> { report(r); null }
+                }
+                reviewStep(1, if (assessment != null) StepState.Done else StepState.Skipped)
+                reviewUpdate { it.copy(assetSeen = assessment?.assetId) }
+                reviewStep(2, if (assessment != null) StepState.Done else StepState.Skipped)
+                reviewStep(3, StepState.Doing)
+                var failed = false
+                for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment)) {
+                    when (val r = apiCall { api.segment(inspectionId, key(), SegmentRequest(photoEvidenceId = uploaded.evidenceId, concept = concept)) }) {
+                        is ApiOutcome.Ok -> cache.put(r.value.state)
+                        else -> { failed = true; report(r) }
+                    }
+                }
+                reviewStep(3, if (failed) StepState.Skipped else StepState.Done)
+            }
+            refresh().join()
+            reviewUpdate { it.copy(done = true) }
         }
     }
+
+    fun closeReview() = local.update { it.copy(review = null) }
+
+    private fun reviewUpdate(change: (Review) -> Review) = local.update { ui -> ui.copy(review = ui.review?.let(change)) }
+    private fun reviewStep(index: Int, to: StepState) = reviewUpdate { r -> r.copy(steps = r.steps.mapIndexed { i, st -> if (i == index) st.copy(state = to) else st }) }
 
     fun onConceptChanged(value: String) = local.update { it.copy(concept = value) }
     fun onWorkOrderChanged(value: String) = local.update { it.copy(workOrderText = value) }

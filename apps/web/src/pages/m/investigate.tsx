@@ -4,10 +4,11 @@ import { Camera, Terminal, Wrench, Loader2, BookOpen, ShieldCheck } from "lucide
 import { Button } from "@/components/ui/button";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { EvidenceBadge, Expandable, Citation, TechDetails } from "@/components/fo/primitives";
-import { EvidencePhoto } from "@/components/fo/evidence-photo";
+import { ArFrame } from "@/components/fo/ar-frame";
+import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { api } from "@/lib/api";
 import { useAct, useKnowledge } from "@/lib/hooks";
-import { lastPhoto, latestDiagnostic, useGeometry, useInspectionBundle } from "@/lib/inspection";
+import { lastPhoto, latestDiagnostic, useInspectionBundle } from "@/lib/inspection";
 import { featureName, fmtWhen, isPostRepairItem, observationState, sentence, stageLabel, stageState } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
@@ -20,10 +21,12 @@ export default function Investigate({ id }: { id: string }) {
   const [plan, setPlan] = useState("");
   const [done, setDone] = useState("");
   const latest = lastPhoto(i);
-  const geometry = useGeometry(id, i, latest?.evidenceId);
+  const outlines = usePhotoOutlines(id, i, latest?.evidenceId);
+  const [selected, setSelected] = useState<string | null>(null);
   const diag = latestDiagnostic(i);
   const assessments = ev.filter((e) => e.kind === "AssessmentRecorded");
-  const segment = useAct(id, (concept?: string) => api.segment(id, concept));
+  // Outline every part the site expects, repair target last (later photos are compared against the last outline).
+  const segment = useAct(id, async (concepts: string[]) => { let r; for (const c of concepts) r = await api.segment(id, c); return r!; });
   const workOrder = useAct(id, (s: string) => api.workOrder(id, s), { success: "Work order drafted" });
   const claim = useAct(id, (d: string) => api.claim(id, d));
 
@@ -33,7 +36,8 @@ export default function Investigate({ id }: { id: string }) {
   const needsView = assessment?.nextAction === "RequestView" && i.stage === "NeedsEvidence";
   const relevant = assessment?.hypotheses.filter((h) => !(isPostRepairItem(h.featureId) && !i?.currentClaimId)) ?? [];
   const unclear = relevant.filter((h) => h.status !== "Observed");
-  const prompts = (fixture?.visualRequirements ?? []).map((v) => v.segmentationPrompt).filter((p): p is string => !!p);
+  const order = outlineOrder(fixture, assessment);
+  const target = needsView ? targetConcept(fixture, assessment) : undefined;
   const canRepair = i.stage === "FaultConfirmed" || i.stage === "FaultSuspected" || i.stage === "AwaitingRepair";
 
   const steps: StepView[] = [
@@ -78,14 +82,15 @@ export default function Investigate({ id }: { id: string }) {
       ),
     },
     {
-      title: "Part outlined",
-      done: !!geometry.data?.matched,
-      body: geometry.data?.matched ? `AI outline of the ${geometry.data.concept}.` : geometry.data ? `No ${geometry.data.concept} found in the latest photo. Nothing was guessed.` : "Outline the part in the latest photo.",
+      title: "Parts outlined",
+      done: outlines.length > 0,
+      body: outlines.length ? `AI outlines: ${outlines.map((g) => g.concept).join(", ")}. Tap a label for the AI's reason.` : "Outline the parts in the latest photo.",
       extra: latest && photoUrl(latest.evidenceId) ? (
-        geometry.data?.matched
-          ? <EvidencePhoto src={photoUrl(latest.evidenceId)!} geometry={geometry.data} className="panel mt-3" />
-          : <Button variant="outline" className="mt-3 h-11 w-full" disabled={segment.isPending} onClick={() => segment.mutate([prompts[prompts.length - 1]])}>
-              {segment.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Outline the {prompts[prompts.length - 1] ?? "part"}
+        outlines.length
+          ? <ArFrame src={photoUrl(latest.evidenceId)!} outlines={outlines} tags={arTags(fixture, assessment, outlines)} selected={selected} onSelect={setSelected}
+              guide={target ? { concept: target, label: "Target region" } : null} className="panel mt-3" />
+          : <Button variant="outline" className="mt-3 h-11 w-full" disabled={segment.isPending || !order.length} onClick={() => segment.mutate([order])}>
+              {segment.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Outline the parts
             </Button>
       ) : null,
     },
