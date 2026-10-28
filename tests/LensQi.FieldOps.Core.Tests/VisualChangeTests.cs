@@ -153,6 +153,29 @@ public class VisualChangeTests
     }
 
     [Fact]
+    public void Post_claim_photos_use_server_time_with_bounded_device_clock_skew()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        var claimedAt = k.Session.State.RepairClaimedAt!.Value;
+        k.Tick(5);
+        // device clock truncated to the second (or a few seconds behind): still the post-repair photo
+        k.Session.RecordPhoto("r1", "photo-skewed", EvidenceOrigin.Phone, "sha-1", claimedAt.AddSeconds(-3), 1600, 1000, k.Now, null, "0000000000000001");
+        Assert.Equal("photo-skewed", k.Session.State.LatestPostRepairPhoto!.EvidenceId);
+        Assert.Equal(k.Now, k.Session.State.Photos.Last().RecordedAt);
+
+        // an old photo uploaded after the claim stays stale even though the server only just received it
+        var stale = new InspectionTestKit();
+        stale.ReachRepairClaim();
+        var at = stale.Session.State.RepairClaimedAt!.Value;
+        stale.Tick(5);
+        stale.Session.RecordPhoto("r2", "photo-old", EvidenceOrigin.Phone, "sha-2", at.AddMinutes(-10), 1600, 1000, stale.Now, null, "0000000000000002");
+        Assert.Null(stale.Session.State.LatestPostRepairPhoto);
+        Assert.False(stale.Session.State.IsPostClaim(stale.Session.State.Photos.Last()));
+        Assert.Equal(VerificationResult.Denied, VerificationPolicyEvaluator.Evaluate(stale.Session.State, stale.Twin, stale.Now).Result);
+    }
+
+    [Fact]
     public void Policy_denies_a_checklist_reviewed_against_a_photo_that_was_later_rejected()
     {
         var (k, post) = ClaimWithPostPhoto();

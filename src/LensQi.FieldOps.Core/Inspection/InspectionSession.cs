@@ -215,7 +215,7 @@ public sealed class InspectionSession
         {
             Require(State.CurrentClaimId is not null && analysis.ClaimId == State.CurrentClaimId, "Change analysis must belong to the current repair claim");
             var photo = State.Photos.FirstOrDefault(p => p.EvidenceId == analysis.PhotoEvidenceId);
-            Require(photo is not null && photo.ObservedAt > State.RepairClaimedAt, "Change analysis must cite a photo taken after the repair claim");
+            Require(photo is not null && State.IsPostClaim(photo), "Change analysis must cite a photo taken after the repair claim");
             Require(photo!.ArtifactSha256 == analysis.AfterImageDigest, "Change analysis digest does not match the photo");
             if (analysis.ReferencePhotoEvidenceId is { } refId)
                 Require(State.Photos.Any(p => p.EvidenceId == refId), $"Reference photo '{refId}' is not part of this inspection");

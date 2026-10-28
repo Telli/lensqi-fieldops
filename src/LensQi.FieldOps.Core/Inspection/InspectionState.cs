@@ -2,7 +2,7 @@ using LensQi.FieldOps.Core.Knowledge;
 
 namespace LensQi.FieldOps.Core.Inspection;
 
-public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, ImageQualitySignals? Quality = null, string? PerceptualHash = null);
+public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, ImageQualitySignals? Quality = null, string? PerceptualHash = null, DateTimeOffset? RecordedAt = null);
 public sealed record DiagnosticEvidence(string EvidenceId, DiagnosticResult Result, DateTimeOffset RecordedAt);
 public sealed record ChecklistEntry(string RequirementId, ChecklistStatus Status, DateTimeOffset ReviewedAt, string? ReviewedByEvidenceId = null);
 public sealed record SegmentationEvidence(string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, DateTimeOffset RecordedAt);
@@ -56,7 +56,7 @@ public sealed record InspectionState
     {
         var next = e switch
         {
-            PhotoRecorded p => this with { Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash)] },
+            PhotoRecorded p => this with { Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt)] },
             SegmentationRecorded sr => this with { Segmentations = [.. Segmentations, new SegmentationEvidence(sr.EvidenceId, sr.SourcePhotoEvidenceId, sr.Concept, sr.Matched, sr.MaskSha256, sr.OccurredAt)] },
             VisualChangeAnalyzed vc => this with { ChangeAnalyses = [.. ChangeAnalyses, vc.Analysis] },
             AssessmentRecorded a => this with { Assessments = [.. Assessments, a.Assessment] },
@@ -86,9 +86,20 @@ public sealed record InspectionState
         return next with { LastSequence = e.Sequence };
     }
 
+    /// <summary>Device clocks drift and truncate; a photo observed at most this long before the claim still counts if the server recorded it after.</summary>
+    public static readonly TimeSpan PhotoClockSkewTolerance = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// A photo belongs to the current claim when the server recorded it after the claim (server time wins) and the
+    /// device-reported observation time is not earlier than the claim by more than the skew tolerance, so an old
+    /// photo uploaded late stays stale.
+    /// </summary>
+    public bool IsPostClaim(PhotoEvidence p) =>
+        RepairClaimedAt is { } at && (p.RecordedAt ?? p.ObservedAt) > at && p.ObservedAt >= at - PhotoClockSkewTolerance;
+
     /// <summary>Newest photo taken after the current claim that change analysis has not rejected (DuplicateImage, NoVisualChange).</summary>
     public PhotoEvidence? LatestPostRepairPhoto =>
-        RepairClaimedAt is null ? null : Photos.Where(p => p.ObservedAt > RepairClaimedAt && !IsRejectedForCurrentClaim(p.EvidenceId)).OrderByDescending(p => p.ObservedAt).FirstOrDefault();
+        RepairClaimedAt is null ? null : Photos.Where(p => IsPostClaim(p) && !IsRejectedForCurrentClaim(p.EvidenceId)).OrderByDescending(p => p.RecordedAt ?? p.ObservedAt).FirstOrDefault();
 
     /// <summary>The latest change analysis of this photo under the current claim rejected it as post-repair evidence.</summary>
     public bool IsRejectedForCurrentClaim(string photoEvidenceId) =>
