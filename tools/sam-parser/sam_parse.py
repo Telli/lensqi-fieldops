@@ -15,6 +15,14 @@ from dataclasses import asdict
 import meta_sam_parser as sam
 
 
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("meta-sam-parser")
+    except Exception:  # pragma: no cover
+        return getattr(sam, "__version__", "unknown")
+
+
 def parse_text(raw: str) -> dict:
     parser = sam.image_segmentation_format().create_parser()
     parser.push(raw)
@@ -37,7 +45,7 @@ def parse_text(raw: str) -> dict:
             entry["text"] = getattr(r, "text", None)
         records.append(entry)
     return {
-        "parser": {"package": "meta-sam-parser", "version": getattr(sam, "__version__", "unknown")},
+        "parser": {"package": "meta-sam-parser", "version": _version()},
         "outcome": asdict(result.outcome) if hasattr(result.outcome, "__dataclass_fields__") else str(result.outcome),
         "revision": result.revision,
         "records": records,

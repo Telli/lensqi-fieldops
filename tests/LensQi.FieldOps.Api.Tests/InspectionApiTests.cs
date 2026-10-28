@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LensQi.FieldOps.Core.Inspection;
+using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Diagnostics;
+using LensQi.FieldOps.Meta.Segmentation;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.AI;
@@ -16,6 +18,7 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
 {
     public string DataDir { get; } = Directory.CreateTempSubdirectory("fieldops-api-").FullName;
     public FakeVisionChat FakeChat { get; } = new();
+    public FakeSegmenter FakeSam { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -26,7 +29,29 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IChatClient>();
             services.AddSingleton<IChatClient>(FakeChat);
+            services.RemoveAll<ISegmenter>();
+            services.AddSingleton<ISegmenter>(FakeSam);
+            services.RemoveAll<IRoiCropper>();
+            services.AddSingleton<IRoiCropper>(new FakeCropper());
         });
+    }
+}
+
+public sealed class FakeSegmenter : ISegmenter
+{
+    public bool Match { get; set; } = true;
+    public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct) =>
+        Task.FromResult(Match
+            ? new SegmentationOutcome(concept, "sam-3.1", "r1", "<0f>0<|box;...|>", "raw", [new BoxRecord("0", 10, 10, 30, 30, 0.9)], [new MaskRecord("0", 20, 20, 10, 10, 30, 30, new RleMask([20, 20], "0"), 0.9)], "fake", 0.1)
+            : new SegmentationOutcome(concept, "sam-3.1", "r2", "", "raw", [], [], "n/a", 0.1));
+}
+
+public sealed class FakeCropper : IRoiCropper
+{
+    public Task<CropResult> CropAsync(string sourcePath, string sourceEvidenceId, string sourceSha256, PixelBox box, string outputPath, CancellationToken ct)
+    {
+        File.WriteAllBytes(outputPath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1]);
+        return Task.FromResult(new CropResult(outputPath, new CropTransform(sourceEvidenceId, sourceSha256, 100, 100, box, 1.0)));
     }
 }
 
@@ -207,5 +232,29 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal("Verified", first.GetProperty("decision").GetProperty("result").GetString());
         Assert.True(second.GetProperty("replayed").GetBoolean());
         Assert.Equal(first.GetProperty("decision").ToString(), second.GetProperty("decision").ToString());
+    }
+
+    [Fact]
+    public async Task Segment_records_match_with_crop_and_no_match_without_mask()
+    {
+        var id = await CreateInspection();
+        var p0 = await Upload(id);
+        _factory.FakeSam.Match = true;
+        var r = await Post($"/v1/inspections/{id}/segment", new { concept = "yellow ethernet cable" });
+        var seg = r.GetProperty("segmentation");
+        Assert.True(seg.GetProperty("matched").GetBoolean());
+        Assert.Equal(1, seg.GetProperty("boxes").GetArrayLength());
+        Assert.Equal(64, seg.GetProperty("maskSha256").GetString()!.Length);
+        var cropFile = seg.GetProperty("crop").GetProperty("file").GetString()!;
+        Assert.Equal(p0, seg.GetProperty("crop").GetProperty("transform").GetProperty("sourceEvidenceId").GetString());
+        var artifact = await _client.GetAsync($"/v1/inspections/{id}/artifacts/{cropFile}");
+        Assert.Equal("image/png", artifact.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync($"/v1/inspections/{id}/artifacts/..%2Fsecret")).StatusCode);
+
+        _factory.FakeSam.Match = false;
+        var n = await Post($"/v1/inspections/{id}/segment", new { concept = "network switch" });
+        Assert.False(n.GetProperty("segmentation").GetProperty("matched").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, n.GetProperty("segmentation").GetProperty("maskSha256").ValueKind);
+        Assert.Equal("NeedsEvidence", n.GetProperty("state").GetProperty("stage").GetString());
     }
 }

@@ -1,5 +1,6 @@
 using LensQi.FieldOps.Api.Features.Inspections;
 using LensQi.FieldOps.Api.Features.Receipts;
+using LensQi.FieldOps.Api.Features.Segmentation;
 using LensQi.FieldOps.Api.Features.Simulation;
 using LensQi.FieldOps.Api.Features.VendorKnowledge;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
@@ -7,6 +8,7 @@ using LensQi.FieldOps.Api.Infrastructure.Fixtures;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Diagnostics;
 using LensQi.FieldOps.Meta.Knowledge;
+using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Vision;
 using LensQi.FieldOps.Api.Infrastructure.Knowledge;
 using LensQi.FieldOps.Core.Diagnostics;
@@ -104,6 +106,18 @@ builder.Services.AddSingleton<VisualAssessmentService>();
 builder.Services.AddSingleton<ReceiptService>();
 builder.Services.AddSingleton<GroundedProposalService>();
 
+// SAM 3.1 (parent FR-03): Responses API client + Python sidecar for the special-token grammar and the pixel crop.
+builder.Services.AddSingleton(sp => { var o = new SamOptions(); builder.Configuration.GetSection(SamOptions.SectionName).Bind(o); return o; });
+builder.Services.AddSingleton(sp =>
+{
+    var repoRoot = Path.GetDirectoryName(KnowledgePaths.ResolveDirectory(builder.Environment.ContentRootPath, "fixtures"))!;
+    return new PythonSidecar(sp.GetRequiredService<SamOptions>(), repoRoot);
+});
+builder.Services.AddSingleton<ISamOutputParser>(sp => sp.GetRequiredService<PythonSidecar>());
+builder.Services.AddSingleton<IRoiCropper>(sp => sp.GetRequiredService<PythonSidecar>());
+builder.Services.AddHttpClient("sam");
+builder.Services.AddSingleton<ISegmenter>(sp => new SamSegmentationClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("sam"), sp.GetRequiredService<SamOptions>(), sp.GetRequiredService<MuseOptions>(), sp.GetRequiredService<ISamOutputParser>()));
+
 var app = builder.Build();
 
 // Fail closed at startup: an invalid pack or binding stops the process before any inspection can use it.
@@ -117,6 +131,7 @@ app.MapInspections();
 app.MapSimulation();
 app.MapReceipts();
 app.MapInspectionKnowledge();
+app.MapSegmentation();
 
 // Browser inspection UI (P0 surface): static files under wwwroot, no build step.
 app.UseDefaultFiles();

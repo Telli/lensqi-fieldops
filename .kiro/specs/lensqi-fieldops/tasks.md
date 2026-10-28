@@ -19,9 +19,9 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 - [x] T1.1 Integrate `sam-3.1` image segmentation with a short object noun prompt. *(Spike done 2026-10-28: genuine calls, `yellow ethernet cable` found at 0.73 confidence, `network switch` honest no-match; C# adapter next.)*
 - [x] T1.2 Normalize special-token boxes/masks with Meta's `meta-sam-parser` in a small internal Python sidecar; portable JSON ROI response (half-open pixel boxes, COCO RLE masks, box-local bounds, confidence). *(Done 2026-10-28: `tools/sam-parser/sam_parse.py`; data-URL input and `one_bit` encoding confirmed.)*
-- [ ] T1.3 Implement image original/preview capture and high-res ROI crop, with transform test fixtures.
+- [x] T1.3 Implement image original/preview capture and high-res ROI crop, with transform test fixtures. *(Done 2026-10-28: `SamSegmentationClient` over the Responses API + `PythonSidecar` (parse and Pillow crop), `RoiCrop` padded box and `CropTransform` at scale 1, `POST /v1/inspections/{id}/segment`, mask overlay drawn from RLE in the browser; genuine call verified in the UI. Downsampled preview variant not needed: Muse accepts the original.)*
 - [x] T1.4 Build minimal inspection screen showing image, ROI and next requested view. *(Done 2026-10-28 as the browser P0 surface per the Oct 29 cutline: `wwwroot/index.html`; genuine Muse assessment rendered with Observed/Suspected/Unknown badges; SAM ROI overlay pending the C# adapter. Android is P1.)*
-- [ ] **Gate:** real SAM response and working mask/box display, with explicit no-match behavior.
+- [x] **Gate:** real SAM response and working mask/box display, with explicit no-match behavior. *(Passed 2026-10-28: `docs/evidence/ui/04-*.jpg`, `docs/evidence/sam-spike-*`.)*
 
 ## Day 3: Thu Oct 29 — Epistemic loop
 

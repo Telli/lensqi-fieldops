@@ -81,12 +81,53 @@ $("upload").onclick = () => act(async () => {
   const r = await api("POST", `/v1/inspections/${inspectionId}/observations`, fd, true);
   photoUrls[r.evidenceId] = URL.createObjectURL(file); $("photo").value = "";
 });
+// --- SAM: segment, then draw box + mask on the ORIGINAL image on a canvas; crop shown beside it ---
+function decodeRle(counts, height, width) {
+  // COCO compressed RLE (LEB128-ish, column-major). Returns Uint8Array of h*w in column-major order.
+  const out = new Uint8Array(height * width); let p = 0, pos = 0, value = 0, more, k = 0, x, m = 0, cnts = [];
+  while (p < counts.length) { x = 0; k = 0; more = 1;
+    while (more) { const c = counts.charCodeAt(p) - 48; x |= (c & 0x1f) << (5 * k); more = c & 0x20; p++; k++; if (!more && (c & 0x10)) x |= -1 << (5 * k); }
+    if (m > 2) x += cnts[m - 2]; cnts[m++] = x; }
+  for (let i = 0; i < cnts.length; i++) { for (let n = 0; n < cnts[i]; n++) { if (pos < out.length) out[pos++] = value; } value = value ? 0 : 1; }
+  return out;
+}
+async function drawSegmentation(seg) {
+  const canvas = $("overlay"), ctx = canvas.getContext("2d");
+  const img = new Image(); img.src = `/v1/inspections/${inspectionId}/artifacts/` + (await artifactNameFor(seg.photoEvidenceId));
+  await img.decode();
+  canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; canvas.classList.remove("hidden");
+  ctx.drawImage(img, 0, 0);
+  for (const m of seg.masks) {
+    const [h, w] = m.rle.size; const bits = decodeRle(m.rle.counts, h, w);
+    const tile = ctx.createImageData(w, h);
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { if (bits[x * h + y]) { const o = (y * w + x) * 4; tile.data[o] = 255; tile.data[o + 1] = 80; tile.data[o + 2] = 80; tile.data[o + 3] = 120; } }
+    const off = document.createElement("canvas"); off.width = w; off.height = h; off.getContext("2d").putImageData(tile, 0, 0);
+    ctx.drawImage(off, 0, 0, w, h, m.left, m.top, m.right - m.left, m.bottom - m.top);
+  }
+  ctx.lineWidth = Math.max(3, canvas.width / 300); ctx.strokeStyle = "#ff5050"; ctx.font = `${Math.max(14, canvas.width / 60)}px system-ui`; ctx.fillStyle = "#ff5050";
+  for (const b of seg.boxes) { ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top); ctx.fillText(`${b.objectId}${b.confidence != null ? " " + b.confidence.toFixed(2) : ""}`, b.left + 4, Math.max(16, b.top - 6)); }
+  if (seg.crop) { $("cropImg").src = `/v1/inspections/${inspectionId}/artifacts/${seg.crop.file}`; $("cropFig").classList.remove("hidden"); } else $("cropFig").classList.add("hidden");
+}
+async function artifactNameFor(evidenceId) { const names = await api("GET", `/v1/inspections/${inspectionId}/artifacts`); return names.find(n => n.startsWith(evidenceId + "-")); }
+$("segment").onclick = () => act(async () => {
+  $("segResult").textContent = "Asking sam-3.1 (one concept, image as data URL)…";
+  const concept = $("concept").value.trim();
+  const r = await api("POST", `/v1/inspections/${inspectionId}/segment`, concept ? { concept } : {});
+  const s = r.segmentation;
+  $("segResult").innerHTML = s.matched
+    ? `<span class="tag inferred">${esc(s.model)}</span> “${esc(s.concept)}”: ${s.boxes.length} box(es), ${s.masks.length} mask(s), ${s.elapsedSeconds.toFixed(1)} s · parser ${esc(s.parser)} · mask sha ${esc((s.maskSha256 || "").slice(0, 12))}…`
+    : `<span class="tag">NO REGION DETECTED</span> “${esc(s.concept)}” — honest no-match from ${esc(s.model)}; no mask was fabricated`;
+  await drawSegmentation(s);
+});
+
 $("investigate").onclick = () => act(async () => {
   $("assessment").innerHTML = `<span class="muted">Asking muse-spark-1.3… (image + fixture context, strict schema)</span>`;
   const r = await api("POST", `/v1/inspections/${inspectionId}/investigate`);
   const a = r.assessment;
   $("assessment").innerHTML = `<div class="muted">model ${esc(r.modelId)} · tokens ${r.usage?.inputTokenCount ?? "?"}/${r.usage?.outputTokenCount ?? "?"} · response ${esc(r.responseDigest.slice(0, 12))}…</div>` +
-    a.hypotheses.map(h => `<div class="hyp ${esc(h.status)}"><b>${esc(h.status)}</b> ${esc(h.featureId)} — ${esc(h.reason)}</div>`).join("") +
+    a.hypotheses.map(h => `<div class="hyp ${esc(h.status)}"><b>${esc(h.status)}</b> ${esc(h.featureId)} — ${esc(h.reason)}</div>`).join("");
+  if (a.requestedSegmentationConcept) $("concept").value = a.requestedSegmentationConcept;
+  $("assessment").innerHTML +=
     `<div><b>Proposed next action:</b> ${esc(a.nextAction)}${a.requestedView ? ` — “${esc(a.requestedView)}”` : ""}${a.requestedSegmentationConcept ? ` · segment “${esc(a.requestedSegmentationConcept)}”` : ""} <span class="tag inferred">inferred</span></div>`;
 });
 $("decline").onclick = () => act(() => api("POST", `/v1/inspections/${inspectionId}/decline-view`).catch(e => { if (e.status === 404) throw new Error("Decline endpoint not exposed yet"); throw e; }));

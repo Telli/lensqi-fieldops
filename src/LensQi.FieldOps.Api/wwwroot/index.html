@@ -40,6 +40,17 @@
         </div>
         <div id="photos" class="photos"></div>
 
+        <h3>Localize <span class="tag inferred">SAM 3.1 · inferred</span></h3>
+        <div class="row">
+          <input id="concept" placeholder="one noun phrase, e.g. yellow ethernet cable" size="30">
+          <button id="segment">Segment latest photo</button>
+        </div>
+        <div id="segResult" class="muted"></div>
+        <div class="row">
+          <canvas id="overlay" class="overlay hidden"></canvas>
+          <figure id="cropFig" class="hidden"><img id="cropImg" alt="ROI crop"><figcaption class="muted">ROI crop from original pixels (scale 1) — not independent evidence</figcaption></figure>
+        </div>
+
         <h3>Investigate <span class="tag inferred">Muse Spark · inferred</span></h3>
         <div class="row">
           <button id="investigate">Assess latest photo</button>
