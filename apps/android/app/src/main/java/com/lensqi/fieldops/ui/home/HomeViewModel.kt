@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.ui.home
 
+import com.lensqi.fieldops.ui.common.needsYou
 import com.lensqi.fieldops.ui.theme.Appearance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,6 +36,9 @@ data class HomeState(
     val loading: Boolean = false,
     val creating: String? = null,
     val error: String? = null,
+    /** The most urgent inspection that has a photo, and that photo's artifact URL, for the Today hero. */
+    val focusId: String? = null,
+    val focusPhotoUrl: String? = null,
 )
 
 /** Shared by the home, inspections, assets, start and profile tabs; everything shown comes from the server or its cached copy. */
@@ -67,11 +71,22 @@ class HomeViewModel @Inject constructor(
             list?.let { snapshots.save(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
             fixtures.takeIf { it.isNotEmpty() }?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
             _state.update { it.copy(health = health.value, reachable = true, fixtures = fixtures, inspections = list ?: it.inspections, cachedAt = null, loading = false) }
+            loadFocus()
         } else {
             val list = snapshots.load(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
             val fixtures = snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer()))
             _state.update { it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt, loading = false) }
         }
+    }
+
+    private suspend fun loadFocus() {
+        val focus = needsYou(_state.value.inspections).firstOrNull { it.photos > 0 } ?: return _state.update { it.copy(focusId = null, focusPhotoUrl = null) }
+        val names = (apiCall { api.artifacts(focus.inspectionId) } as? ApiOutcome.Ok)?.value.orEmpty()
+        val photo = names.filter { it.startsWith("photo-") && !it.contains("-crop-") }
+        val view = (apiCall { api.inspection(focus.inspectionId) } as? ApiOutcome.Ok)?.value
+        val latest = view?.photos?.lastOrNull()?.evidenceId
+        val name = photo.firstOrNull { latest != null && it.startsWith("$latest-") } ?: photo.lastOrNull()
+        _state.update { it.copy(focusId = focus.inspectionId, focusPhotoUrl = name?.let { n -> settings.currentBase().resolve("v1/inspections/${focus.inspectionId}/artifacts/$n").toString() }) }
     }
 
     fun onBaseChanged(value: String) = _state.update { it.copy(apiBase = value) }

@@ -42,6 +42,7 @@ The rebuilt technician app and operations dashboard, walked through end to end o
 | `ui-v2/16-ops-reports-integrity.jpg` | Reports with status filters, attempts per inspection and a live integrity column (each receipt bundle re-hashed on the server: 40/40 intact at capture). | `SIMULATED_PROBE` |
 | `ui-v2/17-tech-home-evidence-requested.jpg`, `ui-v2/18-tech-investigation-request-banner.jpg` | The ops request on the technician's home and as a banner on the investigation, with the action to answer it. | — |
 | `ui-v2/20-ops-light.jpg`, `ui-v2/21-tech-profile-appearance-light.jpg` | Light appearance (the design's light tokens) on the ops dashboard and the technician app; Appearance switch System / Light / Dark, saved per browser, System follows the device. | — |
+| `ui-v2/22-today-ai-first.jpg`, `ui-v2/23-inspection-hub-ar-ai.jpg` | Decluttered technician app: Today leads with the photo LensQi is working on and its next move, then a short "Up next" list; three tabs (Today, Scan, Assets). The inspection hub puts the outlined photo first, then one LensQi card (what it sees, the next move, one action), a five-step progress bar, and details folded away. AI text is built from the server's assessment and decision. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 
 ## Browser UI (first version, replaced)
 
@@ -81,6 +82,7 @@ camera captures are the emulator's virtual scene, labelled `Phone`.
 | `android/27-home-evidence-requested.png`, `android/28-inspection-request-banner.png` | The ops request on the Android home and inspection; answered by the next photo (server shows `answeredByPhotoId`, ops shows "Answered · show photo"). | `EMULATOR` |
 | `android/29-asset-expected-state.png` | Android asset screen: expected installation state from the site record and the asset's inspection history. | `EMULATOR` |
 | `android/30-light-home.png`, `android/31-light-verification-failed.png`, `android/32-light-app-camera-stays-dark.png` | Android light appearance (Profile → Appearance, saved on the phone, System follows the phone); the camera stays dark whatever the app theme. | `EMULATOR` |
+| `android/33-today-ai-first.png`, `android/34-inspection-hub-ar-ai.png` | The same Today screen and inspection hub on Android (light appearance): focus photo hero, LensQi card with one action, progress segments, target region on the AR overlay. | `EMULATOR`, `LIVE_META` |
 
 ## Receipt bundles
 

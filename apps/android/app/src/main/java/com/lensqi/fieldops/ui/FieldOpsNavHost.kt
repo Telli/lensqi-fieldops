@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.ui
 
+import androidx.compose.foundation.shape.CircleShape
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,13 +59,13 @@ import com.lensqi.fieldops.ui.receipt.ReceiptScreen
 import com.lensqi.fieldops.ui.theme.Fo
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+// Three destinations: today's work, the camera, the equipment. Profile and the full list open from Today.
 private val tabs = listOf(
-    Tab("home", "Home", Icons.Outlined.Home),
-    Tab("inspections", "Inspections", Icons.Outlined.Assignment),
+    Tab("home", "Today", Icons.Outlined.Home),
     Tab("start", "Scan", Icons.Outlined.QrCodeScanner),
     Tab("assets", "Assets", Icons.Outlined.Inventory2),
-    Tab("profile", "Profile", Icons.Outlined.Person),
 )
+private val withBar = setOf("home", "start", "assets", "inspections", "profile")
 
 @Composable
 fun FieldOpsNavHost(modifier: Modifier = Modifier) {
@@ -80,7 +81,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
     Column(modifier) {
         Box(Modifier.weight(1f)) {
             NavHost(nav, startDestination = "home") {
-                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { goTab("inspections") }) }
+                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
                 composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("home") } ; nav.navigate("camera") } }
                 composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }
@@ -140,7 +141,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 }
             }
         }
-        if (route in tabs.map { it.route }) BottomBar(route) { goTab(it) }
+        if (route in withBar) BottomBar(route) { goTab(it) }
     }
 }
 
@@ -154,7 +155,7 @@ private fun BottomBar(current: String?, onSelect: (String) -> Unit) {
                 Column(Modifier.weight(1f).clickable { onSelect(t.route) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (t.route == "start") {
                         Box(
-                            Modifier.offset(y = (-18).dp).size(56.dp).border(4.dp, Fo.Background, RoundedCornerShape(18.dp)).background(Fo.Primary, RoundedCornerShape(18.dp)),
+                            Modifier.offset(y = (-20).dp).size(64.dp).border(6.dp, Fo.Background, CircleShape).padding(6.dp).background(Fo.Primary, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) { Icon(t.icon, "Start an inspection", tint = Fo.OnPrimary, modifier = Modifier.size(26.dp)) }
                         Text(t.label, color = Fo.Primary, fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.offset(y = (-14).dp))

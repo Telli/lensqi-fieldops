@@ -1,11 +1,16 @@
 import { Link } from "wouter";
-import { ScanLine, ChevronRight, ClipboardList, Camera } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Kpi, Section, EvidenceBadge, HealthDot, Empty } from "@/components/fo/primitives";
+import { ScanLine, ChevronRight, Camera, User, ShieldCheck, ShieldX, Wrench, Search } from "lucide-react";
+import { EvidenceBadge } from "@/components/fo/primitives";
 import { ConnBadge, Page } from "@/components/fo/mobile-shell";
+import { ArFrame } from "@/components/fo/ar-frame";
+import { LensQiMark } from "@/components/fo/ai";
 import { useFixtures, useHealth, useInspections } from "@/lib/hooks";
+import { lastPhoto, useInspectionBundle } from "@/lib/inspection";
+import { arTags, targetConcept, usePhotoOutlines } from "@/lib/ar";
+import { aiSummary, nextMove } from "@/lib/ai";
 import { fmtWhen, greeting, stageLabel, stageState } from "@/lib/labels";
 import type { InspectionSummary } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export function inspectionHref(s: Pick<InspectionSummary, "inspectionId" | "stage">) {
   const base = `/m/i/${s.inspectionId}`;
@@ -28,109 +33,116 @@ export function InspectionCard({ s, assetName }: { s: InspectionSummary; assetNa
   );
 }
 
+/** What needs the technician, most urgent first. */
+function needsYou(all: InspectionSummary[]) {
+  const rank = (s: InspectionSummary) =>
+    s.openEvidenceRequest ? 0 : s.stage === "VerificationFailed" ? 1 : s.stage === "ReadyToVerify" ? 2 : s.stage === "AwaitingRepair" || s.stage === "FaultConfirmed" ? 3 : s.stage === "NeedsEvidence" && s.photos > 0 ? 4 : 9;
+  return all.filter((s) => rank(s) < 9).sort((a, b) => rank(a) - rank(b) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
+}
+
+const reasonOf = (s: InspectionSummary) =>
+  s.openEvidenceRequest ? { text: s.openEvidenceRequest.note, Icon: Camera, tone: "text-warning bg-warning/12" }
+  : s.stage === "VerificationFailed" ? { text: "Failed. Check it again.", Icon: ShieldX, tone: "text-failure bg-failure/12" }
+  : s.stage === "ReadyToVerify" ? { text: "Repair claimed. Verify it.", Icon: ShieldCheck, tone: "text-primary bg-primary/12" }
+  : s.stage === "AwaitingRepair" || s.stage === "FaultConfirmed" ? { text: s.workOrder ?? "Fault confirmed. Plan the fix.", Icon: Wrench, tone: "text-warning bg-warning/12" }
+  : { text: "LensQi needs a better view.", Icon: Search, tone: "text-warning bg-warning/12" };
+
+/** The photo LensQi is working on, with its outlines, and the next move in one line. */
+function FocusHero({ s, assetName }: { s: InspectionSummary; assetName?: string }) {
+  const { i, fixture, assessment, photoUrl } = useInspectionBundle(s.inspectionId);
+  const photo = lastPhoto(i);
+  const outlines = usePhotoOutlines(s.inspectionId, i, photo?.evidenceId);
+  const shown = i?.currentClaimId ? undefined : assessment;
+  const move = nextMove(i, assessment);
+  const src = photo && photoUrl(photo.evidenceId);
+  return (
+    <Link href={inspectionHref(s)} className="group relative block overflow-hidden rounded-[28px] bg-overlay text-overlay-foreground shadow-xl shadow-black/20">
+      {src ? <ArFrame src={src} outlines={outlines} tags={arTags(fixture, shown, outlines)} guide={(() => { const t = targetConcept(fixture, shown); return t ? { concept: t, label: "Target" } : null; })()} />
+        : <div className="grid aspect-[4/3] place-items-center"><ScanLine className="size-10 opacity-40" /></div>}
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
+        <span className="glass rounded-full px-2.5 py-1 text-[11px] font-medium">{assetName ?? s.assetId}</span>
+        <span className="glass rounded-full px-2.5 py-1 text-[11px]">{stageLabel[s.stage]}</span>
+      </div>
+      <div className="relative -mt-16 bg-gradient-to-t from-overlay via-overlay/95 to-transparent px-4 pb-4 pt-10">
+        <div className="flex items-start gap-3">
+          <LensQiMark />
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[12px] opacity-75">{aiSummary(i, shown)}</p>
+            <p className="mt-0.5 text-[17px] font-semibold leading-snug">{move?.title ?? "Continue"}</p>
+          </div>
+          <ChevronRight className="mt-2 size-5 opacity-60 transition-transform group-hover:translate-x-0.5" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/** Nothing in flight: the camera is the whole story. */
+function ScanHero() {
+  return (
+    <Link href="/m/start" className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-[28px] bg-overlay text-overlay-foreground shadow-xl shadow-black/20">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1/4 animate-scan bg-gradient-to-b from-transparent via-primary/25 to-transparent" />
+      <div className="relative size-24">
+        {["left-0 top-0 border-l-2 border-t-2", "right-0 top-0 border-r-2 border-t-2", "left-0 bottom-0 border-l-2 border-b-2", "right-0 bottom-0 border-r-2 border-b-2"].map((c) => (
+          <span key={c} className={cn("absolute size-6 rounded-[4px] border-overlay-foreground/80", c)} />
+        ))}
+        <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
+      </div>
+      <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 p-4">
+        <LensQiMark />
+        <div><p className="text-[12px] opacity-75">Point at the equipment.</p><p className="text-[17px] font-semibold">I'll identify it and outline what matters.</p></div>
+      </div>
+    </Link>
+  );
+}
+
 export default function Home() {
   const health = useHealth();
   const list = useInspections();
   const fixtures = useFixtures();
   const all = list.data ?? [];
-  const assets = fixtures.data?.flatMap((f) => f.assets.map((a) => ({ ...a, fixtureId: f.fixtureId }))) ?? [];
-  const nameOf = (id: string) => assets.find((a) => a.assetId === id)?.displayName;
-  const active = all.filter((s) => s.stage !== "VerifiedComplete" && s.stage !== "Inconclusive");
-  const toVerify = all.filter((s) => s.stage === "ReadyToVerify" || s.stage === "VerificationFailed");
-  const requested = all.filter((s) => s.openEvidenceRequest);
-  const today = new Date().toDateString();
-  const doneToday = all.filter((s) => s.stage === "VerifiedComplete" && new Date(s.updatedAt).toDateString() === today);
-  const healthOf = (assetId: string): "healthy" | "attention" | "fault" | "unknown" => {
-    const latest = all.find((s) => s.assetId === assetId);
-    if (!latest) return "unknown";
-    if (latest.stage === "VerifiedComplete") return "healthy";
-    if (latest.stage === "FaultConfirmed" || latest.stage === "VerificationFailed" || latest.stage === "AwaitingRepair") return "fault";
-    return "attention";
-  };
+  const nameOf = (id: string) => fixtures.data?.flatMap((f) => f.assets).find((a) => a.assetId === id)?.displayName;
+  const queue = needsYou(all);
+  const focus = queue.find((s) => s.photos > 0);
+  const rest = queue.filter((s) => s !== focus).slice(0, 3);
 
   return (
-    <Page>
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs text-muted-foreground">{fixtures.data?.[0]?.fixtureId ?? "LensQi FieldOps"}</div>
-          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">{greeting()}</h1>
+    <Page className="space-y-6 pt-5">
+      <header className="flex items-center gap-3">
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground">{greeting()}</p>
+          <h1 className="text-[22px] font-semibold tracking-tight">{focus ? "Pick up where you left off" : "Ready when you are"}</h1>
         </div>
         <ConnBadge reachable={!health.isError} />
-      </div>
+        <Link href="/m/profile" aria-label="Profile" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><User className="size-4" /></Link>
+      </header>
 
-      <Button asChild size="lg" className="h-14 w-full justify-between rounded-xl text-base">
-        <Link href="/m/start"><span className="flex items-center gap-2"><ScanLine /> Start an inspection</span><ChevronRight /></Link>
-      </Button>
+      {focus ? <FocusHero s={focus} assetName={nameOf(focus.assetId)} /> : <ScanHero />}
 
-      <div className="grid grid-cols-3 gap-2.5">
-        <Kpi label="Active" value={active.length} tone="primary" />
-        <Kpi label="To verify" value={toVerify.length} tone="warning" />
-        <Kpi label="Done today" value={doneToday.length} tone="success" />
-      </div>
-
-      {requested.length > 0 && (
-        <Section title="Evidence requested">
-          {requested.slice(0, 3).map((s) => (
-            <Link key={s.inspectionId} href={`/m/i/${s.inspectionId}/scan`} className="panel flex items-center gap-3 border-warning/40 bg-warning/10 p-3.5 hover:border-warning/70">
-              <Camera className="size-5 shrink-0 text-warning" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{s.openEvidenceRequest!.note}</div>
-                <div className="text-xs text-muted-foreground">{nameOf(s.assetId) ?? s.assetId} · {s.openEvidenceRequest!.requestedBy}, {fmtWhen(s.openEvidenceRequest!.requestedAt)}</div>
-              </div>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </Link>
-          ))}
-        </Section>
-      )}
-
-      {toVerify.length > 0 && (
-        <Section title="Work requiring verification">
-          {toVerify.slice(0, 3).map((s) => (
-            <Link key={s.inspectionId} href={`/m/i/${s.inspectionId}/verify`} className="panel flex items-center justify-between p-3.5 hover:border-primary/40">
-              <div>
-                <div className="text-sm font-medium">{s.workOrder ?? nameOf(s.assetId) ?? s.assetId}</div>
-                <div className="text-xs text-muted-foreground">{s.stage === "VerificationFailed" ? "Last verification failed" : "Repair claimed · verification not yet run"}</div>
-              </div>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </Link>
-          ))}
-        </Section>
-      )}
-
-      <Section title="Open inspections" action={<Link href="/m/inspections" className="text-xs text-primary">All</Link>}>
-        {active.length === 0 && !list.isLoading && (
-          <Empty icon={ClipboardList} title="No open inspections" body="Start one by scanning the equipment in front of you." />
-        )}
-        {active.slice(0, 4).map((s) => <InspectionCard key={s.inspectionId} s={s} assetName={nameOf(s.assetId)} />)}
-      </Section>
-
-      {assets.length > 0 && (
-        <Section title="Assets">
-          <div className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1">
-            {assets.map((a) => (
-              <Link key={a.assetId} href={`/m/start?asset=${encodeURIComponent(a.assetId)}`} className="panel min-w-[150px] p-3 hover:border-primary/40">
-                <div className="text-[11px] text-muted-foreground">{a.assetId}</div>
-                <div className="mt-1 text-sm font-medium">{a.displayName}</div>
-                <div className="mt-1.5"><HealthDot h={healthOf(a.assetId)} /></div>
-              </Link>
-            ))}
+      {rest.length > 0 && (
+        <section className="space-y-1">
+          <h2 className="px-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Up next</h2>
+          <div className="divide-y divide-border/70 overflow-hidden rounded-3xl border border-border bg-surface">
+            {rest.map((s) => {
+              const r = reasonOf(s);
+              return (
+                <Link key={s.inspectionId} href={inspectionHref(s)} className="flex items-center gap-3 p-3.5 hover:bg-muted/50">
+                  <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", r.tone)}><r.Icon className="size-[18px]" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{r.text}</span>
+                    <span className="block text-xs text-muted-foreground">{nameOf(s.assetId) ?? s.assetId} · {fmtWhen(s.updatedAt)}</span>
+                  </span>
+                  <ChevronRight className="size-4 text-muted-foreground" />
+                </Link>
+              );
+            })}
           </div>
-        </Section>
+        </section>
       )}
 
-      {all.length > 0 && (
-        <Section title="Recent activity">
-          <ol className="relative space-y-3 border-l border-border pl-4">
-            {all.slice(0, 4).map((s) => (
-              <li key={s.inspectionId} className="relative text-sm">
-                <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-primary" />
-                <div>{nameOf(s.assetId) ?? s.assetId}: {stageLabel[s.stage].toLowerCase()}</div>
-                <div className="text-[11px] text-muted-foreground">{fmtWhen(s.updatedAt)}</div>
-              </li>
-            ))}
-          </ol>
-        </Section>
-      )}
+      <Link href="/m/inspections" className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        {queue.length > 1 + rest.length ? `All inspections · ${queue.length} waiting` : "All inspections"} <ChevronRight className="size-4" />
+      </Link>
     </Page>
   );
 }

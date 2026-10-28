@@ -2,6 +2,10 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Camera, Terminal, RotateCcw, ShieldCheck, ShieldX, FileCheck2, Wrench, Loader2, UserCheck, Scale } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
+import { AiCard } from "@/components/fo/ai";
+import { aiSummary } from "@/lib/ai";
+
+const assessmentNone = undefined;
 import { EvidenceRequestBanner } from "@/components/fo/evidence-request";
 import { CheckRow, EvidenceBadge, Section, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
@@ -67,10 +71,7 @@ export default function Verify({ id }: { id: string }) {
       <Page>
         <EvidenceRequestBanner id={id} requests={i.evidenceRequests} />
         {!decision && !running && (
-          <div className="panel space-y-1 p-4">
-            <div className="text-base font-semibold">FieldProof runs two independent checks</div>
-            <p className="text-sm text-muted-foreground">A new photo that you've reviewed, and a fresh equipment check. Both must pass; a photo alone can't mark this work complete.</p>
-          </div>
+          <AiCard says={aiSummary(i, assessmentNone)} title="Verify the repair" hint="A new photo you've reviewed and a fresh equipment check both have to pass. A photo alone can't mark this work complete." />
         )}
 
         {(!decision || i.stage === "ReadyToVerify") && (

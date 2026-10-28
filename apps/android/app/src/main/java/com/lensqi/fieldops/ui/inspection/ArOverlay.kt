@@ -52,6 +52,7 @@ import com.lensqi.fieldops.domain.CocoRle
 import com.lensqi.fieldops.ui.common.featureName
 import com.lensqi.fieldops.ui.common.sentence
 import com.lensqi.fieldops.ui.theme.Fo
+import com.lensqi.fieldops.ui.theme.FoDark
 
 /** A label pinned to a part SAM outlined. Tags exist only where a real outline exists; nothing is placed by guesswork. */
 data class ArTag(val concept: String, val label: String, val tone: Color, val detail: String, val box: SegmentBox)
@@ -133,7 +134,7 @@ fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, gu
             guideBox?.let { b ->
                 // Darken everything outside the target box.
                 val l = (b.left * scale).toFloat(); val t = (b.top * scale).toFloat(); val r = (b.right * scale).toFloat(); val btm = (b.bottom * scale).toFloat()
-                val shade = Fo.Background.copy(alpha = 0.6f)
+                val shade = FoDark.Overlay.copy(alpha = 0.6f)
                 drawRect(shade, Offset(0f, 0f), Size(size.width, t))
                 drawRect(shade, Offset(0f, btm), Size(size.width, size.height - btm))
                 drawRect(shade, Offset(0f, t), Size(l, btm - t))

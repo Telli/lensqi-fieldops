@@ -1,5 +1,26 @@
 package com.lensqi.fieldops.ui.home
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.GppBad
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.HorizontalDivider
+import coil.compose.AsyncImage
+import com.lensqi.fieldops.ui.common.LensQiMark
+import com.lensqi.fieldops.ui.common.needsYou
+import com.lensqi.fieldops.ui.common.reasonText
+import com.lensqi.fieldops.ui.theme.Eyebrow
+import com.lensqi.fieldops.ui.theme.FoDark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,88 +118,111 @@ fun InspectionCard(s: InspectionSummary, assetName: String?, onOpen: (String) ->
 }
 
 @Composable
-fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit) {
+fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit, onProfile: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
-    val active = s.inspections.filter(::open)
-    val toVerify = s.inspections.filter { it.stage == InspectionStage.ReadyToVerify || it.stage == InspectionStage.VerificationFailed }
-    val doneToday = s.inspections.count { it.stage == InspectionStage.VerifiedComplete && whenText(it.updatedAt).startsWith("Today") }
-    LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val queue = needsYou(s.inspections)
+    val focus = queue.firstOrNull { it.inspectionId == s.focusId } ?: queue.firstOrNull { it.photos > 0 }
+    val rest = queue.filter { it != focus }.take(3)
+    LazyColumn(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         item {
-            Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.Top) {
+            Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text(s.fixtures.firstOrNull()?.fixtureId ?: "LensQi FieldOps", style = MaterialTheme.typography.bodySmall)
-                    Text(greeting(), style = MaterialTheme.typography.headlineSmall)
+                    Text(greeting(), style = MaterialTheme.typography.bodySmall)
+                    Text(if (focus != null) "Pick up where you left off" else "Ready when you are", fontSize = 23.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)
                 }
                 ConnBadge(s.reachable)
+                Box(Modifier.size(38.dp).clip(CircleShape).background(Fo.Surface).border(1.dp, Fo.Border, CircleShape).clickable(onClick = onProfile), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Person, "Profile", modifier = Modifier.size(18.dp))
+                }
             }
         }
         s.cachedAt?.let { at -> item { Text("Offline: showing the list saved at ${whenText(at)}. Captures still queue on this phone.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall) } }
-        item { PrimaryButton("Start an inspection", onStart, icon = Icons.Outlined.QrCodeScanner, modifier = Modifier.height(56.dp)) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Kpi("Active", "${active.size}", Fo.Primary, Modifier.weight(1f))
-                Kpi("To verify", "${toVerify.size}", Fo.Warning, Modifier.weight(1f))
-                Kpi("Done today", "$doneToday", Fo.Success, Modifier.weight(1f))
-            }
-        }
-        val requested = s.inspections.filter { it.openEvidenceRequest != null }
-        if (requested.isNotEmpty()) {
-            item { SectionTitle("Evidence requested") }
-            items(requested.take(3), key = { "r-" + it.inspectionId }) { r ->
-                val q = r.openEvidenceRequest!!
-                Panel(Modifier.clickable { onOpen(r.inspectionId) }, border = Fo.Warning.copy(alpha = 0.45f), background = Fo.Warning.copy(alpha = 0.08f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Outlined.CameraAlt, null, tint = Fo.Warning)
-                        Column(Modifier.weight(1f)) {
-                            Text(q.note, fontWeight = FontWeight.Medium)
-                            Text("${vm.assetName(r.assetId) ?: r.assetId} · ${q.requestedBy}, ${whenText(q.requestedAt)}", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
-                    }
-                }
-            }
-        }
-        if (toVerify.isNotEmpty()) {
-            item { SectionTitle("Work requiring verification") }
-            items(toVerify.take(3), key = { "v-" + it.inspectionId }) { v ->
-                Panel(Modifier.clickable { onOpen(v.inspectionId) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(v.workOrder ?: vm.assetName(v.assetId) ?: v.assetId, fontWeight = FontWeight.Medium)
-                            Text(if (v.stage == InspectionStage.VerificationFailed) "Last verification failed" else "Repair claimed · verification not yet run", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
-                    }
-                }
-            }
-        }
-        item { SectionTitle("Open inspections") { Text("All", color = Fo.Primary, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onAll)) } }
-        if (active.isEmpty() && !s.loading) item { Panel { Text("No open inspections. Start one by scanning the equipment in front of you.", style = MaterialTheme.typography.bodySmall) } }
-        items(active.take(4), key = { it.inspectionId }) { InspectionCard(it, vm.assetName(it.assetId), onOpen) }
-        if (s.fixtures.isNotEmpty()) {
-            item { SectionTitle("Assets") }
+        item { if (focus != null) FocusHero(focus, s.focusPhotoUrl.takeIf { s.focusId == focus.inspectionId }, vm.assetName(focus.assetId)) { onOpen(focus.inspectionId) } else ScanHero(onStart) }
+        if (rest.isNotEmpty()) {
+            item { Text("UP NEXT", style = Eyebrow, modifier = Modifier.padding(start = 4.dp)) }
             item {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    s.fixtures.flatMap { f -> f.assets.map { f.fixtureId to it } }.forEach { (_, a) ->
-                        val latest = s.inspections.firstOrNull { it.assetId == a.assetId }
-                        val (c, h) = when {
-                            latest == null -> Fo.Muted to "Unknown"
-                            latest.stage == InspectionStage.VerifiedComplete -> Fo.Success to "Healthy"
-                            latest.stage in listOf(InspectionStage.FaultConfirmed, InspectionStage.VerificationFailed, InspectionStage.AwaitingRepair) -> Fo.Failure to "Fault"
-                            else -> Fo.Warning to "Attention"
+                Column(Modifier.clip(RoundedCornerShape(24.dp)).background(Fo.Surface).border(1.dp, Fo.Border, RoundedCornerShape(24.dp))) {
+                    rest.forEachIndexed { k, r ->
+                        if (k > 0) HorizontalDivider(color = Fo.Border)
+                        val (icon, tone) = when {
+                            r.openEvidenceRequest != null -> Icons.Outlined.CameraAlt to Fo.Warning
+                            r.stage == InspectionStage.VerificationFailed -> Icons.Outlined.GppBad to Fo.Failure
+                            r.stage == InspectionStage.ReadyToVerify -> Icons.Outlined.VerifiedUser to Fo.Primary
+                            r.stage == InspectionStage.AwaitingRepair || r.stage == InspectionStage.FaultConfirmed -> Icons.Outlined.Build to Fo.Warning
+                            else -> Icons.Outlined.Search to Fo.Warning
                         }
-                        Panel(Modifier.width(150.dp), padding = 12) {
-                            Text(a.assetId, style = MaterialTheme.typography.bodySmall)
-                            Text(a.displayName, fontWeight = FontWeight.Medium)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Dot(c); Text(h, fontSize = 12.sp) }
+                        Row(Modifier.fillMaxWidth().clickable { onOpen(r.inspectionId) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(40.dp).background(tone.copy(alpha = 0.13f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = tone, modifier = Modifier.size(19.dp)) }
+                            Column(Modifier.weight(1f)) {
+                                Text(reasonText(r), fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${vm.assetName(r.assetId) ?: r.assetId} · ${whenText(r.updatedAt)}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
                         }
                     }
                 }
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth().clickable(onClick = onAll).padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (queue.size > rest.size + 1) "All inspections · ${queue.size} waiting" else "All inspections", color = Fo.Muted, fontSize = 14.sp)
+                Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted, modifier = Modifier.size(18.dp))
+            }
+        }
+        item { Spacer(Modifier.height(28.dp)) }
     }
 }
+
+/** The photo LensQi is working on and the one thing it needs, on dark glass whatever the theme. */
+@Composable
+private fun FocusHero(s: InspectionSummary, photoUrl: String?, assetName: String?, onOpen: () -> Unit) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(FoDark.Overlay).clickable(onClick = onOpen)) {
+        if (photoUrl != null) AsyncImage(photoUrl, "Latest photo", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Crop)
+        else Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.QrCodeScanner, null, tint = FoDark.Muted, modifier = Modifier.size(40.dp)) }
+        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            GlassChip(assetName ?: s.assetId)
+            GlassChip(stageLabel(s.stage))
+        }
+        Row(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, FoDark.Overlay.copy(alpha = 0.92f), FoDark.Overlay)))
+                .padding(start = 16.dp, end = 16.dp, top = 36.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            LensQiMark()
+            Column(Modifier.weight(1f)) {
+                Text("Next", fontSize = 12.sp, color = FoDark.Muted)
+                Text(reasonText(s), fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = FoDark.Foreground, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.Outlined.ChevronRight, null, tint = FoDark.Muted)
+        }
+    }
+}
+
+/** Nothing in flight: the camera is the whole story. */
+@Composable
+private fun ScanHero(onStart: () -> Unit) {
+    Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(28.dp)).background(FoDark.Overlay).clickable(onClick = onStart), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(96.dp)) {
+            val c = FoDark.Foreground.copy(alpha = 0.8f); val l = 22.dp.toPx(); val w = 2.dp.toPx()
+            listOf(Offset(0f, 0f) to Offset(1f, 1f), Offset(size.width, 0f) to Offset(-1f, 1f), Offset(0f, size.height) to Offset(1f, -1f), Offset(size.width, size.height) to Offset(-1f, -1f)).forEach { (o, d) ->
+                drawLine(c, o, Offset(o.x + d.x * l, o.y), w); drawLine(c, o, Offset(o.x, o.y + d.y * l), w)
+            }
+            drawCircle(FoDark.Primary, 3.dp.toPx())
+        }
+        Row(Modifier.align(Alignment.BottomStart).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LensQiMark()
+            Column {
+                Text("Point at the equipment.", fontSize = 12.sp, color = FoDark.Muted)
+                Text("I'll identify it and outline what matters.", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = FoDark.Foreground)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlassChip(text: String) = Text(text, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = FoDark.Foreground,
+    modifier = Modifier.clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.65f)).padding(horizontal = 10.dp, vertical = 5.dp))
 
 @Composable
 fun InspectionsScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
