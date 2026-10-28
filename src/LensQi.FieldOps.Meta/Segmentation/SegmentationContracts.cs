@@ -15,6 +15,8 @@ public sealed class SamOptions
     public string PythonExecutable { get; set; } = "python3";
     public string SidecarDirectory { get; set; } = "tools/sam-parser";
     public double CropPadFraction { get; set; } = 0.25;
+    /// <summary>Wall-clock limit for one sidecar process; on expiry or request cancellation the process tree is killed.</summary>
+    public int SidecarTimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>COCO-style compressed RLE as emitted by meta-sam-parser: size [height, width], column-major counts.</summary>
@@ -51,4 +53,11 @@ public sealed record CropResult(string Path, CropTransform Transform);
 public interface IRoiCropper
 {
     Task<CropResult> CropAsync(string sourcePath, string sourceEvidenceId, string sourceSha256, PixelBox box, string outputPath, CancellationToken ct);
+}
+
+/// <summary>Blur and luminance signals for a stored photo (T6.1). Returns null when the signals cannot be measured;
+/// a missing signal never blocks an upload.</summary>
+public interface IImageQualityAnalyzer
+{
+    Task<ImageQualitySignals?> AnalyzeAsync(string imagePath, CancellationToken ct);
 }

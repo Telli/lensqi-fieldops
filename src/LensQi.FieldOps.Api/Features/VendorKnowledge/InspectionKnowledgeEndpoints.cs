@@ -1,3 +1,4 @@
+using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Knowledge;
@@ -38,9 +39,9 @@ public static class InspectionKnowledgeEndpoints
             var resolution = resolver.Resolve(binding, binding.ToAssetIdentity(), []);
             GroundedProposalResult result;
             try { result = await service.ProposeAsync(binding, binding.ToAssetIdentity(), resolution, new Observation(req.Observation), ct); }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException) { return ApiResults.Conflict("provider_unavailable", ex.Message); }
+            catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or InvalidOperationException) && !ct.IsCancellationRequested) { return ApiResults.Conflict("provider_unavailable", ex.Message); }
             return Results.Ok(new { result.Accepted, result.ModelId, result.PromptDigest, result.ResponseDigest, usage = result.Usage, proposal = result.Proposal, rejections = result.Validation.Rejections, result.ParseError, raw = result.RawResponse });
-        });
+        }).AsModelCall();
         return app;
     }
 }

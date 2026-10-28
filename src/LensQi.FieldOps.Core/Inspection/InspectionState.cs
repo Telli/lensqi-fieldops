@@ -2,7 +2,7 @@ using LensQi.FieldOps.Core.Knowledge;
 
 namespace LensQi.FieldOps.Core.Inspection;
 
-public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt);
+public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, ImageQualitySignals? Quality = null);
 public sealed record DiagnosticEvidence(string EvidenceId, DiagnosticResult Result, DateTimeOffset RecordedAt);
 public sealed record ChecklistEntry(string RequirementId, ChecklistStatus Status, DateTimeOffset ReviewedAt);
 public sealed record PendingPrediction(string PredictionId, string DiagnosticId, string PredictedValue, DateTimeOffset RegisteredAt);
@@ -53,7 +53,7 @@ public sealed record InspectionState
     {
         var next = e switch
         {
-            PhotoRecorded p => this with { Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt)] },
+            PhotoRecorded p => this with { Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality)] },
             AssessmentRecorded a => this with { Assessments = [.. Assessments, a.Assessment] },
             ViewRequested v => this with { ViewRequests = v.RequestNumber },
             PredictionRegistered pr => this with { PendingPredictions = [.. PendingPredictions, new PendingPrediction(pr.PredictionId, pr.DiagnosticId, pr.PredictedValue, pr.OccurredAt)] },

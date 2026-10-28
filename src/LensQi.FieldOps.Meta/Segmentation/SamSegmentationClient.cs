@@ -55,7 +55,7 @@ public sealed class SamSegmentationClient : ISegmenter
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
         var payload = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
-            throw new HttpRequestException($"Meta Model API (SAM) returned {(int)resp.StatusCode}: {(payload.Length > 400 ? payload[..400] : payload)}", null, resp.StatusCode);
+            throw new HttpRequestException($"Meta Model API (SAM) returned {(int)resp.StatusCode}: {ProviderErrors.Redact(payload, 400)}", null, resp.StatusCode);
         sw.Stop();
 
         using var doc = JsonDocument.Parse(payload);

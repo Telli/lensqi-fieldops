@@ -48,7 +48,7 @@ public sealed class MuseSparkChatClient : IChatClient
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Meta Model API returned {(int)response.StatusCode}: {Truncate(payload, 600)}", null, response.StatusCode);
+            throw new HttpRequestException($"Meta Model API returned {(int)response.StatusCode}: {ProviderErrors.Redact(payload, 600)}", null, response.StatusCode);
 
         var completion = JsonSerializer.Deserialize<ChatCompletionResponse>(payload, Wire)
                          ?? throw new InvalidOperationException("Meta Model API returned an empty body.");
@@ -136,8 +136,6 @@ public sealed class MuseSparkChatClient : IChatClient
             ? new WireMessage(role, string.Concat(message.Contents.OfType<TextContent>().Select(t => t.Text)))
             : new WireMessage(role, parts);
     }
-
-    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 
     private sealed record ChatCompletionRequest(
         string Model,

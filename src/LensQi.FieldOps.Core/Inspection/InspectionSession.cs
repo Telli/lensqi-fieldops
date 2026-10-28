@@ -44,7 +44,7 @@ public sealed class InspectionSession
     // ---------------- commands ----------------
 
     public IReadOnlyList<InspectionEvent> RecordPhoto(string requestId, string evidenceId, EvidenceOrigin origin, string artifactSha256,
-        DateTimeOffset observedAt, int width, int height, DateTimeOffset now) =>
+        DateTimeOffset observedAt, int width, int height, DateTimeOffset now, ImageQualitySignals? quality = null) =>
         Idempotent(requestId, () =>
         {
             Require(State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive), "Inspection is closed");
@@ -52,7 +52,7 @@ public sealed class InspectionSession
                 throw new InspectionConflictException(InspectionErrorCodes.DuplicateEvidence, $"Evidence '{evidenceId}' already recorded");
             if (origin is EvidenceOrigin.Muse or EvidenceOrigin.Sam or EvidenceOrigin.LiveLocalProbe or EvidenceOrigin.SimulatedProbe or EvidenceOrigin.ReplayProbe)
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, "A photo cannot originate from a model or probe");
-            var batch = new List<InspectionEvent> { new PhotoRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, origin, artifactSha256, observedAt, width, height) };
+            var batch = new List<InspectionEvent> { new PhotoRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, origin, artifactSha256, observedAt, width, height, quality) };
             var target = State.Stage switch
             {
                 InspectionStage.Created => InspectionStage.InitialScan,
