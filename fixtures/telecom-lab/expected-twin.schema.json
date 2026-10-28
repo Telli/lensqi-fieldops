@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lensqi:expected-twin:1.0",
+  "title": "LensQi FieldOps Synthetic Expected Twin",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureId",
+    "fixtureRevision",
+    "assets",
+    "connections",
+    "diagnostics",
+    "visualRequirements",
+    "verificationPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "fixtureId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "fixtureRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fixtureDescription": {
+      "type": "string"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetId",
+          "kind",
+          "displayName"
+        ],
+        "properties": {
+          "assetId": {
+            "$ref": "#/$defs/identifier"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ethernet_switch",
+              "test_endpoint",
+              "router",
+              "patch_panel"
+            ]
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "visualLabels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connectionId",
+          "fromAssetId",
+          "toAssetId",
+          "cableLabel",
+          "expectedState"
+        ],
+        "properties": {
+          "connectionId": {
+            "$ref": "#/$defs/identifier"
+          },
+          "fromAssetId": {
+            "$ref": "#/$defs/identifier"
+          },
+          "fromPortLabel": {
+            "type": "string"
+          },
+          "toAssetId": {
+            "$ref": "#/$defs/identifier"
+          },
+          "cableLabel": {
+            "type": "string"
+          },
+          "expectedState": {
+            "enum": [
+              "connected",
+              "disconnected"
+            ]
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "diagnosticId",
+          "type",
+          "targetAlias",
+          "expectedHttpStatus",
+          "timeoutMs"
+        ],
+        "properties": {
+          "diagnosticId": {
+            "$ref": "#/$defs/identifier"
+          },
+          "type": {
+            "const": "http_health"
+          },
+          "targetAlias": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Server-owned alias resolved from trusted configuration; never a URL, host or address."
+          },
+          "expectedHttpStatus": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 30000
+          },
+          "claimVerified": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "visualRequirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requirementId",
+          "mandatory"
+        ],
+        "properties": {
+          "requirementId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 60,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "mandatory": {
+            "type": "boolean"
+          },
+          "segmentationPrompt": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 60,
+            "description": "One concrete noun phrase SAM is asked for when this requirement is checked; also the target for before/after change analysis."
+          }
+        }
+      }
+    },
+    "verificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirePostRepairPhoto",
+        "requireFreshDiagnostic",
+        "requireTechnicianAcknowledgement",
+        "requireHumanReviewedVisualChecklist",
+        "diagnosticMaxAgeSeconds",
+        "allowedDiagnosticSources",
+        "verifiedLiveRequiresSource"
+      ],
+      "properties": {
+        "requirePostRepairPhoto": {
+          "type": "boolean"
+        },
+        "requireFreshDiagnostic": {
+          "type": "boolean"
+        },
+        "requireTechnicianAcknowledgement": {
+          "type": "boolean"
+        },
+        "requireHumanReviewedVisualChecklist": {
+          "type": "boolean"
+        },
+        "diagnosticMaxAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "allowedDiagnosticSources": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "LiveLocal",
+              "Simulated",
+              "RecordedReplay"
+            ]
+          }
+        },
+        "verifiedLiveRequiresSource": {
+          "const": "LiveLocal"
+        }
+      }
+    }
+  },
+  "description": "Cross-item rules the schema cannot express (connection endpoints name declared assets, IDs unique, a vendor-knowledge binding's approvedDiagnostics is a subset of diagnostics[].diagnosticId) are enforced by scripts/validate_expected_twin.py and must be mirrored by the runtime loader.",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}
