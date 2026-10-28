@@ -2,6 +2,7 @@ package com.lensqi.fieldops.di
 
 import android.content.Context
 import androidx.room.Room
+import com.lensqi.fieldops.data.SnapshotStore
 import com.lensqi.fieldops.data.queue.PendingCommandDao
 import com.lensqi.fieldops.data.queue.QueueDatabase
 import dagger.Module
@@ -9,6 +10,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.serialization.json.Json
+import java.io.File
 import javax.inject.Singleton
 
 @Module
@@ -17,6 +20,9 @@ object StorageModule {
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): QueueDatabase =
         Room.databaseBuilder(context, QueueDatabase::class.java, "fieldops-queue.db").build()
+
+    @Provides @Singleton
+    fun snapshots(@ApplicationContext context: Context, json: Json): SnapshotStore = SnapshotStore(File(context.filesDir, "snapshots"), json)
 
     @Provides
     fun commands(db: QueueDatabase): PendingCommandDao = db.commands()
