@@ -38,9 +38,9 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
 {
     public VisualChangeThresholds Thresholds => thresholds;
 
-    /// <summary>Only photos taken after the current claim are analysed.</summary>
+    /// <summary>Only photos that count as post-claim (server-recorded after the claim, device time within tolerance) are analysed.</summary>
     public static bool Applies(InspectionState state, PhotoEvidence photo) =>
-        state.CurrentClaimId is not null && state.RepairClaimedAt is { } at && photo.ObservedAt > at;
+        state.CurrentClaimId is not null && state.IsPostClaim(photo);
 
     public async Task<ChangeEvidenceResult> AnalyzeAsync(InspectionState state, PhotoEvidence photo, string photoPath, CancellationToken ct)
     {
@@ -49,9 +49,8 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
         if (VisualChangeAnalyzer.FindDuplicate(photo, earlier, thresholds) is { } dup)
             return new(VisualChangeAnalyzer.Duplicate(claimId, photo, dup.EvidenceId, dup.Distance, thresholds), null);
 
-        var claimedAt = state.RepairClaimedAt!.Value;
         var reference = state.Segmentations
-            .Where(s => s.Matched && state.Photos.FirstOrDefault(p => p.EvidenceId == s.SourcePhotoEvidenceId)?.ObservedAt <= claimedAt)
+            .Where(s => s.Matched && state.Photos.FirstOrDefault(p => p.EvidenceId == s.SourcePhotoEvidenceId) is { } src && !state.IsPostClaim(src))
             .LastOrDefault();
         if (reference is null)
             return new(VisualChangeAnalyzer.Unscorable(claimId, photo, null, null, "No matched pre-claim segmentation to compare against; manual review applies", thresholds), null);
