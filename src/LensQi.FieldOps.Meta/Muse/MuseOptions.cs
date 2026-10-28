@@ -10,6 +10,9 @@ public sealed class MuseOptions
     public string? ApiKey { get; set; }
     public string Model { get; set; } = "muse-spark-1.3";
     public double Temperature { get; set; } = 0.0;
-    public int MaxOutputTokens { get; set; } = 1200;
+    /// <summary>Covers reasoning AND visible output on the Meta API; reasoning alone can use several hundred tokens.</summary>
+    public int MaxOutputTokens { get; set; } = 6000;
+    /// <summary>minimal | low | medium | high | xhigh | max. Lowest effort that validates; reasoning tokens are billed and count against MaxOutputTokens.</summary>
+    public string ReasoningEffort { get; set; } = "low";
     public int TimeoutSeconds { get; set; } = 60;
 }

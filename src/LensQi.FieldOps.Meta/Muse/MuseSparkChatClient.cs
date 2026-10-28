@@ -69,6 +69,8 @@ public sealed class MuseSparkChatClient : IChatClient
                 InputTokenCount = completion.Usage.PromptTokens,
                 OutputTokenCount = completion.Usage.CompletionTokens,
                 TotalTokenCount = completion.Usage.TotalTokens,
+                AdditionalCounts = completion.Usage.CompletionTokensDetails?.ReasoningTokens is { } rt
+                    ? new AdditionalPropertiesDictionary<long> { ["reasoning_tokens"] = rt } : null,
             },
         };
     }
@@ -106,7 +108,8 @@ public sealed class MuseSparkChatClient : IChatClient
             Messages: wireMessages,
             Temperature: options?.Temperature ?? (float)_options.Temperature,
             MaxTokens: options?.MaxOutputTokens ?? _options.MaxOutputTokens,
-            ResponseFormat: format);
+            ResponseFormat: format,
+            ReasoningEffort: _options.ReasoningEffort);
     }
 
     private static WireMessage ToWireMessage(ChatMessage message)
@@ -141,7 +144,8 @@ public sealed class MuseSparkChatClient : IChatClient
         IReadOnlyList<WireMessage> Messages,
         float? Temperature,
         [property: JsonPropertyName("max_tokens")] int? MaxTokens,
-        [property: JsonPropertyName("response_format")] ResponseFormat? ResponseFormat);
+        [property: JsonPropertyName("response_format")] ResponseFormat? ResponseFormat,
+        [property: JsonPropertyName("reasoning_effort")] string? ReasoningEffort);
 
     private sealed record WireMessage(string Role, object Content);
 
@@ -155,5 +159,7 @@ public sealed class MuseSparkChatClient : IChatClient
     private sealed record Usage(
         [property: JsonPropertyName("prompt_tokens")] long? PromptTokens,
         [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
-        [property: JsonPropertyName("total_tokens")] long? TotalTokens);
+        [property: JsonPropertyName("total_tokens")] long? TotalTokens,
+        [property: JsonPropertyName("completion_tokens_details")] CompletionDetails? CompletionTokensDetails);
+    private sealed record CompletionDetails([property: JsonPropertyName("reasoning_tokens")] long? ReasoningTokens);
 }

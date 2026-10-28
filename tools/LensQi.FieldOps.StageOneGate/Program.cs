@@ -54,7 +54,7 @@ foreach (var (name, observation) in scenarios)
     Console.WriteLine($"== Scenario: {name}");
     var result = await service.ProposeAsync(binding, asset, resolution, observation);
     allAccepted &= result.Accepted;
-    Console.WriteLine($"model={result.ModelId} accepted={result.Accepted} tokens(in/out)={result.Usage?.InputTokenCount}/{result.Usage?.OutputTokenCount}");
+    Console.WriteLine($"model={result.ModelId} accepted={result.Accepted} tokens(in/out/reasoning)={result.Usage?.InputTokenCount}/{result.Usage?.OutputTokenCount}/{result.Usage?.AdditionalCounts?.GetValueOrDefault("reasoning_tokens")}");
     Console.WriteLine(result.RawResponse);
     foreach (var r in result.Validation.Rejections)
         Console.WriteLine($"REJECTED {r.Code}: {r.Message} [{string.Join(", ", r.OffendingIds)}]");
@@ -65,7 +65,7 @@ foreach (var (name, observation) in scenarios)
         modelId = result.ModelId,
         promptSha256 = result.PromptDigest,
         responseSha256 = result.ResponseDigest,
-        usage = result.Usage is null ? null : new { input = result.Usage.InputTokenCount, output = result.Usage.OutputTokenCount },
+        usage = result.Usage is null ? null : new { input = result.Usage.InputTokenCount, output = result.Usage.OutputTokenCount, reasoning = result.Usage.AdditionalCounts?.GetValueOrDefault("reasoning_tokens") },
         accepted = result.Accepted,
         proposal = result.Proposal,
         rejections = result.Validation.Rejections,
@@ -84,6 +84,8 @@ var evidence = new
     recordedAtUtc = DateTimeOffset.UtcNow,
     apiBase = muse.BaseUrl,
     model = muse.Model,
+    reasoningEffort = muse.ReasoningEffort,
+    maxOutputTokens = muse.MaxOutputTokens,
     pack = new { resolution.PackId, resolution.PackSha256, resolution.PackRevision },
     binding = new { binding.FixtureId, binding.AssetId, binding.ApprovedDiagnostics },
     applicableFactIds = resolution.Facts.Select(f => f.FactId),
