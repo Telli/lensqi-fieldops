@@ -1,0 +1,75 @@
+{
+  "inspectionId": "I-35a13d6978fe",
+  "status": "Applicable",
+  "packId": "lab-switch-01.synthetic",
+  "packSha256": "f61d928056adcf26ebd68efd8dd6a8c73f74eb2a4c13a583470c016e17b74251",
+  "packRevision": 1,
+  "facts": [
+    {
+      "factId": "LAB-PORT-MAP-01",
+      "factKey": "site.expectedConnection.LAB-CONN-A.port",
+      "assertedValue": "P2",
+      "statement": "The approved synthetic lab wiring plan expects the yellow cable to occupy the lab switch's P2 connector.",
+      "claimKind": "SiteConfigured",
+      "provenance": "SiteConfigured",
+      "safety": "ObserveOnly",
+      "tags": [
+        "port",
+        "wiring",
+        "expected-state"
+      ],
+      "citation": {
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Connections / LAB-CONN-A",
+        "accessedOn": "2026-10-27"
+      }
+    },
+    {
+      "factId": "LAB-HEALTH-CHECK-01",
+      "factKey": "site.requiredDiagnostic.LAB-NODE-A",
+      "assertedValue": "NODE-A-HEALTH",
+      "statement": "The lab acceptance checklist requires the approved NODE-A-HEALTH endpoint check after a technician's repair claim.",
+      "claimKind": "SiteConfigured",
+      "provenance": "SiteConfigured",
+      "safety": "ReadOnlyObservation",
+      "tags": [
+        "endpoint-reachability",
+        "verification"
+      ],
+      "citation": {
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Acceptance checks / node A",
+        "accessedOn": "2026-10-27"
+      }
+    },
+    {
+      "factId": "LAB-CLAIM-BOUNDARY-01",
+      "factKey": "engineering.claimBoundary.health",
+      "assertedValue": "endpoint-only",
+      "statement": "An HTTP health result from Node A shows reachability for that endpoint at test time, not the exact physical switch port in use.",
+      "claimKind": "EngineeringNote",
+      "provenance": "Documented",
+      "safety": "ObserveOnly",
+      "tags": [
+        "endpoint-reachability",
+        "claim-scope"
+      ],
+      "citation": {
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Verification limitations",
+        "accessedOn": "2026-10-27"
+      }
+    }
+  ],
+  "excluded": [],
+  "warnings": [],
+  "approvedDiagnostics": [
+    "NODE-A-HEALTH"
+  ]
+}

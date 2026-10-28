@@ -1,0 +1,23 @@
+name: android
+
+on:
+  push:
+    paths: ["apps/android/**", "fixtures/api-recordings/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["apps/android/**", "fixtures/api-recordings/**", ".github/workflows/android.yml"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit and contract tests, debug build
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain

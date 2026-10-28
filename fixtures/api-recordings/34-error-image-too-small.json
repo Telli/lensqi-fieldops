@@ -1,0 +1,5 @@
+{
+  "code": "image_too_small",
+  "message": "image is 16x16; at least 320x240 is required",
+  "details": null
+}

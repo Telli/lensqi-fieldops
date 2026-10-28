@@ -1,0 +1,47 @@
+{
+  "evidenceId": "photo-aeb16af71e",
+  "sha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+  "mediaType": "image/jpeg",
+  "bytes": 74871,
+  "width": 1600,
+  "height": 1000,
+  "quality": {
+    "blurLaplacianVariance": 137.384,
+    "meanLuminance": 43.994,
+    "analyzerVersion": "image-quality/1 (pillow 13.0.0)"
+  },
+  "origin": "Phone",
+  "events": 2,
+  "state": {
+    "inspectionId": "I-35a13d6978fe",
+    "fixtureId": "LAB-RACK-01",
+    "fixtureRevision": 1,
+    "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "assetId": "LAB-SW-01",
+    "stage": "InitialScan",
+    "lastSequence": 3,
+    "viewRequests": 0,
+    "currentClaimId": null,
+    "repairClaimedAt": null,
+    "technicianAcknowledged": false,
+    "photos": [
+      {
+        "evidenceId": "photo-aeb16af71e",
+        "origin": "Phone",
+        "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+        "observedAt": "2026-10-28T04:55:54.90506+00:00",
+        "quality": {
+          "blurLaplacianVariance": 137.384,
+          "meanLuminance": 43.994,
+          "analyzerVersion": "image-quality/1 (pillow 13.0.0)"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "checklist": [],
+    "pendingPredictions": [],
+    "predictionScores": [],
+    "lastDecision": null,
+    "outcomeKind": null
+  }
+}

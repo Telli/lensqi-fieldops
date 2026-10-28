@@ -1,0 +1,58 @@
+[
+  {
+    "fixtureId": "LAB-RACK-01",
+    "fixtureRevision": 1,
+    "sha256": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "fixtureDescription": "Synthetic demonstration network: one unmanaged lab switch and one owned HTTP health endpoint. The P2 port mapping is an EXPECTED value; the HTTP probe cannot verify which physical port is used.",
+    "assets": [
+      {
+        "assetId": "LAB-SW-01",
+        "kind": "ethernet_switch",
+        "displayName": "Lab Switch 01"
+      },
+      {
+        "assetId": "LAB-NODE-A",
+        "kind": "test_endpoint",
+        "displayName": "Lab Node A"
+      }
+    ],
+    "diagnostics": [
+      {
+        "diagnosticId": "NODE-A-HEALTH",
+        "type": "http_health",
+        "targetAlias": "lab-node-a",
+        "claimVerified": "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
+      }
+    ],
+    "visualRequirements": [
+      {
+        "requirementId": "switch_chassis_visible",
+        "mandatory": true,
+        "segmentationPrompt": "network switch"
+      },
+      {
+        "requirementId": "yellow_cable_near_end_visible",
+        "mandatory": true,
+        "segmentationPrompt": "yellow ethernet cable"
+      },
+      {
+        "requirementId": "post_repair_view_captured",
+        "mandatory": true,
+        "segmentationPrompt": null
+      }
+    ],
+    "verificationPolicy": {
+      "requirePostRepairPhoto": true,
+      "requireFreshDiagnostic": true,
+      "requireTechnicianAcknowledgement": true,
+      "requireHumanReviewedVisualChecklist": true,
+      "diagnosticMaxAgeSeconds": 60,
+      "allowedDiagnosticSources": [
+        "LiveLocal",
+        "Simulated",
+        "RecordedReplay"
+      ],
+      "verifiedLiveRequiresSource": "LiveLocal"
+    }
+  }
+]
