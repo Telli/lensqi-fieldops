@@ -41,7 +41,7 @@ public sealed record InspectionState
     private static InspectionState Start(InspectionEvent e)
     {
         if (e is not InspectionCreated c)
-            throw new InvalidOperationException($"First event must be InspectionCreated, got {e.Kind}.");
+            throw new InvalidOperationException($"First event must be InspectionCreated, got {e.EventKind}.");
         return new InspectionState
         {
             InspectionId = c.InspectionId, FixtureId = c.FixtureId, FixtureRevision = c.FixtureRevision,

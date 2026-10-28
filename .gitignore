@@ -32,3 +32,4 @@ Thumbs.db
 
 # Keep the sanitized template
 !.env.example
+data/

@@ -11,7 +11,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 - [ ] T0.1 Record official indie prior-code reuse clarification and event start in `docs/HACKATHON_CONTRIBUTIONS.md` (or mark unresolved; do not copy private source).
 - [ ] T0.2 Initialize clean public repo + copyright/license/data-rights review + `.gitignore` / `.env.example` / secret check.
 - [ ] T0.3 Scaffold .NET 10 solution with Core/Api/Meta/Diagnostics and tests; Kotlin/Compose Android app with no private-source imports.
-- [ ] T0.4 Implement `ExpectedTwin` schema validation, cross-item invariants (connection endpoints resolve, unique IDs, binding allowlist ⊆ fixture diagnostics) and version hash; load synthetic `LAB-RACK-01`. Mirror `scripts/validate_expected_twin.py`.
+- [x] T0.4 Implement `ExpectedTwin` schema validation, cross-item invariants and version hash; load synthetic `LAB-RACK-01`. *(Done 2026-10-28: `ExpectedTwinStore` + `ExpectedTwinInvariants`; binding ⊆ diagnostics check is in the Python validator, .NET cross-check pending.)*
 - [x] T0.5 Implement Model API `muse-spark-1.3` with strict typed response; log provider name, request ID and elapsed time without image/key leakage. *(Done 2026-10-28: text-grounded call passed; the first image request is folded into T1.3.)*
 - [ ] **Gate:** successful real Muse call; invalid asset IDs refused.
 
@@ -33,22 +33,22 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Day 4: Fri Oct 30 — Diagnostics
 
-- [ ] T3.1 Implement allowlisted `IDiagnosticProbe` with HTTP health check, no arbitrary URL, strict local target resolution.
-- [ ] T3.2 Implement `SimulatedProbe` and `RecordedReplayProbe` with explicit provenance.
-- [ ] T3.3 Validate failure/success against isolated fixture; document what the probe actually establishes.
+- [x] T3.1 Implement allowlisted `IDiagnosticProbe` with HTTP health check, no arbitrary URL, strict local target resolution. *(Done 2026-10-28: `LiveLocalHttpHealthProbe`, redirects/oversize/exceptions fail closed; alias map is server config.)*
+- [x] T3.2 Implement `SimulatedProbe` and `RecordedReplayProbe` with explicit provenance. *(Done; demo switch at `POST /v1/simulation/diagnostics/{id}`, only in Simulated mode.)*
+- [x] T3.3 Validate failure/success against isolated fixture; document what the probe actually establishes. *(Done with the simulated fixture over HTTP; live owned endpoint still to be exercised.)*
 - [ ] **Gate:** end-to-end probe flow, bounded failures, simulator visibly labeled.
 
 ## Day 5: Sat Oct 31 — Fake-fix checkpoint
 
 - [x] T4.1 Implement repair-claim action, invalidating earlier verification evidence. *(Done in Core 2026-10-28.)*
 - [x] T4.2 Implement deterministic dual-proof verification with human-reviewed visual checklist. *(Done in Core: `VerificationPolicyEvaluator` v1.1.)*
-- [ ] T4.3 Record **visual pass / telemetry fail** and show `VerificationFailed` with human-readable reason.
+- [x] T4.3 Record **visual pass / telemetry fail** and show `VerificationFailed` with human-readable reason. *(Done over HTTP: `POST /verify` denies with the diagnostic reason; UI display pending.)*
 - [x] T4.4 Add negative tests for stale, wrong fixture, unknown, simulated-as-live, and duplicate verify. *(Done: the ten PRD §17 cases plus view budget, freshness window, checklist review; 19 tests.)*
 - [ ] **Gate:** cannot be tricked by an apparently plugged-in cable; no false live verification in scripted suite.
 
 ## Day 6: Sun Nov 1 — Completion + receipts
 
-- [ ] T5.1 Capture fresh post-repair frame and passing diagnostic; distinguish live vs simulated verification.
+- [x] T5.1 Capture fresh post-repair frame and passing diagnostic; distinguish live vs simulated verification. *(Done at API level: `VerifiedCompleteSimulated` returned; receipts (T5.2/T5.3) pending.)*
 - [ ] T5.2 Create JSON + printable HTML evidence manifest, content hashes and verification CLI.
 - [ ] T5.3 Flip artifact bytes in tests and confirm receipt verification fails.
 - [ ] **Gate:** full fault → failed fix → valid fix → receipt loop reliably reproduces.
