@@ -115,7 +115,7 @@ public sealed class KnowledgePackValidator
         var result = schema.Evaluate(element, SchemaOptions);
         if (result.IsValid) return [];
         var errors = new List<string>();
-        foreach (var detail in result.Details.Where(d => d.Errors is { Count: > 0 }))
+        foreach (var detail in (result.Details ?? []).Where(d => d.Errors is { Count: > 0 }))
         {
             foreach (KeyValuePair<string, string> kv in detail.Errors!)
                 errors.Add($"{detail.InstanceLocation}: [{kv.Key}] {kv.Value}");

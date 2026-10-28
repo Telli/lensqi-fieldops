@@ -18,7 +18,7 @@ public class KnowledgeActionValidatorTests
     }
 
     private static VendorGroundedProposal Proposal(
-        string asset = "LAB-SW-01", string[]? facts = null, VendorGroundedNextAction action = VendorGroundedNextAction.RequestView,
+        string asset = "LAB-SW-01", string[]? facts = null, ProposedNextAction action = ProposedNextAction.RequestView,
         string? view = "Show the yellow cable and the P1-P3 labels clearly.", string? diag = null, Prediction? prediction = null) =>
         new(asset, facts ?? ["LAB-PORT-MAP-01"], "Port cannot be confirmed yet.", view, diag, action, prediction);
 
@@ -57,7 +57,7 @@ public class KnowledgeActionValidatorTests
     {
         var (b, r) = Context();
         var result = KnowledgeActionValidator.Validate(
-            Proposal(action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: diag,
+            Proposal(action: ProposedNextAction.RunApprovedProbe, view: null, diag: diag,
                 prediction: new Prediction(diag, "Reachable", ["LAB-PORT-MAP-01"], null)), r, b, Registry);
         Assert.Contains(ProposalErrorCodes.ProbeNotAllowlisted, Codes(result));
     }
@@ -66,7 +66,7 @@ public class KnowledgeActionValidatorTests
     public void Run_diagnostic_without_prediction_is_prediction_missing()
     {
         var (b, r) = Context();
-        var result = KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: "NODE-A-HEALTH"), r, b, Registry);
+        var result = KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.RunApprovedProbe, view: null, diag: "NODE-A-HEALTH"), r, b, Registry);
         Assert.Equal([ProposalErrorCodes.PredictionMissing], Codes(result));
     }
 
@@ -74,11 +74,11 @@ public class KnowledgeActionValidatorTests
     public void Prediction_outside_closed_set_or_wrong_diagnostic_is_rejected()
     {
         var (b, r) = Context();
-        var wrongValue = KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: "NODE-A-HEALTH",
+        var wrongValue = KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.RunApprovedProbe, view: null, diag: "NODE-A-HEALTH",
             prediction: new Prediction("NODE-A-HEALTH", "Probably fine", ["LAB-PORT-MAP-01"], null)), r, b, Registry);
         Assert.Contains(ProposalErrorCodes.PredictionValueInvalid, Codes(wrongValue));
 
-        var wrongDiag = KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: "NODE-A-HEALTH",
+        var wrongDiag = KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.RunApprovedProbe, view: null, diag: "NODE-A-HEALTH",
             prediction: new Prediction("OTHER", "Reachable", ["LAB-PORT-MAP-01"], null)), r, b, Registry);
         Assert.Contains(ProposalErrorCodes.PredictionValueInvalid, Codes(wrongDiag));
     }
@@ -87,7 +87,7 @@ public class KnowledgeActionValidatorTests
     public void Prediction_basis_must_be_subset_of_used_facts()
     {
         var (b, r) = Context();
-        var result = KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: "NODE-A-HEALTH",
+        var result = KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.RunApprovedProbe, view: null, diag: "NODE-A-HEALTH",
             prediction: new Prediction("NODE-A-HEALTH", "Reachable", ["LAB-HEALTH-CHECK-01"], null)), r, b, Registry);
         Assert.Contains(ProposalErrorCodes.InvalidFactReference, Codes(result));
     }
@@ -97,17 +97,25 @@ public class KnowledgeActionValidatorTests
     {
         var (b, r) = Context();
         var result = KnowledgeActionValidator.Validate(Proposal(facts: ["LAB-PORT-MAP-01", "LAB-HEALTH-CHECK-01"],
-            action: VendorGroundedNextAction.RunApprovedDiagnostic, view: null, diag: "NODE-A-HEALTH",
+            action: ProposedNextAction.RunApprovedProbe, view: null, diag: "NODE-A-HEALTH",
             prediction: new Prediction("NODE-A-HEALTH", "Reachable", ["LAB-HEALTH-CHECK-01"], "cable now in P2")), r, b, Registry);
         Assert.True(result.IsValid, string.Join("; ", result.Rejections.Select(x => x.Message)));
+    }
+
+    [Fact]
+    public void Segment_region_is_never_a_knowledge_action()
+    {
+        var (b, r) = Context();
+        var result = KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.SegmentRegion, view: null), r, b, Registry);
+        Assert.Equal([ProposalErrorCodes.ActionNotAllowed], Codes(result));
     }
 
     [Fact]
     public void Human_action_requires_a_human_action_fact_and_request_view_requires_evidence_text()
     {
         var (b, r) = Context();
-        Assert.Contains(ProposalErrorCodes.ActionNotAllowed, Codes(KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.RequestHumanAction), r, b, Registry)));
+        Assert.Contains(ProposalErrorCodes.ActionNotAllowed, Codes(KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.PrepareWorkOrder), r, b, Registry)));
         Assert.Contains(ProposalErrorCodes.ActionNotAllowed, Codes(KnowledgeActionValidator.Validate(Proposal(view: "  "), r, b, Registry)));
-        Assert.True(KnowledgeActionValidator.Validate(Proposal(action: VendorGroundedNextAction.Abstain, view: null, facts: []), r, b, Registry).IsValid);
+        Assert.True(KnowledgeActionValidator.Validate(Proposal(action: ProposedNextAction.StopInconclusive, view: null, facts: []), r, b, Registry).IsValid);
     }
 }

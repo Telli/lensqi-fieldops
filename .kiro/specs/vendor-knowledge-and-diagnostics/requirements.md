@@ -71,7 +71,7 @@ The demo MUST remain reproducible without vendor hardware using an explicitly la
 ### VK-R04 — Muse reasoning bounded to retrieved sources (P0)
 
 1. WHEN an inspection hypothesis is generated, THE BACKEND SHALL pass Muse Spark only the relevant, applicable fact cards, confirmed site configuration and observation references.
-2. THE MODEL OUTPUT SHALL include `usedFactIds`, `hypothesis`, `requestedVisualEvidence`, `proposedDiagnosticId` and a `nextAction` drawn only from the `VendorGroundedNextAction` set this spec defines (`RequestView`, `RunApprovedDiagnostic`, `RequestAssetConfirmation`, `RequestHumanAction`, `Abstain`; see `design.md` §5). THE SERVER SHALL map that value onto the parent FieldProof action allowlist for the current stage through a fixed code table and SHALL reject any proposal whose action has no permitted mapping with `action_not_allowed`. THE SERVER SHALL reject nonexistent fact IDs, an `assetId` other than the inspection's bound asset, unapproved procedure/probe IDs, and unauthorized actions. EVERY rejection SHALL be persisted as a `KnowledgeProposalRejected` event naming the offending IDs, so audits can show the boundary working.
+2. THE MODEL OUTPUT SHALL include `usedFactIds`, `hypothesis`, `requestedVisualEvidence`, `proposedDiagnosticId` and a `nextAction` drawn only from the parent `ProposedNextAction` enum (`RequestView`, `RunApprovedProbe`, `PrepareWorkOrder`, `RequestHumanReview`, `StopInconclusive`; `SegmentRegion` is never accepted from a knowledge proposal; see `design.md` §5). THE SERVER SHALL apply the per-action validation in `design.md` §5 and the parent stage rules, and SHALL reject any proposal that fails them with `action_not_allowed`. THE SERVER SHALL reject nonexistent fact IDs, an `assetId` other than the inspection's bound asset, unapproved procedure/probe IDs, and unauthorized actions. EVERY rejection SHALL be persisted as a `KnowledgeProposalRejected` event naming the offending IDs, so audits can show the boundary working.
 3. WHEN documentation contains instructions that resemble prompts, network commands, credentials, or system messages, THE SYSTEM SHALL treat them as untrusted source content, not directives to the agent runtime.
 4. WHEN a source backs only a specification (e.g. interface names) but not a diagnosis, THE UI SHALL distinguish the manufacturer's fact from the model's inference and from a measured diagnostic result.
 5. THE MODEL SHALL NOT set `FaultConfirmed`, `VerifiedCompleteLive`, or `VerifiedCompleteSimulated` independently of FieldProof policy evaluation.
@@ -125,7 +125,7 @@ The demo MUST remain reproducible without vendor hardware using an explicitly la
 
 ### VK-R11 — Pre-registered predictions (P0)
 
-1. WHEN a proposal's `nextAction` is `RunApprovedDiagnostic`, THE MODEL OUTPUT SHALL include a `prediction` with the same `diagnosticId`, a `predictedValue` drawn only from the closed value set the probe registry declares for that diagnostic's observation kind, and the `basedOnFactIds` it relies on (a subset of `usedFactIds`). A proposal without a prediction, or with a value outside the closed set, SHALL be rejected with `prediction_missing` or `prediction_value_invalid` and no dispatch.
+1. WHEN a proposal's `nextAction` is `RunApprovedProbe`, THE MODEL OUTPUT SHALL include a `prediction` with the same `diagnosticId`, a `predictedValue` drawn only from the closed value set the probe registry declares for that diagnostic's observation kind, and the `basedOnFactIds` it relies on (a subset of `usedFactIds`). A proposal without a prediction, or with a value outside the closed set, SHALL be rejected with `prediction_missing` or `prediction_value_invalid` and no dispatch.
 2. THE SYSTEM SHALL persist the prediction as a `PredictionRegistered` event, with its digest and timestamp, BEFORE the diagnostic is dispatched. A prediction arriving after a result exists for that dispatch SHALL be rejected with `prediction_late`, and a probe result SHALL NOT be disclosed to the model before registration.
 3. WHEN the diagnostic completes, CORE SHALL compare `predictedValue` with the normalized measured value deterministically and record `PredictionScored` with outcome `Confirmed`, `Falsified` or `Unscorable` (probe unavailable or errored). THE MODEL SHALL NOT score, revise or withdraw its own prediction.
 4. Prediction outcomes are a calibration record, not a verification gate. A `Confirmed` prediction SHALL NOT advance state by itself and a `Falsified` prediction SHALL NOT by itself set `VerificationFailed`; the measured result drives the existing gates. Both outcomes SHALL be visible in the UI and the receipt.
@@ -162,8 +162,8 @@ The demo MUST remain reproducible without vendor hardware using an explicitly la
 | `SiteConfigured` fact inside a `VendorLinked` pack | Pack rejected at load |
 | Client, model or request body supplies a pack or fragment | `pack_not_trusted`; server packs only |
 | Muse proposal names a different `assetId` than the inspection | Rejected; `KnowledgeProposalRejected` recorded |
-| Muse proposes `RunApprovedDiagnostic` with no `proposedDiagnosticId`, or `RequestHumanAction` with no `HumanActionRequired` fact cited | `action_not_allowed`; no approximation to a nearer action |
-| `RunApprovedDiagnostic` proposal without a prediction, or predicting a value outside the closed set | `prediction_missing` / `prediction_value_invalid`; no dispatch |
+| Muse proposes `RunApprovedProbe` with no `proposedDiagnosticId`, or `PrepareWorkOrder` with no `HumanActionRequired` fact cited | `action_not_allowed`; no approximation to a nearer action |
+| `RunApprovedProbe` proposal without a prediction, or predicting a value outside the closed set | `prediction_missing` / `prediction_value_invalid`; no dispatch |
 | Prediction submitted after the probe result exists | `prediction_late`; not scored |
 | Prediction falsified by the measurement | `PredictionScored: Falsified` recorded and shown; state driven by the measurement alone |
 | Post-repair photo is the pre-repair photo re-submitted | `DuplicateImage`; not accepted as evidence; no SAM call |
@@ -178,7 +178,7 @@ The demo MUST remain reproducible without vendor hardware using an explicitly la
 - [ ] Model/revision binding, citations, knowledge applicability and retrieval have passing unit tests.
 - [ ] A genuine Muse call can use retrieved fact IDs and produce a grounded proposed next step; fabricated IDs fail validation.
 - [ ] A fake-fix with a passing-looking photo but failing independent diagnostic is **not verified**.
-- [ ] Every `RunApprovedDiagnostic` proposal in the demo carries a registered prediction; receipts show at least one `Confirmed` and one `Falsified` outcome, and no outcome changed a state transition.
+- [ ] Every `RunApprovedProbe` proposal in the demo carries a registered prediction; receipts show at least one `Confirmed` and one `Falsified` outcome, and no outcome changed a state transition.
 - [ ] A re-submitted or unchanged post-repair photo is rejected by change analysis before any state advance.
 - [ ] The inspection receipt includes pack IDs/digests, fact sources, test results and evidence hashes.
 - [ ] Standalone public build with no dependence on private code or vendor credentials.
@@ -192,5 +192,5 @@ The demo MUST remain reproducible without vendor hardware using an explicitly la
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-27 | Initial specification. |
-| 1.1 | 2026-10-27 | Aligned claim kinds and proposal field names with the schema and design; added server-only pack trust (VK-R02.6), binding validation (VK-R02.7), excluded-fact reporting (VK-R03.4), rejection events (VK-R04.2), fact-is-not-authorization (VK-R06.7), `Site configured` label and link provenance (VK-R09.1); self-contained `VendorGroundedNextAction` contract with a fixed mapping onto the parent allowlist (VK-R04.2); seven new negative cases. Rationale in `docs/SPEC_REVIEW_2026-10-27.md`. |
+| 1.1 | 2026-10-27 | Aligned claim kinds and proposal field names with the schema and design; added server-only pack trust (VK-R02.6), binding validation (VK-R02.7), excluded-fact reporting (VK-R03.4), rejection events (VK-R04.2), fact-is-not-authorization (VK-R06.7), `Site configured` label and link provenance (VK-R09.1); self-contained `ProposedNextAction` contract with a fixed mapping onto the parent allowlist (VK-R04.2); seven new negative cases. Rationale in `docs/SPEC_REVIEW_2026-10-27.md`. |
 | 1.2 | 2026-10-27 | Added VK-R11 pre-registered predictions and VK-R12 segmentation-based change evidence (both P0), US-VK-06, six negative cases, two release-gate items; timebox raised to 11–19 h. Rationale in `docs/HACKATHON_FIT_ASSESSMENT.md` §4. |

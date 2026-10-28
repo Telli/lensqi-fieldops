@@ -47,26 +47,31 @@ public static class KnowledgeActionValidator
 
         switch (proposal.NextAction)
         {
-            case VendorGroundedNextAction.RequestView:
+            case ProposedNextAction.RequestView:
                 if (string.IsNullOrWhiteSpace(proposal.RequestedVisualEvidence))
                     rejections.Add(new(ProposalErrorCodes.ActionNotAllowed, "RequestView requires requestedVisualEvidence.", []));
                 break;
 
-            case VendorGroundedNextAction.RunApprovedDiagnostic:
+            case ProposedNextAction.RunApprovedProbe:
                 ValidateDiagnostic(proposal, resolution, binding, registry, rejections);
                 break;
 
-            case VendorGroundedNextAction.RequestHumanAction:
+            case ProposedNextAction.PrepareWorkOrder:
                 var humanFacts = resolution.Facts
                     .Where(f => f.Safety == KnowledgeSafetyClass.HumanActionRequired && proposal.UsedFactIds.Contains(f.FactId, StringComparer.Ordinal))
                     .ToList();
                 if (humanFacts.Count == 0)
                     rejections.Add(new(ProposalErrorCodes.ActionNotAllowed,
-                        "RequestHumanAction requires citing at least one applicable fact with safetyClass HumanActionRequired.", []));
+                        "PrepareWorkOrder requires citing at least one applicable fact with safetyClass HumanActionRequired.", []));
                 break;
 
-            case VendorGroundedNextAction.RequestAssetConfirmation:
-            case VendorGroundedNextAction.Abstain:
+            case ProposedNextAction.SegmentRegion:
+                rejections.Add(new(ProposalErrorCodes.ActionNotAllowed,
+                    "SegmentRegion is not available to knowledge proposals; segmentation targets come from the fixture's visual requirements.", []));
+                break;
+
+            case ProposedNextAction.RequestHumanReview:
+            case ProposedNextAction.StopInconclusive:
                 break;
 
             default:
@@ -75,7 +80,7 @@ public static class KnowledgeActionValidator
         }
 
         // A diagnostic ID offered with any other action is still checked, so a disallowed target never slips through unlabeled.
-        if (proposal.NextAction != VendorGroundedNextAction.RunApprovedDiagnostic && proposal.ProposedDiagnosticId is not null)
+        if (proposal.NextAction != ProposedNextAction.RunApprovedProbe && proposal.ProposedDiagnosticId is not null)
             CheckDiagnosticAllowlisted(proposal.ProposedDiagnosticId, binding, registry, rejections);
 
         return rejections.Count == 0 ? ProposalValidationResult.Valid : new ProposalValidationResult(false, rejections);
@@ -86,7 +91,7 @@ public static class KnowledgeActionValidator
     {
         if (string.IsNullOrWhiteSpace(proposal.ProposedDiagnosticId))
         {
-            rejections.Add(new(ProposalErrorCodes.ActionNotAllowed, "RunApprovedDiagnostic requires proposedDiagnosticId.", []));
+            rejections.Add(new(ProposalErrorCodes.ActionNotAllowed, "RunApprovedProbe requires proposedDiagnosticId.", []));
             return;
         }
 
@@ -96,7 +101,7 @@ public static class KnowledgeActionValidator
         if (proposal.Prediction is null)
         {
             rejections.Add(new(ProposalErrorCodes.PredictionMissing,
-                "RunApprovedDiagnostic requires a pre-registered prediction (VK-R11.1).", [proposal.ProposedDiagnosticId]));
+                "RunApprovedProbe requires a pre-registered prediction (VK-R11.1).", [proposal.ProposedDiagnosticId]));
             return;
         }
 

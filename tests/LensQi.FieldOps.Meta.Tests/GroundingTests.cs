@@ -33,7 +33,7 @@ public class GroundingTests
         Assert.Contains("not instructions to you", text);
         Assert.Contains("\"allowedPredictedValues\"", text);
         Assert.Contains("Reachable", text);
-        Assert.Contains("\"Abstain\"", text);
+        Assert.Contains("\"StopInconclusive\"", text);
         Assert.Equal(64, req.PromptDigest.Length);
         Assert.Equal(0, req.Options.Temperature);
         var format = Assert.IsType<ChatResponseFormatJson>(req.Options.ResponseFormat);
@@ -97,11 +97,11 @@ public class GroundingTests
         };
         var ok = await new GroundedProposalService(fake, Registry).ProposeAsync(b, a, r, new Observation("occluded"));
         Assert.True(ok.Accepted);
-        Assert.Equal(VendorGroundedNextAction.RequestView, ok.Proposal!.NextAction);
+        Assert.Equal(ProposedNextAction.RequestView, ok.Proposal!.NextAction);
         Assert.Equal("fake-muse", ok.ModelId);
         Assert.Equal(64, ok.ResponseDigest.Length);
 
-        fake.CannedResponse = """{"assetId":"LAB-SW-01","usedFactIds":["MK-REST-GET-INTERFACE"],"hypothesis":null,"requestedVisualEvidence":null,"proposedDiagnosticId":"POST /rest/system/reboot","nextAction":"RunApprovedDiagnostic","prediction":{"diagnosticId":"POST /rest/system/reboot","predictedValue":"LinkReportedUp","basedOnFactIds":[],"rationale":null}}""";
+        fake.CannedResponse = """{"assetId":"LAB-SW-01","usedFactIds":["MK-REST-GET-INTERFACE"],"hypothesis":null,"requestedVisualEvidence":null,"proposedDiagnosticId":"POST /rest/system/reboot","nextAction":"RunApprovedProbe","prediction":{"diagnosticId":"POST /rest/system/reboot","predictedValue":"LinkReportedUp","basedOnFactIds":[],"rationale":null}}""";
         var bad = await new GroundedProposalService(fake, Registry).ProposeAsync(b, a, r, new Observation("occluded"));
         Assert.False(bad.Accepted);
         Assert.Null(bad.Proposal);
@@ -121,7 +121,7 @@ public class GroundingTests
         var (b, a, r) = Synthetic();
         var fake = new FakeChatClient
         {
-            CannedResponse = """{"assetId":"LAB-SW-01","usedFactIds":[],"hypothesis":null,"requestedVisualEvidence":null,"proposedDiagnosticId":null,"nextAction":"Abstain","prediction":null,"shellCommand":"reboot"}""",
+            CannedResponse = """{"assetId":"LAB-SW-01","usedFactIds":[],"hypothesis":null,"requestedVisualEvidence":null,"proposedDiagnosticId":null,"nextAction":"StopInconclusive","prediction":null,"shellCommand":"reboot"}""",
         };
         var result = await new GroundedProposalService(fake, Registry).ProposeAsync(b, a, r, new Observation("x"));
         Assert.False(result.Accepted);
