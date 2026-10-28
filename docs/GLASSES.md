@@ -64,6 +64,13 @@ Code: `apps/android/app/src/main/java/com/lensqi/fieldops/wearables/` (`GlassesS
 5. The glasses' capture button needs the experimental DAT Inputs capability approved for the app in the Developer
    Center. If it is not approved, the screen says the glasses' button is unavailable and the phone shutter still works.
 
+## Evidence policy for mock photos
+
+Decided 2026-10-28: a `MockWearables` photo is treated like an imported (`RecordedFixture`) photo. It can be the
+accepted post-repair photo and count toward verification, and it is labelled as mock everywhere it appears
+(inspection, review screen, receipt evidence list). The verification policy does not change for it: the fresh
+equipment check is still required, and a simulated check still yields `VerifiedCompleteSimulated`, never live.
+
 ## What was verified (emulator-5554, API 36 arm64, Mock Device Kit, API at 10.0.2.2:5199)
 
 - Real path without hardware: DAT initialises and registration reports *unavailable*. **Connect with Meta AI** returns
