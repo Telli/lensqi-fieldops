@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Boxes, ClipboardList, Server, ShieldCheck, Smartphone, LayoutDashboard, Search } from "lucide-react";
+import { Boxes, ClipboardList, Server, ShieldCheck, Smartphone, LayoutDashboard, Search, ChevronRight } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
-import { Empty, HealthDot, Section, SourceBadge } from "@/components/fo/primitives";
+import { Empty, Section, SourceBadge } from "@/components/fo/primitives";
+import { fmtWhen, stageLabel } from "@/lib/labels";
 import { useFixtures, useHealth, useInspections } from "@/lib/hooks";
 import { ThemeControl } from "@/components/fo/theme-control";
 import { InspectionCard } from "./home";
@@ -34,22 +35,32 @@ export function Assets() {
   return (
     <>
       <TopBar title="Assets" />
-      <Page>
-        <label className="panel flex items-center gap-2 px-3 py-2.5"><Search className="size-4 text-muted-foreground" />
+      <Page className="space-y-4">
+        <label className="flex h-12 items-center gap-2.5 rounded-2xl border border-border bg-surface px-4 focus-within:border-primary"><Search className="size-4 text-muted-foreground" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or asset label" className="w-full bg-transparent text-sm outline-none" /></label>
         {fixtures.data?.map((f) => (
           <Section key={f.fixtureId} title={f.fixtureId}>
-            {f.assets.filter(match).map((a) => {
-              const latest = list.data?.find((s) => s.assetId === a.assetId);
-              const h = !latest ? "unknown" : latest.stage === "VerifiedComplete" ? "healthy" : ["FaultConfirmed", "VerificationFailed", "AwaitingRepair"].includes(latest.stage) ? "fault" : "attention";
-              return (
-                <Link key={a.assetId} href={`/m/assets/${encodeURIComponent(a.assetId)}`} className="panel flex items-center gap-3 p-3.5 hover:border-primary/40">
-                  <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground"><Boxes className="size-5" /></span>
-                  <span className="flex-1"><span className="block text-sm font-medium">{a.displayName}</span><span className="block text-xs text-muted-foreground">{a.assetId} · {a.kind}</span></span>
-                  <HealthDot h={h} />
-                </Link>
-              );
-            })}
+            <div className="panel divide-y divide-border overflow-hidden">
+              {f.assets.filter(match).map((a) => {
+                const mine = list.data?.filter((s) => s.assetId === a.assetId) ?? [];
+                const latest = mine[0];
+                const h = !latest ? "unknown" : latest.stage === "VerifiedComplete" ? "healthy" : ["FaultConfirmed", "VerificationFailed", "AwaitingRepair"].includes(latest.stage) ? "fault" : "attention";
+                const dot = { healthy: "bg-success", attention: "bg-warning", fault: "bg-failure", unknown: "bg-muted-foreground" }[h];
+                return (
+                  <Link key={a.assetId} href={`/m/assets/${encodeURIComponent(a.assetId)}`} className="flex items-center gap-3 px-3.5 py-3 hover:bg-muted/40">
+                    <span className="relative grid size-11 place-items-center rounded-2xl bg-accent text-accent-foreground">
+                      <Boxes className="size-5" />
+                      <span className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-card ${dot}`} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{a.displayName}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{latest ? `${stageLabel[latest.stage]} · ${fmtWhen(latest.updatedAt)}` : "Not inspected yet"}</span>
+                    </span>
+                    <ChevronRight className="size-4 text-muted-foreground" />
+                  </Link>
+                );
+              })}
+            </div>
           </Section>
         ))}
       </Page>

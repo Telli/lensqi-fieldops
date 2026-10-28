@@ -64,3 +64,8 @@ export function progress(i?: Inspection | null, assessment?: Assessment | null):
   return i.photos.length ? 1 : 0;
 }
 export const progressSteps = ["Capture", "Observe", "Check", "Repair", "Verify"] as const;
+
+/** The four gates of repair verification, in order. The server enforces each one; the bar only shows where you are. */
+export const verifySteps = ["Photo", "Review", "Confirm", "Verify"] as const;
+export type VerifyGate = "photo" | "review" | "confirm" | "run";
+export const verifyGateIndex: Record<VerifyGate, number> = { photo: 0, review: 1, confirm: 2, run: 3 };

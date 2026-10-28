@@ -1,19 +1,17 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Camera, Terminal, RotateCcw, ShieldCheck, ShieldX, FileCheck2, Wrench, Loader2, UserCheck, Scale } from "lucide-react";
+import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
-import { AiCard } from "@/components/fo/ai";
-import { aiSummary } from "@/lib/ai";
-
-const assessmentNone = undefined;
-import { EvidenceRequestBanner } from "@/components/fo/evidence-request";
-import { CheckRow, EvidenceBadge, Section, SourceBadge, TechDetails } from "@/components/fo/primitives";
+import { AiCard, Progress } from "@/components/fo/ai";
+import { ArFrame } from "@/components/fo/ar-frame";
+import { CheckRow, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { api, type ChecklistStatus, type Decision } from "@/lib/api";
+import { api, type ChecklistStatus, type Decision, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
+import { aiSummary, verifyGateIndex, verifySteps, type VerifyGate } from "@/lib/ai";
+import { arTags, usePhotoOutlines } from "@/lib/ar";
 import { useAct } from "@/lib/hooks";
-import { latestDiagnostic, useInspectionBundle, verifications } from "@/lib/inspection";
-import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason } from "@/lib/labels";
+import { beforePhoto, latestDiagnostic, useInspectionBundle, verifications } from "@/lib/inspection";
+import { checklistLabel, featureName, fmtTime, fmtWhen, plainReason } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 const DIAG_FAILED = "Diagnostic failed after the repair claim";
@@ -26,8 +24,12 @@ function split(d?: Decision | null): { visual: boolean | null; diagnostic: boole
   return { visual: false, diagnostic: null };
 }
 
+/**
+ * Repair verification, camera first: the repair photo with the server's change outline (or the before photo until
+ * there is one), then one LensQi card at the gate you are at. The server enforces every gate and decides the outcome.
+ */
 export default function Verify({ id }: { id: string }) {
-  const { i, ev, fixture, photoUrl } = useInspectionBundle(id);
+  const { i, ev, fixture, assessment, photoUrl } = useInspectionBundle(id);
   const [running, setRunning] = useState(false);
   const [retry, setRetry] = useState("");
   const review = useAct(id, (req: string, status: ChecklistStatus, photo: string) => api.review(id, req, status, photo));
@@ -37,9 +39,20 @@ export default function Verify({ id }: { id: string }) {
 
   if (!i) return <><TopBar title="Repair verification" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
+  if (!i.currentClaimId)
+    return (
+      <>
+        <TopBar title="Repair verification" back={`/m/i/${id}`} />
+        <Page>
+          <AiCard says="Nothing to verify yet." title="No repair claimed" hint="Finish the investigation and tell me what you fixed first.">
+            <Button asChild size="lg" className="h-12 w-full rounded-2xl"><Link href={`/m/i/${id}`}>Back to the inspection</Link></Button>
+          </AiCard>
+        </Page>
+      </>
+    );
+
   const accepted = i.photos.find((p) => p.evidenceId === i.acceptedPostRepairPhotoId);
   const change = [...i.changeAnalyses].reverse().find((c) => c.claimId === i.currentClaimId);
-  const acceptedChange = accepted && [...i.changeAnalyses].reverse().find((c) => c.photoEvidenceId === accepted.evidenceId);
   const required = fixture?.visualRequirements.filter((v) => v.mandatory) ?? [];
   const reviewed = (req: string) => i.checklist.find((c) => c.requirementId === req && (!c.reviewedByEvidenceId || c.reviewedByEvidenceId === accepted?.evidenceId));
   const allReviewed = required.every((r) => reviewed(r.requirementId));
@@ -48,92 +61,100 @@ export default function Verify({ id }: { id: string }) {
   const diag = latestDiagnostic(i);
   const attempts = verifications(ev);
   const ready = i.stage === "ReadyToVerify";
+  const decided = !running && !!decision && !ready;
+  const asked = i.evidenceRequests?.find((r) => !r.answeredByPhotoId);
+  const gate: VerifyGate = !accepted ? "photo" : !allReviewed ? "review" : !i.technicianAcknowledged ? "confirm" : "run";
+  const busy = review.isPending || ack.isPending || claim.isPending;
+  const btn = "h-12 w-full rounded-2xl";
 
   const start = () => {
     setRunning(true);
     verify.mutate([], { onSettled: () => setTimeout(() => setRunning(false), 600) });
   };
 
-  if (!i.currentClaimId)
-    return (
-      <>
-        <TopBar title="Repair verification" back={`/m/i/${id}`} />
-        <Page>
-          <div className="panel p-4 text-sm">No repair has been claimed for this inspection yet.</div>
-          <Button asChild className="h-11 w-full"><Link href={`/m/i/${id}`}>Back to investigation</Link></Button>
-        </Page>
-      </>
-    );
+  const reviewRows = (
+    <div className="divide-y divide-border">
+      {required.map((r) => {
+        const cur = reviewed(r.requirementId)?.status;
+        return (
+          <div key={r.requirementId} className="space-y-2 py-2.5 first:pt-0 last:pb-0">
+            <div className="text-sm">{featureName(r.requirementId)}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["Satisfied", "NotSatisfied", "Unknown"] as ChecklistStatus[]).map((st) => (
+                <button key={st} disabled={!accepted || busy || i.technicianAcknowledged}
+                  onClick={() => accepted && review.mutate([r.requirementId, st, accepted.evidenceId])}
+                  className={cn("h-9 rounded-xl border text-xs font-medium transition-colors disabled:cursor-default",
+                    cur === st ? (st === "Satisfied" ? "border-success/50 bg-success/15 text-success" : st === "NotSatisfied" ? "border-failure/50 bg-failure/15 text-failure" : "border-warning/50 bg-warning/15 text-warning") : "border-border text-muted-foreground hover:border-primary/40")}>
+                  {checklistLabel[st]}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const card = (() => {
+    if (running) return <AiCard says="I'm checking the new photo and your review, then the equipment gets a fresh check." title="Verifying…" />;
+    if (decided && decision.result === "Verified")
+      return (
+        <AiCard tone="success" says={aiSummary(i, undefined)} title="Verified complete" hint="Every required check passed.">
+          {decision.outcomeKind === "VerifiedCompleteSimulated" && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground"><SourceBadge source="Simulated" /> The equipment check was simulated, not a live measurement.</p>
+          )}
+          <Button asChild size="lg" className={btn}><Link href={`/m/i/${id}/receipt`}><FileCheck2 /> View FieldProof receipt</Link></Button>
+        </AiCard>
+      );
+    if (decided && decision.result === "Denied")
+      return (
+        <AiCard tone="failure" says={plainReason(decision.reasons[0] ?? "")} title="Verification failed" hint="This work can't be marked verified. Every attempt stays in the record.">
+          <input value={retry} onChange={(e) => setRetry(e.target.value)} placeholder="What did you do this time?"
+            className="h-12 w-full rounded-2xl border border-input bg-background px-4 text-sm outline-none focus:border-primary" />
+          <Button size="lg" className={btn} disabled={!retry.trim() || claim.isPending} onClick={() => claim.mutate([retry.trim()], { onSuccess: () => { setRetry(""); verify.reset(); } })}>
+            <RotateCcw /> Fixed it again — verify
+          </Button>
+          <Button asChild variant="ghost" className="h-10 w-full"><Link href={`/m/i/${id}/diagnostics`}><Terminal /> Review the equipment check</Link></Button>
+        </AiCard>
+      );
+    if (decided && decision.result === "NeedsHumanReview")
+      return <AiCard tone="warning" says={plainReason(decision.reasons[0] ?? "")} title="Needs a decision" hint="A supervisor decides this one; I can't." />;
+    switch (gate) {
+      case "photo":
+        return (
+          <AiCard says={aiSummary(i, undefined)} title={asked ? asked.note : "Photograph the repair"}
+            hint={asked ? `Requested by the ${asked.requestedBy.toLowerCase()}. Your next photo answers it.` : "Same view as before. The same photo again won't count."}>
+            <Button asChild size="lg" className={btn}><Link href={`/m/i/${id}/scan`}><Camera /> Open camera</Link></Button>
+            <Button asChild variant="ghost" className="h-10 w-full"><Link href={`/m/i/${id}/glasses`}><Glasses /> Use the glasses</Link></Button>
+          </AiCard>
+        );
+      case "review":
+        return <AiCard says={aiSummary(i, undefined)} title="Review the new photo" hint="Mark what you can see yourself. My outline is a suggestion.">{reviewRows}</AiCard>;
+      case "confirm":
+        return (
+          <AiCard says="Your review is in." title="Confirm it's your review" hint="The receipt records that you checked this evidence yourself.">
+            <Button size="lg" variant="outline" className={btn} disabled={busy} onClick={() => ack.mutate([])}>{ack.isPending ? <Loader2 className="animate-spin" /> : <UserCheck />} I reviewed this evidence myself</Button>
+          </AiCard>
+        );
+      case "run":
+        return (
+          <AiCard says="Photo accepted, reviewed and confirmed." title="Ready to verify" hint="I'll check the photo and run a fresh equipment check. Both have to pass.">
+            <Button size="lg" className={btn} disabled={!ready} onClick={start}><Wrench /> Run verification</Button>
+            {!ready && <p className="text-center text-xs text-muted-foreground">Waiting for the server to accept the evidence.</p>}
+          </AiCard>
+        );
+    }
+  })();
 
   return (
     <>
       <TopBar title="Repair verification" back={`/m/i/${id}`} right={diag && <SourceBadge source={diag.source} />} />
-      <Page>
-        <EvidenceRequestBanner id={id} requests={i.evidenceRequests} />
-        {!decision && !running && (
-          <AiCard says={aiSummary(i, assessmentNone)} title="Verify the repair" hint="A new photo you've reviewed and a fresh equipment check both have to pass. A photo alone can't mark this work complete." />
-        )}
+      <Page className="space-y-4">
+        <VerifyHero id={id} i={i} fixture={fixture} assessment={assessment} photoUrl={photoUrl} camera={!decided || decision?.result !== "Verified"} />
+        {card}
+        <Progress step={decided && decision?.result === "Verified" ? 4 : verifyGateIndex[gate]} steps={verifySteps} />
 
-        {(!decision || i.stage === "ReadyToVerify") && (
-          <>
-            <Section title="1 · New photo after the repair">
-              {accepted && photoUrl(accepted.evidenceId) ? (
-                <div className="panel flex items-center gap-3 p-2.5">
-                  <img src={photoUrl(accepted.evidenceId)} alt="Post-repair photo" className="size-16 rounded-lg object-cover" />
-                  <div className="min-w-0 flex-1 text-sm">
-                    <div className="font-medium">Photo accepted</div>
-                    <div className="text-xs text-muted-foreground">{fmtTime(accepted.observedAt)} · {acceptedChange ? changeLabel[acceptedChange.verdict].label : "not compared"}</div>
-                  </div>
-                  <Button asChild variant="outline" size="sm"><Link href={`/m/i/${id}/scan`}>Retake</Link></Button>
-                </div>
-              ) : (
-                <div className={cn("panel space-y-3 p-3.5", change && "border-failure/40 bg-failure/10")}>
-                  {change ? (
-                    <div className="text-sm"><EvidenceBadge state="failed" label={changeLabel[change.verdict].label} /><p className="mt-1.5">{changeLabel[change.verdict].detail}</p></div>
-                  ) : <p className="text-sm text-muted-foreground">Take a photo of the repaired connection.</p>}
-                  <Button asChild className="h-11 w-full"><Link href={`/m/i/${id}/scan`}><Camera /> Take post-repair photo</Link></Button>
-                </div>
-              )}
-            </Section>
-
-            <Section title="2 · Your review">
-              <div className={cn("panel divide-y divide-border", !accepted && "opacity-50")}>
-                {required.map((r) => {
-                  const cur = reviewed(r.requirementId)?.status;
-                  return (
-                    <div key={r.requirementId} className="space-y-2 p-3">
-                      <div className="text-sm">{featureName(r.requirementId)}</div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {(["Satisfied", "NotSatisfied", "Unknown"] as ChecklistStatus[]).map((st) => (
-                          <button key={st} disabled={!accepted || review.isPending}
-                            onClick={() => accepted && review.mutate([r.requirementId, st, accepted.evidenceId])}
-                            className={cn("h-9 rounded-lg border text-xs font-medium transition-colors",
-                              cur === st ? (st === "Satisfied" ? "border-success/50 bg-success/15 text-success" : st === "NotSatisfied" ? "border-failure/50 bg-failure/15 text-failure" : "border-warning/50 bg-warning/15 text-warning") : "border-border text-muted-foreground hover:border-primary/40")}>
-                            {checklistLabel[st]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Section>
-
-            <label className={cn("panel flex items-center justify-between gap-3 p-3.5 text-sm", !allReviewed && "opacity-50")}>
-              <span className="flex items-center gap-2"><UserCheck className="size-4 text-muted-foreground" />3 · I reviewed this evidence myself</span>
-              <Switch checked={i.technicianAcknowledged} disabled={!allReviewed || i.technicianAcknowledged || ack.isPending} onCheckedChange={() => ack.mutate([])} />
-            </label>
-
-            <Button size="lg" className="h-12 w-full" onClick={start} disabled={!ready || running || !accepted || !allReviewed || !i.technicianAcknowledged}>
-              {running ? <Loader2 className="animate-spin" /> : <Wrench />} Run verification
-            </Button>
-            {ready && (!accepted || !allReviewed || !i.technicianAcknowledged) && (
-              <p className="text-center text-xs text-muted-foreground">{!accepted ? "Take a post-repair photo first." : !allReviewed ? "Review each item against the new photo." : "Confirm you reviewed the evidence."}</p>
-            )}
-          </>
-        )}
-
-        {(running || decision) && (
+        {(running || decided) && (
           <div className="space-y-2.5">
             <CheckRow label="Visual verification"
               detail={running ? "Checking the new photo and your review…" : outcome.visual === false ? plainReason(decision!.reasons[0] ?? "") : "New photo accepted and every item reviewed."}
@@ -144,61 +165,52 @@ export default function Verify({ id }: { id: string }) {
           </div>
         )}
 
-        {!running && decision && decision.result === "Denied" && i.stage === "VerificationFailed" && (
-          <div className="animate-rise space-y-4 rounded-2xl border border-failure/50 bg-failure/10 p-5">
-            <ShieldX className="size-10 text-failure" />
-            <div>
-              <div className="text-xl font-semibold text-failure">Verification failed</div>
-              <p className="mt-1 text-sm">{plainReason(decision.reasons[0] ?? "")}</p>
-              <p className="mt-2 text-xs text-muted-foreground">This work can't be marked verified. Every attempt is kept in the record.</p>
+        <div className="space-y-2">
+          {!decided && accepted && (gate === "confirm" || gate === "run") && <Expandable title={`Your review · ${required.length} items`}>{reviewRows}</Expandable>}
+          {attempts.length > 0 && (
+            <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              <span>Attempts</span>
+              {attempts.map((a) => {
+                const ok = (a["decision"] as Decision).result === "Verified";
+                return <span key={a.sequence} title={fmtWhen(a.occurredAt)} className={cn("size-2 rounded-full", ok ? "bg-success" : "bg-failure")} />;
+              })}
+              <span className="ml-auto">all kept in the record</span>
             </div>
-            <div className="space-y-2">
-              <input value={retry} onChange={(e) => setRetry(e.target.value)} placeholder="What did you do this time?"
-                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
-              <Button className="h-11 w-full" disabled={!retry.trim() || claim.isPending} onClick={() => claim.mutate([retry.trim()], { onSuccess: () => { setRetry(""); verify.reset(); } })}>
-                <RotateCcw /> Fixed it again — verify
-              </Button>
-              <Button asChild variant="outline" className="h-11 w-full"><Link href={`/m/i/${id}/diagnostics`}><Terminal /> Review equipment check</Link></Button>
-            </div>
-          </div>
-        )}
-
-        {!running && decision && decision.result === "NeedsHumanReview" && (
-          <div className="animate-rise space-y-2 rounded-2xl border border-warning/50 bg-warning/10 p-5">
-            <Scale className="size-10 text-warning" />
-            <div className="text-xl font-semibold text-warning">Needs a decision</div>
-            <p className="text-sm">{plainReason(decision.reasons[0] ?? "")}</p>
-          </div>
-        )}
-
-        {!running && decision?.result === "Verified" && (
-          <div className="animate-rise space-y-4 rounded-2xl border border-success/40 bg-success/10 p-5">
-            <ShieldCheck className="size-10 text-success" />
-            <div>
-              <div className="text-xl font-semibold text-success">Verified complete</div>
-              <p className="mt-1 text-sm">All required checks passed.</p>
-              {decision.outcomeKind === "VerifiedCompleteSimulated" && (
-                <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><SourceBadge source="Simulated" /> The equipment check was simulated, not a live measurement.</p>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {i.photos.slice(-3).map((p) => photoUrl(p.evidenceId) && (
-                <img key={p.evidenceId} src={photoUrl(p.evidenceId)} alt="" className="h-16 w-full rounded-lg border border-border object-cover" />
-              ))}
-            </div>
-            <Button asChild size="lg" className="h-12 w-full"><Link href={`/m/i/${id}/receipt`}><FileCheck2 /> View FieldProof receipt</Link></Button>
-          </div>
-        )}
-
-        {attempts.length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            Attempts: {attempts.map((a) => ((a["decision"] as Decision).result === "Verified" ? "✓" : "✕")).join("  ")} — every attempt is kept in the audit record.
-          </div>
-        )}
-        {decision && (
-          <TechDetails rows={[["Decision", decision.result], ["Reason", decision.reasons.join(" ")], ["Policy", decision.policyVersion], ["Outcome", decision.outcomeKind ?? "—"], ["Last attempt", attempts.length ? fmtWhen(attempts[attempts.length - 1]!.occurredAt) : "—"]]} />
-        )}
+          )}
+          {decision && (
+            <TechDetails rows={[["Decision", decision.result], ["Reason", decision.reasons.join(" ")], ["Policy", decision.policyVersion], ["Outcome", decision.outcomeKind ?? "—"], ["Last attempt", attempts.length ? fmtWhen(attempts[attempts.length - 1]!.occurredAt) : "—"]]} />
+          )}
+        </div>
       </Page>
     </>
+  );
+}
+
+/** Before and after on the same frame. "After" is the repair photo with the server's change outline pinned to it. */
+function VerifyHero({ id, i, fixture, assessment, photoUrl, camera }: { id: string; i: Inspection; fixture?: Fixture | null; assessment?: Assessment | null; photoUrl: (e: string) => string | undefined; camera: boolean }) {
+  const change = [...i.changeAnalyses].reverse().find((c) => c.claimId === i.currentClaimId);
+  const after: Photo | undefined = i.photos.find((p) => p.evidenceId === i.acceptedPostRepairPhotoId) ?? (change && i.photos.find((p) => p.evidenceId === change.photoEvidenceId));
+  const before = beforePhoto(i);
+  const [side, setSide] = useState<"before" | "after" | null>(null);
+  const showing = side ?? (after ? "after" : "before");
+  const photo = showing === "after" ? after : before;
+  const outlines = usePhotoOutlines(id, i, photo?.evidenceId);
+  const photoChange = i.changeAnalyses.find((c) => c.photoEvidenceId === photo?.evidenceId);
+  const tags = showing === "after" ? arTags(fixture, undefined, outlines, photoChange) : arTags(fixture, assessment, outlines);
+  const src = photo && photoUrl(photo.evidenceId);
+  return (
+    <div className="relative overflow-hidden rounded-[26px] bg-overlay shadow-lg shadow-black/15">
+      {src ? <ArFrame src={src} outlines={outlines} tags={tags} />
+        : <Link href={`/m/i/${id}/scan`} className="grid aspect-[4/3] place-items-center text-sm text-overlay-foreground/70"><span className="flex flex-col items-center gap-2"><Camera className="size-9" />Tap to open the camera</span></Link>}
+      {before && (
+        <div className="glass absolute left-3 top-3 flex rounded-full p-0.5 text-[11px] font-medium">
+          {(["before", "after"] as const).map((s) => (
+            <button key={s} disabled={s === "after" && !after} onClick={() => setSide(s)}
+              className={cn("rounded-full px-3 py-1 capitalize transition-colors disabled:opacity-40", showing === s ? "bg-primary text-primary-foreground" : "opacity-80")}>{s}</button>
+          ))}
+        </div>
+      )}
+      {camera && <Link href={`/m/i/${id}/scan`} aria-label="New photo" className="glass absolute bottom-3 right-3 grid size-11 place-items-center rounded-full shadow-lg"><Camera className="size-5" /></Link>}
+    </div>
   );
 }

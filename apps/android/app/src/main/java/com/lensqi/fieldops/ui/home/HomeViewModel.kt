@@ -39,6 +39,8 @@ data class HomeState(
     /** The most urgent inspection that has a photo, and that photo's artifact URL, for the Today hero. */
     val focusId: String? = null,
     val focusPhotoUrl: String? = null,
+    /** Latest photo URL per asset, loaded when the asset's page opens. */
+    val assetPhotos: Map<String, String> = emptyMap(),
 )
 
 /** Shared by the home, inspections, assets, start and profile tabs; everything shown comes from the server or its cached copy. */
@@ -81,12 +83,23 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun loadFocus() {
         val focus = needsYou(_state.value.inspections).firstOrNull { it.photos > 0 } ?: return _state.update { it.copy(focusId = null, focusPhotoUrl = null) }
-        val names = (apiCall { api.artifacts(focus.inspectionId) } as? ApiOutcome.Ok)?.value.orEmpty()
+        val url = latestPhotoUrl(focus.inspectionId)
+        _state.update { it.copy(focusId = focus.inspectionId, focusPhotoUrl = url) }
+    }
+
+    /** The asset's most recent photo, from its newest inspection that has one. */
+    fun loadAssetPhoto(assetId: String) = viewModelScope.launch {
+        val withPhoto = _state.value.inspections.firstOrNull { it.assetId == assetId && it.photos > 0 } ?: return@launch
+        latestPhotoUrl(withPhoto.inspectionId)?.let { url -> _state.update { it.copy(assetPhotos = it.assetPhotos + (assetId to url)) } }
+    }
+
+    private suspend fun latestPhotoUrl(inspectionId: String): String? {
+        val names = (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value.orEmpty()
         val photo = names.filter { it.startsWith("photo-") && !it.contains("-crop-") }
-        val view = (apiCall { api.inspection(focus.inspectionId) } as? ApiOutcome.Ok)?.value
+        val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value
         val latest = view?.photos?.lastOrNull()?.evidenceId
         val name = photo.firstOrNull { latest != null && it.startsWith("$latest-") } ?: photo.lastOrNull()
-        _state.update { it.copy(focusId = focus.inspectionId, focusPhotoUrl = name?.let { n -> settings.currentBase().resolve("v1/inspections/${focus.inspectionId}/artifacts/$n").toString() }) }
+        return name?.let { n -> settings.currentBase().resolve("v1/inspections/$inspectionId/artifacts/$n").toString() }
     }
 
     fun onBaseChanged(value: String) = _state.update { it.copy(apiBase = value) }

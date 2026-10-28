@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { toast } from "sonner";
-import { Download, Share2, Fingerprint, Printer, ShieldCheck, Loader2 } from "lucide-react";
+import { Download, Share2, Fingerprint, Printer, ShieldCheck, ShieldX, CircleDashed, Loader2 } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { Button } from "@/components/ui/button";
-import { Logo, EvidenceBadge, Citation, SourceBadge, TechDetails } from "@/components/fo/primitives";
+import { Logo, Citation, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { EvidencePhoto } from "@/components/fo/evidence-photo";
 import { api, receiptHtmlUrl, receiptJsonUrl, type Decision, type DiagnosticResult, type EventRecord } from "@/lib/api";
 import { beforePhoto, useGeometry, useInspectionBundle } from "@/lib/inspection";
@@ -55,17 +55,37 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
 
   return (
     <article className="panel overflow-hidden">
-      <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
-        <div className="flex items-center gap-2"><Logo size={22} /><span className="text-sm font-semibold">FieldProof Receipt</span></div>
-        <EvidenceBadge state={ok ? "verified" : attempts.length ? "failed" : "evidence-required"} label={ok ? "Verified complete" : attempts.length ? "Not verified" : "Pending"} />
+      <header className={cn("relative overflow-hidden border-b border-border px-5 pb-5 pt-4", ok ? "bg-success/[0.07]" : attempts.length ? "bg-failure/[0.07]" : "bg-surface")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2"><Logo size={20} /><span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">FieldProof receipt</span></div>
+          <span className="text-[11px] text-muted-foreground">{fmtWhen(r.generatedAt)}</span>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <span className={cn("grid size-12 shrink-0 place-items-center rounded-2xl", ok ? "bg-success/15 text-success" : attempts.length ? "bg-failure/15 text-failure" : "bg-muted text-muted-foreground")}>
+            {ok ? <ShieldCheck className="size-6" /> : attempts.length ? <ShieldX className="size-6" /> : <CircleDashed className="size-6" />}
+          </span>
+          <div className="min-w-0">
+            <div className={cn("text-xl font-semibold tracking-tight", ok ? "text-success" : attempts.length ? "text-failure" : "")}>{ok ? "Verified complete" : attempts.length ? "Not verified" : "Open"}</div>
+            <div className="truncate text-sm text-muted-foreground">{asset?.displayName ?? r.inspection.assetId} · {r.inspection.fixtureId} rev {r.inspection.fixtureRevision}</div>
+          </div>
+        </div>
+        {ok && <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">{r.decision?.outcomeKind === "VerifiedCompleteLive" ? <SourceBadge source="LiveLocal" /> : <SourceBadge source="Simulated" />}{r.decision?.outcomeKind === "VerifiedCompleteLive" ? "Live equipment check" : "Equipment check simulated, not a live measurement"}</div>}
       </header>
-      <div className={cn("space-y-4 p-4 text-sm", wide && "grid gap-6 space-y-0 md:grid-cols-2")}>
-        <div className="space-y-4">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-            {[["Asset", asset?.displayName ?? r.inspection.assetId], ["Site", `${r.inspection.fixtureId} rev ${r.inspection.fixtureRevision}`], ["Issued", fmtWhen(r.generatedAt)], ["Result", ok ? (r.decision?.outcomeKind === "VerifiedCompleteLive" ? "Verified · live check" : "Verified · simulated check") : r.decision ? "Not verified" : "Open"]].map(([k, v]) => (
-              <div key={k}><dt className="text-muted-foreground">{k}</dt><dd className="font-medium">{v}</dd></div>
-            ))}
-          </dl>
+      <div className={cn("space-y-5 p-4 text-sm", wide && "grid gap-6 space-y-0 md:grid-cols-2")}>
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-2">
+            {[["Before", before, beforeGeo.data, "warning"], ["After", after, afterGeo.data, "success"]].map(([label, p, g, tone]) => {
+              const photo = p as typeof before;
+              const src = photo && photoUrl(photo.evidenceId);
+              return (
+                <div key={label as string} className="overflow-hidden rounded-xl border border-border bg-overlay">
+                  {src ? <EvidencePhoto src={src} geometry={g as never} tone={tone as "warning" | "success"} imgClassName="aspect-[4/3] object-contain">
+                    <figcaption className="glass absolute bottom-1.5 left-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium">{label as string}{(g as { matched?: boolean } | null)?.matched ? " · outlined" : ""}</figcaption>
+                  </EvidencePhoto> : <div className="grid aspect-[4/3] place-items-center text-[11px] text-overlay-foreground/60">No {String(label).toLowerCase()} photo</div>}
+                </div>
+              );
+            })}
+          </div>
           <div><div className="eyebrow">Initial discrepancy</div><p className="mt-1">
             {firstFail ? "The approved equipment check failed" : "Inspection opened"}{unclear?.length ? `; the first photo left ${unclear.join(" and ")} unclear` : ""}.
           </p></div>
@@ -74,21 +94,8 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
               <ol className="mt-1 list-decimal space-y-0.5 pl-4">{claims.map((c, k) => <li key={k}>{c}</li>)}</ol>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            {[["Before", before, beforeGeo.data, "warning"], ["After", after, afterGeo.data, "success"]].map(([label, p, g, tone]) => {
-              const photo = p as typeof before;
-              const src = photo && photoUrl(photo.evidenceId);
-              return (
-                <div key={label as string} className="overflow-hidden rounded-lg border border-border">
-                  {src ? <EvidencePhoto src={src} geometry={g as never} tone={tone as "warning" | "success"} imgClassName="h-24 object-cover">
-                    <figcaption className="glass absolute bottom-1 left-1 rounded px-1.5 text-[10px]">{label as string}{(g as { matched?: boolean } | null)?.matched ? " · outlined" : ""}</figcaption>
-                  </EvidencePhoto> : <div className="grid h-24 place-items-center text-[11px] text-muted-foreground">No {String(label).toLowerCase()} photo</div>}
-                </div>
-              );
-            })}
-          </div>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
             <div className="eyebrow">Verification decisions</div>
             <ul className="mt-1.5 space-y-1 text-xs">
@@ -117,7 +124,7 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
               {r.knowledge.citations.slice(0, 3).map((c) => <Citation key={c.factId} title={c.documentTitle} section={c.sourceLocator} href={c.sourceUrl} />)}
             </div>
           ) : null}
-          <div className="rounded-lg border border-border bg-surface p-3">
+          <div className="rounded-xl border border-border bg-surface p-3.5">
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-xs font-medium"><Fingerprint className="size-3.5 text-primary" /> Evidence integrity</span>
               <button onClick={() => check.refetch()} className="text-[11px] text-primary">{check.isFetching ? "Checking…" : "Check now"}</button>
@@ -131,9 +138,9 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Button asChild><a href={receiptJsonUrl(id)} download={`fieldproof-${id}.json`}><Download /> Export</a></Button>
-            <Button variant="outline" onClick={share}><Share2 /> Share</Button>
-            <Button asChild variant="outline" className="col-span-2"><a href={receiptHtmlUrl(id)} target="_blank" rel="noopener"><Printer /> Printable receipt</a></Button>
+            <Button size="lg" className="col-span-2 h-12 rounded-2xl" onClick={share}><Share2 /> Share receipt</Button>
+            <Button asChild variant="outline" className="h-11 rounded-xl"><a href={receiptJsonUrl(id)} download={`fieldproof-${id}.json`}><Download /> Export</a></Button>
+            <Button asChild variant="outline" className="h-11 rounded-xl"><a href={receiptHtmlUrl(id)} target="_blank" rel="noopener"><Printer /> Print</a></Button>
           </div>
           <TechDetails rows={[["Inspection", r.inspection.inspectionId], ["Policy", r.versions.policyVersion], ["Receipt format", r.versions.receiptVersion], ...r.artifacts.map((a): [string, string] => [a.evidenceId, a.sha256])]} />
         </div>

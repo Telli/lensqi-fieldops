@@ -10,6 +10,8 @@ import { changeLabel, featureName, isPostRepairItem, observationState, sentence 
 import { ArFrame } from "@/components/fo/ar-frame";
 import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { EvidenceBadge } from "@/components/fo/primitives";
+import { LensQiMark } from "@/components/fo/ai";
+import { aiSummary, nextMove } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
 type Step = { label: string; state: "todo" | "doing" | "done" | "skipped" };
@@ -98,7 +100,6 @@ export default function Scan({ id }: { id: string }) {
         setStep(3, failed ? "skipped" : "done");
       }
       setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
-      setDrawer(true);
       qc.setQueryData(qk.inspection(id), state);
     } catch (e) {
       setSteps([]);
@@ -144,13 +145,15 @@ export default function Scan({ id }: { id: string }) {
   const expected = fixture?.assets.find((a) => a.assetId === i?.assetId);
   const seen = result?.assessment?.assetId;
   const rejected = result?.change && (result.change.verdict === "DuplicateImage" || result.change.verdict === "NoVisualChange");
+  const findings = result?.assessment?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)) ?? [];
+  const last = i?.photos[i.photos.length - 1];
 
   return (
     <div className="relative h-dvh overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       {/* Feed: live camera, or the photo just taken with its outline */}
       <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-cover", (live !== "on" || preview) && "hidden")} />
       {preview && (
-        <div className="absolute inset-x-0 top-14 bottom-0 grid place-items-start">
+        <div className="absolute inset-x-0 top-14 bottom-56 grid place-items-center">
           <ArFrame src={result ? photoUrl(result.evidenceId) ?? preview : preview} outlines={outlines} tags={tags} selected={selected} onSelect={setSelected}
             guide={target ? { concept: target, label: `Target region · ${sentence(result?.assessment?.requestedView) || target}` } : null} className="w-full" />
         </div>
@@ -190,64 +193,87 @@ export default function Scan({ id }: { id: string }) {
         <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>
       </div>
 
-      {/* Investigation panel */}
-      <div className="absolute inset-x-0 bottom-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="glass max-h-[58dvh] overflow-y-auto rounded-2xl border border-border p-3.5">
-          <button onClick={() => setDrawer(!drawer)} className="flex w-full items-center justify-between gap-3 text-left">
-            <div className="text-sm font-medium">{result ? (rejected ? "Photo not accepted" : afterRepair ? "Photo accepted" : "Here's what LensQi sees") : prompt}</div>
-            <ChevronUp className={cn("size-4 shrink-0 transition-transform", drawer && "rotate-180")} />
-          </button>
-          {steps.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-              {steps.map((st, k) => (
-                <span key={st.label} className="flex items-center gap-1.5">
-                  {k > 0 && <span className="h-px w-3 bg-overlay-foreground/30" />}
-                  <span className={cn("flex items-center gap-1", st.state === "done" ? "text-primary" : st.state === "doing" ? "text-overlay-foreground" : "text-overlay-foreground/50")}>
-                    {st.state === "done" ? <Check className="size-3" /> : st.state === "doing" ? <Loader2 className="size-3 animate-spin" /> : st.state === "skipped" ? <AlertTriangle className="size-3 text-warning" /> : null}
-                    {st.label}
-                  </span>
-                </span>
-              ))}
+      {/* Bottom: LensQi's prompt and the shutter, or what LensQi sees in the photo just taken */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-16 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {!result ? (
+          <>
+            <div className="glass mx-auto mb-5 flex max-w-sm items-start gap-2.5 rounded-2xl px-3 py-2.5">
+              <LensQiMark className="size-6" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm leading-snug">{busy ? (afterRepair ? "Comparing with the photo from before…" : "Looking at your photo…") : prompt}</div>
+                {steps.length > 0 && <StepLine steps={steps} />}
+              </div>
             </div>
-          )}
-          {drawer && result && (
-            <div className="mt-3 animate-rise space-y-2 border-t border-border pt-3 text-xs">
-              {result.change && (
-                <div className={cn("rounded-lg border p-2.5", rejected ? "border-failure/40 bg-failure/10" : "border-border")}>
-                  <EvidenceBadge state={changeLabel[result.change.verdict].state} label={changeLabel[result.change.verdict].label} />
-                  <p className="mt-1.5">{changeLabel[result.change.verdict].detail}</p>
-                </div>
-              )}
-              {result.assessment?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)).map((h) => (
-                <div key={h.featureId} className="flex gap-2">
-                  <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", h.status === "Observed" ? "bg-primary" : h.status === "Conflicting" ? "bg-failure" : "bg-warning")} />
-                  <span><span className="font-medium">{featureName(h.featureId)}</span> <span className="opacity-70">· {observationState[h.status].label}</span><br /><span className="opacity-80">{h.reason}</span></span>
-                </div>
-              ))}
-              {result.assessment?.nextAction === "RequestView" && result.assessment.requestedView && (
-                <div className="flex gap-2 text-warning"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />Next: {sentence(result.assessment.requestedView)}</div>
-              )}
-              <button onClick={() => (rejected ? (setPreview(null), setResult(null), setSteps([])) : nav(next))}
-                className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-medium text-primary-foreground">
-                {rejected ? "Take another photo" : afterRepair ? "Continue to verification" : "Continue investigation"} <ArrowRight className="size-4" />
-              </button>
-            </div>
-          )}
-          {!result && (
-            <div className="mt-3 flex items-center justify-between">
-              <button onClick={() => fileGallery.current?.click()} disabled={busy} className="grid size-11 place-items-center rounded-xl border border-border" aria-label="Choose a photo">
+            <div className="flex items-center justify-between px-5">
+              <button onClick={() => fileGallery.current?.click()} disabled={busy} className="glass grid size-12 place-items-center rounded-2xl" aria-label="Choose a photo">
                 <Images className="size-5" />
               </button>
-              <button onClick={onShutter} disabled={busy || !i} aria-label="Capture" className="grid size-[72px] place-items-center rounded-full border-4 border-primary disabled:opacity-60">
-                <span className={cn("size-14 rounded-full bg-primary transition-transform active:scale-90", busy && "animate-pulse")} />
+              <button onClick={onShutter} disabled={busy || !i} aria-label="Capture" className="grid size-[76px] place-items-center rounded-full border-4 border-overlay-foreground/90 disabled:opacity-60">
+                <span className={cn("size-[60px] rounded-full bg-overlay-foreground transition-transform active:scale-90", busy && "animate-pulse bg-primary")} />
               </button>
-              <div className="w-11 text-center text-[11px] opacity-70">{i?.photos.length ?? 0}<br />photos</div>
+              {last && photoUrl(last.evidenceId) ? (
+                <Link href={`/m/i/${id}`} aria-label={`${i?.photos.length} photos`} className="relative size-12 overflow-hidden rounded-2xl border-2 border-overlay-foreground/70">
+                  <img src={photoUrl(last.evidenceId)} alt="" className="size-full object-cover" />
+                  <span className="absolute right-0.5 top-0.5 rounded-full bg-black/70 px-1 text-[9px] font-semibold tabular-nums">{i?.photos.length}</span>
+                </Link>
+              ) : <span className="size-12" />}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="glass max-h-[58dvh] animate-rise overflow-y-auto rounded-3xl border border-border p-4">
+            <div className="flex items-start gap-3">
+              <LensQiMark />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-[13px] leading-relaxed opacity-80">{aiSummary(result.state, result.assessment)}</p>
+                <h2 className={cn("text-lg font-semibold leading-snug", rejected && "text-failure")}>
+                  {rejected ? "Photo not accepted" : afterRepair ? "Photo accepted" : nextMove(result.state, result.assessment)?.title}
+                </h2>
+                {steps.some((st) => st.state === "skipped") && <StepLine steps={steps} />}
+              </div>
+            </div>
+            {(findings.length > 0 || result.change) && (
+              <button onClick={() => setDrawer(!drawer)} className="mt-3 flex w-full items-center justify-between text-xs opacity-80">
+                {drawer ? "Hide details" : tags.length ? "Details · tap a label on the photo for the reason" : "Details"}
+                <ChevronUp className={cn("size-4 transition-transform", !drawer && "rotate-180")} />
+              </button>
+            )}
+            {drawer && (
+              <div className="mt-2 animate-rise space-y-2 border-t border-border pt-3 text-xs">
+                {result.change && (
+                  <div><EvidenceBadge state={changeLabel[result.change.verdict].state} label={changeLabel[result.change.verdict].label} /><p className="mt-1.5 opacity-80">{result.change.reason}</p></div>
+                )}
+                {findings.map((h) => (
+                  <div key={h.featureId} className="flex gap-2">
+                    <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", h.status === "Observed" ? "bg-primary" : h.status === "Conflicting" ? "bg-failure" : "bg-warning")} />
+                    <span><span className="font-medium">{featureName(h.featureId)}</span> <span className="opacity-70">· {observationState[h.status].label}</span><br /><span className="opacity-80">{h.reason}</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => (rejected ? (setPreview(null), setResult(null), setSteps([])) : nav(next))}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground">
+              {rejected ? <><CameraIcon className="size-4" /> Take another photo</> : <>{afterRepair ? "Continue to verification" : "Continue"} <ArrowRight className="size-4" /></>}
+            </button>
+          </div>
+        )}
       </div>
       <input ref={fileCamera} type="file" accept="image/jpeg,image/png" capture="environment" className="hidden" onChange={onFile(coarse ? "Phone" : "RecordedFixture")} />
       <input ref={fileGallery} type="file" accept="image/jpeg,image/png" className="hidden" onChange={onFile("RecordedFixture")} />
+    </div>
+  );
+}
+
+/** The server's work on the photo, step by step, in one quiet line. */
+function StepLine({ steps }: { steps: Step[] }) {
+  if (!steps.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
+      {steps.map((st) => (
+        <span key={st.label} className={cn("flex items-center gap-1", st.state === "done" ? "text-primary" : st.state === "doing" ? "text-overlay-foreground" : "text-overlay-foreground/50")}>
+          {st.state === "done" ? <Check className="size-3" /> : st.state === "doing" ? <Loader2 className="size-3 animate-spin" /> : st.state === "skipped" ? <AlertTriangle className="size-3 text-warning" /> : null}
+          {st.label}
+        </span>
+      ))}
     </div>
   );
 }
