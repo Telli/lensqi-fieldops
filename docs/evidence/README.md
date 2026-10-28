@@ -59,6 +59,13 @@ camera captures are the emulator's virtual scene, labelled `Phone`.
 | `android/10-offline-capture-awaiting-upload.png` … `12-reconnected-synced.png` | Airplane-mode capture queued with its device SHA-256, cached view and knowledge labelled `CACHED`, automatic upload after reconnecting with a matching server digest. | `EMULATOR` |
 | `android/13-cold-install-connect.png` … `15-cold-install-real-fix-verified.png` | The whole hero flow from a fresh install. | `EMULATOR`, `LIVE_META`, `SIMULATED_PROBE` |
 | `android/16-change-evidence-duplicate.png` | A re-submitted photo after the claim: change evidence `DuplicateImage`, inspection back to NeedsEvidence. | `EMULATOR`, `SYNTHETIC_IMAGE` |
+| `android/17-restyle-camera.png` | Restyled capture screen (design port): glass top bar, the requested view as the prompt, ringed shutter. The preview is the emulator's virtual scene. | `EMULATOR` |
+| `android/18-restyle-investigation.png` | Investigation stepper after the AI looked at an imported lab render: plain labels ("AI: visible"), the part outline on the photo. | `EMULATOR`, `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `android/19-restyle-same-photo-blocked.png` | Fake fix on the restyled verification screen: the same photo after the claim is flagged "Same photo" and verification stays locked. | `EMULATOR`, `SYNTHETIC_IMAGE` |
+| `android/20-restyle-verification-failed.png` | New photo reviewed but the equipment check still fails: two check rows and the plain-language failure card. | `EMULATOR`, `SIMULATED_PROBE` |
+| `android/21-restyle-home.png` | Restyled home: connection badge, counts and work requiring verification, from `GET /v1/inspections`. | `EMULATOR` |
+| `android/22-restyle-verified.png` | Real fix verified, labelled Simulated, with before/after photos and the receipt integrity check (intact, 10 checks). | `EMULATOR`, `SIMULATED_PROBE` |
+| `android/23-restyle-receipt.png` | The designed FieldProof receipt from the API's web app, embedded in the Android app. | `EMULATOR`, `SIMULATED_PROBE` |
 
 ## Receipt bundles
 

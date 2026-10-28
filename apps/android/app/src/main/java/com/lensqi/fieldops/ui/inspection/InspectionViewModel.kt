@@ -23,6 +23,14 @@ import com.lensqi.fieldops.data.api.Segmentation
 import com.lensqi.fieldops.data.api.SimulationRequest
 import com.lensqi.fieldops.data.api.WorkOrderRequest
 import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.api.ProposedNextAction
+import com.lensqi.fieldops.data.api.VerificationResult
+import com.lensqi.fieldops.data.api.VisualAssessment
+import com.lensqi.fieldops.ui.common.sentence
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.lensqi.fieldops.data.queue.CommandQueue
 import com.lensqi.fieldops.data.queue.PendingCommand
 import com.lensqi.fieldops.data.settings.SettingsStore
@@ -63,6 +71,12 @@ data class InspectionUi(
     val concept: String? = null,
     val workOrderText: String = "Reseat the yellow cable at port 2",
     val claimText: String = "Reseated the yellow cable at port 2",
+    /** Latest AI assessment, read from the event trail so it survives restarts. */
+    val latestAssessment: VisualAssessment? = null,
+    /** Every verification decision so far, oldest first. */
+    val attempts: List<VerificationResult> = emptyList(),
+    /** Demo control state of the simulated endpoint (Simulated mode only). */
+    val simUp: Boolean? = null,
     val busy: String? = null,
     val error: String? = null,
 )
@@ -75,6 +89,7 @@ class InspectionViewModel @Inject constructor(
     private val queue: CommandQueue,
     private val settings: SettingsStore,
     private val snapshots: SnapshotStore,
+    private val json: Json,
 ) : ViewModel() {
     val inspectionId: String = checkNotNull(savedState["inspectionId"])
     private val local = MutableStateFlow(InspectionUi())
@@ -108,7 +123,8 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun artifactUrl(name: String): String = settings.currentBase().resolve("v1/inspections/$inspectionId/artifacts/$name").toString()
-    fun receiptUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt.html").toString()
+    /** The designed receipt page served by the API (embed mode: the app draws its own top bar). */
+    fun receiptUrl(): String = settings.currentBase().resolve("m/i/$inspectionId/receipt?embed=1").toString()
     fun receiptJsonUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt").toString()
     fun artifactFor(evidenceId: String): String? = state.value.artifacts.firstOrNull { it.startsWith("$evidenceId-") }
 
@@ -128,6 +144,55 @@ class InspectionViewModel @Inject constructor(
             else -> report(r)
         }
         (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
+        loadTrail()
+    }
+
+    /** Assessment and verification history from the events, the stored outline of the latest photo, and the demo switch. */
+    private suspend fun loadTrail() {
+        val events = (apiCall { api.events(inspectionId) } as? ApiOutcome.Ok)?.value ?: return
+        val assessment = events.lastOrNull { it["kind"]?.jsonPrimitive?.content == "AssessmentRecorded" }?.get("assessment")
+            ?.let { runCatching { json.decodeFromJsonElement(VisualAssessment.serializer(), it) }.getOrNull() }
+        val attempts = events.filter { it["kind"]?.jsonPrimitive?.content == "VerificationEvaluated" }
+            .mapNotNull { e -> e["decision"]?.jsonObject?.get("result")?.jsonPrimitive?.content?.let { r -> runCatching { VerificationResult.valueOf(r) }.getOrNull() } }
+        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts) }
+        val view = state.value.view ?: return
+        val photo = view.photos.lastOrNull() ?: return
+        val seg = view.segmentations.lastOrNull { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }
+        if (seg != null && local.value.segmentation?.segmentationId != seg.evidenceId) {
+            val geometry = (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
+                ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
+            if (geometry != null) local.update { it.copy(segmentation = geometry, segmentationImage = loadArtifactBitmap(photo.evidenceId)) }
+        }
+        if (local.value.diagnosticsMode == DiagnosticSource.Simulated) {
+            val sim = (apiCall { api.simulation() } as? ApiOutcome.Ok)?.value
+            val id = local.value.fixture?.diagnostics?.firstOrNull()?.diagnosticId
+            local.update { it.copy(simUp = sim?.get("outcomes")?.jsonObject?.get(id ?: "")?.jsonPrimitive?.booleanOrNull) }
+        }
+    }
+
+    /** What the camera asks for: the AI's requested view, or a post-repair photo once a repair is claimed. */
+    fun cameraPrompt(): String {
+        val v = state.value.view
+        return when {
+            v?.currentClaimId != null -> "Take a new photo of the repaired connection"
+            state.value.latestAssessment?.nextAction == ProposedNextAction.RequestView -> sentence(state.value.latestAssessment?.requestedView)
+            else -> "Point at the equipment and capture a wide view"
+        }
+    }
+
+    /** Muse looks at the latest photo, then SAM outlines the part it asks for (or the fixture's most specific prompt). */
+    fun assessAndOutline() = act("LensQi is looking at the photo…") {
+        var concept: String? = null
+        when (val r = apiCall { api.investigate(inspectionId, key()) }) {
+            is ApiOutcome.Ok -> { cache.put(r.value.state); concept = r.value.assessment.requestedSegmentationConcept; local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) } }
+            else -> report(r)
+        }
+        val prompts = local.value.fixture?.visualRequirements?.mapNotNull { it.segmentationPrompt }.orEmpty()
+        val target = concept ?: prompts.lastOrNull()
+        apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = target)) }.onOk { r ->
+            cache.put(r.state)
+            local.update { it.copy(segmentation = r.segmentation, segmentationImage = loadArtifactBitmap(r.segmentation.photoEvidenceId)) }
+        }
     }
 
     fun onConceptChanged(value: String) = local.update { it.copy(concept = value) }
@@ -165,7 +230,7 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
-        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { }
+        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
     }
 
     fun workOrder(summary: String) = act("Drafting work order…") { apiCall { api.workOrder(inspectionId, key(), WorkOrderRequest(summary)) }.onOk(cache::put) }
