@@ -1,0 +1,131 @@
+{
+  "kind": "sam-spike",
+  "recordedAtUtc": "2026-10-28T02:25:25.843886+00:00",
+  "apiBase": "https://api.meta.ai/v1/responses",
+  "model": "sam-3.1",
+  "requestMetadata": {
+    "mask_encoding": "one_bit",
+    "include_confidence": "true"
+  },
+  "imageTransport": "data URL (base64) in input_image.image_url",
+  "image": {
+    "path": "fixtures/telecom-lab/images/lab-sw-01-initial-synthetic.jpg",
+    "sha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+    "width": 1600,
+    "height": 1000,
+    "source": "synthetic",
+    "note": "Rendered with Pillow; not a photograph of real equipment."
+  },
+  "runs": [
+    {
+      "prompt": "yellow ethernet cable",
+      "model": "sam-3.1",
+      "responseId": "resp_6ae15d138542858c78d04420",
+      "status": "completed",
+      "elapsedSeconds": 1.22,
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0,
+        "images_processed": 1
+      },
+      "rawOutputText": "<0f>0<|box;x1=304;y1=585;x2=629;y2=967;w=1600;h=1000;c=0.7299578189849854|><|mask;x=0;y=0;c=0.7299578189849854;data=383,326,!!!!#m@]!oMGNsUij^Ub{af3J//09fN7`GZc`uCA.$IDR[6M8(+w8x2en0n[Oi-&=.TAC-CcvyhzZx*dPUBJ^L9[TCn&s]sgF1e5Z!2f^=6uZs%19sHv`W08pUz)Y'3E{AG^l6vX0gIauxLSop^)&[Ga*sqki&+xs+SAZ=9Y`KD3x?PhWok0WGC?O92'@9!ZrIgvLxBs|>\n",
+      "parsed": {
+        "parser": {
+          "package": "meta-sam-parser",
+          "version": "unknown"
+        },
+        "outcome": {
+          "status": "completed"
+        },
+        "revision": 1,
+        "records": [
+          {
+            "kind": "box",
+            "order": 0,
+            "objectId": "0",
+            "box": {
+              "left": 304,
+              "top": 585,
+              "right": 630,
+              "bottom": 968
+            },
+            "confidence": 0.7299578189849854
+          },
+          {
+            "kind": "mask",
+            "order": 1,
+            "objectId": "0",
+            "bounds": {
+              "left": 304,
+              "top": 585,
+              "right": 630,
+              "bottom": 968
+            },
+            "mask": {
+              "encoding": "one_bit",
+              "width": 326,
+              "height": 383,
+              "rle": {
+                "size": [
+                  383,
+                  326
+                ],
+                "counts": "c;:a;5J5K5L5J5K5M3L4M3N2M3L4M3M3L4N2N2N2N2N2M3N2M3N2M2O10L2M4N2M3N3K4N3M2N2N2O1O1O1000001O00000O2O1N1O2N101O0O110O1O1O001N110O010O10O10O100O0010O01O0001000O1000O0010O100O001O100O100O010O100000000O100000000O10O1000000O010000000000000001O0O10000000000000000000000O1000000O01000O10001O00000001O000000000001O00O10010O0000000010O000000000010O00000000000001O000001O00O2O0001O0000O1010O0001O0000000000010O000010O0000010O000001O01O01O0001O00010O00010O0001O01O0001O01O01O0000010O000001O01O01O0000010O0000001O01O00001O0000010O00001O01O01O000010O01O0000010O01O010O0010O0010O0010O0001VOXO\\Fh0d9i000100O001O1O100O1O1O2O0O100O100O1O100O100O1O100O1J_EmNb:Q1700O1000O10000000O100O2K5XOoD0_;"
+              }
+            },
+            "confidence": 0.7299578189849854
+          }
+        ],
+        "diagnostics": [],
+        "rawSha256": "4ddead8e33f8b2d5d501c0457200a36d8c1fec6937cd585e3453a0a19b9ba272",
+        "rawLength": 327
+      },
+      "noMatch": false
+    },
+    {
+      "prompt": "network switch",
+      "model": "sam-3.1",
+      "responseId": "resp_6ae15d14c151e465774442d0",
+      "status": "completed",
+      "elapsedSeconds": 1.69,
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0,
+        "images_processed": 1
+      },
+      "rawOutputText": "",
+      "parsed": {
+        "parser": {
+          "package": "meta-sam-parser",
+          "version": "unknown"
+        },
+        "outcome": {
+          "status": "completed"
+        },
+        "revision": 0,
+        "records": [],
+        "diagnostics": [],
+        "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "rawLength": 0
+      },
+      "noMatch": true
+    }
+  ],
+  "overlay": "sam-spike-20261028T022522Z-overlay.jpg",
+  "label": "LIVE_META",
+  "note": "Genuine Meta Model API calls. Boxes/masks are model interpretations of a synthetic image; they are not evidence of equipment state and never authorize a diagnostic."
+}

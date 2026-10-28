@@ -26,7 +26,7 @@ feature commit, not at submission time.
 ## Must demonstrate (status)
 
 - [x] Muse Spark real structured-output request, validated server-side — `docs/evidence/stage-one-gate-*.json` (`LIVE_META`)
-- [ ] SAM 3.1 real object segmentation and ROI crop/overlay (or truthful no-match path)
+- [x] SAM 3.1 real object segmentation with box/mask overlay on the original image and a truthful no-match path — `docs/evidence/sam-spike-*.json` (`LIVE_META`); ROI crop and C# adapter pending
 - [ ] Bounded epistemic evidence collection loop (Core state machine)
 - [ ] Deterministic false-repair rejection and separately scoped live/simulated verification
 - [ ] JSON/HTML evidence receipt with verifiable hashes

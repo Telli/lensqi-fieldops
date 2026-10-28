@@ -1,0 +1,26 @@
+{
+  "image": "lab-sw-01-initial-synthetic.jpg",
+  "source": "synthetic",
+  "rightsMode": "OriginalSynthetic",
+  "note": "Rendered with Pillow for the SAM spike. Not a photograph of real equipment.",
+  "drawn": {
+    "switchChassis": [
+      160,
+      380,
+      1440,
+      620
+    ],
+    "portP2": [
+      570,
+      500,
+      648,
+      570
+    ],
+    "yellowCablePlug": [
+      582,
+      506,
+      636,
+      596
+    ]
+  }
+}
