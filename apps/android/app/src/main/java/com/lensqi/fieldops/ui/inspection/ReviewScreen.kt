@@ -53,7 +53,6 @@ import com.lensqi.fieldops.ui.common.PrimaryButton
 import com.lensqi.fieldops.ui.common.SecondaryButton
 import com.lensqi.fieldops.ui.common.changeText
 import com.lensqi.fieldops.ui.common.featureName
-import com.lensqi.fieldops.ui.common.originLabel
 import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.ui.common.isPostRepairItem
 import com.lensqi.fieldops.ui.common.observationLabel
@@ -102,7 +101,11 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
             // Where the photo came from, always visible: mock glasses are never presented as real glasses.
             runCatching { EvidenceOrigin.valueOf(r.origin) }.getOrNull()?.takeIf { it != EvidenceOrigin.Phone }?.let { o ->
                 Text(
-                    "Photo from ${originLabel(o)}" + if (o == EvidenceOrigin.MockWearables) " · Meta Mock Device Kit, simulated" else "",
+                    when (o) {
+                        EvidenceOrigin.MockWearables -> "Photo from mock glasses · Meta Mock Device Kit, simulated"
+                        EvidenceOrigin.Glasses -> "Photo from the glasses"
+                        else -> "Imported photo"
+                    },
                     fontSize = 12.sp, color = if (o == EvidenceOrigin.MockWearables) Fo.Warning else Fo.Muted,
                     modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                 )

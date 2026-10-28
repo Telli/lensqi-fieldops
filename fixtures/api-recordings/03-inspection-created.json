@@ -1,5 +1,5 @@
 {
-  "inspectionId": "I-5cb4b038251d",
+  "inspectionId": "I-3a3f101a9f39",
   "fixtureId": "LAB-RACK-01",
   "fixtureRevision": 1,
   "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
@@ -19,5 +19,6 @@
   "pendingPredictions": [],
   "predictionScores": [],
   "lastDecision": null,
+  "evidenceRequests": [],
   "outcomeKind": null
 }

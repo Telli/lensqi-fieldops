@@ -44,6 +44,7 @@ import androidx.navigation.navArgument
 import com.lensqi.fieldops.ui.camera.CameraScreen
 import com.lensqi.fieldops.ui.common.stageLabel
 import com.lensqi.fieldops.ui.glasses.GlassesScreen
+import com.lensqi.fieldops.ui.home.AssetDetailScreen
 import com.lensqi.fieldops.ui.home.AssetsScreen
 import com.lensqi.fieldops.ui.home.HomeScreen
 import com.lensqi.fieldops.ui.home.HomeViewModel
@@ -82,7 +83,13 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { goTab("inspections") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
                 composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("home") } ; nav.navigate("camera") } }
-                composable("assets") { AssetsScreen(home) { f, a -> home.create(f, a) { id -> nav.navigate("inspection/$id") } } }
+                composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }
+                composable("asset/{assetId}", arguments = listOf(navArgument("assetId") { type = NavType.StringType })) { e ->
+                    AssetDetailScreen(
+                        home, requireNotNull(e.arguments?.getString("assetId")), onBack = { nav.popBackStack() },
+                        onStart = { f, a -> home.create(f, a) { id -> nav.navigate("inspection/$id") } }, onOpen = openInspection,
+                    )
+                }
                 composable("profile") { ProfileScreen(home, openInspection) }
                 composable("inspection/{inspectionId}", arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })) {
                     InspectionScreen(

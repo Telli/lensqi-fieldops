@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "wouter";
-import { Boxes, ClipboardList, Server, ShieldCheck, Smartphone, LayoutDashboard } from "lucide-react";
+import { Boxes, ClipboardList, Server, ShieldCheck, Smartphone, LayoutDashboard, Search } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { Empty, HealthDot, Section, SourceBadge } from "@/components/fo/primitives";
 import { useFixtures, useHealth, useInspections } from "@/lib/hooks";
@@ -27,17 +28,21 @@ export function Inspections() {
 export function Assets() {
   const fixtures = useFixtures();
   const list = useInspections();
+  const [q, setQ] = useState("");
+  const match = (a: { assetId: string; displayName: string; kind: string }) => !q.trim() || `${a.assetId} ${a.displayName} ${a.kind}`.toLowerCase().includes(q.trim().toLowerCase());
   return (
     <>
       <TopBar title="Assets" />
       <Page>
+        <label className="panel flex items-center gap-2 px-3 py-2.5"><Search className="size-4 text-muted-foreground" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or asset label" className="w-full bg-transparent text-sm outline-none" /></label>
         {fixtures.data?.map((f) => (
           <Section key={f.fixtureId} title={f.fixtureId}>
-            {f.assets.map((a) => {
+            {f.assets.filter(match).map((a) => {
               const latest = list.data?.find((s) => s.assetId === a.assetId);
               const h = !latest ? "unknown" : latest.stage === "VerifiedComplete" ? "healthy" : ["FaultConfirmed", "VerificationFailed", "AwaitingRepair"].includes(latest.stage) ? "fault" : "attention";
               return (
-                <Link key={a.assetId} href={`/m/start?asset=${encodeURIComponent(a.assetId)}`} className="panel flex items-center gap-3 p-3.5 hover:border-primary/40">
+                <Link key={a.assetId} href={`/m/assets/${encodeURIComponent(a.assetId)}`} className="panel flex items-center gap-3 p-3.5 hover:border-primary/40">
                   <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground"><Boxes className="size-5" /></span>
                   <span className="flex-1"><span className="block text-sm font-medium">{a.displayName}</span><span className="block text-xs text-muted-foreground">{a.assetId} · {a.kind}</span></span>
                   <HealthDot h={h} />

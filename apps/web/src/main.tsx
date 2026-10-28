@@ -9,6 +9,7 @@ import Home from "@/pages/m/home";
 import Start from "@/pages/m/start";
 import Scan from "@/pages/m/scan";
 import GlassesView from "@/pages/m/glasses";
+import MobileAssetDetail from "@/pages/m/asset-detail";
 import Investigate from "@/pages/m/investigate";
 import Asset from "@/pages/m/asset";
 import Knowledge from "@/pages/m/knowledge";
@@ -18,7 +19,7 @@ import ReceiptPage from "@/pages/m/receipt";
 import { Inspections, Assets, Profile } from "@/pages/m/lists";
 import Overview from "@/pages/ops/overview";
 import { InspectionsList, InspectionWorkspace } from "@/pages/ops/inspections";
-import { AssetRegistry, WorkOrders, KnowledgePacks, Reports } from "@/pages/ops/more";
+import { AssetRegistry, AssetDetail, WorkOrders, KnowledgePacks, Reports } from "@/pages/ops/more";
 import "./styles.css";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
@@ -44,6 +45,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/start">{() => m(<Start />)}</Route>
         <Route path="/m/inspections">{() => m(<Inspections />)}</Route>
         <Route path="/m/assets">{() => m(<Assets />)}</Route>
+        <Route path="/m/assets/:assetId">{(p) => m(<MobileAssetDetail assetId={p.assetId} />)}</Route>
         <Route path="/m/profile">{() => m(<Profile />)}</Route>
         <Route path="/m/i/:id/scan">{(p) => m(<Scan key={p.id} id={p.id} />, true)}</Route>
         <Route path="/m/i/:id/glasses">{(p) => m(<GlassesView key={p.id} id={p.id} />, true)}</Route>
@@ -57,6 +59,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/ops/inspections">{() => ops(<InspectionsList />)}</Route>
         <Route path="/ops/inspections/:id">{(p) => ops(<InspectionWorkspace id={p.id} />)}</Route>
         <Route path="/ops/assets">{() => ops(<AssetRegistry />)}</Route>
+        <Route path="/ops/assets/:assetId">{(p) => ops(<AssetDetail assetId={p.assetId} />)}</Route>
         <Route path="/ops/work-orders">{() => ops(<WorkOrders />)}</Route>
         <Route path="/ops/knowledge">{() => ops(<KnowledgePacks />)}</Route>
         <Route path="/ops/reports">{() => ops(<Reports />)}</Route>

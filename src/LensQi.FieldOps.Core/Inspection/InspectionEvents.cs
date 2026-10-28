@@ -24,6 +24,7 @@ namespace LensQi.FieldOps.Core.Inspection;
 [JsonDerivedType(typeof(VerificationEvaluated), "VerificationEvaluated")]
 [JsonDerivedType(typeof(StageChanged), "StageChanged")]
 [JsonDerivedType(typeof(VisualChangeAnalyzed), "VisualChangeAnalyzed")]
+[JsonDerivedType(typeof(EvidenceRequested), "EvidenceRequested")]
 public abstract record InspectionEvent(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest)
 {
     [JsonIgnore] public string EventKind => GetType().Name;
@@ -64,6 +65,10 @@ public sealed record RepairClaimed(long Sequence, string InspectionId, DateTimeO
 
 public sealed record ChecklistReviewed(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string RequirementId, ChecklistStatus Status, string ReviewedByEvidenceId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+
+/// <summary>A reviewer asked the technician for more evidence. It changes no stage and decides nothing; the next photo answers it.</summary>
+public sealed record EvidenceRequested(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
+    string RequestId, string Note, string RequestedBy) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record TechnicianAcknowledged(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string ClaimId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);

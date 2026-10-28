@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Inventory2
@@ -119,6 +120,23 @@ fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit,
                 Kpi("Done today", "$doneToday", Fo.Success, Modifier.weight(1f))
             }
         }
+        val requested = s.inspections.filter { it.openEvidenceRequest != null }
+        if (requested.isNotEmpty()) {
+            item { SectionTitle("Evidence requested") }
+            items(requested.take(3), key = { "r-" + it.inspectionId }) { r ->
+                val q = r.openEvidenceRequest!!
+                Panel(Modifier.clickable { onOpen(r.inspectionId) }, border = Fo.Warning.copy(alpha = 0.45f), background = Fo.Warning.copy(alpha = 0.08f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Outlined.CameraAlt, null, tint = Fo.Warning)
+                        Column(Modifier.weight(1f)) {
+                            Text(q.note, fontWeight = FontWeight.Medium)
+                            Text("${vm.assetName(r.assetId) ?: r.assetId} · ${q.requestedBy}, ${whenText(q.requestedAt)}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
+                    }
+                }
+            }
+        }
         if (toVerify.isNotEmpty()) {
             item { SectionTitle("Work requiring verification") }
             items(toVerify.take(3), key = { "v-" + it.inspectionId }) { v ->
@@ -203,7 +221,7 @@ fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
 }
 
 @Composable
-fun AssetsScreen(vm: HomeViewModel, onStartFor: (String, String) -> Unit) {
+fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Assets", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
@@ -211,7 +229,7 @@ fun AssetsScreen(vm: HomeViewModel, onStartFor: (String, String) -> Unit) {
             item { SectionTitle(f.fixtureId) }
             items(f.assets, key = { "a-" + it.assetId }) { a ->
                 val n = s.inspections.count { it.assetId == a.assetId }
-                Panel(Modifier.clickable { onStartFor(f.fixtureId, a.assetId) }) {
+                Panel(Modifier.clickable { onOpenAsset(a.assetId) }) {
                     Text(a.displayName, fontWeight = FontWeight.Medium)
                     Text("${a.assetId} · $n inspection${if (n == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall)
                 }

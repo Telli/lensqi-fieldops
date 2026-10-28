@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ScanLine, ChevronRight, ClipboardList } from "lucide-react";
+import { ScanLine, ChevronRight, ClipboardList, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kpi, Section, EvidenceBadge, HealthDot, Empty } from "@/components/fo/primitives";
 import { ConnBadge, Page } from "@/components/fo/mobile-shell";
@@ -37,6 +37,7 @@ export default function Home() {
   const nameOf = (id: string) => assets.find((a) => a.assetId === id)?.displayName;
   const active = all.filter((s) => s.stage !== "VerifiedComplete" && s.stage !== "Inconclusive");
   const toVerify = all.filter((s) => s.stage === "ReadyToVerify" || s.stage === "VerificationFailed");
+  const requested = all.filter((s) => s.openEvidenceRequest);
   const today = new Date().toDateString();
   const doneToday = all.filter((s) => s.stage === "VerifiedComplete" && new Date(s.updatedAt).toDateString() === today);
   const healthOf = (assetId: string): "healthy" | "attention" | "fault" | "unknown" => {
@@ -66,6 +67,21 @@ export default function Home() {
         <Kpi label="To verify" value={toVerify.length} tone="warning" />
         <Kpi label="Done today" value={doneToday.length} tone="success" />
       </div>
+
+      {requested.length > 0 && (
+        <Section title="Evidence requested">
+          {requested.slice(0, 3).map((s) => (
+            <Link key={s.inspectionId} href={`/m/i/${s.inspectionId}/scan`} className="panel flex items-center gap-3 border-warning/40 bg-warning/10 p-3.5 hover:border-warning/70">
+              <Camera className="size-5 shrink-0 text-warning" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{s.openEvidenceRequest!.note}</div>
+                <div className="text-xs text-muted-foreground">{nameOf(s.assetId) ?? s.assetId} · {s.openEvidenceRequest!.requestedBy}, {fmtWhen(s.openEvidenceRequest!.requestedAt)}</div>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground" />
+            </Link>
+          ))}
+        </Section>
+      )}
 
       {toVerify.length > 0 && (
         <Section title="Work requiring verification">

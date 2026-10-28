@@ -6,6 +6,8 @@ public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, str
 public sealed record DiagnosticEvidence(string EvidenceId, DiagnosticResult Result, DateTimeOffset RecordedAt);
 public sealed record ChecklistEntry(string RequirementId, ChecklistStatus Status, DateTimeOffset ReviewedAt, string? ReviewedByEvidenceId = null);
 public sealed record SegmentationEvidence(string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, DateTimeOffset RecordedAt);
+/// <summary>A reviewer's request for more evidence; open until a photo is recorded after it.</summary>
+public sealed record EvidenceRequest(string RequestId, string Note, string RequestedBy, DateTimeOffset RequestedAt, string? AnsweredByPhotoId = null, DateTimeOffset? AnsweredAt = null);
 public sealed record PendingPrediction(string PredictionId, string DiagnosticId, string PredictedValue, DateTimeOffset RegisteredAt);
 
 /// <summary>Materialized view of an inspection, rebuilt by replaying the event list. Never mutated directly.</summary>
@@ -31,6 +33,7 @@ public sealed record InspectionState
     public DateTimeOffset? RepairClaimedAt { get; init; }
     public bool TechnicianAcknowledged { get; init; }
     public VerificationDecision? LastDecision { get; init; }
+    public IReadOnlyList<EvidenceRequest> EvidenceRequests { get; init; } = [];
     public IReadOnlyDictionary<string, VerificationDecision> DecisionsByRequest { get; init; } = new Dictionary<string, VerificationDecision>();
 
     public static InspectionState Replay(IEnumerable<InspectionEvent> events)
@@ -56,7 +59,12 @@ public sealed record InspectionState
     {
         var next = e switch
         {
-            PhotoRecorded p => this with { Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt)] },
+            PhotoRecorded p => this with
+            {
+                Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt)],
+                EvidenceRequests = [.. EvidenceRequests.Select(r => r.AnsweredByPhotoId is null ? r with { AnsweredByPhotoId = p.EvidenceId, AnsweredAt = p.OccurredAt } : r)],
+            },
+            EvidenceRequested q => this with { EvidenceRequests = [.. EvidenceRequests, new EvidenceRequest(q.RequestId, q.Note, q.RequestedBy, q.OccurredAt)] },
             SegmentationRecorded sr => this with { Segmentations = [.. Segmentations, new SegmentationEvidence(sr.EvidenceId, sr.SourcePhotoEvidenceId, sr.Concept, sr.Matched, sr.MaskSha256, sr.OccurredAt)] },
             VisualChangeAnalyzed vc => this with { ChangeAnalyses = [.. ChangeAnalyses, vc.Analysis] },
             AssessmentRecorded a => this with { Assessments = [.. Assessments, a.Assessment] },

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { EvidenceBadge, Section, Citation } from "@/components/fo/primitives";
 import { EvidencePhoto } from "@/components/fo/evidence-photo";
+import { ExpectedState } from "@/components/fo/expected-state";
 import { useInspections, useKnowledge } from "@/lib/hooks";
 import { firstPhoto, useGeometry, useInspectionBundle } from "@/lib/inspection";
 import { fmtWhen, stageLabel, stageState } from "@/lib/labels";
@@ -20,7 +21,6 @@ export default function Asset({ id }: { id: string }) {
     ["Device", asset?.kind.replace(/_/g, " ") ?? "—"],
     ["Site", fixture ? `${fixture.fixtureId} · revision ${fixture.fixtureRevision}` : "—"],
     ["Last inspection", previous?.[0] ? `${fmtWhen(previous[0].updatedAt)} · ${stageLabel[previous[0].stage].toLowerCase()}` : "None before this one"],
-    ["Expected state", "Per the site's wiring plan (see documentation)"],
   ];
   return (
     <>
@@ -48,6 +48,7 @@ export default function Asset({ id }: { id: string }) {
             <div key={k} className="flex justify-between gap-4 px-3.5 py-2.5 text-sm"><dt className="text-muted-foreground">{k}</dt><dd className="text-right">{v}</dd></div>
           ))}
         </dl>
+        {i && <Section title="Expected installation state"><ExpectedState fixture={fixture} assetId={i.assetId} /></Section>}
         {knowledge.data && knowledge.data.facts.length > 0 && (
           <Section title="Documentation" action={<Link href={`/m/i/${id}/knowledge`} className="text-xs text-primary">All</Link>}>
             {knowledge.data.facts.slice(0, 2).map((f) => <Citation key={f.factId} title={f.citation.documentTitle} section={f.citation.sourceLocator} href={f.citation.sourceUrl} />)}

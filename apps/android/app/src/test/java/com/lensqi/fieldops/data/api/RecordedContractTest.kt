@@ -30,7 +30,7 @@ class RecordedContractTest {
         name == "knowledge" -> KnowledgeResponse.serializer()
         name.startsWith("diagnostic-run") -> DiagnosticRunResponse.serializer()
         name.startsWith("repair-claim") -> RepairClaimResponse.serializer()
-        name == "work-order" || name.startsWith("checklist-") || name.startsWith("acknowledge") -> InspectionView.serializer()
+        name == "evidence-request" || name == "work-order" || name.startsWith("checklist-") || name.startsWith("acknowledge") -> InspectionView.serializer()
         name.startsWith("verify-") -> VerifyResponse.serializer()
         name == "events" -> ListSerializer(JsonObject.serializer())
         name == "artifacts" -> ListSerializer(String.serializer())
@@ -85,6 +85,17 @@ class RecordedContractTest {
         assertEquals(EvidenceOrigin.Phone, photo.origin)
         assertTrue(photo.width >= 320 && photo.height >= 240)
         assertNotNull(photo.quality)
+    }
+
+    @Test
+    fun a_reviewer_request_stays_open_until_the_next_photo_answers_it() {
+        val asked = json.decodeFromString(InspectionView.serializer(), Recordings.text("evidence-request")).evidenceRequests.single()
+        assertEquals("Operations desk", asked.requestedBy)
+        assertNull(asked.answeredByPhotoId)
+        val later = json.decodeFromString(InspectionView.serializer(), Recordings.text("inspection")).evidenceRequests.single { it.requestId == asked.requestId }
+        assertNotNull(later.answeredByPhotoId)
+        val fixture = json.decodeFromString(ListSerializer(Fixture.serializer()), Recordings.text("fixtures")).first()
+        assertEquals("P2", fixture.connections.single().fromPortLabel)
     }
 
     @Test

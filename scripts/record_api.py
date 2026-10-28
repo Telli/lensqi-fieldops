@@ -86,6 +86,7 @@ def main() -> int:
     r.upload("observation-initial", iid, IMAGES / "f02-wrong-port-down.jpg")
     r.call("investigate", "POST", p + "/investigate", label="LIVE_META muse")
     r.call("segment", "POST", p + "/segment", {"concept": "yellow ethernet cable"}, label="LIVE_META sam")
+    r.call("evidence-request", "POST", p + "/evidence-requests", {"note": "Show the yellow cable connector at port 2 up close"}, label="reviewer request")
     r.call("knowledge", "GET", p + "/knowledge", label="documented")
     r.call("diagnostic-run-down", "POST", p + "/diagnostics/NODE-A-HEALTH:run", label="SIMULATED_PROBE")
     r.call("work-order", "POST", p + "/work-order", {"summary": "Move the yellow cable to port 2"})

@@ -225,6 +225,15 @@ public sealed class InspectionSession
             return Commit(batch);
         });
 
+    /// <summary>A reviewer asks for more evidence. Allowed on any open inspection; never changes the stage or a decision.</summary>
+    public IReadOnlyList<InspectionEvent> RequestEvidence(string requestId, string note, string requestedBy, DateTimeOffset now) =>
+        Idempotent(requestId, () =>
+        {
+            Require(State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive), "Inspection is closed");
+            Require(!string.IsNullOrWhiteSpace(note), "Say what evidence is needed");
+            return Commit([new EvidenceRequested(Next(), State.InspectionId, now, State.FixtureDigest, requestId, note.Trim(), requestedBy)]);
+        });
+
     public IReadOnlyList<InspectionEvent> Acknowledge(string requestId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {

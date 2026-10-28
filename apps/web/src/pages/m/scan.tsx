@@ -36,8 +36,9 @@ export default function Scan({ id }: { id: string }) {
   const [preview, setPreview] = useState<string | null>(null);
 
   const afterRepair = !!i?.currentClaimId && (i.stage === "ReadyToVerify" || i.stage === "NeedsEvidence");
-  const prompt = afterRepair
-    ? "Take a new photo of the repaired connection"
+  const asked = i?.evidenceRequests?.find((r) => !r.answeredByPhotoId);
+  const prompt = asked ? `Requested: ${asked.note}`
+    : afterRepair ? "Take a new photo of the repaired connection"
     : prior?.nextAction === "RequestView" && prior.requestedView ? sentence(prior.requestedView)
     : "Point at the equipment and capture a wide view";
 

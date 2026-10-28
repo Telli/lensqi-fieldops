@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { EvidenceBadge, Expandable, Citation, TechDetails } from "@/components/fo/primitives";
 import { ArFrame } from "@/components/fo/ar-frame";
+import { EvidenceRequestBanner } from "@/components/fo/evidence-request";
 import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { api } from "@/lib/api";
 import { useAct, useKnowledge } from "@/lib/hooks";
@@ -136,6 +137,7 @@ export default function Investigate({ id }: { id: string }) {
       <TopBar title="Investigation" back="/m" right={<EvidenceBadge state={stageState[i.stage]} label={stageLabel[i.stage]} />} />
       <Page>
         <Link href={`/m/i/${id}/asset`} className="block text-xs text-muted-foreground hover:text-foreground">{asset?.displayName ?? i.assetId} · {i.fixtureId} ›</Link>
+        <EvidenceRequestBanner id={id} requests={i.evidenceRequests} />
         <ol className="relative space-y-4">
           {steps.map((st, k) => (
             <li key={st.title} className="relative flex gap-3">

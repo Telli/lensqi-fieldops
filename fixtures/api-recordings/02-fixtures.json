@@ -41,6 +41,16 @@
         "segmentationPrompt": null
       }
     ],
+    "connections": [
+      {
+        "connectionId": "LAB-CONN-A",
+        "fromAssetId": "LAB-SW-01",
+        "fromPortLabel": "P2",
+        "toAssetId": "LAB-NODE-A",
+        "cableLabel": "YELLOW-A",
+        "expectedState": "connected"
+      }
+    ],
     "verificationPolicy": {
       "requirePostRepairPhoto": true,
       "requireFreshDiagnostic": true,

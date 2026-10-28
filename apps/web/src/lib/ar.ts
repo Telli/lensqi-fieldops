@@ -60,6 +60,8 @@ export function arTags(fixture: Fixture | null | undefined, assessment: Assessme
 /** The single next instruction for a hands-free view, derived from the server's state. */
 export function nextStep(i?: Inspection | null, assessment?: Assessment | null): { text: string; hint?: string } {
   if (!i) return { text: "Loading…" };
+  const asked = i.evidenceRequests?.find((r) => !r.answeredByPhotoId);
+  if (asked && i.stage !== "VerifiedComplete") return { text: asked.note, hint: `Requested by the ${asked.requestedBy.toLowerCase()}. Take a photo to answer.` };
   const diag = i.diagnostics[i.diagnostics.length - 1];
   switch (i.stage) {
     case "VerifiedComplete": return { text: "Verified complete", hint: "The FieldProof receipt is ready." };
