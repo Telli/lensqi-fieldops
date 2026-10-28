@@ -31,7 +31,7 @@ feature commit, not at submission time.
 
 - [x] Muse Spark real structured-output request, validated server-side — `docs/evidence/stage-one-gate-*.json` (`LIVE_META`)
 - [x] SAM 3.1 real object segmentation with box/mask overlay on the original image and a truthful no-match path — `docs/evidence/sam-spike-*.json` (`LIVE_META`); ROI crop and C# adapter pending
-- [x] Bounded epistemic evidence collection loop: Core state machine, append-only events, view budget, idempotent commands (`Core/Inspection`)
+- [x] Bounded epistemic evidence collection loop: Core state machine, append-only events, view budget, idempotent commands (`Core/Inspection`); browser P0 surface drives the whole loop (`docs/evidence/ui/`)
 - [x] Deterministic false-repair rejection and separately scoped live/simulated verification: `VerificationPolicyEvaluator`, PRD §17 ten negative tests, and the full fake-fix → real-fix flow over HTTP with the simulated probe (`InspectionApiTests`)
 - [x] JSON/HTML evidence receipt with verifiable hashes: canonical-JSON manifest digest, per-artifact SHA-256, `verify-receipt` CLI; tamper tests (artifact byte, forged decision, dropped event) fail as required; sample bundle in `docs/evidence/receipt-sample/`
 - [x] Vendor-knowledge grounding: exact applicability, bounded cited retrieval, proposal validation (child spec VK-T01–T06)

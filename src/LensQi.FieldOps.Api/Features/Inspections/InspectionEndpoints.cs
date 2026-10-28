@@ -135,6 +135,9 @@ public static class InspectionEndpoints
             });
         });
 
+        g.MapPost("/inspections/{id}/decline-view", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
+            Guard(() => store.Execute(id, s => { s.DeclineView(RequestId(http, "decline"), clock.GetUtcNow()); return Results.Ok(View(s)); })));
+
         g.MapPost("/inspections/{id}/work-order", (string id, WorkOrderRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.DraftWorkOrder(RequestId(http, "wo:" + req.Summary), req.Summary, clock.GetUtcNow()); return Results.Ok(View(s)); })));
 

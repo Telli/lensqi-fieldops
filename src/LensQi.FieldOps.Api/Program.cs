@@ -6,6 +6,7 @@ using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Fixtures;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Diagnostics;
+using LensQi.FieldOps.Meta.Knowledge;
 using LensQi.FieldOps.Meta.Vision;
 using LensQi.FieldOps.Api.Infrastructure.Knowledge;
 using LensQi.FieldOps.Core.Diagnostics;
@@ -54,7 +55,7 @@ builder.Services.AddSingleton(sp =>
 {
     var o = new MuseOptions();
     builder.Configuration.GetSection(MuseOptions.SectionName).Bind(o);
-    o.ApiKey ??= Environment.GetEnvironmentVariable(MuseOptions.ApiKeyEnvironmentVariable);
+    o.ApiKey ??= Environment.GetEnvironmentVariable(MuseOptions.ApiKeyEnvironmentVariable) ?? ReadDotEnv(builder.Environment.ContentRootPath, MuseOptions.ApiKeyEnvironmentVariable);
     return o;
 });
 builder.Services.AddHttpClient("muse");
@@ -101,6 +102,7 @@ builder.Services.AddSingleton<IDiagnosticProbe>(sp => new LiveLocalHttpHealthPro
 builder.Services.AddSingleton<DiagnosticDispatcher>();
 builder.Services.AddSingleton<VisualAssessmentService>();
 builder.Services.AddSingleton<ReceiptService>();
+builder.Services.AddSingleton<GroundedProposalService>();
 
 var app = builder.Build();
 
@@ -114,7 +116,34 @@ app.MapVendorKnowledge();
 app.MapInspections();
 app.MapSimulation();
 app.MapReceipts();
+app.MapInspectionKnowledge();
+
+// Browser inspection UI (P0 surface): static files under wwwroot, no build step.
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.Run();
 
-public partial class Program;
+public partial class Program
+{
+    /// <summary>Developer convenience: read KEY=value from a gitignored .env at or above the content root. Never logged, never served.</summary>
+    internal static string? ReadDotEnv(string start, string key)
+    {
+        var dir = new DirectoryInfo(start);
+        for (var i = 0; dir is not null && i < 6; i++, dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, ".env");
+            if (!File.Exists(path)) continue;
+            foreach (var line in File.ReadLines(path))
+            {
+                var l = line.Trim();
+                if (l.StartsWith(key + "=", StringComparison.Ordinal))
+                {
+                    var v = l[(key.Length + 1)..].Trim().Trim('"');
+                    return string.IsNullOrEmpty(v) ? null : v;
+                }
+            }
+        }
+        return null;
+    }
+}

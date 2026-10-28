@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fieldops-api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/LensQi.FieldOps.Api", "--no-launch-profile", "--urls", "http://127.0.0.1:5199"],
+      "port": 5199
+    }
+  ]
+}

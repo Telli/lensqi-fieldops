@@ -62,6 +62,10 @@ pack, validates them server-side, and writes an evidence record:
 dotnet run --project tools/LensQi.FieldOps.StageOneGate
 ```
 
+## Browser inspection UI (P0 surface)
+
+Start the API and open <http://127.0.0.1:5199/>. The page is plain HTML and JavaScript served from `wwwroot`, no build step. It walks the loop in order: fixture and asset → photo (camera capture on phones) → Muse assessment with Observed / Suspected / Unknown / Conflicting badges → documentation facts with provenance labels and a grounded proposal → prediction and probe with a LIVE / SIMULATED / REPLAY badge → work order, repair claim, human-reviewed checklist, acknowledgement → Verify → receipt and bundle verification. Demo controls for the simulated endpoint appear only when the server runs in Simulated mode. Screenshots of a full run are in `docs/evidence/ui/`. Android is P1; no Android build is claimed.
+
 ## Receipts
 
 Every inspection can issue a FieldProof receipt: `GET /v1/inspections/{id}/receipt` (JSON), `/receipt.html` (printable) and `/receipt/verify`. The bundle on disk (`data/receipts/{id}/`) carries `receipt.json`, `receipt.html` and a copy of every photo. The manifest digest is the SHA-256 of the canonical JSON; the CLI recomputes it and every artifact digest:
@@ -88,7 +92,7 @@ python tools/sam-parser/sam_spike.py --image fixtures/telecom-lab/images/lab-sw-
 
 ```text
 src/LensQi.FieldOps.Core         pure contracts, applicability, resolver, proposal validation (no provider deps)
-src/LensQi.FieldOps.Api          minimal API, pack loader, startup validation
+src/LensQi.FieldOps.Api          minimal API, inspection endpoints, receipts, browser UI (wwwroot)
 src/LensQi.FieldOps.Meta         MuseSparkChatClient, grounding composer, proposal service (SAM adapter next)
 src/LensQi.FieldOps.Diagnostics  allowlisted read-only probes (in progress)
 tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner (Muse)
