@@ -41,6 +41,7 @@ feature commit, not at submission time.
 | 2026-10-27T23:29:59-07:00 | `8d0059d` | LIVE_LOCAL_PROBE (loopback): live HTTP probe flow to VerifiedCompleteLive, Unavailable case, Track D runbook | I-ad1f169da81a VerifiedCompleteLive; I-d315eaa937a5 UNAVAILABLE; verify-receipt PASS on docs/evidence/receipt-loopback | None |
 | 2026-10-27T23:37:47-07:00 | `68b3e9e` | Clean-room check script; post-claim photo rule uses server time with 120 s device skew tolerance | dotnet 140/140; first clean-room run exposed the truncated-observedAt bug, fixed here | None |
 | 2026-10-27T23:41:42-07:00 | `f46d4ca` | README refresh, demo storyboard, evidence index; browser change-evidence banner | clean_room_check PASS from GitHub at 7a11e22; storyboard sequence dry-run through the API; browser screenshot ui/05 | None |
+| 2026-10-27T23:59:59-07:00 | `1382103` | Clean diagnostic-failure denial wording, structural VerificationFailed mapping, banner ordered by event trail | dotnet 140/140; Android 51/51; recordings re-captured; browser banner checked for both orders | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
