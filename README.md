@@ -12,10 +12,12 @@
 6. Code, not the model, owns every state transition. A repair is **Verified Complete** only when a fresh accepted post-repair photo, a human-reviewed checklist, an acknowledgement and a fresh passing diagnostic all agree.
 7. A simulated or replayed measurement can never produce `VerifiedCompleteLive`.
 8. Every inspection issues a FieldProof receipt: canonical JSON, a digest per artifact, an append-only event trail, and an offline verifier that fails on a one-byte change.
-9. Surfaces: a browser UI (the guaranteed P0) and an Android client (Kotlin/Compose) that works offline and syncs a hashed capture when the network returns.
+9. Surfaces: a technician web app and an operations dashboard (React, built into the API, no Node at runtime), and an Android client (Kotlin/Compose) that works offline and syncs a hashed capture when the network returns.
 10. Everything here was written during the event; no private LensIQ source is copied.
 
-![Change evidence rejecting a re-submitted post-repair photo](docs/evidence/ui/05-change-evidence-duplicate.jpg)
+| | | |
+|---|---|---|
+| ![The AI outlines the cable and asks for a closer view](docs/evidence/ui-v2/02-scan-ambiguous-ai-outline.jpg) | ![A fake fix is refused](docs/evidence/ui-v2/05-fake-fix-verification-failed.jpg) | ![The real fix is verified, labelled simulated](docs/evidence/ui-v2/06-real-fix-verified-simulated.jpg) |
 
 ## Measured, not claimed
 
@@ -61,8 +63,19 @@ dotnet test --nologo
 dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
 ```
 
-Open <http://127.0.0.1:5199/> for the browser UI. The demo controls for the simulated endpoint appear only in Simulated
-mode (the default). The API refuses to start if any knowledge pack, fixture binding or expected twin is invalid.
+Open <http://127.0.0.1:5199/m> for the technician app (a phone frame on a desktop, full screen on a phone) and
+<http://127.0.0.1:5199/ops> for the operations dashboard. Demo controls for the simulated endpoint appear only in
+Simulated mode (the default). The API refuses to start if any knowledge pack, fixture binding or expected twin is invalid.
+
+The web app's source is `apps/web` (React, Tailwind, TanStack Query); its built bundle is committed in the API's
+`wwwroot`, so running the API needs no Node. To change the UI:
+
+```bash
+cd apps/web && npm ci && npm run dev
+```
+
+`npm run dev` serves on port 5173 and proxies the API on 5199; `npm run build` typechecks and rewrites `wwwroot`. The
+clean-room check fails if the committed bundle differs from a fresh build.
 
 ```bash
 dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 --only c01-clear-p2,f01-seated-down
@@ -87,7 +100,8 @@ cd apps/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
 | Muse Spark client (strict JSON schema), visual assessment, grounded proposals | `src/LensQi.FieldOps.Meta/Muse`, `Vision`, `Knowledge` |
 | SAM 3.1 client (Responses API) and the Python sidecar (parser, crop, image measurements) | `src/LensQi.FieldOps.Meta/Segmentation`, `tools/sam-parser/` |
 | Probes: simulated, recorded replay, guarded live HTTP; server-side alias resolution | `src/LensQi.FieldOps.Diagnostics/` |
-| Minimal API, hardening (timeouts, rate limits, image limits), browser UI | `src/LensQi.FieldOps.Api/` |
+| Minimal API, hardening (timeouts, rate limits, image limits) | `src/LensQi.FieldOps.Api/` |
+| Technician web app and operations dashboard (plain-language states, technical details collapsed) | `apps/web/` → `src/LensQi.FieldOps.Api/wwwroot/` |
 | FieldProof receipts and the offline verifier | `src/LensQi.FieldOps.Core/Receipts/`, `tools/LensQi.FieldOps.VerifyReceipt/` |
 | Android client: CameraX capture, Room queue, WorkManager sync, cached views | `apps/android/` |
 | Expected twin, vendor knowledge packs, evaluation scenarios, API recordings | `fixtures/` |

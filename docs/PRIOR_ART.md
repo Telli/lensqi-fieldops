@@ -33,6 +33,10 @@
 | MikroTik product and RouterOS REST documentation | Vendor copyright; `LinkOnly` | URLs and short original paraphrases only; nothing redistributed | Yes |
 | Meta Wearables SDK | Per Meta terms | Optional P1 | Optional |
 | Test photographs | Original/synthetic, rights-cleared | Review before publication | Planned |
+| Owner-provided UI design prototypes: `Telli/pixel-true-web-page` (Lovable) and `LensQi-FieldOps.zip` (Replit) | Owner's own design work; creation date to be confirmed by the owner for attribution | Design tokens (`styles.css`), the `primitives` / shell components and the screen layouts were adapted into `apps/web` and wired to the real API; their mock data, sample photos and simulated flows were not used | Yes |
+| React 19, Vite 8, Tailwind CSS 4, `tw-animate-css`, Radix UI (slot, switch, progress), TanStack Query 5, wouter 3, sonner 2, `class-variance-authority`, `clsx`, `tailwind-merge` | MIT | Web app framework and components (`apps/web`) | Yes |
+| `lucide-react` icons | ISC | Icons in the web app | Yes |
+| Geist and Geist Mono fonts (Google Fonts) | SIL Open Font License | Web app typography; falls back to system fonts offline | Yes |
 
 ## Boundary statement for judges
 

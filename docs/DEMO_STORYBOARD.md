@@ -4,34 +4,35 @@ The video shows only what exists and runs. Every model call in it is genuine (`m
 result carries its badge: the main story uses the **SIMULATED** endpoint and says so on screen. The images are
 synthetic renders of a fictional switch, and a caption says so. Live measurement appears only in the segment built
 for it, with its exact label. The photo sequence below was dry-run through the API on 2026-10-28 and produces exactly
-the verdicts listed.
+the verdicts listed. Every scene was walked through in the rebuilt web app on 2026-10-28 (stills in `docs/evidence/ui-v2/`).
 
 ## Setup (before recording)
 
 | Item | How |
 |---|---|
-| API, Simulated mode | `dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199` with `MODEL_API_KEY` in `.env` |
-| Browser | Chrome at 1280×800, <http://127.0.0.1:5199/>, zoom 100 %, dark UI as shipped |
-| Images | `fixtures/telecom-lab/eval/images/`: `a01-labels-occluded.jpg`, `c01-clear-p2.jpg`, `c03-clear-rotated.jpg`, `r03-repaired-rotated-post.jpg` |
-| Android clips | Recorded separately from the emulator (Medium Phone, API 36.1) with `adb shell screenrecord`; see the Android segment |
+| API, Simulated mode, clean data | `dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199 --Storage:DataDirectory data/demo` with `MODEL_API_KEY` in `.env` |
+| Technician app | Chrome at 1280×800, <http://127.0.0.1:5199/m>: the app renders inside a phone frame on a desktop. Or a real phone on the same network (debug build of the Android app, or the web app). |
+| Operations dashboard | <http://127.0.0.1:5199/ops> in a second window |
+| Images (pick with the gallery button on the camera screen) | `fixtures/telecom-lab/eval/images/`: `a01-labels-occluded.jpg`, `c01-clear-p2.jpg`, `c03-clear-rotated.jpg`, `r03-repaired-rotated-post.jpg` (imported photos are labelled "imported", never "camera") |
+| Android clips | Recorded separately from the emulator with `adb shell screenrecord`; see the Android segment |
 | Terminal | 120×30, large font, in the repository root |
-| Clean state | A fresh data directory (`--Storage:DataDirectory data/demo`) so the event trail starts empty |
 
-Record each scene as its own clip (`docs/rehearsal/` is not committed), so the edit never depends on one perfect take.
+Record each scene as its own clip, so the edit never depends on one perfect take. The reference stills for every scene
+are `docs/evidence/ui-v2/01–09`.
 
 ## Shot list
 
-| Time | Scene | Exact actions | On-screen labels and captions |
+| Time | Scene | Exact actions | What the screen shows |
 |---|---|---|---|
-| 0:00–0:12 | **Cold open: the fake fix is refused** | Clip from scene 5: the red **VERIFICATION FAILED** banner over a photo where the cable looks seated. | Caption: "The cable looks fine. The endpoint is still down. Not verified." Badge **SIMULATED** visible next to the failing probe. |
-| 0:12–0:25 | **The fixture** | Section 1: Fixture `LAB-RACK-01 rev 1`, Asset `Lab Switch 01 (LAB-SW-01)` → **Start inspection**. | Caption: "Synthetic lab fixture. Expected state is versioned and hashed (fixture digest shown)." |
-| 0:25–0:55 | **Uncertainty, then a requested view** | Choose File `a01-labels-occluded.jpg`, source `RecordedFixture` → **Record photo** → **Assess latest photo**. Muse marks features Unknown or Suspected and proposes a view. Choose File `c01-clear-p2.jpg` → **Record photo** → concept `yellow ethernet cable` → **Segment latest photo**. | Muse panel: model id, token counts and the **inferred** tag. SAM: mask and box drawn on the original pixels, ROI crop beside it captioned "ROI crop from original pixels (scale 1) — not independent evidence". Caption: "Genuine Muse Spark and SAM 3.1 calls." |
-| 0:55–1:15 | **The fault is measured** | Demo control **Set endpoint DOWN** → **Run NODE-A-HEALTH**. Stage chip moves to **FaultConfirmed**. Scroll to the documentation facts. | Probe row: **SIMULATED · FAIL**. Fact `LAB-PORT-MAP-01` tagged **site configured**, citation shown. Caption: "Documentation guides; it never proves a repair." |
-| 1:15–1:50 | **Two fake fixes** | **Draft work order**, claim text "Reseated the cable" → **Claim repair**. (a) Choose File `c01-clear-p2.jpg` again → **Record photo**: banner **CHANGE EVIDENCE: DuplicateImage**, stage back to **NeedsEvidence**; **Verify** is refused and no probe runs. (b) Choose File `c03-clear-rotated.jpg` → **Record photo**: **Changed**; checklist **Satisfied** ×3 → **Acknowledge** → **Verify**. | (a) "Re-submitted photo: rejected before any probe runs." (b) Red **VERIFICATION FAILED**, reason "Diagnostic failed after the repair claim: NODE-A-HEALTH measured Unreachable (Simulated probe)". Caption: "A changed photo is necessary, never sufficient." |
-| 1:50–2:15 | **The real fix** | **Set endpoint UP** → claim text "Restored the endpoint" → **Claim repair** → Choose File `r03-repaired-rotated-post.jpg` → **Record photo** (Changed) → checklist **Satisfied** ×3 → **Acknowledge** → **Verify**. | Amber banner **VERIFIED COMPLETE · SIMULATED (not a live measurement)**, verified claim text "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)". |
-| 2:15–2:35 | **Android (20 s)** | Emulator clips: airplane mode on → **Capture** → "Awaiting upload · sha …"; airplane mode off → photo appears; then the verified banner and `receipt.html` in the app. Source: the gates behind `docs/evidence/android/10–15`. | Caption: "Android client on the emulator: offline capture, hash on device, automatic sync. Same server decision." Corner label **Android emulator**. |
-| 2:35–2:45 | **A live measurement (10 s)** | Open `docs/evidence/receipt-loopback/receipt.html` (or `receipt-live/` if the owner's LAN run exists). | Use the label that matches the bundle: **LIVE_LOCAL_PROBE (loopback)**, "a real HTTP probe of a local server standing in for the lab endpoint". `VerifiedCompleteLive` appears only here. |
-| 2:45–3:00 | **Proof you can check** | Terminal: `dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- docs/evidence/receipt-sample` → **RECEIPT INTEGRITY: PASS**. Flip one byte in a copy of an artifact and run it again → **FAIL**. Cut to the evaluation headline. | "25 labelled scenarios: 0 false completions with the gate; a single model look would have accepted 4 of 5 fake fixes." Repository URL and "built during the event". |
+| 0:00–0:12 | **Cold open: the fake fix is refused** | Clip from scene 5. | Two check rows (visual ✓, equipment check ✕) and the red **Verification failed** card: "The equipment still fails its check after the repair." **SIMULATED** in the top bar. Caption: "The cable looks fine. The endpoint is still down. Not verified." |
+| 0:12–0:25 | **Start** | Home → **Start an inspection** → **Lab Switch 01**. | Greeting, live counts, the asset list. Caption: "The asset comes from its label; the AI never guesses a serial." |
+| 0:25–0:55 | **Uncertainty, then a requested view** | Camera opens → gallery → `a01-labels-occluded.jpg`. Wait for *Saving photo ✓ Observing ✓ Outlining the part ✓*. **Continue investigation**: step 3 asks for a closer view → **Capture another view** → gallery → `c01-clear-p2.jpg`. | The AI outline of the yellow cable on the photo; "Yellow cable near end · AI hypothesis" with the reason; "Next: Move closer and show the switch faceplate…". Caption: "Genuine Muse Spark and SAM 3.1 calls. The AI asks instead of guessing." (`ui-v2/02`, `03`) |
+| 0:55–1:15 | **The fault is measured** | Investigation step 5 → **Open approved checks** → **Demo controls** (endpoint off) → **Run approved check**. | **Fail — endpoint unreachable**, Source *Sim*, "What a pass proves: …HTTP 200 at test time (not physical port identity)". Caption: "Only checks the site approved. Documentation guides; it never proves a repair." |
+| 1:15–1:50 | **Two fake fixes** | Back → Repair: plan "Reseat the yellow cable in port 2" → **Save** → "Reseated the yellow cable in port 2" → **Repair completed — verify**. (a) **Take post-repair photo** → `c01-clear-p2.jpg` again → **Photo not accepted · Same photo**. (b) **Take another photo** → `c03-clear-rotated.jpg` → **Change detected** → **Continue to verification** → **Looks right** ×3 → **I reviewed this evidence myself** → **Run verification**. | (a) "This is the same picture as an earlier one." (`ui-v2/04`) (b) Visual ✓, Equipment check ✕, **Verification failed** (`ui-v2/05`). Caption: "A changed photo is necessary, never sufficient." |
+| 1:50–2:15 | **The real fix** | **Review equipment check** → Demo controls (endpoint on) → back → "Restored the endpoint and reseated the cable" → **Fixed it again — verify** → **Take post-repair photo** → `r03-repaired-rotated-post.jpg` → **Looks right** ×3 → confirm → **Run verification**. | Both checks ✓, **Verified complete**, "SIMULATED · The equipment check was simulated, not a live measurement." Attempts ✕ ✓. (`ui-v2/06`) |
+| 2:15–2:35 | **Android (20 s)** | Emulator clips: airplane mode on → capture → "Awaiting upload · sha …"; airplane mode off → the photo appears; the verified banner and `receipt.html` in the app. | Caption: "Android client on the emulator: offline capture, hash on device, automatic sync. Same server decision." Corner label **Android emulator**. |
+| 2:35–2:45 | **A live measurement (10 s)** | Open `docs/evidence/receipt-loopback/receipt.html` (or `receipt-live/` if the owner's LAN run exists). | Label **LIVE_LOCAL_PROBE (loopback)**: "a real HTTP probe of a local server standing in for the lab endpoint". `VerifiedCompleteLive` appears only here. |
+| 2:45–3:00 | **Proof you can check** | **View FieldProof receipt** → before/after photos, decisions ✕ ✓, **Check now** → "Intact". Cut to the ops dashboard overview, then a terminal: `verify-receipt` PASS and a one-byte flip FAIL. | Receipt (`ui-v2/07`), dashboard (`ui-v2/08`). Caption: "25 labelled scenarios: 0 false completions with the gate; a single model look would have accepted 4 of 5 fake fixes." Repository URL. |
 
 ## Words to use and to avoid
 
