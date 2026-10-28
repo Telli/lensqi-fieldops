@@ -36,6 +36,41 @@ public sealed class InspectionStore
 
     public IEnumerable<InspectionSession> All => _sessions.Values.Select(e => e.Session);
 
+    /// <summary>A persisted inspection that was left on disk at startup, and why.</summary>
+    public sealed record SkippedLog(string File, string Reason);
+
+    /// <summary>
+    /// Rebuilds every persisted inspection from its JSONL log through <see cref="InspectionSession.Rehydrate"/>, so a restart
+    /// keeps open inspections. Fail closed per inspection: a log whose fixture digest differs from the installed twin, whose
+    /// sequence is not contiguous from 1, or that does not parse is left on disk untouched and reported, never half-loaded.
+    /// </summary>
+    public IReadOnlyList<SkippedLog> LoadPersisted(Func<string, LoadedExpectedTwin?> findTwin)
+    {
+        var skipped = new List<SkippedLog>();
+        foreach (var path in Directory.EnumerateFiles(_root, "*.jsonl").OrderBy(p => p, StringComparer.Ordinal))
+        {
+            var file = Path.GetFileName(path);
+            try
+            {
+                var events = File.ReadLines(path).Where(l => !string.IsNullOrWhiteSpace(l))
+                    .Select(l => JsonSerializer.Deserialize<InspectionEvent>(l, KnowledgeJson.Options) ?? throw new JsonException("null event")).ToList();
+                if (events.Count == 0 || events[0] is not InspectionCreated created) { skipped.Add(new(file, "does not start with InspectionCreated")); continue; }
+                if (created.InspectionId + ".jsonl" != file) { skipped.Add(new(file, $"file name does not match {created.InspectionId}")); continue; }
+                if (events.Select((e, i) => e.Sequence == i + 1 && e.InspectionId == created.InspectionId).Any(ok => !ok)) { skipped.Add(new(file, "sequence is not contiguous from 1 or mixes inspections")); continue; }
+                var twin = findTwin(created.FixtureId);
+                if (twin is null) { skipped.Add(new(file, $"fixture {created.FixtureId} is not installed")); continue; }
+                if (events.Any(e => e.FixtureDigest != twin.Sha256)) { skipped.Add(new(file, $"fixture digest differs from the installed {created.FixtureId}")); continue; }
+                var session = InspectionSession.Rehydrate(twin, events);
+                _sessions[created.InspectionId] = new Entry(session) { PersistedCount = events.Count };
+            }
+            catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or InspectionConflictException)
+            {
+                skipped.Add(new(file, ex.GetType().Name + ": " + ex.Message));
+            }
+        }
+        return skipped;
+    }
+
     public InspectionSession? Find(string inspectionId) => _sessions.TryGetValue(inspectionId, out var e) ? e.Session : null;
 
     public InspectionSession Create(LoadedExpectedTwin twin, string assetId, DateTimeOffset now)
