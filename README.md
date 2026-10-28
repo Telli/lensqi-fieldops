@@ -36,7 +36,7 @@ docs/
   LENSIQ_REUSE_ASSESSMENT.md  # what may be imported from the private monorepo and how to label it
 ```
 
-Place this **alongside** the existing `.kiro/specs/lensqi-fieldops/` from v1.1; don't replace the parent specs or import LensIQ domain code (one labeled infrastructure-scaffolding import commit is permitted; see `docs/LENSIQ_REUSE_ASSESSMENT.md` and `docs/SOURCES_AND_RIGHTS.md`). If the new public repo is not yet present, this pack can be unpacked into the newly initialized repo after the permitted hackathon start.
+This checkout **is** the public repository <https://github.com/Telli/lensqi-fieldops>. The parent FieldOps v1.1 specs under `.kiro/specs/lensqi-fieldops/` are not yet present here and must be added alongside this spec, not in place of it. Do not import LensIQ domain code; one labeled infrastructure-scaffolding import commit is permitted (see `docs/LENSIQ_REUSE_ASSESSMENT.md` and `docs/SOURCES_AND_RIGHTS.md`).
 
 ## Build and test
 

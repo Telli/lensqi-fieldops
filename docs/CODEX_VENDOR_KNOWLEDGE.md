@@ -28,4 +28,4 @@ Paste this into the coding agent **from the root of the new public `lensqi-field
 
 ## Public repo note
 
-The GitHub repository `Telli/lensqi-fieldops` was not found through the connected account when this add-on was prepared. These documents do **not** create, publish or modify a repository.
+The public repository is <https://github.com/Telli/lensqi-fieldops> (created October 28, 2026 UTC, from this kit's checkout). All work is committed there in event-period commits; the first commit is the spec kit itself.
