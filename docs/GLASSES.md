@@ -68,7 +68,7 @@ Code: `apps/android/app/src/main/java/com/lensqi/fieldops/wearables/` (`GlassesS
 
 Decided 2026-10-28: a `MockWearables` photo is treated like an imported (`RecordedFixture`) photo. It can be the
 accepted post-repair photo and count toward verification, and it is labelled as mock everywhere it appears
-(inspection, review screen, receipt evidence list). The verification policy does not change for it: the fresh
+(Android photo strip and review screen, web hands-free view; the receipt JSON keeps the origin on every photo event). The verification policy does not change for it: the fresh
 equipment check is still required, and a simulated check still yields `VerifiedCompleteSimulated`, never live.
 
 ## What was verified (emulator-5554, API 36 arm64, Mock Device Kit, API at 10.0.2.2:5199)
