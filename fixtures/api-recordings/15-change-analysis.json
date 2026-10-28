@@ -1,0 +1,18 @@
+{
+  "claimId": "claim-8d957ed2be",
+  "photoEvidenceId": "photo-52f09b7c03",
+  "afterImageDigest": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+  "referencePhotoEvidenceId": "photo-36f941b410",
+  "beforeImageDigest": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
+  "targetPrompt": "yellow ethernet cable",
+  "beforeMaskDigest": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
+  "afterMaskDigest": "53a7bf42120d6120d100885f78a970e34390c92f9551b6e8f020989318bde32a",
+  "perceptualHashDistance": 17,
+  "duplicateOfEvidenceId": null,
+  "targetRegionIoU": 0,
+  "componentShiftNormalized": 0.2212,
+  "verdict": "Changed",
+  "reason": "Visual change in the target region: image dHash distance 17 ≥ 12; 'yellow ethernet cable' mask IoU 0.000 ≤ 0.8; 'yellow ethernet cable' centroid moved 0.221 of its box diagonal ≥ 0.1",
+  "thresholdsVersion": "visual-change/1",
+  "rejectsPhoto": false
+}

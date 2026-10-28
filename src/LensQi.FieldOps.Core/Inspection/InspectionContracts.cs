@@ -75,6 +75,8 @@ public static class InspectionErrorCodes
     public const string FixtureMismatch = "fixture_mismatch";
     public const string ViewBudgetExhausted = "view_budget_exhausted";
     public const string DuplicateEvidence = "duplicate_evidence";
+    /// <summary>The cited photo was rejected by change analysis (DuplicateImage or NoVisualChange) for the current claim.</summary>
+    public const string ChangeEvidenceRejected = "change_evidence_rejected";
     public const string PredictionLate = "prediction_late";
 }
 

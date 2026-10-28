@@ -116,8 +116,15 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton<ISamOutputParser>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddSingleton<IRoiCropper>(sp => sp.GetRequiredService<PythonSidecar>());
-builder.Services.AddSingleton<IImageQualityAnalyzer>(sp => sp.GetRequiredService<PythonSidecar>());
+builder.Services.AddSingleton<IImageAnalyzer>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddHttpClient("sam");
+builder.Services.AddSingleton(sp =>
+{
+    var o = new ChangeEvidenceOptions();
+    builder.Configuration.GetSection(ChangeEvidenceOptions.SectionName).Bind(o);
+    return o.ToThresholds();
+});
+builder.Services.AddSingleton<ChangeEvidenceService>();
 builder.Services.AddSingleton<ISegmenter>(sp => new SamSegmentationClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("sam"), sp.GetRequiredService<SamOptions>(), sp.GetRequiredService<MuseOptions>(), sp.GetRequiredService<ISamOutputParser>()));
 
 // T6.1: request timeouts and rate limits on the endpoints that spend Meta Model API calls.

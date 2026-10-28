@@ -32,10 +32,13 @@ public static class TestImages
     private static byte[] BigEndian(int v) => [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
 }
 
-public sealed class FakeQualityAnalyzer : IImageQualityAnalyzer
+public sealed class FakeQualityAnalyzer : IImageAnalyzer
 {
     public ImageQualitySignals? Signals { get; set; } = new(812.5, 117.25, "image-quality/fake");
-    public Task<ImageQualitySignals?> AnalyzeAsync(string imagePath, CancellationToken ct) => Task.FromResult(Signals);
+    /// <summary>dHash per uploaded file; by default derived from the bytes, so different files are far apart.</summary>
+    public Func<byte[], string?> Hash { get; set; } = bytes => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))[..16];
+    public async Task<ImageMeasurement?> MeasureAsync(string imagePath, CancellationToken ct) =>
+        Signals is null ? null : new ImageMeasurement(Signals, Hash(await File.ReadAllBytesAsync(imagePath, ct)));
 }
 
 /// <summary>Records every log message at every level so a test can assert what never reaches a logger.</summary>

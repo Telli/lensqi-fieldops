@@ -1,7 +1,7 @@
 {
-  "claimId": "claim-284d8c7c32",
+  "claimId": "claim-8d957ed2be",
   "state": {
-    "inspectionId": "I-35a13d6978fe",
+    "inspectionId": "I-7ba6f25c240f",
     "fixtureId": "LAB-RACK-01",
     "fixtureRevision": 1,
     "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
@@ -9,33 +9,34 @@
     "stage": "ReadyToVerify",
     "lastSequence": 12,
     "viewRequests": 0,
-    "currentClaimId": "claim-284d8c7c32",
-    "repairClaimedAt": "2026-10-28T04:56:02.556561+00:00",
+    "currentClaimId": "claim-8d957ed2be",
+    "repairClaimedAt": "2026-10-28T06:18:40.295686+00:00",
     "technicianAcknowledged": false,
     "photos": [
       {
-        "evidenceId": "photo-aeb16af71e",
+        "evidenceId": "photo-36f941b410",
         "origin": "Phone",
-        "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
-        "observedAt": "2026-10-28T04:55:54.90506+00:00",
+        "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
+        "observedAt": "2026-10-28T06:18:33.248472+00:00",
         "quality": {
-          "blurLaplacianVariance": 137.384,
-          "meanLuminance": 43.994,
-          "analyzerVersion": "image-quality/1 (pillow 13.0.0)"
-        }
+          "blurLaplacianVariance": 137.61,
+          "meanLuminance": 43.996,
+          "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
+        },
+        "perceptualHash": "80809269495ab4a8"
       }
     ],
     "diagnostics": [
       {
-        "evidenceId": "diag-ac7a5db846",
+        "evidenceId": "diag-36f5787646",
         "result": {
           "fixtureId": "LAB-RACK-01",
           "diagnosticId": "NODE-A-HEALTH",
           "targetAlias": "lab-node-a",
           "passed": false,
-          "completedAt": "2026-10-28T04:56:02.555418+00:00",
+          "completedAt": "2026-10-28T06:18:40.294515+00:00",
           "source": "Simulated",
-          "traceId": "ac7a5db846274b86a5924ef5d32def40",
+          "traceId": "36f5787646184797be02f457ee8b8bbe",
           "normalizedValue": "Unreachable",
           "rawDigest": null
         },
@@ -43,6 +44,18 @@
       }
     ],
     "checklist": [],
+    "segmentations": [
+      {
+        "evidenceId": "seg-90fe3fe944",
+        "sourcePhotoEvidenceId": "photo-36f941b410",
+        "concept": "yellow ethernet cable",
+        "matched": true,
+        "maskSha256": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
+        "recordedAt": "2026-10-28T06:18:40.290381+00:00"
+      }
+    ],
+    "changeAnalyses": [],
+    "acceptedPostRepairPhotoId": null,
     "pendingPredictions": [],
     "predictionScores": [],
     "lastDecision": null,

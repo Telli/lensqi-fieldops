@@ -1,72 +1,72 @@
 {
   "segmentation": {
-    "segmentationId": "seg-909ee85a23",
-    "photoEvidenceId": "photo-aeb16af71e",
-    "photoSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+    "segmentationId": "seg-90fe3fe944",
+    "photoEvidenceId": "photo-36f941b410",
+    "photoSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
     "concept": "yellow ethernet cable",
     "model": "sam-3.1",
-    "responseId": "resp_6ae18061ca6171a5b20a499a",
-    "rawSha256": "692c70bb9c87eaa6204ca68f89e71fed591fd89182f04848e9ad6115f630f9c8",
+    "responseId": "resp_6ae193bf99fb87c003c84ad1",
+    "rawSha256": "53d9fe69c1fea2e05cfe41c7ce5f2e7990577e373f51fec73cd0f8f9486a02b2",
     "parser": "meta-sam-parser 0.1.0",
-    "elapsedSeconds": 1.3458645,
+    "elapsedSeconds": 0.810391,
     "matched": true,
     "boxes": [
       {
         "objectId": "0",
-        "left": 304,
-        "top": 585,
-        "right": 630,
+        "left": 414,
+        "top": 586,
+        "right": 740,
         "bottom": 968,
-        "confidence": 0.7344398498535156
+        "confidence": 0.8672199249267578
       }
     ],
     "masks": [
       {
         "objectId": "0",
         "width": 326,
-        "height": 383,
-        "left": 304,
-        "top": 585,
-        "right": 630,
+        "height": 382,
+        "left": 414,
+        "top": 586,
+        "right": 740,
         "bottom": 968,
         "rle": {
           "size": [
-            383,
+            382,
             326
           ],
-          "counts": "c;:a;5J5K5L5J5K5M3L4M3N2M3L4M3M3L4N2N2N2N2N2M3N2M3N2M2O10L2M4N2M3N3K4N3M2N2N2O1O1O1000001O00000O2O1N1O2N101O0O110O1O1O001N110O010O10O10O100O0010O01O0001000O1000O0010O100O001O100O100O010O100000000O100000000O10O1000000O010000000000O11O01O0O10000000000000000000000O1000000O01000O10001O00000001O000000000001O00O10010O0000000010O000000000010O00000000000001O000001O00O2O0001O0000O1010O0001O0000000000010O000010O0000010O000001O01O01O0001O00010O00010O0001O01O0001O01O01O0000010O000001O01O01O0000010O0000001O01O00001O0000010O00001O01O01O000010O01O0000010O01O010O0010O0010O0010O0001VOXO\\Fh0d9i000100O001O1O100O1O1O2O0O100O100O1O100O100O1O100O1J_EmNb:Q1700O1000O10000000O100O2K5XOoD0_;"
+          "counts": "a;;`;4J5L4K5K5M4J5L4M3N2N2M3L4M3M3L4O1M3N2M3N2M3N2N2M200OO1K5M3L4M2M5M2M3O1O2N1O100000001OO11O0O2O0O2O1N1O101N2O010O1O0O20O01O010O10O0100O1O01O01000O01O010O1000O000100O1000O01O100O100O010O101O000O01000000000O10O100000000000O11O00O100000000O1000000000000O10000000000O10O1000O1000001O00000001O00000000000001OO100001O01O000001O0000001O01O0000000000010O000000000001O000000000000000010O000001O000000001O01O0001O01O00010O0001O00010O0001O0000010O0001O01O01O01O01O000010O0000010O0000001O01O0001O00010O0000010O000001O01O00010O00000010O00001O010O000010O0001O01O01O01O010O01O0000010O[OUOWFl0g9f0O110O0100O1O1O100O1O100O100O100O1O100O100O1O1O100J^EoNc:o0700O10000000000O10000O2K5WOf0"
         },
-        "confidence": 0.7344398498535156
+        "confidence": 0.8672199249267578
       }
     ],
-    "maskSha256": "c277d0176c902c9d4cf4a77f8d05cb00e087e0d289bfab4671d148541f58d266",
+    "maskSha256": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
     "crop": {
-      "file": "seg-909ee85a23-crop-photo-aeb16af71e.jpg",
-      "sha256": "2fa291f7d04448762875cb0c51b270b27e00e637e2126c7229408d6514c7e00c",
+      "file": "seg-90fe3fe944-crop-photo-36f941b410.jpg",
+      "sha256": "71b3b8d7d71d40c949ba5092ece11b2cf782a4b40c01af3a05559f2e336a6820",
       "transform": {
-        "sourceEvidenceId": "photo-aeb16af71e",
-        "sourceSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+        "sourceEvidenceId": "photo-36f941b410",
+        "sourceSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
         "sourceWidth": 1600,
         "sourceHeight": 1000,
         "crop": {
-          "left": 208,
-          "top": 489,
-          "right": 726,
+          "left": 318,
+          "top": 490,
+          "right": 836,
           "bottom": 1000,
           "width": 518,
-          "height": 511,
+          "height": 510,
           "isEmpty": false
         },
         "scale": 1,
-        "offsetX": 208,
-        "offsetY": 489
+        "offsetX": 318,
+        "offsetY": 490
       }
     },
     "label": "LIVE_META",
     "note": "Boxes and masks are model interpretations of the photo; a crop is not independent evidence."
   },
   "state": {
-    "inspectionId": "I-35a13d6978fe",
+    "inspectionId": "I-7ba6f25c240f",
     "fixtureId": "LAB-RACK-01",
     "fixtureRevision": 1,
     "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
@@ -79,19 +79,32 @@
     "technicianAcknowledged": false,
     "photos": [
       {
-        "evidenceId": "photo-aeb16af71e",
+        "evidenceId": "photo-36f941b410",
         "origin": "Phone",
-        "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
-        "observedAt": "2026-10-28T04:55:54.90506+00:00",
+        "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
+        "observedAt": "2026-10-28T06:18:33.248472+00:00",
         "quality": {
-          "blurLaplacianVariance": 137.384,
-          "meanLuminance": 43.994,
-          "analyzerVersion": "image-quality/1 (pillow 13.0.0)"
-        }
+          "blurLaplacianVariance": 137.61,
+          "meanLuminance": 43.996,
+          "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
+        },
+        "perceptualHash": "80809269495ab4a8"
       }
     ],
     "diagnostics": [],
     "checklist": [],
+    "segmentations": [
+      {
+        "evidenceId": "seg-90fe3fe944",
+        "sourcePhotoEvidenceId": "photo-36f941b410",
+        "concept": "yellow ethernet cable",
+        "matched": true,
+        "maskSha256": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
+        "recordedAt": "2026-10-28T06:18:40.290381+00:00"
+      }
+    ],
+    "changeAnalyses": [],
+    "acceptedPostRepairPhotoId": null,
     "pendingPredictions": [],
     "predictionScores": [],
     "lastDecision": null,

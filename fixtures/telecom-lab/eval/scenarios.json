@@ -1,6 +1,6 @@
 {
-  "version": "eval-scenarios/1.0",
-  "note": "All images are Pillow renders of a fictional switch; none is a photograph. Expected Muse statuses are allowed sets, scored as model accuracy, never asserted as truth. Deterministic expectations (decision, stage, outcome kind) are hard pass/fail.",
+  "version": "eval-scenarios/2.0",
+  "note": "All images are Pillow renders of a fictional switch; none is a photograph. Expected Muse statuses are allowed sets, scored as model accuracy, never asserted as truth. Deterministic expectations (decision, stage, outcome kind) are hard pass/fail. v2 (2026-10-28): fault and repair flows upload a distinct post-repair render (postRender) or deliberately re-submit the pre-repair photo, so change evidence (VK-T26) is exercised.",
   "heldOut": [
     "c03-clear-rotated",
     "a05-glare",
@@ -350,7 +350,7 @@
     {
       "id": "f01-seated-down",
       "category": "fakefix",
-      "description": "Cable visibly seated in P2, endpoint down, technician claims repair",
+      "description": "Cable seated in P2, endpoint down; the pre-repair photo is re-submitted as the post-repair photo",
       "flow": "fakefix",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
@@ -374,15 +374,17 @@
       },
       "endpointUpAfterRepair": false,
       "expect": {
-        "decision": "Denied",
-        "finalStage": "VerificationFailed",
-        "outcomeKind": null
+        "changeVerdict": "DuplicateImage",
+        "decision": null,
+        "finalStage": "NeedsEvidence",
+        "outcomeKind": null,
+        "probeNotRunAtVerify": true
       }
     },
     {
       "id": "f02-wrong-port-down",
       "category": "fakefix",
-      "description": "Cable seated in P3 (looks fine), endpoint down",
+      "description": "Cable moved from P3 to P2 (visible change) but the endpoint is still down",
       "flow": "fakefix",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
@@ -408,15 +410,22 @@
       },
       "endpointUpAfterRepair": false,
       "expect": {
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ],
         "decision": "Denied",
         "finalStage": "VerificationFailed",
         "outcomeKind": null
+      },
+      "postRender": {
+        "port": 2
       }
     },
     {
       "id": "f03-occluded-down",
       "category": "fakefix",
-      "description": "Labels occluded, claim made anyway, endpoint down",
+      "description": "Strap removed from the label row, cable untouched in P2, endpoint down: an unchanged re-shoot",
       "flow": "fakefix",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
@@ -445,15 +454,28 @@
       },
       "endpointUpAfterRepair": false,
       "expect": {
-        "decision": "Denied",
-        "finalStage": "VerificationFailed",
+        "changeVerdictIn": [
+          "NoVisualChange",
+          "Unscorable"
+        ],
+        "decisionIn": [
+          null,
+          "Denied"
+        ],
+        "finalStageIn": [
+          "NeedsEvidence",
+          "VerificationFailed"
+        ],
         "outcomeKind": null
+      },
+      "postRender": {
+        "port": 2
       }
     },
     {
       "id": "f04-dark-down",
       "category": "fakefix",
-      "description": "Dark photo, claim made, endpoint down",
+      "description": "Dark photo of P2, endpoint down; the same photo is re-submitted after the claim",
       "flow": "fakefix",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
@@ -481,15 +503,17 @@
       },
       "endpointUpAfterRepair": false,
       "expect": {
-        "decision": "Denied",
-        "finalStage": "VerificationFailed",
-        "outcomeKind": null
+        "changeVerdict": "DuplicateImage",
+        "decision": null,
+        "finalStage": "NeedsEvidence",
+        "outcomeKind": null,
+        "probeNotRunAtVerify": true
       }
     },
     {
       "id": "f05-closeup-down",
       "category": "fakefix",
-      "description": "Convincing close-up of a seated plug, endpoint down",
+      "description": "Close-up; cable moved to P3 after the claim but the endpoint is still down",
       "flow": "fakefix",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
@@ -514,21 +538,29 @@
       },
       "endpointUpAfterRepair": false,
       "expect": {
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ],
         "decision": "Denied",
         "finalStage": "VerificationFailed",
         "outcomeKind": null
+      },
+      "postRender": {
+        "port": 3,
+        "closeup": true
       }
     },
     {
       "id": "r01-repaired-clear",
       "category": "repaired",
-      "description": "Repair done, fresh clear photo, endpoint up",
+      "description": "Repair done, fresh clear photo, endpoint up (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2
+        "port": 5
       },
       "expectMuse": {
         "switch_chassis_visible": [
@@ -548,19 +580,26 @@
       "expect": {
         "decision": "Verified",
         "finalStage": "VerifiedComplete",
-        "outcomeKind": "VerifiedCompleteSimulated"
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2
       }
     },
     {
       "id": "r02-repaired-closeup",
       "category": "repaired",
-      "description": "Repair done, close-up after",
+      "description": "Repair done, close-up after (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2,
+        "port": 5,
         "closeup": true
       },
       "expectMuse": {
@@ -581,19 +620,27 @@
       "expect": {
         "decision": "Verified",
         "finalStage": "VerifiedComplete",
-        "outcomeKind": "VerifiedCompleteSimulated"
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2,
+        "closeup": true
       }
     },
     {
       "id": "r03-repaired-rotated",
       "category": "repaired",
-      "description": "Repair done, rotated after-photo",
+      "description": "Repair done, rotated after-photo (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2,
+        "port": 5,
         "rotate": -5
       },
       "expectMuse": {
@@ -614,19 +661,27 @@
       "expect": {
         "decision": "Verified",
         "finalStage": "VerifiedComplete",
-        "outcomeKind": "VerifiedCompleteSimulated"
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2,
+        "rotate": -5
       }
     },
     {
       "id": "r04-repaired-checklist-unknown",
       "category": "repaired",
-      "description": "Endpoint up but technician marks the cable item Unknown",
+      "description": "Endpoint up but technician marks the cable item Unknown (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2,
+        "port": 5,
         "brightness": 0.4
       },
       "expectMuse": {
@@ -650,19 +705,27 @@
       "expect": {
         "decision": "NeedsHumanReview",
         "finalStage": "NeedsEvidence",
-        "outcomeKind": null
+        "outcomeKind": null,
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2,
+        "brightness": 0.4
       }
     },
     {
       "id": "r05-repaired-checklist-conflict",
       "category": "repaired",
-      "description": "Endpoint up but reviewer marks the cable item Conflicting",
+      "description": "Endpoint up but reviewer marks the cable item Conflicting (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2
+        "port": 5
       },
       "expectMuse": {
         "switch_chassis_visible": [
@@ -682,7 +745,14 @@
       "expect": {
         "decision": "NeedsHumanReview",
         "finalStage": "NeedsEvidence",
-        "outcomeKind": null
+        "outcomeKind": null,
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2
       }
     },
     {
@@ -778,13 +848,13 @@
     {
       "id": "w05-simulated-never-live",
       "category": "wrong",
-      "description": "Everything passes in Simulated mode: outcome must never be Live",
+      "description": "Everything passes in Simulated mode: outcome must never be Live (before: cable in P5; after: P2)",
       "flow": "repair",
       "fixtureId": "LAB-RACK-01",
       "assetId": "LAB-SW-01",
       "samConcept": "yellow ethernet cable",
       "render": {
-        "port": 2
+        "port": 5
       },
       "expectMuse": {
         "switch_chassis_visible": [
@@ -805,7 +875,14 @@
         "decision": "Verified",
         "finalStage": "VerifiedComplete",
         "outcomeKind": "VerifiedCompleteSimulated",
-        "outcomeKindNot": "VerifiedCompleteLive"
+        "outcomeKindNot": "VerifiedCompleteLive",
+        "changeVerdictIn": [
+          "Changed",
+          "Unscorable"
+        ]
+      },
+      "postRender": {
+        "port": 2
       }
     }
   ]

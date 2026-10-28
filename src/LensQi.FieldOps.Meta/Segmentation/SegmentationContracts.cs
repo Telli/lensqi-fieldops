@@ -55,9 +55,13 @@ public interface IRoiCropper
     Task<CropResult> CropAsync(string sourcePath, string sourceEvidenceId, string sourceSha256, PixelBox box, string outputPath, CancellationToken ct);
 }
 
-/// <summary>Blur and luminance signals for a stored photo (T6.1). Returns null when the signals cannot be measured;
-/// a missing signal never blocks an upload.</summary>
-public interface IImageQualityAnalyzer
+/// <summary>What the sidecar measures on a stored photo: blur/luminance signals (T6.1) and a 64-bit dHash for change
+/// evidence (VK-T26, 16 hex digits).</summary>
+public sealed record ImageMeasurement(ImageQualitySignals Quality, string? PerceptualHash);
+
+/// <summary>Measures a stored photo. Returns null when it cannot; a missing measurement never blocks an upload, it only
+/// leaves duplicate detection to the byte digest.</summary>
+public interface IImageAnalyzer
 {
-    Task<ImageQualitySignals?> AnalyzeAsync(string imagePath, CancellationToken ct);
+    Task<ImageMeasurement?> MeasureAsync(string imagePath, CancellationToken ct);
 }

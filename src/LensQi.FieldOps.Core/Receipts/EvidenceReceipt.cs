@@ -110,6 +110,16 @@ public static class ReceiptHtml
             sb.Append("<tr><td>").Append(E(a.EvidenceId)).Append("</td><td>").Append(E(a.Origin)).Append("</td><td>").Append(a.ObservedAt.ToString("u")).Append("</td><td><code>").Append(E(a.Sha256)).Append("</code></td><td>").Append(E(a.Path)).Append("</td></tr>");
         sb.Append("</table>");
         if (r.Checklist.Count > 0) { sb.Append("<ul>"); foreach (var c in r.Checklist) sb.Append("<li>").Append(E(c.RequirementId)).Append(": <b>").Append(E(c.Status.ToString())).Append("</b> at ").Append(c.ReviewedAt.ToString("u")).Append("</li>"); sb.Append("</ul>"); }
+        var changes = r.Events.OfType<VisualChangeAnalyzed>().Select(e => e.Analysis).ToList();
+        if (changes.Count > 0)
+        {
+            sb.Append("<h2>Change evidence (measured, visual; never a verification)</h2><table><tr><th>Claim</th><th>Photo</th><th>Verdict</th><th>Compared with</th><th>dHash distance</th><th>IoU</th><th>Shift</th><th>Reason</th><th>Thresholds</th></tr>");
+            foreach (var c in changes)
+                sb.Append("<tr><td>").Append(E(c.ClaimId)).Append("</td><td>").Append(E(c.PhotoEvidenceId)).Append("</td><td><b>").Append(E(c.Verdict.ToString())).Append("</b></td><td>").Append(E(c.DuplicateOfEvidenceId ?? c.ReferencePhotoEvidenceId))
+                  .Append("</td><td>").Append(c.PerceptualHashDistance?.ToString() ?? "").Append("</td><td>").Append(c.TargetRegionIoU?.ToString("0.000") ?? "").Append("</td><td>").Append(c.ComponentShiftNormalized?.ToString("0.000") ?? "")
+                  .Append("</td><td>").Append(E(c.Reason)).Append("</td><td>").Append(E(c.ThresholdsVersion)).Append("</td></tr>");
+            sb.Append("</table>");
+        }
         sb.Append("<h2>Model calls (inferred, annotations only)</h2><table><tr><th>Evidence</th><th>Model</th><th>Schema</th><th>At</th></tr>");
         foreach (var m in r.ModelCalls) sb.Append("<tr><td>").Append(E(m.EvidenceId)).Append("</td><td>").Append(E(m.ModelId)).Append("</td><td>").Append(E(m.SchemaVersion)).Append("</td><td>").Append(m.At.ToString("u")).Append("</td></tr>");
         sb.Append("</table>");

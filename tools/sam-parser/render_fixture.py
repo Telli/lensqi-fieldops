@@ -3,7 +3,8 @@
 
     python render_fixture.py --scenarios fixtures/telecom-lab/eval/scenarios.json --out fixtures/telecom-lab/eval/images
 
-Each scenario's "render" block controls: port (1-8 or null for no cable), occludeLabels, brightness (0.2-1.6),
+Each scenario's "render" block (the first photo) and optional "postRender" block (the photo after the repair
+claim, written as <id>-post.jpg) control: port (1-8 or null for no cable), occludeLabels, brightness (0.2-1.6),
 blur (px), rotate (degrees), chassisLabel, closeup (crop to the port row), glare. Deterministic for a given seed.
 Every output is a Pillow render, never a photograph; the evaluation report says so.
 """
@@ -105,6 +106,10 @@ def main() -> int:
         path = out / f"{s['id']}.jpg"
         img.save(path, quality=90)
         manifest[s["id"]] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if "postRender" in s:  # the photo taken after the repair claim (change evidence, VK-T26)
+            post = out / f"{s['id']}-post.jpg"
+            render(s["postRender"]).save(post, quality=90)
+            manifest[s["id"] + "-post"] = hashlib.sha256(post.read_bytes()).hexdigest()
     (out / "manifest.json").write_text(json.dumps({"source": "synthetic (Pillow render)", "images": manifest}, indent=2) + "\n")
     print(f"rendered {len(manifest)} images into {out}")
     return 0

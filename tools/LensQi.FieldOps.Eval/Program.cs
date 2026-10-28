@@ -83,7 +83,7 @@ async Task RunScenario(JsonObject s, JsonObject r)
 
     // photo
     var image = Path.Combine(imagesDir, id.Length > 0 ? s["id"]!.GetValue<string>() + ".jpg" : "");
-    var photoId = await Upload(id, image);
+    var photoId = (await Upload(id, image))["evidenceId"]!.GetValue<string>();
 
     // Muse (baseline A = this single look)
     var inv = await Post($"/v1/inspections/{id}/investigate");
@@ -136,22 +136,55 @@ async Task RunScenario(JsonObject s, JsonObject r)
     var upAfter = s["endpointUpAfterRepair"]?.GetValue<bool>() ?? false;
     await Post("/v1/simulation/diagnostics/NODE-A-HEALTH", new { passed = upAfter });
 
+    // change evidence (VK-T26): the post-repair photo is a distinct render when the scenario has one, else the same photo again
+    var rejected = false;
     if (flow != "nophoto")
     {
-        var after = await Upload(id, image);
-        foreach (var kv in s["checklist"]!.AsObject())
-            await Post($"/v1/inspections/{id}/checklist", new { requirementId = kv.Key, status = kv.Value!.GetValue<string>(), photoEvidenceId = after });
+        var postImage = Path.Combine(imagesDir, s["id"]!.GetValue<string>() + "-post.jpg");
+        var upload = await Upload(id, File.Exists(postImage) ? postImage : image);
+        var after = upload["evidenceId"]!.GetValue<string>();
+        var ca = upload["changeAnalysis"];
+        var verdict = ca?["verdict"]?.GetValue<string>();
+        r["change"] = ca is null ? null : new JsonObject { ["verdict"] = verdict, ["hashDistance"] = ca["perceptualHashDistance"]?.GetValue<int>(),
+            ["iou"] = ca["targetRegionIoU"]?.GetValue<double>(), ["shift"] = ca["componentShiftNormalized"]?.GetValue<double>(), ["reason"] = ca["reason"]?.GetValue<string>() };
+        if (expect["changeVerdict"]?.GetValue<string>() is { } ev && ev != verdict) fails.Add($"change={verdict} want {ev}");
+        if (expect["changeVerdictIn"]?.AsArray() is { } evs && !evs.Any(x => x?.GetValue<string>() == verdict)) fails.Add($"change={verdict} not allowed");
+        rejected = verdict is "DuplicateImage" or "NoVisualChange";
+        if (!rejected)
+            foreach (var kv in s["checklist"]!.AsObject())
+                await Post($"/v1/inspections/{id}/checklist", new { requirementId = kv.Key, status = kv.Value!.GetValue<string>(), photoEvidenceId = after });
     }
     await Post($"/v1/inspections/{id}/acknowledge");
-    var verify = await Post($"/v1/inspections/{id}/verify");
-    var d = verify["decision"]!; var stateNode = verify["state"]!;
-    var result = d["result"]!.GetValue<string>(); var stage = stateNode["stage"]!.GetValue<string>(); var kind = d["outcomeKind"]?.GetValue<string>();
-    r["decision"] = result; r["finalStage"] = stage; r["outcomeKind"] = kind; r["reasons"] = new JsonArray(d["reasons"]!.AsArray().Select(x => (JsonNode)x!.GetValue<string>()).ToArray());
-    if (expect["decision"]?.GetValue<string>() is { } ed && ed != result) fails.Add($"decision={result} want {ed}");
+
+    string? result, kind; string stage;
+    if (rejected)
+    {
+        // A rejected photo returns the session to NeedsEvidence: verification is refused and no probe may run.
+        var probesBefore = (await Get($"/v1/inspections/{id}"))["diagnostics"]!.AsArray().Count;
+        var refused = await http.PostAsync($"/v1/inspections/{id}/verify", null);
+        var stateAfter = await Get($"/v1/inspections/{id}");
+        var probeRan = stateAfter["diagnostics"]!.AsArray().Count != probesBefore;
+        r["verifyRefusedWith"] = (int)refused.StatusCode; r["probeRunAtVerify"] = probeRan;
+        if (refused.IsSuccessStatusCode) fails.Add("verify accepted a rejected photo");
+        if (probeRan) fails.Add("probe ran on a rejected photo");
+        result = null; kind = null; stage = stateAfter["stage"]!.GetValue<string>();
+        r["decision"] = null; r["finalStage"] = stage; r["outcomeKind"] = null; r["reasons"] = new JsonArray((JsonNode)(r["change"]?["reason"]?.GetValue<string>() ?? ""));
+    }
+    else
+    {
+        var verify = await Post($"/v1/inspections/{id}/verify");
+        var d = verify["decision"]!; var stateNode = verify["state"]!;
+        result = d["result"]!.GetValue<string>(); stage = stateNode["stage"]!.GetValue<string>(); kind = d["outcomeKind"]?.GetValue<string>();
+        r["decision"] = result; r["finalStage"] = stage; r["outcomeKind"] = kind; r["reasons"] = new JsonArray(d["reasons"]!.AsArray().Select(x => (JsonNode)x!.GetValue<string>()).ToArray());
+    }
+    if (expect.ContainsKey("decision") && expect["decision"]?.GetValue<string>() != result) fails.Add($"decision={result ?? "none"} want {expect["decision"]?.GetValue<string>() ?? "none"}");
+    if (expect["decisionIn"]?.AsArray() is { } dis && !dis.Any(x => x?.GetValue<string>() == result)) fails.Add($"decision={result ?? "none"} not allowed");
+    if (expect["finalStageIn"]?.AsArray() is { } fsi && !fsi.Any(x => x?.GetValue<string>() == stage)) fails.Add($"stage={stage} not allowed");
+    if (expect["probeNotRunAtVerify"]?.GetValue<bool>() == true && r["probeRunAtVerify"]?.GetValue<bool>() != false) fails.Add("probe-not-run not demonstrated");
     if (expect["finalStage"]?.GetValue<string>() is { } es && es != stage) fails.Add($"stage={stage} want {es}");
     if (expect.ContainsKey("outcomeKind") && (expect["outcomeKind"]?.GetValue<string>()) != kind) fails.Add($"outcomeKind={kind}");
     if (expect["outcomeKindNot"]?.GetValue<string>() is { } okn && okn == kind) fails.Add($"outcomeKind must not be {okn}");
-    if (expect["reasonContains"]?.GetValue<string>() is { } rc && !d["reasons"]!.AsArray().Any(x => x!.GetValue<string>().Contains(rc, StringComparison.OrdinalIgnoreCase))) fails.Add($"reason lacks '{rc}'");
+    if (expect["reasonContains"]?.GetValue<string>() is { } rc && !r["reasons"]!.AsArray().Any(x => x!.GetValue<string>().Contains(rc, StringComparison.OrdinalIgnoreCase))) fails.Add($"reason lacks '{rc}'");
 
     // receipt integrity for every verified/denied flow
     var rv = await Get($"/v1/inspections/{id}/receipt/verify");
@@ -161,7 +194,7 @@ async Task RunScenario(JsonObject s, JsonObject r)
     // B false completion: verified while the endpoint is actually down
     r["proposedBFalseCompletion"] = result == "Verified" && !upAfter;
     r["deterministicPass"] = fails.Count == 0;
-    r["summary"] = $"{result} {kind ?? ""} → {stage}; muse {musePass}/{museTotal}; A-accept={r["baselineAWouldAccept"]}" + (fails.Count > 0 ? " FAIL " + string.Join(",", fails) : "");
+    r["summary"] = $"{result ?? r["change"]?["verdict"]?.GetValue<string>()} {kind ?? ""} → {stage}; muse {musePass}/{museTotal}; A-accept={r["baselineAWouldAccept"]}" + (fails.Count > 0 ? " FAIL " + string.Join(",", fails) : "");
 }
 
 JsonObject BuildReport(List<JsonObject> rs, JsonNode health, TimeSpan total)
@@ -188,6 +221,11 @@ JsonObject BuildReport(List<JsonObject> rs, JsonNode health, TimeSpan total)
         ["receiptsVerified"] = Count(x => B(x, "receiptValid")), ["receiptsIssued"] = Count(x => x["receiptValid"] is not null),
         ["medianScenarioSeconds"] = latencies.Count == 0 ? 0 : latencies[latencies.Count / 2], ["museInputTokens"] = inTok, ["museOutputTokens"] = outTok,
         ["samImagesProcessed"] = Count(x => x["sam"] is not null),
+        ["changeDuplicate"] = Count(x => x["change"]?["verdict"]?.GetValue<string>() == "DuplicateImage"),
+        ["changeNoVisualChange"] = Count(x => x["change"]?["verdict"]?.GetValue<string>() == "NoVisualChange"),
+        ["changeChanged"] = Count(x => x["change"]?["verdict"]?.GetValue<string>() == "Changed"),
+        ["changeUnscorable"] = Count(x => x["change"]?["verdict"]?.GetValue<string>() == "Unscorable"),
+        ["probesRunOnRejectedPhotos"] = Count(x => B(x, "probeRunAtVerify")),
     };
 }
 
@@ -210,10 +248,12 @@ string Markdown(JsonObject rep, List<JsonObject> rs, string stamp)
     sb.AppendLine($"| Median scenario wall time (s) | {rep["medianScenarioSeconds"]} |");
     sb.AppendLine($"| Muse tokens in / out | {rep["museInputTokens"]} / {rep["museOutputTokens"]} |");
     sb.AppendLine($"| SAM images processed | {rep["samImagesProcessed"]} |");
+    sb.AppendLine($"| Change evidence on post-repair photos: duplicate / no change / changed / unscorable | {rep["changeDuplicate"]} / {rep["changeNoVisualChange"]} / {rep["changeChanged"]} / {rep["changeUnscorable"]} |");
+    sb.AppendLine($"| Probes run on a rejected post-repair photo | {rep["probesRunOnRejectedPhotos"]} |");
     sb.AppendLine($"| Total wall time (s) | {rep["totalSeconds"]} |\n");
-    sb.AppendLine("Baseline A counts a scenario as \"accepted\" when the single model look marks both the chassis and the cable near end as Observed, i.e. what a plain image analyzer would report as fine. Proposed B counts a false completion only when the gate returns Verified while the simulated endpoint is down.\n");
+    sb.AppendLine("Baseline A counts a scenario as \"accepted\" when the single model look marks both the chassis and the cable near end as Observed, i.e. what a plain image analyzer would report as fine. Proposed B counts a false completion only when the gate returns Verified while the simulated endpoint is down. Change evidence (thresholds `visual-change/1`) runs on every post-repair photo: a re-submitted or unchanged photo returns the session to NeedsEvidence before any probe can run.\n");
     sb.AppendLine("## Per scenario\n");
-    sb.AppendLine("| Scenario | Category | Held-out | Deterministic | Muse statuses | A accepts | SAM | Decision → stage | Outcome kind | Receipt | s |\n|---|---|:-:|:-:|:-:|:-:|:-:|---|---|:-:|--:|");
+    sb.AppendLine("| Scenario | Category | Held-out | Deterministic | Muse statuses | A accepts | SAM | Change evidence | Decision → stage | Outcome kind | Receipt | s |\n|---|---|:-:|:-:|:-:|:-:|:-:|---|---|---|:-:|--:|");
     foreach (var x in rs)
     {
         string Val(string k) => x[k]?.ToString() ?? "";
@@ -221,14 +261,15 @@ string Markdown(JsonObject rep, List<JsonObject> rs, string stamp)
         var sam = x["sam"] is null ? "" : (x["sam"]!["matched"]!.GetValue<bool>() ? $"match {x["sam"]!["confidence"]?.GetValue<double>():0.00}" : "no match") + (x["samExpectedMatch"] is null ? "" : (x["sam"]!["matched"]!.GetValue<bool>() == x["samExpectedMatch"]!.GetValue<bool>() ? " ✓" : " ✗"));
         var det = x["deterministicPass"]?.GetValue<bool>() == true ? "✓" : "✗";
         var decision = x["decision"] is null ? (x["createCode"] is not null ? $"create {Val("createStatus")} {Val("createCode")}" : $"— → {Val("finalStage")}") : $"{Val("decision")} → {Val("finalStage")}";
-        sb.AppendLine($"| {Val("id")} | {Val("category")} | {(x["heldOut"]?.GetValue<bool>() == true ? "✓" : "")} | {det} | {muse} | {(x["baselineAWouldAccept"]?.GetValue<bool>() == true ? "yes" : (x["baselineAWouldAccept"] is null ? "" : "no"))} | {sam} | {decision} | {Val("outcomeKind")} | {(x["receiptValid"] is null ? "" : x["receiptValid"]!.GetValue<bool>() ? "✓" : "✗")} | {Val("elapsedSeconds")} |");
-        if (x["error"] is not null && x["error"]!.GetValueKind() != JsonValueKind.Null) sb.AppendLine($"|  | error: {x["error"]} | | | | | | | | | |");
+        var ch = x["change"] is not { } c ? "" : $"{c["verdict"]}" + (c["hashDistance"] is null ? "" : $" d={c["hashDistance"]}") + (c["iou"] is null ? "" : $" IoU={c["iou"]!.GetValue<double>():0.00}");
+        sb.AppendLine($"| {Val("id")} | {Val("category")} | {(x["heldOut"]?.GetValue<bool>() == true ? "✓" : "")} | {det} | {muse} | {(x["baselineAWouldAccept"]?.GetValue<bool>() == true ? "yes" : (x["baselineAWouldAccept"] is null ? "" : "no"))} | {sam} | {ch} | {decision} | {Val("outcomeKind")} | {(x["receiptValid"] is null ? "" : x["receiptValid"]!.GetValue<bool>() ? "✓" : "✗")} | {Val("elapsedSeconds")} |");
+        if (x["error"] is not null && x["error"]!.GetValueKind() != JsonValueKind.Null) sb.AppendLine($"|  | error: {x["error"]} | | | | | | | | | | |");
     }
     sb.AppendLine("\n## Scope\n\nSynthetic renders are easier than real photographs; these numbers bound the pipeline, not field recognition rates. The simulated probe stands in for the lab endpoint; no live measurement was made. Verification outcomes in this run are `VerifiedCompleteSimulated` by construction and are never labelled live.\n");
     return sb.ToString();
 }
 
-async Task<string> Upload(string id, string image)
+async Task<JsonNode> Upload(string id, string image)
 {
     using var form = new MultipartFormDataContent();
     var bytes = File.ReadAllBytes(image);
@@ -239,7 +280,7 @@ async Task<string> Upload(string id, string image)
     var r = await http.PostAsync($"/v1/inspections/{id}/observations", form);
     var j = JsonNode.Parse(await r.Content.ReadAsStringAsync())!;
     if (!r.IsSuccessStatusCode) throw new Exception("upload failed: " + j);
-    return j["evidenceId"]!.GetValue<string>();
+    return j;
 }
 
 async Task<JsonNode> Post(string url, object? body = null)

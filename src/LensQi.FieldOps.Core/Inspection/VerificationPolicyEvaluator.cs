@@ -6,7 +6,7 @@ namespace LensQi.FieldOps.Core.Inspection;
 /// </summary>
 public static class VerificationPolicyEvaluator
 {
-    public const string PolicyVersion = "fieldproof-policy/1.1";
+    public const string PolicyVersion = "fieldproof-policy/1.2";
 
     public static VerificationDecision Evaluate(InspectionState state, LoadedExpectedTwin loaded, DateTimeOffset now)
     {
@@ -25,6 +25,11 @@ public static class VerificationPolicyEvaluator
 
         if (policy.RequirePostRepairPhoto && state.LatestPostRepairPhoto is null)
             return Deny("A new post-repair image is required");
+
+        // 1.2: a checklist review that cites a photo change analysis rejected is not post-repair evidence.
+        foreach (var entry in state.Checklist.Values)
+            if (entry.ReviewedByEvidenceId is { } cited && state.IsRejectedForCurrentClaim(cited))
+                return Deny($"Visual requirement '{entry.RequirementId}' was reviewed against {cited}, which change analysis rejected");
 
         if (policy.RequireHumanReviewedVisualChecklist)
         {
