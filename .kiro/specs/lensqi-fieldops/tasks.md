@@ -56,8 +56,8 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 ## Day 7: Mon Nov 2 — Polish before wearable extras
 
 - [ ] T6.1 Harden cancellation, timeouts, image size, quality/occlusion and provider-down behavior.
-- [ ] T6.2 Improve Android flow/copy and add spoken guidance only if P0 remains green.
-- [ ] T6.3 Optional Meta Device Access Toolkit + clearly labeled MockDevice input; no actual hardware claim without test.
+- [ ] T6.2 Android client built in parallel as Track B (`docs/OPUS_HANDOFF_PLAN.md`): skeleton Oct 28, capture Oct 29, investigate/localize Oct 30, verify/receipt Oct 31, offline Nov 1; spoken guidance and push-to-talk claim via Muse Voice Transcribe Nov 2–3 only if the Nov 1 gate is green. Claimed only with evidence in `docs/evidence/android/`.
+- [ ] T6.3 Optional Meta Device Access Toolkit + clearly labeled MockDevice input; no actual hardware claim without test. *(Nov 3 at the earliest, Track B, labelled simulated.)*
 - [ ] **Gate:** clean-install demo and core tests pass.
 
 ## Day 8: Tue Nov 3 — Evaluation/video
@@ -70,7 +70,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Handoff
 
-The remaining work is sequenced day by day in `docs/OPUS_HANDOFF_PLAN.md`; the production path beyond the demo is in `docs/PRODUCTION_DESIGN.md`.
+The remaining work runs as four parallel tracks (backend, Android, demo/reproducibility, owner's hardware) with an integrator and three daily syncs, in `docs/OPUS_HANDOFF_PLAN.md`; the production path beyond the demo is in `docs/PRODUCTION_DESIGN.md`.
 
 ## Day 9: Wed Nov 4 — Freeze and submit
 

@@ -10,8 +10,8 @@ acknowledges. Documentation guides the investigation; it is never evidence that 
 
 **Status (2026-10-28):** Core state machine, dual-proof verification, probes (simulated, replay, guarded live HTTP),
 inspection API, Muse visual assessment, vendor-knowledge grounding and hash-verified receipts are implemented with 99
-passing tests. Genuine Muse Spark and SAM 3.1 calls are recorded under `docs/evidence/`. Browser UI is the P0 surface. Open:
-hardening pass, live owned probe, video; see `.kiro/specs/lensqi-fieldops/tasks.md` and the latest report in `docs/evaluation/`.
+passing tests. Genuine Muse Spark and SAM 3.1 calls are recorded under `docs/evidence/`. Browser UI is the guaranteed P0 surface; the Android client is being built in parallel and is claimed only once it runs.
+Open: hardening, change evidence, live owned probe, Android, video; the parallel plan is `docs/OPUS_HANDOFF_PLAN.md`.
 
 ## Read first
 
