@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.lensqi.fieldops.ui.common.AssetMatch
 import com.lensqi.fieldops.ui.common.LensQiMark
 import com.lensqi.fieldops.ui.common.aiSummary
 import com.lensqi.fieldops.ui.common.nextMove
@@ -101,9 +102,10 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                 ) {
                     val (dot, text) = when {
                         r.afterRepair -> null to "$expected · post-repair photo"
-                        r.assetSeen == null && !r.done -> null to "Matching asset…"
-                        r.assetSeen != null && r.assetSeen != view?.assetId -> FoDark.Warning to "Looks like ${r.assetSeen}, not $expected"
-                        r.assetSeen != null -> FoDark.Success to "$expected · matches site record"
+                        r.assetMatch == null && !r.done -> null to "Matching asset…"
+                        r.assetMatch == AssetMatch.Mismatch -> FoDark.Warning to "Looks like ${r.assetSeen}, not $expected"
+                        r.assetMatch == AssetMatch.Match -> FoDark.Success to "$expected · matches site record"
+                        r.assetMatch == AssetMatch.Unseen -> FoDark.Warning to "Can't confirm $expected in this photo"
                         else -> null to "$expected · from asset label"
                     }
                     dot?.let { Box(Modifier.size(7.dp).background(it, CircleShape)) }

@@ -28,6 +28,8 @@ import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.api.VisualAssessment
 import com.lensqi.fieldops.data.api.PhotoEvidence
+import com.lensqi.fieldops.ui.common.AssetMatch
+import com.lensqi.fieldops.ui.common.assetMatch
 import com.lensqi.fieldops.ui.common.sentence
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
@@ -68,6 +70,8 @@ data class Review(
     val photoId: String? = null,
     val awaitingUpload: Boolean = false,
     val assetSeen: String? = null,
+    /** Whether LensQi saw the inspection's asset; null until it has looked. */
+    val assetMatch: AssetMatch? = null,
     val done: Boolean = false,
 )
 
@@ -253,7 +257,7 @@ class InspectionViewModel @Inject constructor(
                     else -> { report(r); null }
                 }
                 reviewStep(1, if (assessment != null) StepState.Done else StepState.Skipped)
-                reviewUpdate { it.copy(assetSeen = assessment?.assetId) }
+                reviewUpdate { it.copy(assetSeen = assessment?.assetId, assetMatch = assetMatch(assessment, state.value.view?.assetId)) }
                 reviewStep(2, if (assessment != null) StepState.Done else StepState.Skipped)
                 reviewStep(3, StepState.Doing)
                 var failed = false

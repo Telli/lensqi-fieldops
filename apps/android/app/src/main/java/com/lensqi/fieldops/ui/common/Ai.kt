@@ -93,3 +93,16 @@ fun reasonText(s: InspectionSummary): String = when {
 
 /** The four gates of repair verification, in order. The server enforces each one; the bar only shows where you are. */
 val verifySteps = listOf("Photo", "Review", "Confirm", "Verify")
+
+/**
+ * Whether the photo shows the inspection's asset. The model always names an asset, even when the photo shows none of
+ * it, so a match counts only when LensQi saw at least one part of the equipment. Otherwise the asset is [AssetMatch.Unseen].
+ */
+enum class AssetMatch { Match, Mismatch, Unseen }
+
+fun assetMatch(a: VisualAssessment?, expectedAssetId: String?): AssetMatch? {
+    if (a == null) return null
+    val saw = a.hypotheses.any { !isPostRepairItem(it.featureId) && (it.status == ObservationStatus.Observed || it.status == ObservationStatus.Suspected) }
+    if (!saw || a.assetId.isNullOrBlank()) return AssetMatch.Unseen
+    return if (expectedAssetId != null && a.assetId != expectedAssetId) AssetMatch.Mismatch else AssetMatch.Match
+}

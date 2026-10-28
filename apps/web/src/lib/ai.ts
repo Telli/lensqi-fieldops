@@ -69,3 +69,15 @@ export const progressSteps = ["Capture", "Observe", "Check", "Repair", "Verify"]
 export const verifySteps = ["Photo", "Review", "Confirm", "Verify"] as const;
 export type VerifyGate = "photo" | "review" | "confirm" | "run";
 export const verifyGateIndex: Record<VerifyGate, number> = { photo: 0, review: 1, confirm: 2, run: 3 };
+
+/**
+ * Whether the photo shows the inspection's asset. The model always names an asset, even when the photo shows none of
+ * it, so a match counts only when LensQi saw at least one part of the equipment. Otherwise the asset is "unseen".
+ */
+export type AssetMatch = "match" | "mismatch" | "unseen";
+export function assetMatch(a: Assessment | null | undefined, expectedAssetId: string | undefined): AssetMatch | null {
+  if (!a) return null;
+  const saw = a.hypotheses.some((h) => !isPostRepairItem(h.featureId) && (h.status === "Observed" || h.status === "Suspected"));
+  if (!saw || !a.assetId) return "unseen";
+  return expectedAssetId && a.assetId !== expectedAssetId ? "mismatch" : "match";
+}
