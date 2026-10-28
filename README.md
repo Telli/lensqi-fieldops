@@ -61,6 +61,18 @@ pack, validates them server-side, and writes an evidence record:
 dotnet run --project tools/LensQi.FieldOps.StageOneGate
 ```
 
+## SAM 3.1 spike
+
+Genuine `sam-3.1` calls on a synthetic fixture photo, parsed by the Python sidecar, with boxes and masks drawn on the original image (`docs/evidence/sam-spike-*`):
+
+```bash
+python -m pip install -r tools/sam-parser/requirements.txt
+```
+
+```bash
+python tools/sam-parser/sam_spike.py --image fixtures/telecom-lab/images/lab-sw-01-initial-synthetic.jpg --prompt "yellow ethernet cable" --prompt "network switch"
+```
+
 ## Layout
 
 ```text
@@ -68,7 +80,8 @@ src/LensQi.FieldOps.Core         pure contracts, applicability, resolver, propos
 src/LensQi.FieldOps.Api          minimal API, pack loader, startup validation
 src/LensQi.FieldOps.Meta         MuseSparkChatClient, grounding composer, proposal service (SAM adapter next)
 src/LensQi.FieldOps.Diagnostics  allowlisted read-only probes (in progress)
-tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner
+tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner (Muse)
+tools/sam-parser                 SAM output parser sidecar and spike (Python, meta-sam-parser)
 fixtures/telecom-lab             expected twin + schema (synthetic LAB-RACK-01)
 fixtures/vendor-knowledge        knowledge packs, schemas, fixture binding
 scripts/                         fixture validators and negative tests
