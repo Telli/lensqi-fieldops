@@ -1,0 +1,1156 @@
+{
+  "report": {
+    "generatedAtUtc": "2026-10-28T03:53:39.0789470Z",
+    "totalSeconds": 143.1,
+    "diagnosticsMode": "Simulated",
+    "scenarios": 25,
+    "heldOut": 4,
+    "deterministicPass": 25,
+    "deterministicFail": 0,
+    "falseCompletions_proposedB": 0,
+    "falseCompletions_baselineA_onFakeFix": 4,
+    "fakeFixScenarios": 5,
+    "museStatusWithinAllowed": 42,
+    "museStatusTotal": 46,
+    "ambiguousScenariosRequestingEvidence": 5,
+    "ambiguousScenarios": 5,
+    "samAgreesWithLabel": 15,
+    "samScored": 18,
+    "wrongAssetClaimedByModel": 0,
+    "receiptsVerified": 12,
+    "receiptsIssued": 12,
+    "medianScenarioSeconds": 5.1,
+    "museInputTokens": 66556,
+    "museOutputTokens": 22678,
+    "samImagesProcessed": 23
+  },
+  "scenarios": [
+    {
+      "id": "c01-clear-p2",
+      "category": "clear",
+      "heldOut": false,
+      "description": "Clear wide view, cable seated in P2, endpoint up",
+      "inspectionId": "I-7823ecd31dce",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2896,
+        "outputTokens": 810,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 1.8875245,
+        "confidence": 0.6332378387451172
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 8.3
+    },
+    {
+      "id": "c02-clear-bright",
+      "category": "clear",
+      "heldOut": false,
+      "description": "Clear view, brighter exposure",
+      "inspectionId": "I-77474ea82001",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2892,
+        "outputTokens": 816,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.9404062,
+        "confidence": 0.8672199249267578
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.5
+    },
+    {
+      "id": "c03-clear-rotated",
+      "category": "clear",
+      "heldOut": true,
+      "description": "Clear view, camera rotated 4 degrees",
+      "inspectionId": "I-8c6bd4f61144",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2890,
+        "outputTokens": 775,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.3751929,
+        "confidence": 0.7968254089355469
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.5
+    },
+    {
+      "id": "c04-clear-closeup",
+      "category": "clear",
+      "heldOut": false,
+      "description": "Close-up of the port row, labels large",
+      "inspectionId": "I-34c9b3113f04",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 1448,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": false,
+        "boxes": 0,
+        "elapsedSeconds": 0.638045,
+        "confidence": null
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 7.7
+    },
+    {
+      "id": "c05-clear-p5",
+      "category": "clear",
+      "heldOut": false,
+      "description": "Clear view, cable in P5 (expected P2): discrepancy visible, endpoint up",
+      "inspectionId": "I-7f55968c574a",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2898,
+        "outputTokens": 968,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.7982665,
+        "confidence": 0.8400000333786011
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.1
+    },
+    {
+      "id": "a01-labels-occluded",
+      "category": "ambiguous",
+      "heldOut": false,
+      "description": "Cable tie hides the P1-P4 labels",
+      "inspectionId": "I-7edc1a20b852",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RequestView",
+        "requestedView": "move closer and show the switch faceplate and the yellow cable connector",
+        "inputTokens": 2892,
+        "outputTokens": 893,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Unknown"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": false,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.5924614,
+        "confidence": 0.5631399154663086
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=false",
+      "error": null,
+      "elapsedSeconds": 14.5
+    },
+    {
+      "id": "a02-dark",
+      "category": "ambiguous",
+      "heldOut": false,
+      "description": "Very dark exposure",
+      "inspectionId": "I-f2b6aa6572b9",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 684,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 1,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.9463041,
+        "confidence": 0.7815700173377991
+      },
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 1/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.3
+    },
+    {
+      "id": "a03-blurred",
+      "category": "ambiguous",
+      "heldOut": false,
+      "description": "Motion blur, labels unreadable",
+      "inspectionId": "I-68337bddff7c",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RequestView",
+        "requestedView": "move closer and show the switch faceplate and the yellow cable connector in sharp focus with readable port labels",
+        "inputTokens": 2892,
+        "outputTokens": 1468,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Suspected"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Suspected"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": false,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.444052,
+        "confidence": 0.8518518805503845
+      },
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=false",
+      "error": null,
+      "elapsedSeconds": 7.9
+    },
+    {
+      "id": "a04-no-cable",
+      "category": "ambiguous",
+      "heldOut": false,
+      "description": "No yellow cable in frame at all",
+      "inspectionId": "I-70e154276456",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RequestView",
+        "requestedView": "step back slightly and show the area in front of the switch ports including any yellow cable",
+        "inputTokens": 2896,
+        "outputTokens": 1035,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Unknown"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": false,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": false,
+        "boxes": 0,
+        "elapsedSeconds": 0.8324458,
+        "confidence": null
+      },
+      "samExpectedMatch": false,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=false",
+      "error": null,
+      "elapsedSeconds": 5
+    },
+    {
+      "id": "a05-glare",
+      "category": "ambiguous",
+      "heldOut": true,
+      "description": "Strong glare over the port row",
+      "inspectionId": "I-cca82e62be31",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2892,
+        "outputTokens": 711,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 1,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.4978238,
+        "confidence": 0.827957034111023
+      },
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 1/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.3
+    },
+    {
+      "id": "f01-seated-down",
+      "category": "fakefix",
+      "heldOut": false,
+      "description": "Cable visibly seated in P2, endpoint down, technician claims repair",
+      "inspectionId": "I-26d4e4258da0",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 1221,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.8146432,
+        "confidence": 0.6332378387451172
+      },
+      "samExpectedMatch": true,
+      "decision": "Denied",
+      "finalStage": "VerificationFailed",
+      "outcomeKind": null,
+      "reasons": [
+        "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 VerificationFailed; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.6
+    },
+    {
+      "id": "f02-wrong-port-down",
+      "category": "fakefix",
+      "heldOut": false,
+      "description": "Cable seated in P3 (looks fine), endpoint down",
+      "inspectionId": "I-8b22c08ce4f8",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2896,
+        "outputTokens": 1437,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.4998171,
+        "confidence": 0.8672199249267578
+      },
+      "samExpectedMatch": true,
+      "decision": "Denied",
+      "finalStage": "VerificationFailed",
+      "outcomeKind": null,
+      "reasons": [
+        "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 VerificationFailed; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.9
+    },
+    {
+      "id": "f03-occluded-down",
+      "category": "fakefix",
+      "heldOut": false,
+      "description": "Labels occluded, claim made anyway, endpoint down",
+      "inspectionId": "I-dd61a0d26dfd",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RequestView",
+        "requestedView": "move closer and show the switch faceplate and the yellow cable connector",
+        "inputTokens": 2892,
+        "outputTokens": 778,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Unknown"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": false,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.840011,
+        "confidence": 0.5631399154663086
+      },
+      "samExpectedMatch": true,
+      "decision": "Denied",
+      "finalStage": "VerificationFailed",
+      "outcomeKind": null,
+      "reasons": [
+        "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 VerificationFailed; muse 2/2; A-accept=false",
+      "error": null,
+      "elapsedSeconds": 4.9
+    },
+    {
+      "id": "f04-dark-down",
+      "category": "fakefix",
+      "heldOut": false,
+      "description": "Dark photo, claim made, endpoint down",
+      "inspectionId": "I-92786ef13dc1",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2890,
+        "outputTokens": 757,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 1,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.975908,
+        "confidence": 0.7928802371025085
+      },
+      "decision": "Denied",
+      "finalStage": "VerificationFailed",
+      "outcomeKind": null,
+      "reasons": [
+        "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 VerificationFailed; muse 1/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 5
+    },
+    {
+      "id": "f05-closeup-down",
+      "category": "fakefix",
+      "heldOut": true,
+      "description": "Convincing close-up of a seated plug, endpoint down",
+      "inspectionId": "I-e0ef445c2b8b",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 1125,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": false,
+        "boxes": 0,
+        "elapsedSeconds": 1.0907417,
+        "confidence": null
+      },
+      "samExpectedMatch": true,
+      "decision": "Denied",
+      "finalStage": "VerificationFailed",
+      "outcomeKind": null,
+      "reasons": [
+        "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 VerificationFailed; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.6
+    },
+    {
+      "id": "r01-repaired-clear",
+      "category": "repaired",
+      "heldOut": false,
+      "description": "Repair done, fresh clear photo, endpoint up",
+      "inspectionId": "I-6d8da7f75e35",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2892,
+        "outputTokens": 835,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 1.2733107,
+        "confidence": 0.6332378387451172
+      },
+      "samExpectedMatch": true,
+      "decision": "Verified",
+      "finalStage": "VerifiedComplete",
+      "outcomeKind": "VerifiedCompleteSimulated",
+      "reasons": [
+        "Qualifying Simulated fixture checks passed; this is not a live measurement"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Verified VerifiedCompleteSimulated \u2192 VerifiedComplete; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.9
+    },
+    {
+      "id": "r02-repaired-closeup",
+      "category": "repaired",
+      "heldOut": false,
+      "description": "Repair done, close-up after",
+      "inspectionId": "I-5d277a5bc97c",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 1368,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": false,
+        "boxes": 0,
+        "elapsedSeconds": 1.1949977,
+        "confidence": null
+      },
+      "samExpectedMatch": true,
+      "decision": "Verified",
+      "finalStage": "VerifiedComplete",
+      "outcomeKind": "VerifiedCompleteSimulated",
+      "reasons": [
+        "Qualifying Simulated fixture checks passed; this is not a live measurement"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Verified VerifiedCompleteSimulated \u2192 VerifiedComplete; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 7.6
+    },
+    {
+      "id": "r03-repaired-rotated",
+      "category": "repaired",
+      "heldOut": true,
+      "description": "Repair done, rotated after-photo",
+      "inspectionId": "I-7a1d5aa415f9",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2896,
+        "outputTokens": 857,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.6630455,
+        "confidence": 0.8083832263946533
+      },
+      "samExpectedMatch": true,
+      "decision": "Verified",
+      "finalStage": "VerifiedComplete",
+      "outcomeKind": "VerifiedCompleteSimulated",
+      "reasons": [
+        "Qualifying Simulated fixture checks passed; this is not a live measurement"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Verified VerifiedCompleteSimulated \u2192 VerifiedComplete; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 5
+    },
+    {
+      "id": "r04-repaired-checklist-unknown",
+      "category": "repaired",
+      "heldOut": false,
+      "description": "Endpoint up but technician marks the cable item Unknown",
+      "inspectionId": "I-7a9fd5a0a6be",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 965,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 1,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 1.079031,
+        "confidence": 0.7770034670829773
+      },
+      "decision": "NeedsHumanReview",
+      "finalStage": "NeedsEvidence",
+      "outcomeKind": null,
+      "reasons": [
+        "Visual requirement \u0027yellow_cable_near_end_visible\u0027 remains unknown"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "NeedsHumanReview  \u2192 NeedsEvidence; muse 1/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 5.7
+    },
+    {
+      "id": "r05-repaired-checklist-conflict",
+      "category": "repaired",
+      "heldOut": false,
+      "description": "Endpoint up but reviewer marks the cable item Conflicting",
+      "inspectionId": "I-75c3e2a02d8b",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2892,
+        "outputTokens": 724,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.354487,
+        "confidence": 0.7697842121124268
+      },
+      "samExpectedMatch": true,
+      "decision": "NeedsHumanReview",
+      "finalStage": "NeedsEvidence",
+      "outcomeKind": null,
+      "reasons": [
+        "Visual requirement \u0027yellow_cable_near_end_visible\u0027 is marked conflicting"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "NeedsHumanReview  \u2192 NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 4.4
+    },
+    {
+      "id": "w01-unknown-asset",
+      "category": "wrong",
+      "heldOut": false,
+      "description": "Asset LAB-SW-99 is not in the fixture",
+      "createStatus": 409,
+      "createCode": "unknown_asset",
+      "deterministicPass": true,
+      "summary": "create -\u003E 409 unknown_asset",
+      "error": null,
+      "elapsedSeconds": 0
+    },
+    {
+      "id": "w02-unknown-fixture",
+      "category": "wrong",
+      "heldOut": false,
+      "description": "Fixture LAB-RACK-02 is not installed",
+      "createStatus": 404,
+      "createCode": "not_found",
+      "deterministicPass": true,
+      "summary": "create -\u003E 404 not_found",
+      "error": null,
+      "elapsedSeconds": 0
+    },
+    {
+      "id": "w03-wrong-asset-label",
+      "category": "wrong",
+      "heldOut": false,
+      "description": "Photo shows SW02 / LAB-SW-02 but the inspection is bound to LAB-SW-01",
+      "inspectionId": "I-48d73fbf481c",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RequestHumanReview",
+        "requestedView": null,
+        "inputTokens": 2896,
+        "outputTokens": 677,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Conflicting"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": false,
+      "viewRequestedOrUnknown": true,
+      "modelClaimedWrongAsset": false,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 1.1704529,
+        "confidence": 0.675126850605011
+      },
+      "samExpectedMatch": true,
+      "finalStage": "NeedsEvidence",
+      "decision": null,
+      "deterministicPass": true,
+      "summary": "stage NeedsEvidence; muse 2/2; A-accept=false",
+      "error": null,
+      "elapsedSeconds": 5.1
+    },
+    {
+      "id": "w04-no-post-repair-photo",
+      "category": "wrong",
+      "heldOut": false,
+      "description": "Repair claimed but no fresh photo and no review",
+      "inspectionId": "I-e164ea28f5f2",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2896,
+        "outputTokens": 1103,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.8751573,
+        "confidence": 0.6332378387451172
+      },
+      "samExpectedMatch": true,
+      "decision": "Denied",
+      "finalStage": "NeedsEvidence",
+      "outcomeKind": null,
+      "reasons": [
+        "A new post-repair image is required"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Denied  \u2192 NeedsEvidence; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.7
+    },
+    {
+      "id": "w05-simulated-never-live",
+      "category": "wrong",
+      "heldOut": false,
+      "description": "Everything passes in Simulated mode: outcome must never be Live",
+      "inspectionId": "I-c00b85eaaf80",
+      "muse": {
+        "modelId": "muse-spark-1.3",
+        "nextAction": "RunApprovedProbe",
+        "requestedView": null,
+        "inputTokens": 2894,
+        "outputTokens": 1223,
+        "hypotheses": [
+          {
+            "featureId": "switch_chassis_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "yellow_cable_near_end_visible",
+            "status": "Observed"
+          },
+          {
+            "featureId": "post_repair_view_captured",
+            "status": "Unknown"
+          }
+        ]
+      },
+      "museExpectedMatches": 2,
+      "museExpectedTotal": 2,
+      "baselineAWouldAccept": true,
+      "viewRequestedOrUnknown": true,
+      "sam": {
+        "matched": true,
+        "boxes": 1,
+        "elapsedSeconds": 0.6749613,
+        "confidence": 0.6332378387451172
+      },
+      "samExpectedMatch": true,
+      "decision": "Verified",
+      "finalStage": "VerifiedComplete",
+      "outcomeKind": "VerifiedCompleteSimulated",
+      "reasons": [
+        "Qualifying Simulated fixture checks passed; this is not a live measurement"
+      ],
+      "receiptValid": true,
+      "proposedBFalseCompletion": false,
+      "deterministicPass": true,
+      "summary": "Verified VerifiedCompleteSimulated \u2192 VerifiedComplete; muse 2/2; A-accept=true",
+      "error": null,
+      "elapsedSeconds": 6.6
+    }
+  ]
+}
