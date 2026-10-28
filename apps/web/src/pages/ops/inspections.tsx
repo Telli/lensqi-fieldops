@@ -65,7 +65,7 @@ export function InspectionWorkspace({ id }: { id: string }) {
   const timeline = ev.filter((e) => ["PhotoRecorded", "AssessmentRecorded", "SegmentationRecorded", "DiagnosticCompleted", "WorkOrderDrafted", "RepairClaimed", "VisualChangeAnalyzed", "VerificationEvaluated"].includes(e.kind));
   const describe = (e: (typeof ev)[number]): string => {
     switch (e.kind) {
-      case "PhotoRecorded": return `Photo · ${e["origin"] === "Phone" ? "camera" : "imported"}`;
+      case "PhotoRecorded": return `Photo · ${({ Phone: "camera", Glasses: "glasses", MockWearables: "mock glasses (simulated)" } as Record<string, string>)[String(e["origin"])] ?? "imported"}`;
       case "AssessmentRecorded": return "AI observation";
       case "SegmentationRecorded": return e["matched"] ? `Outlined ${e["concept"]}` : `No ${e["concept"]} found`;
       case "DiagnosticCompleted": { const r = e["result"] as { passed: boolean | null; source: string }; return `Check ${r.passed === true ? "passed" : r.passed === false ? "failed" : "unavailable"} · ${r.source}`; }
