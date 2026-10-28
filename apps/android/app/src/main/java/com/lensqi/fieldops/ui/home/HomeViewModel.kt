@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.ui.home
 
+import com.lensqi.fieldops.ui.theme.Appearance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lensqi.fieldops.data.InspectionCache
@@ -44,6 +45,9 @@ class HomeViewModel @Inject constructor(
     private val cache: InspectionCache,
     private val snapshots: SnapshotStore,
 ) : ViewModel() {
+    val appearance = settings.appearance
+    fun setAppearance(value: Appearance) = viewModelScope.launch { settings.setAppearance(value) }
+
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state
 

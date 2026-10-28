@@ -4,6 +4,7 @@ import { LayoutGrid, ClipboardList, Boxes, KanbanSquare, BookOpen, FileCheck2, S
 import { Logo, SourceBadge } from "@/components/fo/primitives";
 import { useHealth } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { ThemeControl } from "@/components/fo/theme-control";
 
 const nav = [
   { to: "/ops", label: "Overview", Icon: LayoutGrid },
@@ -30,6 +31,7 @@ export function OpsShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="mt-auto space-y-2">
+          <ThemeControl compact className="w-full [&>button]:flex-1 [&>button]:justify-center" />
           <Link href="/m" className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs hover:border-primary/40"><Smartphone className="size-4 text-primary" /> Technician app</Link>
           <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground">
             <span>Equipment checks</span>{health.data && <SourceBadge source={health.data.diagnosticsMode} />}

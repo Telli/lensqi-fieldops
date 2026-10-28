@@ -57,15 +57,19 @@ import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.ui.common.isPostRepairItem
 import com.lensqi.fieldops.ui.common.observationLabel
 import com.lensqi.fieldops.ui.common.sentence
-import com.lensqi.fieldops.ui.theme.Fo
+import com.lensqi.fieldops.ui.theme.FoDark
+import com.lensqi.fieldops.ui.theme.ForceDark
 
 /**
  * The frozen frame after the shutter, as in the design's camera: progress while the server works, then the photo with
  * the AI's outlines and pinned labels, the asset match, and what to do next. Every result comes from the API.
  */
+@Composable
+fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -> Unit) = ForceDark { ReviewContent(vm, onContinue, onRetake) }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -> Unit) {
+private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val r = s.review ?: return
     val view = s.view
@@ -82,7 +86,7 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = { vm.closeReview(); onContinue() }, modifier = Modifier.clip(CircleShape).background(glass)) { Icon(Icons.Outlined.Close, "Close", tint = Fo.Foreground) }
+                IconButton(onClick = { vm.closeReview(); onContinue() }, modifier = Modifier.clip(CircleShape).background(glass)) { Icon(Icons.Outlined.Close, "Close", tint = FoDark.Foreground) }
                 Row(
                     Modifier.weight(1f).clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -90,12 +94,12 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
                     val (dot, text) = when {
                         r.afterRepair -> null to "$expected · post-repair photo"
                         r.assetSeen == null && !r.done -> null to "Matching asset…"
-                        r.assetSeen != null && r.assetSeen != view?.assetId -> Fo.Warning to "Looks like ${r.assetSeen}, not $expected"
-                        r.assetSeen != null -> Fo.Success to "$expected · matches site record"
+                        r.assetSeen != null && r.assetSeen != view?.assetId -> FoDark.Warning to "Looks like ${r.assetSeen}, not $expected"
+                        r.assetSeen != null -> FoDark.Success to "$expected · matches site record"
                         else -> null to "$expected · from asset label"
                     }
                     dot?.let { Box(Modifier.size(7.dp).background(it, CircleShape)) }
-                    Text(text, fontSize = 12.sp, maxLines = 1, color = if (dot == Fo.Warning) Fo.Warning else Fo.Foreground)
+                    Text(text, fontSize = 12.sp, maxLines = 1, color = if (dot == FoDark.Warning) FoDark.Warning else FoDark.Foreground)
                 }
             }
             // Where the photo came from, always visible: mock glasses are never presented as real glasses.
@@ -106,20 +110,20 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
                         EvidenceOrigin.Glasses -> "Photo from the glasses"
                         else -> "Imported photo"
                     },
-                    fontSize = 12.sp, color = if (o == EvidenceOrigin.MockWearables) Fo.Warning else Fo.Muted,
+                    fontSize = 12.sp, color = if (o == EvidenceOrigin.MockWearables) FoDark.Warning else FoDark.Muted,
                     modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                 )
             }
             Box(Modifier.fillMaxWidth()) {
                 if (outlinesReady) ArOverlay(s.outlineImage!!, s.outlines, tags, guide = target, guideLabel = "Target region")
                 else local?.let { Image(it.asImageBitmap(), "Captured photo", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
-                if (!r.done && !r.awaitingUpload) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = Fo.Primary, trackColor = Color.Transparent)
+                if (!r.done && !r.awaitingUpload) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = FoDark.Primary, trackColor = Color.Transparent)
             }
         }
 
         Column(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, Fo.Border, RoundedCornerShape(18.dp)).padding(14.dp)
+                .clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(18.dp)).padding(14.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -137,18 +141,18 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
                 r.steps.forEach { st ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         when (st.state) {
-                            StepState.Done -> Icon(Icons.Outlined.Check, null, tint = Fo.Primary, modifier = Modifier.size(13.dp))
-                            StepState.Doing -> CircularProgressIndicator(Modifier.size(11.dp), color = Fo.Foreground, strokeWidth = 1.5.dp)
-                            StepState.Skipped -> Icon(Icons.Outlined.WarningAmber, null, tint = Fo.Warning, modifier = Modifier.size(13.dp))
+                            StepState.Done -> Icon(Icons.Outlined.Check, null, tint = FoDark.Primary, modifier = Modifier.size(13.dp))
+                            StepState.Doing -> CircularProgressIndicator(Modifier.size(11.dp), color = FoDark.Foreground, strokeWidth = 1.5.dp)
+                            StepState.Skipped -> Icon(Icons.Outlined.WarningAmber, null, tint = FoDark.Warning, modifier = Modifier.size(13.dp))
                             StepState.Todo -> {}
                         }
-                        Text(st.label, fontSize = 11.sp, color = when (st.state) { StepState.Done -> Fo.Primary; StepState.Doing -> Fo.Foreground; else -> Fo.Muted })
+                        Text(st.label, fontSize = 11.sp, color = when (st.state) { StepState.Done -> FoDark.Primary; StepState.Doing -> FoDark.Foreground; else -> FoDark.Muted })
                     }
                 }
             }
             if (r.awaitingUpload) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.CloudOff, null, tint = Fo.Warning, modifier = Modifier.size(16.dp))
-                Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = Fo.Warning)
+                Icon(Icons.Outlined.CloudOff, null, tint = FoDark.Warning, modifier = Modifier.size(16.dp))
+                Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = FoDark.Warning)
             }
             if (r.done) {
                 change?.let { c ->
@@ -158,17 +162,17 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
                 }
                 assessment?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }?.forEach { h ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> Fo.Primary; ObservationStatus.Conflicting -> Fo.Failure; else -> Fo.Warning }, CircleShape))
+                        Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> FoDark.Primary; ObservationStatus.Conflicting -> FoDark.Failure; else -> FoDark.Warning }, CircleShape))
                         Column {
                             Text("${featureName(h.featureId)} · ${observationLabel(h.status).second}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            Text(h.reason, fontSize = 12.sp, color = Fo.Muted)
+                            Text(h.reason, fontSize = 12.sp, color = FoDark.Muted)
                         }
                     }
                 }
                 if (assessment?.nextAction == ProposedNextAction.RequestView && !assessment.requestedView.isNullOrBlank())
-                    Text("Next: ${sentence(assessment.requestedView)}", fontSize = 12.sp, color = Fo.Warning)
-                if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = Fo.Muted)
-                if (tags.isNotEmpty()) Text("Tap a label on the photo for the AI's reason.", fontSize = 11.sp, color = Fo.Muted)
+                    Text("Next: ${sentence(assessment.requestedView)}", fontSize = 12.sp, color = FoDark.Warning)
+                if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
+                if (tags.isNotEmpty()) Text("Tap a label on the photo for the AI's reason.", fontSize = 11.sp, color = FoDark.Muted)
             }
             if (rejected) PrimaryButton("Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             else if (r.done || r.awaitingUpload)

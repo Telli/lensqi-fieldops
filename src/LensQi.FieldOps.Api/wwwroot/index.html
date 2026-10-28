@@ -1,17 +1,27 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#f5f7fa" />
+    <script>
+      // Apply the saved appearance before first paint so the page never flashes the wrong theme.
+      try {
+        var t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("lensqi-theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0b0f14");
+        }
+      } catch (e) {}
+    </script>
     <title>LensQi FieldOps</title>
     <meta name="description" content="Inspect equipment with evidence, verify repairs you can prove." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <script type="module" crossorigin src="/assets/index-C6wkyi_4.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BMJU0x3r.css">
+    <script type="module" crossorigin src="/assets/index-ByRJv-4Y.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-LIjXSy7q.css">
   </head>
   <body>
     <div id="root"></div>

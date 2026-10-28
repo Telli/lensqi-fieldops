@@ -9,6 +9,7 @@ import Home from "@/pages/m/home";
 import Start from "@/pages/m/start";
 import Scan from "@/pages/m/scan";
 import GlassesView from "@/pages/m/glasses";
+import { initTheme } from "@/lib/theme";
 import MobileAssetDetail from "@/pages/m/asset-detail";
 import Investigate from "@/pages/m/investigate";
 import Asset from "@/pages/m/asset";
@@ -35,6 +36,8 @@ function Root() {
 const embedded = () => new URLSearchParams(location.search).has("embed");
 const m = (node: React.ReactNode, immersive = false) => <MobileFrame immersive={immersive}>{node}</MobileFrame>;
 const ops = (node: React.ReactNode) => <OpsShell>{node}</OpsShell>;
+
+initTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

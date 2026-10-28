@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lensqi.fieldops.ui.theme.Fo
@@ -37,6 +38,7 @@ import com.lensqi.fieldops.ui.theme.Fo
 @Composable
 fun ReceiptScreen(url: String, onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
+    val background = Fo.Background.toArgb()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
@@ -47,7 +49,7 @@ fun ReceiptScreen(url: String, onBack: () -> Unit) {
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
-                    setBackgroundColor(android.graphics.Color.rgb(0x0B, 0x0F, 0x14))
+                    setBackgroundColor(background)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     val origin = android.net.Uri.parse(url).let { "${it.scheme}://${it.authority}" }

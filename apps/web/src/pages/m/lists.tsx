@@ -4,6 +4,7 @@ import { Boxes, ClipboardList, Server, ShieldCheck, Smartphone, LayoutDashboard,
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { Empty, HealthDot, Section, SourceBadge } from "@/components/fo/primitives";
 import { useFixtures, useHealth, useInspections } from "@/lib/hooks";
+import { ThemeControl } from "@/components/fo/theme-control";
 import { InspectionCard } from "./home";
 
 export function Inspections() {
@@ -67,6 +68,7 @@ export function Profile() {
           <Row icon={ShieldCheck} k="Equipment checks" v={health.data ? <SourceBadge source={health.data.diagnosticsMode} /> : "…"} />
           <Row icon={Boxes} k="Sites and knowledge" v={health.data ? `${health.data.fixtures} site · ${health.data.packs} packs` : "…"} />
         </div>
+        <Section title="Appearance"><ThemeControl className="w-full [&>button]:flex-1 [&>button]:justify-center" /></Section>
         <p className="text-xs text-muted-foreground">
           Simulated checks are labelled everywhere and can never produce a live verification. AI observations are suggestions; a repair is verified only when a new photo, your review and a fresh equipment check all agree.
         </p>
