@@ -700,6 +700,6 @@ Keep the workflow stage (`InspectionStage`) distinct from verification provenanc
 | Spatial coordinates | No per-component world coordinates in P0 | Calibrated depth/pose with measured uncertainty |
 | Historical LensIQ dependency | None | Never a prerequisite for this public repo |
 | SAM decoder | Python `meta-sam-parser` sidecar emitting typed JSON | Native C# parser passes fidelity tests against the sidecar |
-| P0 UI surface | **Decided Oct 28: browser inspection UI served by the API is the P0 surface** (`src/LensQi.FieldOps.Api/wwwroot`, labelled "browser P0 surface"); Android moves to P1 | Android P1 only after the full loop, evaluation and video are done |
+| P0 UI surface | **Decided Oct 28: browser inspection UI served by the API is the guaranteed P0 surface.** The Android client is built **in parallel from Oct 28** (Track B in `docs/OPUS_HANDOFF_PLAN.md`) and is claimed only when it runs on an emulator or device with evidence in `docs/evidence/android/` | If any Android gate slips, the video and README drop the Android claim; nothing is faked |
 
 **Submission boundary:** This PRD and the accompanying Kiro documents are planning artifacts. They do not constitute a working implementation or evidence that a live Meta API call, headset connection, hardware diagnostic or evaluation has passed.

@@ -2,7 +2,7 @@
 
 **Written:** October 28, 2026 (UTC) at commit `cc2f72d`. **Deadline:** November 4, 2026, 9:00 PM Eastern.
 **Repository:** <https://github.com/Telli/lensqi-fieldops>, branch `main`, 29 event-period commits, 104 passing tests.
-**Read first, in this order:** `README.md`, `PRD.md` §3–§8 and §17, `.kiro/specs/lensqi-fieldops/tasks.md`, `docs/HACKATHON_CONTRIBUTIONS.md`, then the project skills under `.claude/skills/` (they encode the conventions and the traps already hit).
+**Read first, in this order:** `README.md`, `docs/STATUS.md` (once it exists), `PRD.md` §3–§8 and §17, `.kiro/specs/lensqi-fieldops/tasks.md`, `docs/HACKATHON_CONTRIBUTIONS.md`, then the project skills under `.claude/skills/` (they encode the conventions and the traps already hit).
 
 ## 1. Where the project stands
 
@@ -18,7 +18,7 @@ Done and verified against the running system with genuine Meta calls:
 | Browser P0 UI served by the API | Done | `docs/evidence/ui/01-03` |
 | Evaluation runner, 25 labelled scenarios, first report | Done | `docs/evaluation/eval-20261028T032756Z.md` |
 
-Not done: hardening pass (T6.1), live owned endpoint smoke (T3.3 live half), demo video (T7.3), final attribution pass (T7.4), freeze and submit (T8). Android is **P1** by recorded decision (PRD §19); no Android build is claimed. Child-spec items VK-T07/T08/T10/T12/T13/T14 and the prediction/change-evidence tasks VK-T24–T27 are partly implemented inside the parent work (predictions are registered and scored; change analysis VK-T26 is **not** built).
+Not done: hardening pass (T6.1), change evidence (VK-T26), live owned endpoint smoke (T3.3 live half), the Android client (starts now as Track B, claimed only when it runs), demo video (T7.3), final attribution pass (T7.4), freeze and submit (T8). The browser UI remains the guaranteed P0 surface. Child-spec items VK-T07/T08/T10/T12/T13/T14 and the prediction/change-evidence tasks VK-T24–T27 are partly implemented inside the parent work (predictions are registered and scored; change analysis VK-T26 is **not** built).
 
 ## 2. Hard rules that must not be broken
 
@@ -29,69 +29,85 @@ Not done: hardening pass (T6.1), live owned endpoint smoke (T3.3 live half), dem
 5. No private LensIQ source is copied (PRD §4A). Every commit is event-period work and goes into the ledger.
 6. Never claim a live measurement, a hardware test, a photograph or an Android build that did not happen. The video shows only what exists.
 
-## 3. Day plan (remaining)
+## 3. Parallel tracks (revised October 28: ambitious, not serial)
 
-Times are UTC. The order is chosen so that at any cutoff the repository is submittable.
+The serial day plan assumed one agent on one checkout. That is the bottleneck. Run **four tracks in parallel** as separate sessions or subagents, each in its own git worktree and on its own API port, with one integrator merging to `main` and writing ledger rows. Android starts **today**, alongside the backend work, not after submission. The browser UI remains the guaranteed P0 surface; the Android app is claimed only when it runs on an emulator or device with screenshots in `docs/evidence/android/`.
 
-### Oct 28–29 — Hardening (T6.1) and truthfulness sweep
+### How to run tracks without colliding
 
-- **Bookkeeping check (10 min).** The stale boxes (T0.1–T0.3, Day 1–6 gates) were ticked on Oct 28; confirm `tasks.md` matches reality after each day and keep ticking with a one-line note. Every feature commit gets a ledger row via `python scripts/ledger_add.py`.
-- **Provider-down behaviour.** `POST /investigate`, `/segment`, `/knowledge/reason` already return `provider_unavailable` on HTTP or timeout errors; add a test per endpoint with a throwing fake, and make the UI banner say "model unavailable; inspection stays where it is" (it does today via the generic error path; make it explicit).
-- **Cancellation and timeouts.** Muse 60 s and SAM 60 s are configured; add `RequestTimeouts` middleware (90 s) on the three model endpoints and pass the request `CancellationToken` through (already done). Verify with a test that a cancelled request leaves no half-written event (the store writes events only after the command succeeds; assert the JSONL line count).
-- **Image checks.** `EvidenceFileStore.MaxImageBytes` is 12 MB; add a minimum dimension check (reject below 320 px on either side when width/height are supplied) and a cheap quality signal: compute the Laplacian-variance blur score and mean luminance in the Python sidecar (`sam_crop.py --stats`) and store them in `PhotoRecorded` (two nullable doubles). Do not gate on them; FR-02 says quality checks are signals, not evidence. Show them in the UI photo caption.
-- **Rate limiting and budgets.** Add ASP.NET rate limiting: 30 model calls per inspection and 120 per hour per client IP, 429 with `ApiError("rate_limited")`. Add a per-inspection model-call counter to `InspectionState` (events `AssessmentRecorded` + segmentations) and refuse `/investigate` beyond 6 calls with `invalid_state` (the two-view budget already bounds the loop; this bounds cost).
-- **Secrets and logs.** Grep the repo and `docs/evidence/` for the key prefix before every push (`scripts/secret_scan.sh`, write it). Make sure request logging never prints the data URL (it does not today; add a test that the Muse client's exception message truncates to 600 chars, which exists, and that no logger receives the body).
-- **Gate:** `dotnet test` green, 110+ tests, `docs/evidence/` clean, ledger row added.
+| Bottleneck | Fix |
+|---|---|
+| One checkout, shared `data/`, `bin/`, `.env` | `git worktree add ../fieldops-<track> -b track/<name>`; copy `.env` into each worktree (gitignored); each API instance uses its own `--urls http://127.0.0.1:52xx` and `Storage:DataDirectory` |
+| One ledger file every track edits → merge conflicts | Tracks **do not** run `ledger_add.py`. They push their branch; the integrator rebases onto `main`, merges with `--no-ff`, then runs `python scripts/ledger_add.py` once per merged feature |
+| `tasks.md` edited by everyone | Tracks tick their own task lines only; conflicts there are trivial and resolved by the integrator |
+| One Model API key and budget | Fine: an evaluation run is ≈ 90k tokens and 23 images; four tracks at full tilt stay far under the credit. Cap each track's eval runs with `--only` while iterating |
+| Python sidecar and `.venv` | Each worktree gets its own `.venv` (`pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt`) or sets `FIELDOPS_PYTHON` |
+| Android toolchain | Android SDK and JDK 21 are installed on this Mac; the emulator is the only Android-specific serial resource, so Track B owns it |
+| Owned LAN endpoint, real equipment, phone camera | Only the owner can supply these. Track D is prepared end to end so the owner's time is 30 minutes, not a day |
+| Muse latency (5–20 s per call) | Irrelevant across tracks; inside a track, batch eval runs with `--only` subsets and keep the full run for the integrator's nightly |
+| Review and merge throughput | The integrator merges at three fixed syncs per day (09:00, 15:00, 21:00 UTC); every track must be green on `dotnet test` and `scripts/secret_scan.sh` before pushing |
 
-### Oct 30 — Live probe and real photographs
+Suggested agent topology: integrator (this plan's owner) + Track A, B, C as long-running sessions; Track D is the integrator plus the owner's hardware. Each track reads the four project skills first.
 
-- **Live owned endpoint.** Run any owned HTTP service on the LAN (a Raspberry Pi, or `python3 -m http.server` on a second machine) and set `Diagnostics:Mode=LiveLocal` with `Targets.lab-node-a` pointing at it. Drive the hero flow; confirm `VerifiedCompleteLive` appears exactly once in a receipt and `LIVE` on the banner. Unplug the endpoint, re-run, confirm `Unavailable` (Passed = null) and a denial. Save the receipt bundle to `docs/evidence/receipt-live/` and add `LIVE_LOCAL_PROBE` to the ledger. If no second device exists, state that plainly in the ledger and keep Simulated; do not fake it.
-- **Real photos.** Photograph any real switch or router with a yellow patch cable (your own equipment, no serials or client networks in frame). Add two or three to `fixtures/telecom-lab/images/real/` with a `README` stating rights. Run `/investigate` and `/segment` on them and append the results to a new evaluation run with `--only` plus a small `real-*` scenario set. Expect SAM to behave differently than on renders; record whatever happens.
-- **Gate:** at least one receipt with a live outcome or an explicit note that none exists; real-photo results recorded.
+### Track A — Backend hardening, change evidence, live probe readiness (Oct 28 → Nov 1)
 
-### Oct 31 — Change evidence (VK-T26) if time allows, else skip
+1. **Hardening (T6.1), Oct 28–29.** Provider-down tests per model endpoint; `RequestTimeouts` on model endpoints; minimum image dimensions; blur and luminance signals from the sidecar stored on `PhotoRecorded` (signals, never gates); ASP.NET rate limiting (30 model calls per inspection, 120 per hour per IP, `rate_limited`); per-inspection model-call cap; assert no logger ever receives an image data URL. Gate: 115+ tests green.
+2. **Change evidence (VK-T26), Oct 29–31.** `VisualChangeAnalyzer`: 64-bit dHash from the sidecar, mask IoU from two `MaskRecord`s with a C# COCO RLE decoder (port the JS one), thresholds with a version string, `VisualChangeAnalyzed` event, automatic run after the post-claim photo when a pre-claim segmentation exists. `DuplicateImage` locks the checklist for that photo. Tests: re-submitted photo → `DuplicateImage` with zero SAM calls; unchanged render → `NoVisualChange`; moved-cable render → `Changed`. Gate: the same-photo fake fix is caught before the probe runs. Cut at Oct 31 noon if not green.
+3. **Live probe readiness, Oct 30.** `Diagnostics__Mode=LiveLocal` path exercised against a local `python3 -m http.server` on this Mac as a stand-in (it is a real HTTP measurement of an owned endpoint on the loopback; label it `LIVE_LOCAL_PROBE (loopback)` in the ledger and never present it as a lab device). Prepare the exact two commands Track D will run on real hardware.
+4. **Second opinion (optional, Oct 31–Nov 1).** `ModelDisagreement`: run the grounded proposal through Muse Spark and Muse Spark Open (Baseten) and record disagreement as an uncertainty signal in the receipt. Only if credits were claimed; otherwise skip without comment in the video.
 
-This is the one frontier item not built. Budget one day, drop it at noon if it is not green.
+### Track B — Android client (Oct 28 → Nov 3), P0.5: claimed only when it runs
 
-- Core: `VisualChangeAnalyzer` with a 64-bit dHash computed by the sidecar (`sam_crop.py --dhash`) and mask IoU from two `MaskRecord`s (decode RLE in C#: port the COCO decoder from `app.js`). Thresholds in `appsettings` with a `ThresholdsVersion`. Event `VisualChangeAnalyzed`.
-- Api: run automatically after the post-claim photo upload when a segmentation exists for the pre-claim photo with the same prompt. `DuplicateImage` (hash distance ≤ 2) leaves the checklist locked for that photo in the UI.
-- Tests: re-submitted photo → `DuplicateImage` with zero SAM calls; unchanged render → `NoVisualChange`; moved cable render (`port` 5 → 2) → `Changed`.
-- **Gate:** the fake-fix scenario with the *same* photo re-uploaded is caught before the probe runs.
+Load `fieldops-android` before writing a line. Package `com.lensqi.fieldops`, Kotlin, Compose, CameraX, Hilt, Retrofit + kotlinx.serialization, Room, WorkManager. No private LensIQ source; reimplement from behaviour.
 
-### Nov 1 — Clean-room reproducibility (T6 gate, VK-T13)
+1. **Oct 28: skeleton and contract.** `apps/android` Gradle project, CI job (`./gradlew :app:testDebugUnitTest :app:assembleDebug`), `FieldOpsApi` Retrofit interface covering fixtures, inspections, observations (multipart), investigate, segment, diagnostics run, work order, repair claims, checklist, acknowledge, verify, receipt, artifacts. Contract tests from recorded JSON captured by curl against the running API (`fixtures/api-recordings/`). Emulator boots and hits `/health` on `10.0.2.2:5199`.
+2. **Oct 29: capture and upload.** CameraX full-resolution JPEG, SHA-256 on device, `Idempotency-Key` per capture, Room queue + WorkManager drain, "awaiting upload" state. Screen 1 (fixture/asset) and Screen 2 (capture). Gate: a photo taken on the emulator appears in the API state and the browser UI.
+3. **Oct 30: investigate and localize.** Screen 3: assessment badges, SAM overlay drawn from RLE on the original (port the decoder), crop viewer, requested-view instruction. Gate: emulator screenshot with a genuine Muse assessment and SAM overlay saved to `docs/evidence/android/`.
+4. **Oct 31: verify and receipt.** Screen 4: work order, claim, checklist, acknowledge, verify; banner text from the decision; `receipt.html` in a WebView; share JSON. Gate: fake fix denied and real fix verified on the emulator; screenshots recorded.
+5. **Nov 1: offline and polish.** Airplane-mode capture then sync; `Cached` label on knowledge facts; copy review. Gate: the hero flow runs on the emulator from a cold install.
+6. **Nov 2–3: voice (P1, only if the above is green).** Push-to-talk repair claim: record audio, `POST` to a new API endpoint that calls Muse Voice Transcribe, show the transcript for confirmation before it becomes the claim text. This adds a third Meta model to the demo honestly. Wearables Mock Device Kit stays out unless time remains on Nov 3, and is labelled simulated if shown.
 
-- Fresh clone into a temp directory on this Mac: `git clone`, `python -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt`, `dotnet test`, `dotnet run --project src/LensQi.FieldOps.Api`, open the UI, run the hero flow with the simulated probe, run `verify-receipt` on the issued bundle, run the eval with `--only c01-clear-p2,f01-seated-down`. Fix anything that needed a step not in the README. Add a `make`-free `scripts/clean_room_check.sh` that does exactly this and prints PASS.
-- Write `docs/DEMO_AND_EVALUATION.md` "How to reproduce" from the checked steps.
-- **Gate:** the script passes from a fresh clone with only `MODEL_API_KEY` supplied.
+Android is **never** on the critical path: if any gate slips, the video uses the browser UI and the Android section is omitted, not faked.
 
-### Nov 2 — Demo video (T7.3) and README polish
+### Track C — Reproducibility, demo, attribution (Oct 29 → Nov 3)
 
-- Storyboard in `docs/DEMO_STORYBOARD.md` following PRD §5 timings, then record with the browser UI at 1280×800:
-  1. 0:00–0:30 Fake fix first: show the denied verification and the red banner before anything else.
-  2. 0:30–1:15 The loop: fixture, photo, Muse assessment with Unknown badges, Localize with the SAM mask, grounded proposal citing a fact ID, prediction registered, probe, work order, claim.
-  3. 1:15–2:00 The boundary: paste a proposal with a fabricated fact ID and a `POST /rest/system/reboot` diagnostic into the grounded-proposal box (type the observation that provokes it, or call the endpoint from a terminal) and show the `KnowledgeProposalRejected` codes.
-  4. 2:00–2:40 Receipt: open `receipt.html`, run `verify-receipt`, flip a byte in a terminal, run again.
-  5. 2:40–3:00 Ledger and commit dates on screen; state what is simulated and what is live.
-- Keep every on-screen label truthful: "SIMULATED" stays visible whenever the simulated probe is used.
-- README: a 10-line "What this is" at the top, the hero screenshot, the evaluation headline table, and the reproduce commands. Do not add claims the evidence folder cannot back.
+1. **Oct 29: clean-room script.** `scripts/clean_room_check.sh`: fresh clone to a temp dir, venv, `dotnet test`, start API, hero flow via curl with the simulated probe, `verify-receipt`, `Eval --only c01-clear-p2,f01-seated-down`, PASS/FAIL. Fix README until it passes. Run it again after every integrator merge.
+2. **Oct 30: storyboard.** `docs/DEMO_STORYBOARD.md` per PRD §5 with exact clicks, on-screen labels and what is simulated versus live; opens with the fake-fix denial. Reserve 20 s for the Android segment and 10 s for the live-probe receipt; both are cut if their tracks do not deliver.
+3. **Oct 31–Nov 1: rehearsal captures.** Record the browser flow at 1280×800 as individual clips so the final edit does not depend on one perfect take; record the `verify-receipt` byte-flip in a terminal.
+4. **Nov 2: README and evidence index.** Ten-line "What this is", hero screenshot, evaluation headline, reproduce commands, `docs/evidence/README.md` indexing every evidence file with its label (`LIVE_META`, `LIVE_LOCAL_PROBE`, `SIMULATED_PROBE`).
+5. **Nov 3: attribution and freeze prep (T7.4, T8.1).** Ledger complete (one row per merged feature), `PRIOR_ART.md` register empty and third-party inputs current, secret scan, screenshot sanitation, media rights note, tag `v0.9-hackathon-freeze`.
 
-### Nov 3 — Attribution (T7.4) and freeze prep (T8.1)
+### Track D — Owner's hardware (needs the user; prepared by Track A)
 
-- `docs/HACKATHON_CONTRIBUTIONS.md`: ensure every commit has a row (the helper appends them), and add a "What judges should look at first" list with five file links.
-- `docs/PRIOR_ART.md`: confirm the copied-source register is empty and third-party inputs are current (add `meta-sam-parser`, `Pillow`, `Microsoft.AspNetCore.Mvc.Testing`).
-- Secret scan, screenshot sanitation (`docs/evidence/ui/`), license check of `fixtures/` media (all synthetic or own photographs).
-- Tag `v0.9-hackathon-freeze`.
+Thirty minutes of the owner's time, any day Oct 30–Nov 2:
+1. Point `Diagnostics__Targets__lab-node-a` at any owned HTTP endpoint on the LAN (a Pi, a NAS, a second laptop), run the two prepared commands, keep the receipt bundle (`docs/evidence/receipt-live/`), unplug, run again for the `Unavailable` case.
+2. Photograph real equipment with a yellow patch cable (own gear, no serials or client networks), three to five photos into `fixtures/telecom-lab/images/real/` with a rights note; run `/investigate` and `/segment` on each and append a `real-*` scenario set to the evaluation. Record whatever happens.
+If the owner cannot do this by Nov 2, the entry stays Simulated and says so.
 
-### Nov 4 — Submit (T8.2, T8.3)
+### Daily syncs and the integrator's checklist
 
-- Final `scripts/clean_room_check.sh` run, push, verify the public URL and the video link open in a private browser window, submit on the Cerebral Valley form before 9:00 PM ET. Record the submission time in the ledger.
+At each sync the integrator: pulls every track branch, rebases onto `main`, runs `dotnet test`, `scripts/secret_scan.sh` and `scripts/clean_room_check.sh`, merges `--no-ff`, runs `ledger_add.py` per feature, ticks `tasks.md`, pushes, and posts a one-paragraph status in `docs/STATUS.md` (date, merged features, test count, what is blocked). Nightly: full evaluation run on `main`, report committed.
+
+### Revised calendar
+
+| Date (UTC) | A backend | B Android | C demo/repro | D owner |
+|---|---|---|---|---|
+| Oct 28 | hardening starts | skeleton, contract, emulator hits API | — | — |
+| Oct 29 | hardening green | capture + upload | clean-room script PASS | — |
+| Oct 30 | change evidence; loopback live probe | investigate + localize | storyboard | live endpoint + real photos (30 min) |
+| Oct 31 | change evidence gate (noon cut) | verify + receipt | rehearsal clips | — |
+| Nov 1 | second opinion (optional) | offline + polish; cold-install hero flow | rehearsal clips | — |
+| Nov 2 | regression and nightly eval | voice claim (P1) | README, evidence index | last chance for D |
+| Nov 3 | freeze support | voice polish or wearables mock (labelled) | attribution, tag | — |
+| Nov 4 | — | — | final clean-room run, submit by 9 PM ET | — |
 
 ## 4. Cutlines
 
-- If the live endpoint is not available by Oct 30 evening: stay Simulated, say so, move on.
-- If VK-T26 is not green by Oct 31 noon: remove its partial code from the branch, keep the spec, note it as not built.
-- If the clean-room check fails on Nov 1: nothing else is worked on until it passes.
-- Never start Android, wearables or voice before Nov 4. They are P1 and the PRD says so.
+- Android never blocks submission: any missed gate removes the Android segment from the video and the claim from the README; nothing is faked.
+- Change evidence: cut at Oct 31 noon; keep the spec, remove partial code from `main`.
+- Live probe and real photos: owner-dependent; absent by Nov 2 evening means the entry stays Simulated with an explicit note.
+- Voice and wearables: only after Track B's Nov 1 gate; wearables only with the Mock Device Kit and a "simulated" label.
+- Clean-room script failing on `main` at any sync stops all merges until it passes.
 
 ## 5. Known traps (each cost real time already)
 
