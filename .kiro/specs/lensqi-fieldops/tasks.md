@@ -55,7 +55,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Day 7: Mon Nov 2 — Polish before wearable extras
 
-- [ ] T6.1 Harden cancellation, timeouts, image size, quality/occlusion and provider-down behavior.
+- [x] T6.1 Harden cancellation, timeouts, image size, quality/occlusion and provider-down behavior. *(Done 2026-10-28: header-measured image size limits, blur/luminance signals on `PhotoRecorded`, 504 `model_timeout`, 429 `rate_limited` per inspection and per IP, provider-down 409 on all three model endpoints, sidecar timeout and process kill, provider error redaction with a no-data-URL-in-logs test; 125 tests.)*
 - [ ] T6.2 Android client built in parallel as Track B (`docs/OPUS_HANDOFF_PLAN.md`): skeleton Oct 28, capture Oct 29, investigate/localize Oct 30, verify/receipt Oct 31, offline Nov 1; spoken guidance and push-to-talk claim via Muse Voice Transcribe Nov 2–3 only if the Nov 1 gate is green. Claimed only with evidence in `docs/evidence/android/`.
 - [ ] T6.3 Optional Meta Device Access Toolkit + clearly labeled MockDevice input; no actual hardware claim without test. *(Nov 3 at the earliest, Track B, labelled simulated.)*
 - [ ] **Gate:** clean-install demo and core tests pass.

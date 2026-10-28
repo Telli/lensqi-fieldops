@@ -17,7 +17,7 @@ public interface ISamOutputParser
 /// Runs Meta's meta-sam-parser through a local Python process. Model grammar never enters C#; the sidecar emits typed JSON.
 /// Also performs the pixel crop with Pillow so .NET needs no image codec. Never exposed over the network.
 /// </summary>
-public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper
+public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper, IImageQualityAnalyzer
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -76,20 +76,48 @@ public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOut
         return new CropResult(outputPath, new CropTransform(sourceEvidenceId, sourceSha256, r.GetProperty("imageWidth").GetInt32(), r.GetProperty("imageHeight").GetInt32(), actual, 1.0));
     }
 
+    public async Task<ImageQualitySignals?> AnalyzeAsync(string imagePath, CancellationToken ct)
+    {
+        try
+        {
+            var (stdout, _) = await RunAsync(["-I", Path.Combine(ScriptDirectory, "image_quality.py"), "--image", imagePath], null, ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(stdout);
+            var r = doc.RootElement;
+            return new ImageQualitySignals(r.GetProperty("blurLaplacianVariance").GetDouble(), r.GetProperty("meanLuminance").GetDouble(), r.GetProperty("version").GetString() ?? "image-quality/unknown");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonException or KeyNotFoundException or System.ComponentModel.Win32Exception or TimeoutException)
+        {
+            return null;
+        }
+    }
+
     private async Task<(string Stdout, string Stderr)> RunAsync(IReadOnlyList<string> args, string? stdin, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(PythonExecutable) { RedirectStandardInput = stdin is not null, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var a in args) psi.ArgumentList.Add(a);
         using var p = Process.Start(psi) ?? throw new InvalidOperationException($"Could not start {PythonExecutable}");
-        if (stdin is not null)
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(options.SidecarTimeoutSeconds));
+        string stdout, stderr;
+        try
         {
-            await p.StandardInput.WriteAsync(stdin.AsMemory(), ct).ConfigureAwait(false);
-            p.StandardInput.Close();
+            if (stdin is not null)
+            {
+                await p.StandardInput.WriteAsync(stdin.AsMemory(), timeout.Token).ConfigureAwait(false);
+                p.StandardInput.Close();
+            }
+            var stdoutTask = p.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderrTask = p.StandardError.ReadToEndAsync(timeout.Token);
+            await p.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            stdout = await stdoutTask; stderr = await stderrTask;
         }
-        var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
-        var stderrTask = p.StandardError.ReadToEndAsync(ct);
-        await p.WaitForExitAsync(ct).ConfigureAwait(false);
-        var stdout = await stdoutTask; var stderr = await stderrTask;
+        catch (OperationCanceledException)
+        {
+            // Never leave an orphaned Python process behind a cancelled or timed-out request.
+            try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            if (ct.IsCancellationRequested) throw;
+            throw new TimeoutException($"sidecar exceeded {options.SidecarTimeoutSeconds}s");
+        }
         if (p.ExitCode != 0) throw new InvalidOperationException($"sidecar exited {p.ExitCode}: {stderr.Trim()}");
         return (stdout, stderr);
     }

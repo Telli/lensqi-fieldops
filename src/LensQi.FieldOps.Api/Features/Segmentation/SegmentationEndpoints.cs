@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
+using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Inspection;
@@ -40,7 +41,7 @@ public static class SegmentationEndpoints
 
             SegmentationOutcome outcome;
             try { outcome = await segmenter.SegmentAsync(bytes, mediaType, concept, ct); }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException) { return ApiResults.Conflict("provider_unavailable", ex.Message); }
+            catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or InvalidOperationException or TimeoutException) && !ct.IsCancellationRequested) { return ApiResults.Conflict("provider_unavailable", ex.Message); }
 
             var segId = "seg-" + Guid.NewGuid().ToString("N")[..10];
             var maskSha = outcome.Masks.Count > 0 ? Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("|", outcome.Masks.Select(m => m.Rle.Counts))))) : null;
@@ -54,7 +55,7 @@ public static class SegmentationEndpoints
                 cropName = $"{segId}-crop-{photo.EvidenceId}.jpg";
                 var outPath = Path.Combine(evidenceDir, cropName);
                 try { crop = await cropper.CropAsync(sourcePath, photo.EvidenceId, photo.ArtifactSha256, padded, outPath, ct); }
-                catch (InvalidOperationException ex) { return ApiResults.Conflict("crop_failed", ex.Message); }
+                catch (Exception ex) when (ex is InvalidOperationException or TimeoutException) { return ApiResults.Conflict("crop_failed", ex.Message); }
                 cropSha = Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(outPath, ct)));
             }
 
@@ -78,7 +79,7 @@ public static class SegmentationEndpoints
                 }, ct);
             }
             catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
-        });
+        }).AsModelCall();
 
         // Serves evidence artifacts (photos, crops) and segmentation geometry for the UI and the receipt viewer. Read-only.
         app.MapGet("/v1/inspections/{id}/artifacts/{name}", (string id, string name, InspectionStore store, EvidenceFileStore files) =>

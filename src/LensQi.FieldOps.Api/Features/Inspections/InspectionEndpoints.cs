@@ -1,9 +1,11 @@
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Fixtures;
+using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Diagnostics;
+using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Vision;
 
 namespace LensQi.FieldOps.Api.Features.Inspections;
@@ -50,7 +52,7 @@ public static class InspectionEndpoints
             store.Find(id) is { } s ? Results.Ok(s.Events) : ApiResults.NotFound($"Inspection '{id}' not found"));
 
         // FR-02: multipart upload of the original JPEG/PNG. Magic bytes decide the type; declared content type is ignored.
-        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, IImageQualityAnalyzer quality, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
@@ -63,16 +65,24 @@ public static class InspectionEndpoints
             var bytes = ms.ToArray();
             var mediaType = EvidenceFileStore.DetectImageType(bytes);
             if (mediaType is null) return ApiResults.BadRequest("image must be JPEG or PNG (checked by magic bytes)");
+            // T6.1: size comes from the file header, never from the form; too small or too large is refused before storage.
+            if (!EvidenceFileStore.TryReadDimensions(bytes, out var width, out var height))
+                return ApiResults.BadRequest("image_unreadable", "image header has no readable pixel size");
+            if (Math.Min(width, height) < limits.MinImageShortSide || Math.Max(width, height) < limits.MinImageLongSide)
+                return ApiResults.BadRequest("image_too_small", $"image is {width}x{height}; at least {limits.MinImageLongSide}x{limits.MinImageShortSide} is required");
+            if ((long)width * height > limits.MaxImagePixels)
+                return ApiResults.BadRequest("image_too_large", $"image is {width}x{height}; at most {limits.MaxImagePixels} pixels are accepted");
             var origin = Enum.TryParse<EvidenceOrigin>(form["source"], ignoreCase: true, out var o) ? o : EvidenceOrigin.Phone;
             var observedAt = DateTimeOffset.TryParse(form["observedAt"], out var obs) ? obs : clock.GetUtcNow();
-            int.TryParse(form["width"], out var width); int.TryParse(form["height"], out var height);
             var evidenceId = "photo-" + Guid.NewGuid().ToString("N")[..10];
             var artifact = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
+            // Blur and luminance are signals beside the evidence; a missing measurement never blocks the upload.
+            var signals = await quality.AnalyzeAsync(Path.Combine(files.DataDirectoryPath, artifact.RelativePath), ct);
             var requestId = RequestId(http, "observation:" + artifact.Sha256);
             return await GuardAsync(() => store.ExecuteAsync(id, s =>
             {
-                var events = s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow());
-                return Task.FromResult(Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, origin = origin.ToString(), events = events.Count, state = View(s) }));
+                var events = s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), signals);
+                return Task.FromResult(Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals, origin = origin.ToString(), events = events.Count, state = View(s) }));
             }, ct));
         }).DisableAntiforgery();
 
@@ -99,7 +109,7 @@ public static class InspectionEndpoints
                 var events = s.RecordAssessment(requestId, evidenceId, outcome.Assessment, clock.GetUtcNow());
                 return Task.FromResult(Results.Ok(new { evidenceId, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, usage = outcome.Usage, assessment = outcome.Assessment, events = events.Count, state = View(s) }));
             }, ct));
-        });
+        }).AsModelCall();
 
         g.MapPost("/inspections/{id}/segmentations", (string id, SegmentationRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s =>
@@ -220,6 +230,7 @@ public static class InspectionEndpoints
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
     {
         try { return await action(); }
+        catch (OperationCanceledException) { throw; }   // request aborted or timed out: the timeout middleware answers
         catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (KeyNotFoundException ex) { return ApiResults.NotFound($"Inspection '{ex.Message}' not found"); }
         catch (Exception ex) { return Results.Json(new ApiError("internal", ex.GetType().Name + ": " + ex.Message), statusCode: 500); }

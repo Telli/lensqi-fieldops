@@ -5,6 +5,7 @@ using LensQi.FieldOps.Api.Features.Simulation;
 using LensQi.FieldOps.Api.Features.VendorKnowledge;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Fixtures;
+using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Diagnostics;
 using LensQi.FieldOps.Meta.Knowledge;
@@ -115,8 +116,12 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton<ISamOutputParser>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddSingleton<IRoiCropper>(sp => sp.GetRequiredService<PythonSidecar>());
+builder.Services.AddSingleton<IImageQualityAnalyzer>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddHttpClient("sam");
 builder.Services.AddSingleton<ISegmenter>(sp => new SamSegmentationClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("sam"), sp.GetRequiredService<SamOptions>(), sp.GetRequiredService<MuseOptions>(), sp.GetRequiredService<ISamOutputParser>()));
+
+// T6.1: request timeouts and rate limits on the endpoints that spend Meta Model API calls.
+builder.Services.AddModelCallLimits(builder.Configuration);
 
 var app = builder.Build();
 
@@ -124,6 +129,8 @@ var app = builder.Build();
 _ = app.Services.GetRequiredService<IKnowledgePackStore>();
 _ = app.Services.GetRequiredService<IReadOnlyList<FixtureKnowledgeBinding>>();
 _ = app.Services.GetRequiredService<ExpectedTwinStore>();
+
+app.UseModelCallLimits();
 
 app.MapGet("/health", (IKnowledgePackStore store, ExpectedTwinStore twins, DiagnosticsOptions diag) => Results.Ok(new { status = "ok", packs = store.Packs.Count, fixtures = twins.Twins.Count, diagnosticsMode = diag.Mode.ToString() }));
 app.MapVendorKnowledge();

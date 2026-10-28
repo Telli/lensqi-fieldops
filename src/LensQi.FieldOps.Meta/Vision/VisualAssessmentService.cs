@@ -106,7 +106,8 @@ public sealed class VisualAssessmentService(IChatClient chat)
         {
             response = await chat.GetResponseAsync(messages, options, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        // A cancelled request (client gone or endpoint timeout) propagates; a provider timeout or error becomes an outcome.
+        catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or InvalidOperationException) && !ct.IsCancellationRequested)
         {
             return new VisualAssessmentOutcome(null, "", "unknown", promptDigest, "", null, $"provider_unavailable: {ex.Message}");
         }

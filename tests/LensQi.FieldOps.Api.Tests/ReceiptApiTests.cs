@@ -8,7 +8,7 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
 {
     private readonly FieldOpsApiFactory _factory;
     private readonly HttpClient _client;
-    private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 9, 9, 9, 9];
+    private static readonly byte[] Png = TestImages.Png(800, 600);
 
     public ReceiptApiTests(FieldOpsApiFactory factory) { _factory = factory; _client = factory.CreateClient(); }
 

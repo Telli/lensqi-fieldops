@@ -25,6 +25,11 @@ public enum VerificationResult { Verified, Denied, NeedsHumanReview }
 /// <summary>Technician's review of one visual requirement after the repair claim.</summary>
 public enum ChecklistStatus { Satisfied, NotSatisfied, Unknown, Conflicting }
 
+/// <summary>Measured image-quality signals for a photo (T6.1). Signals only: they are recorded and shown, never used to
+/// accept or reject evidence. Blur is the variance of a 3×3 Laplacian on a downscaled grey image (low = blurrier);
+/// luminance is the mean grey level 0–255.</summary>
+public sealed record ImageQualitySignals(double BlurLaplacianVariance, double MeanLuminance, string AnalyzerVersion);
+
 public sealed record Hypothesis(string FeatureId, ObservationStatus Status, string Reason, IReadOnlyList<string> EvidenceIds);
 
 /// <summary>Typed Muse output for a scene. Untrusted until the session validates asset ID, features and action.</summary>

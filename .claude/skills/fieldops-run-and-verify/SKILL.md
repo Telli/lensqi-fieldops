@@ -7,7 +7,7 @@ description: How to build, test, run the FieldOps API and browser UI, drive the 
 
 ## Build and test
 ```bash
-dotnet test --nologo            # ~104 tests across Core, Meta, Api
+dotnet test --nologo            # ~125 tests across Core, Meta, Api
 ```
 Python helpers (once): `python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt`. Fixture validators: `python scripts/validate_expected_twin.py && python scripts/validate_vendor_packs.py`.
 
@@ -27,6 +27,11 @@ Open `http://127.0.0.1:5199/`. The launch config `.claude/launch.json` (`fieldop
 7. Set simulation `passed:true`, claim again, upload, checklist, acknowledge, verify → **Verified, VerifiedCompleteSimulated**
 8. `GET .../receipt.html`, `GET .../receipt/verify`; CLI: `dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- src/LensQi.FieldOps.Api/data/receipts/{id}` (flip a byte in `artifacts/` to see FAIL)
 Use an `Idempotency-Key` header to prove replay on `/verify`. Errors come back as `{code, message}` with HTTP 409 for typed conflicts.
+
+## Hardening limits (T6.1, `Hardening` section in `appsettings.json`)
+- Photos: pixel size is read from the file header (the form's `width`/`height` are ignored); under 320×240 → 400 `image_too_small`, over 50 MP → `image_too_large`, no readable header → `image_unreadable`. Blur (Laplacian variance) and mean luminance from `tools/sam-parser/image_quality.py` ride on `PhotoRecorded.quality` as signals only; a sidecar failure records `null` and never blocks.
+- Model endpoints (`investigate`, `segment`, `knowledge/reason`): 90 s request timeout → 504 `model_timeout`; 30 calls per inspection per 24 h and 120 per hour per client IP → 429 `rate_limited` with `Retry-After`. In-memory, reset on restart. A full evaluation from one machine makes roughly 50–80 model calls; raise `Hardening__ModelCallsPerHourPerIp` if you run it twice within an hour.
+- Provider failures → 409 `provider_unavailable`; provider error text has data URLs and bearer tokens redacted before it reaches an exception, a response or a logger.
 
 ## Evaluation
 ```bash

@@ -19,6 +19,7 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
     public string DataDir { get; } = Directory.CreateTempSubdirectory("fieldops-api-").FullName;
     public FakeVisionChat FakeChat { get; } = new();
     public FakeSegmenter FakeSam { get; } = new();
+    public FakeQualityAnalyzer FakeQuality { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -33,6 +34,8 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ISegmenter>(FakeSam);
             services.RemoveAll<IRoiCropper>();
             services.AddSingleton<IRoiCropper>(new FakeCropper());
+            services.RemoveAll<IImageQualityAnalyzer>();
+            services.AddSingleton<IImageQualityAnalyzer>(FakeQuality);
         });
     }
 }
@@ -40,8 +43,9 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
 public sealed class FakeSegmenter : ISegmenter
 {
     public bool Match { get; set; } = true;
+    public Exception? Throw { get; set; }
     public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct) =>
-        Task.FromResult(Match
+        Throw is { } ex ? Task.FromException<SegmentationOutcome>(ex) : Task.FromResult(Match
             ? new SegmentationOutcome(concept, "sam-3.1", "r1", "<0f>0<|box;...|>", "raw", [new BoxRecord("0", 10, 10, 30, 30, 0.9)], [new MaskRecord("0", 20, 20, 10, 10, 30, 30, new RleMask([20, 20], "0"), 0.9)], "fake", 0.1)
             : new SegmentationOutcome(concept, "sam-3.1", "r2", "", "raw", [], [], "n/a", 0.1));
 }
@@ -59,10 +63,15 @@ public sealed class FakeVisionChat : IChatClient
 {
     public string CannedResponse { get; set; } = "{}";
     public int Images { get; private set; }
-    public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    public Exception? Throw { get; set; }
+    /// <summary>When set, the call waits this long (honouring cancellation) before answering.</summary>
+    public TimeSpan? Delay { get; set; }
+    public async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         Images += messages.SelectMany(m => m.Contents).OfType<DataContent>().Count();
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, CannedResponse)) { ModelId = "fake-muse" });
+        if (Delay is { } d) await Task.Delay(d, cancellationToken);
+        if (Throw is { } ex) throw ex;
+        return new ChatResponse(new ChatMessage(ChatRole.Assistant, CannedResponse)) { ModelId = "fake-muse" };
     }
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
@@ -73,7 +82,7 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
 {
     private readonly FieldOpsApiFactory _factory;
     private readonly HttpClient _client;
-    private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    private static readonly byte[] Png = TestImages.Png(640, 480);
 
     public InspectionApiTests(FieldOpsApiFactory factory) { _factory = factory; _client = factory.CreateClient(); }
 
