@@ -39,7 +39,7 @@
   - Acceptance: a successful endpoint health check verifies only endpoint reachability, never physical port identity.
 - [ ] **VK-T10 — Add documentation gates to FieldProof evaluation.** Validate cited required facts have matching asset, pack digest and version; do **not** change the existing required visual, fresh diagnostic and human acknowledgement predicates.
   - Acceptance: wrong-model fact cannot close; false repair remains `VerificationFailed` even with vendor manual guidance.
-- [ ] **VK-T11 — Include references in FieldProof receipt.** Add fact IDs/document locators, pack identity/digest, applicability verdict and probe evidence to JSON and printable HTML exports; include the `predictions` and `visualChange` blocks from P0-E when present. Extend integrity verifier to detect changed bundled pack bytes if included.
+- [x] **VK-T11 — Include references in FieldProof receipt.** *(Done 2026-10-28: receipt `knowledge` block with pack id/revision/digest, citations with provenance labels, excluded facts; `predictions` block with outcomes.)* Add fact IDs/document locators, pack identity/digest, applicability verdict and probe evidence to JSON and printable HTML exports; include the `predictions` and `visualChange` blocks from P0-E when present. Extend integrity verifier to detect changed bundled pack bytes if included.
   - Acceptance: receipt separates vendor documentation, site expectation, model inference and measured verification, with clear origin labels.
 
 **Gate C:** The full synthetic inspection—manual guidance → additional photo → apparent repair → failed diagnostic → valid repair → approved verification → receipt—reproduces with no physical hardware.

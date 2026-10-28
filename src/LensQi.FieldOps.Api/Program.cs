@@ -1,4 +1,5 @@
 using LensQi.FieldOps.Api.Features.Inspections;
+using LensQi.FieldOps.Api.Features.Receipts;
 using LensQi.FieldOps.Api.Features.Simulation;
 using LensQi.FieldOps.Api.Features.VendorKnowledge;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
@@ -99,6 +100,7 @@ builder.Services.AddSingleton<IDiagnosticProbe>(sp => new RecordedReplayProbe(sp
 builder.Services.AddSingleton<IDiagnosticProbe>(sp => new LiveLocalHttpHealthProbe(LiveLocalHttpHealthProbe.CreateClient(), sp.GetRequiredService<DiagnosticsOptions>(), sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<DiagnosticDispatcher>();
 builder.Services.AddSingleton<VisualAssessmentService>();
+builder.Services.AddSingleton<ReceiptService>();
 
 var app = builder.Build();
 
@@ -111,6 +113,7 @@ app.MapGet("/health", (IKnowledgePackStore store, ExpectedTwinStore twins, Diagn
 app.MapVendorKnowledge();
 app.MapInspections();
 app.MapSimulation();
+app.MapReceipts();
 
 app.Run();
 
