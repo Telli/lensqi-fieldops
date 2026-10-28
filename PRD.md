@@ -700,6 +700,6 @@ Keep the workflow stage (`InspectionStage`) distinct from verification provenanc
 | Spatial coordinates | No per-component world coordinates in P0 | Calibrated depth/pose with measured uncertainty |
 | Historical LensIQ dependency | None | Never a prerequisite for this public repo |
 | SAM decoder | Python `meta-sam-parser` sidecar emitting typed JSON | Native C# parser passes fidelity tests against the sidecar |
-| P0 UI surface | Android app (§4) | **Recommended Oct 28:** browser inspection UI as P0 and Android as P1, both labelled per the Oct 29 cutline, if Core + SAM are not green by Oct 29 |
+| P0 UI surface | **Decided Oct 28: browser inspection UI served by the API is the P0 surface** (`src/LensQi.FieldOps.Api/wwwroot`, labelled "browser P0 surface"); Android moves to P1 | Android P1 only after the full loop, evaluation and video are done |
 
 **Submission boundary:** This PRD and the accompanying Kiro documents are planning artifacts. They do not constitute a working implementation or evidence that a live Meta API call, headset connection, hardware diagnostic or evaluation has passed.

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LensQi FieldOps</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">◎</span> LensQi FieldOps <span class="sub">FieldProof Engine · browser P0 surface</span></div>
+  <div id="mode" class="mode"></div>
+</header>
+
+<main>
+  <section id="setup" class="card">
+    <h2>1 · Fixture and asset</h2>
+    <div class="row">
+      <label>Fixture <select id="fixture"></select></label>
+      <label>Asset <select id="asset"></select></label>
+      <button id="create" class="primary">Start inspection</button>
+    </div>
+    <p class="muted" id="fixtureNote"></p>
+  </section>
+
+  <section id="inspection" class="card hidden">
+    <div class="row space">
+      <h2>2 · Inspection <code id="inspId"></code></h2>
+      <div class="stages" id="stages"></div>
+    </div>
+    <div id="banner" class="banner hidden"></div>
+
+    <div class="grid">
+      <div>
+        <h3>Observe <span class="tag">photo · evidence</span></h3>
+        <div class="row">
+          <input type="file" id="photo" accept="image/jpeg,image/png" capture="environment">
+          <select id="source"><option>Phone</option><option>RecordedFixture</option><option>MockWearables</option></select>
+          <button id="upload">Record photo</button>
+        </div>
+        <div id="photos" class="photos"></div>
+
+        <h3>Investigate <span class="tag inferred">Muse Spark · inferred</span></h3>
+        <div class="row">
+          <button id="investigate">Assess latest photo</button>
+          <button id="decline" class="ghost">Decline requested view</button>
+        </div>
+        <div id="assessment"></div>
+
+        <h3>Documentation <span class="tag documented">vendor pack · documented</span></h3>
+        <div id="knowledge" class="muted">Loading…</div>
+        <div class="row">
+          <input id="observation" placeholder="Describe what you see (for the grounded proposal)…" size="48">
+          <button id="reason">Ask grounded proposal</button>
+        </div>
+        <div id="proposal"></div>
+      </div>
+
+      <div>
+        <h3>Corroborate <span class="tag measured">probe · measured</span></h3>
+        <div class="row">
+          <label>Predict first <select id="predictValue"><option value="">(no prediction)</option><option>Reachable</option><option>Unreachable</option></select></label>
+          <button id="runProbe">Run NODE-A-HEALTH</button>
+        </div>
+        <div id="diagnostics"></div>
+
+        <h3>Repair <span class="tag">technician · claim</span></h3>
+        <div class="row">
+          <button id="workOrder" class="ghost">Draft work order</button>
+          <input id="claimText" placeholder="What did you do?" size="28">
+          <button id="claim">Claim repair</button>
+        </div>
+
+        <h3>Review checklist <span class="tag">technician · reviewed</span></h3>
+        <div id="checklist"></div>
+        <div class="row">
+          <button id="ack">Acknowledge</button>
+          <button id="verify" class="primary">Verify</button>
+        </div>
+
+        <h3>Receipt <span class="tag">hash-verified bundle</span></h3>
+        <div class="row" id="receiptLinks"></div>
+      </div>
+    </div>
+
+    <details class="demo" id="demo">
+      <summary>Demo controls · SIMULATED probe only</summary>
+      <p>This switch exists only when the server runs in <b>Simulated</b> mode. Every result it influences is labelled Simulated in the API, the events and the receipt. It is never available for live probes.</p>
+      <div class="row">
+        <button id="simFail">Set endpoint DOWN</button>
+        <button id="simPass">Set endpoint UP</button>
+        <span id="simState" class="muted"></span>
+      </div>
+    </details>
+
+    <details>
+      <summary>Event trail (append-only)</summary>
+      <ol id="events" class="events"></ol>
+    </details>
+  </section>
+</main>
+
+<footer>
+  Verification is computed by code from measured evidence. Model output and documentation are annotations and guidance, never proof of a repair. Hash receipts prove bundle integrity, not who captured the images.
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

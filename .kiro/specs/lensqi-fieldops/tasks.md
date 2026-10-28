@@ -20,7 +20,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 - [x] T1.1 Integrate `sam-3.1` image segmentation with a short object noun prompt. *(Spike done 2026-10-28: genuine calls, `yellow ethernet cable` found at 0.73 confidence, `network switch` honest no-match; C# adapter next.)*
 - [x] T1.2 Normalize special-token boxes/masks with Meta's `meta-sam-parser` in a small internal Python sidecar; portable JSON ROI response (half-open pixel boxes, COCO RLE masks, box-local bounds, confidence). *(Done 2026-10-28: `tools/sam-parser/sam_parse.py`; data-URL input and `one_bit` encoding confirmed.)*
 - [ ] T1.3 Implement image original/preview capture and high-res ROI crop, with transform test fixtures.
-- [ ] T1.4 Build minimal Android inspection screen showing image, ROI and next requested view.
+- [x] T1.4 Build minimal inspection screen showing image, ROI and next requested view. *(Done 2026-10-28 as the browser P0 surface per the Oct 29 cutline: `wwwroot/index.html`; genuine Muse assessment rendered with Observed/Suspected/Unknown badges; SAM ROI overlay pending the C# adapter. Android is P1.)*
 - [ ] **Gate:** real SAM response and working mask/box display, with explicit no-match behavior.
 
 ## Day 3: Thu Oct 29 — Epistemic loop
@@ -77,7 +77,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 ## Hard cutlines
 
 - If real Muse or SAM calls are blocked on Oct 28, prioritize a minimal genuine Meta-powered vertical slice, not polished mock UI.
-- If Android is unstable on Oct 29, permit a basic browser/evaluation UI for backup **but do not represent it as a working Android build**.
+- If Android is unstable on Oct 29, permit a basic browser/evaluation UI for backup **but do not represent it as a working Android build**. *(Invoked early on Oct 28: the browser UI is the P0 surface and is labelled as such; no Android build is claimed.)*
 - If SAM ROI overlay remains unreliable on Oct 29, expose real output in a separated evidence panel, not a fake on-image mask.
 - If the full dual-proof loop is not working on Nov 1, cancel all voice, glasses and P2 work.
 - Do not publish or import private LensIQ source while indie reuse permission is unresolved.
