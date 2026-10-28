@@ -30,6 +30,7 @@ feature commit, not at submission time.
 | 2026-10-27T20:28:42-07:00 | `52b6be7` | Evaluation runner, scenario renderer, 25 labelled scenarios, first measured report (T7.1, T7.2) | 25/25 deterministic pass; B false completions 0 vs A 4/5; receipts 12/12; genuine LIVE_META calls | None |
 | 2026-10-27T20:36:39-07:00 | `54606bf` | Handoff plan for the next agent, four project skills, production design with mobile app plan, ledger and secret-scan helpers | n/a (documents and scripts); secret scan PASS | None |
 | 2026-10-27T20:40:35-07:00 | `0af66d0` | Handoff plan revised to four parallel tracks with Android starting Oct 28; bottleneck fixes (worktrees, ports, integrator-only ledger, syncs); PRD, tasks, skill and README aligned | n/a (planning documents); secret scan PASS | None |
+| 2026-10-27T20:51:52-07:00 | `0937855` | T6.1 hardening: header-measured image limits, blur/luminance signals, model request timeout, per-inspection and per-IP rate limits, provider-down handling, sidecar kill, provider error redaction | dotnet test 125/125 green; secret_scan PASS; live smoke on :5199 with genuine Muse and SAM; eval --only c01-clear-p2,f01-seated-down PASS | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
