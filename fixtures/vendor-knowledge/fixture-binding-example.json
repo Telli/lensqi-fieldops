@@ -1,0 +1,14 @@
+{
+  "status": "illustrative-overlay-not-a-full-expected-twin",
+  "fixtureId": "LAB-RACK-01",
+  "assetId": "LAB-SW-01",
+  "vendorKnowledge": {
+    "packId": "lab-switch-01.synthetic",
+    "expectedManufacturerId": "LensQiLab-SYNTHETIC",
+    "expectedProductCode": "LAB-8P-SYNTH",
+    "firmwareMajor": null,
+    "requiredKnowledgeFactIds": ["LAB-PORT-MAP-01", "LAB-HEALTH-CHECK-01"]
+  },
+  "approvedDiagnostics": ["NODE-A-HEALTH"],
+  "note": "The real MikroTik pack is a separate sample. Do not bind it to LAB-SW-01 or treat the synthetic lab switch as MikroTik equipment."
+}

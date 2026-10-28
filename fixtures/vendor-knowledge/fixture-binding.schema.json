@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lensqi:vendor-knowledge-fixture-binding:1.0",
+  "title": "LensQi FieldOps site fixture vendor-knowledge binding (overlay)",
+  "description": "Site-owned overlay that binds one asset in an ExpectedTwin fixture to exactly one knowledge pack and lists the fact IDs verification requires. Cross-file rules enforced by the validator and the runtime loader: the pack must be installed; expectedManufacturerId, expectedProductCode and firmwareMajor must equal the pack identity; every requiredKnowledgeFactIds entry must exist in that pack. Diagnostics are authorized only here, never by a pack.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fixtureId", "assetId", "vendorKnowledge", "approvedDiagnostics"],
+  "properties": {
+    "status": {"type": "string", "maxLength": 120, "description": "Free-text marker for sample files only; the runtime ignores it."},
+    "fixtureId": {"type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "assetId": {"type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "vendorKnowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "expectedManufacturerId", "expectedProductCode", "firmwareMajor", "requiredKnowledgeFactIds"],
+      "properties": {
+        "packId": {"type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "expectedManufacturerId": {"type": "string", "minLength": 2, "maxLength": 80},
+        "expectedProductCode": {"type": "string", "minLength": 2, "maxLength": 80},
+        "hardwareRevision": {"type": ["string", "null"], "maxLength": 40, "description": "Confirmed hardware revision of the installed unit, or null when unknown."},
+        "firmwareMajor": {"type": ["string", "null"], "maxLength": 30, "description": "Confirmed firmware major of the installed unit, or null when unknown. Unknown firmware leaves firmware-scoped facts Unverified."},
+        "requiredKnowledgeFactIds": {
+          "type": "array", "minItems": 0, "maxItems": 20, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+        }
+      }
+    },
+    "approvedDiagnostics": {
+      "type": "array", "maxItems": 20, "uniqueItems": true,
+      "description": "Fixture-approved diagnostic IDs. Each must also exist in the server probe registry before it can run. No URLs, hosts, interface names or credentials.",
+      "items": {"type": "string", "minLength": 2, "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+    },
+    "note": {"type": "string", "maxLength": 500}
+  }
+}
