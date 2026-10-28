@@ -1,10 +1,51 @@
 # Meta glasses (Wearables Device Access Toolkit) in the Android app
 
-Hands-free capture with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit (DAT) 1.0.1
+Hands-free live assistance and capture with Ray-Ban Meta glasses through Meta's Wearables Device Access Toolkit (DAT) 1.0.1
 (`com.meta.wearable:mwdat-core`, `-camera`, `-inputs`, `-display`; `-mockdevice` in debug builds only).
 
 **Status: integrated and exercised against Meta's Mock Device Kit on an Android emulator. Not tested on real glasses:
 no hardware was available.**
+
+## Continuous assistance (2026-10-28)
+
+Open an inspection → **Glasses** → **Start glasses camera** → **Start live assist**. After the explicit Start action,
+sampled glasses frames are sent to the shared live-analysis endpoints, and local tracking continues between detections.
+The phone shows tracked boxes, guidance age and update rate. The wearer receives changing guidance through Android
+text-to-speech using the selected media output (Bluetooth glasses when routed there); compatible Meta Ray-Ban Display
+glasses also receive text guidance and the Capture control. Ordinary Ray-Ban Meta glasses have no visual overlay in the lens.
+
+The glasses stream feeds a headless HEVC decoder, so inference does not depend on a visible phone preview. The analysis
+decoder stays primed while the glasses camera is running: DAT 1.0.1 has no request-keyframe operation, and discarding that
+decoder on pause made late starts/resumes wait indefinitely on the mock stream. RGB conversion, tracking and remote
+requests run only while live assistance is enabled. Camera stop releases both decoders.
+
+`GlassesLiveService` owns the analysis session, speech and display feedback. A `connectedDevice` foreground service and
+a renewable, bounded partial wake lock keep it active with the phone locked. Its notification has **Mute/Unmute** and
+**Stop camera** actions. Speech waits for guidance to settle for 1.5 seconds, spaces new utterances by at least 8 seconds,
+and does not repeat unchanged advice. Removing the app from Recents stops the camera; there is no automatic restart.
+
+**Pause live assist** stops frame analysis, cancels in-flight requests and clears tracking while retaining the visible
+camera preview. Closing the glasses screen, stopping the camera or capturing a photo also ends assistance. Backgrounding
+a preview without live assistance stops its camera. A paused/disconnected or stalled stream clears old boxes and guidance;
+an unexplained 30-second frame outage ends the session with recovery instructions. A glasses-initiated pause can resume.
+
+Frames remain ephemeral: no saved photos, events, stage changes, offline queue entries or automatic repair decisions.
+Low-light/focus coaching helps before model guidance arrives; a current, validated recommendation takes priority over
+those coarse full-frame heuristics. Both phone and browser clients wait the requested refresh interval after a successful
+response, avoiding a race with the server's cooldown.
+
+Verification: the SDK Mock Device Kit's HEVC lab video reached the real SAM/Muse endpoints; the cable was outlined and
+tracked at approximately 6–7 local updates/second. New inference requests continued during a seven-second phone lock;
+pause stopped requests, resume decoded frames, and inspection events remained unchanged. This is a synthetic video on
+an emulator, not a physical-glasses accuracy or battery benchmark. Bluetooth playback has not been heard on real glasses.
+Screenshots and the bounded check are in [live-glasses evidence](evidence/live-glasses/README.md).
+
+The notification's Stop camera action was also exercised: it ended the foreground service and returned the UI to a
+connected camera-ready state. Late display responses after teardown are ignored instead of producing a false error.
+
+`./gradlew :app:testDebugUnitTest :app:assembleDebug` passed with 91 tests. A separate release build reached compilation
+but its lint task crashed in AndroidX `NonNullableMutableLiveDataDetector` with a Kotlin analysis-API class/interface
+incompatibility. No lint checks were disabled; release packaging needs that toolchain issue resolved.
 
 ## What it does
 
@@ -41,8 +82,8 @@ Code: `apps/android/app/src/main/java/com/lensqi/fieldops/wearables/` (`GlassesS
   compileSdk 35 are unchanged.
 - The debug APK is about 100 MB because DAT ships native libraries for all ABIs. ABI splits are not configured.
 - Manifest: `BLUETOOTH`, `BLUETOOTH_CONNECT`, the `com.meta.wearable.mwdat.APPLICATION_ID` / `CLIENT_TOKEN`
-  meta-data, and a `lensqi-fieldops://` VIEW intent filter on `MainActivity` so Meta AI can return to the app. No
-  foreground service: streaming runs only while the glasses screen is open.
+  meta-data, and a `lensqi-fieldops://` VIEW intent filter on `MainActivity` so Meta AI can return to the app. Live assistance
+  adds a non-exported `connectedDevice` foreground service, notification permission and a service-owned partial wake lock.
 
 ## Registering real glasses
 
@@ -60,7 +101,8 @@ Code: `apps/android/app/src/main/java/com/lensqi/fieldops/wearables/` (`GlassesS
    They are injected as manifest placeholders. The defaults are empty, and with empty values the SDK logs
    `TOKEN_NOT_CONFIGURED`.
 4. Build, open an inspection, tap **Use glasses**, then **Connect with Meta AI** and approve LensQi FieldOps. Next,
-   **Start glasses camera** and allow camera access when Meta AI asks.
+   **Start glasses camera** and allow camera access when Meta AI asks. Tap **Start live assist** for continuous tracking
+   and spoken guidance; select the glasses as the phone's media audio output.
 5. The glasses' capture button needs the experimental DAT Inputs capability approved for the app in the Developer
    Center. If it is not approved, the screen says the glasses' button is unavailable and the phone shutter still works.
 
@@ -99,3 +141,6 @@ Mock Device Kit behaviour found on the emulator:
 Everything on real glasses is untested: registration in Meta AI, the camera permission flow, real HEVC stream
 timing and keyframes, HEIC capture and its EXIF orientation, the capture button via Inputs, Bluetooth audio routing of
 the spoken instruction, and the Ray-Ban Display HUD. Text-to-speech was triggered but not listened to on the emulator.
+
+Implementation references: Android's [connected-device foreground service requirements](https://developer.android.com/develop/background-work/services/fgs/service-types#connected-device)
+and [MediaCodec flexible YUV output](https://developer.android.com/reference/android/media/MediaCodec).

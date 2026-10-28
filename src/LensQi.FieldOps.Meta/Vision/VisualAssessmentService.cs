@@ -75,7 +75,7 @@ public sealed class VisualAssessmentService(IChatClient chat)
         6. Output exactly one JSON object matching the schema. No prose.
         """;
 
-    public async Task<VisualAssessmentOutcome> AssessAsync(InspectionState state, ExpectedTwin twin, byte[] image, string mediaType, string photoEvidenceId, CancellationToken ct)
+    public async Task<VisualAssessmentOutcome> AssessAsync(InspectionState state, ExpectedTwin twin, byte[] image, string mediaType, string photoEvidenceId, CancellationToken ct, bool livePreview = false)
     {
         var asset = twin.FindAsset(state.AssetId);
         var context = new
@@ -99,6 +99,11 @@ public sealed class VisualAssessmentService(IChatClient chat)
             new(ChatRole.User, [new TextContent("FIXTURE CONTEXT (typed JSON, authoritative):\n" + contextJson), new DataContent(image, mediaType), new TextContent("Assess this photo.")]),
         };
         var options = new ChatOptions { Temperature = 0, ResponseFormat = ChatResponseFormat.ForJsonSchema(Schema.Value, "VisualAssessment") };
+        if (livePreview)
+        {
+            options.MaxOutputTokens = 3000;
+            options.AdditionalProperties = new AdditionalPropertiesDictionary { ["reasoning_effort"] = "minimal" };
+        }
         var promptDigest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(SystemPrompt + "\n" + contextJson)));
 
         ChatResponse response;

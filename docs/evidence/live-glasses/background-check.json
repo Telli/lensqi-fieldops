@@ -1,0 +1,29 @@
+{
+  "sdk": "Meta Mock Device Kit",
+  "source": "HEVC synthetic lab clip",
+  "physicalGlassesTested": false,
+  "trackingUpdatesPerSecond": 6,
+  "feedback": [
+    "Glasses assist",
+    "MOCK GLASSES",
+    "Streaming",
+    "MOCK GLASSES",
+    "Simulated Meta Ray-Ban Display #1 \u00b7 live",
+    "Tracking 1 part",
+    "6 tracking updates/s \u00b7 AI guidance from 9s ago",
+    "Pause live assist",
+    "Active with the phone locked. Stop the camera from its notification.",
+    "INSTRUCTION",
+    "MOCK GLASSES",
+    "Capture this view, then run the approved equipment check.",
+    "AI inferred \u00b7 Tracking 1 part",
+    "Shown on the glasses display. Read aloud through the phone's audio, which plays on the glasses when they are connected over Bluetooth."
+  ],
+  "requestsBeforeLock": 26,
+  "requestsAfterSevenSecondsLocked": 29,
+  "foregroundServiceWhileLocked": true,
+  "pauseStoppedRequests": true,
+  "resumeDecodedFrames": true,
+  "evidenceUnchanged": true,
+  "notificationStopEndedCameraAndService": true
+}

@@ -57,7 +57,7 @@ function FocusHero({ s, assetName }: { s: InspectionSummary; assetName?: string 
   const src = photo && photoUrl(photo.evidenceId);
   return (
     <Link href={inspectionHref(s)} className="group relative block overflow-hidden rounded-[28px] bg-overlay text-overlay-foreground shadow-xl shadow-black/20">
-      {src ? <ArFrame src={src} outlines={outlines} tags={arTags(fixture, shown, outlines)} guide={(() => { const t = targetConcept(fixture, shown); return t ? { concept: t, label: "Target" } : null; })()} />
+      {src ? <ArFrame src={src} outlines={outlines} tags={arTags(fixture, shown, outlines)} interactive={false} guide={(() => { const t = targetConcept(fixture, shown); return t ? { concept: t, label: "Target" } : null; })()} />
         : <div className="grid aspect-[4/3] place-items-center"><ScanLine className="size-10 opacity-40" /></div>}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
         <span className="glass rounded-full px-2.5 py-1 text-[11px] font-medium">{assetName ?? s.assetId}</span>

@@ -106,7 +106,7 @@ Judges must be able to run a **clearly labeled simulated diagnostic fixture** wi
 
 ### Explicitly out of scope
 
-- Automated electrical repair, software configuration writes, privileged shell access, public-network scanning, safety certification, compliance enforcement, automatic work-order dispatch to real third parties, arbitrary device/brand support, pixel-to-world geospatial coordinate claims, autonomous site-wide video surveillance, photorealistic 3D digital twins, and guarantee of sub-second model responses.
+- Automated electrical repair, software configuration writes, privileged shell access, public-network scanning, safety certification, compliance enforcement, automatic work-order dispatch to real third parties, arbitrary device/brand support, autonomous site-wide video surveillance, photorealistic 3D digital twins, and guarantee of sub-second model responses.
 
 
 ## 4A. Component reuse decision and competition gate (v1.1)
@@ -130,7 +130,7 @@ Judges must be able to run a **clearly labeled simulated diagnostic fixture** wi
 | `.../data/remote/backend/BackendJson.kt` | Lenient `kotlinx.serialization` configuration | **Rebuild tiny equivalent (P0)** | Few lines; fresh contracts are easier to audit |
 | `.../data/remote/backend/LensIqApiService.kt` | Large Retrofit interface tied to tourism endpoints, billing, auth | **Do not copy** | Define typed `FieldOpsApi` with only inspection/evidence/verify endpoints |
 | `.../service/live/AudioCaptureService.kt` + `AdaptiveVad.kt` | PCM capture and adaptive VAD | **Conditional targeted reuse (P1)** | Nontrivial lifecycle/permission logic; add only after P0 works and permitted rights established |
-| `.../service/ArCapabilityChecker.kt`, `ar/` | ARCore capability checks, anchors, depth and scene management | **Defer** | No world-locked overlay is required for the verified-inspection loop |
+| `.../service/ArCapabilityChecker.kt`, `ar/` | ARCore capability checks, anchors, depth and scene management | **Optional P1 (Reimplement clean FieldOps ARCore adapter)** | World-locked 3D spatial anchors and depth-assisted distance coaching on ARCore-capable Android phones; falls back to 2D patch tracking on non-ARCore devices, Web, and glasses |
 | `.../service/HeadingProvider.kt`, `LocationProvider.kt` | Geospatial sensors and live observations | **Defer** | Site/asset IDs, not approximate GPS location, identify the fixture in P0 |
 | `.../service/SceneCandidateService.kt` | GPS/heading-ranked heritage landmarks | **Reject** | Semantics do not apply to equipment identification |
 | `.../service/GroundingService.kt`, `engine/ConfidenceScoringEngine.kt` | Weighted confidence scores for historical explanations | **Reject** | Maintenance verification must use explicit evidence gates, not combined model confidence |
@@ -188,8 +188,8 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 - Muse or a fixed fixture rule nominates a concrete segmentable object (e.g., “network switch”, “yellow Ethernet cable”).
 - SAM 3.1 segments that object in the photo and returns boxes/masks. On no match, show **No region detected**, never a synthetic mask disguised as real.
 - Convert masks/boxes to original-image coordinates with documented transformations; Android draws a visible mask/box.
-- Compute a padded crop from the most relevant region; if a valid quadrilateral is detected, optionally rectify perspective. Never claim calibrated distance from a 2D mask.
-- Request a more useful angle using qualitative guidance (“move slightly left”, “show both cable ends”), not uncalibrated measurements (“six inches right”).
+- Compute a padded crop from the most relevant region; if a valid quadrilateral is detected, optionally rectify perspective. When ARCore depth/hit-testing is active on a supported phone, 2D SAM mask centroids may be projected onto 3D world-locked spatial anchors with measured camera-to-target distance; otherwise use 2D image-space tracking.
+- Request a more useful angle using qualitative guidance (“move slightly left”, “show both cable ends”) or, when ARCore depth/pose tracking is active, metric distance coaching (e.g., “move ~15 cm closer”).
 
 **Acceptance:** Segmentation overlays align correctly on portrait/landscape test images; cropping retains fine label pixels and preserves an original-to-crop transform.
 

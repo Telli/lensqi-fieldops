@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses } from "lucide-react";
+import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, Lock, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { AiCard, Progress } from "@/components/fo/ai";
 import { ArFrame } from "@/components/fo/ar-frame";
-import { CheckRow, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
+import { CheckRow, EvidenceBadge, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
 import { api, type ChecklistStatus, type Decision, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
 import { aiSummary, verifyGateIndex, verifySteps, type VerifyGate } from "@/lib/ai";
 import { arTags, usePhotoOutlines } from "@/lib/ar";
 import { useAct } from "@/lib/hooks";
 import { beforePhoto, latestDiagnostic, useInspectionBundle, verifications } from "@/lib/inspection";
-import { checklistLabel, featureName, fmtTime, fmtWhen, plainReason } from "@/lib/labels";
+import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 const DIAG_FAILED = "Diagnostic failed after the repair claim";
@@ -156,6 +156,29 @@ export default function Verify({ id }: { id: string }) {
 
         {(running || decided) && (
           <div className="space-y-2.5">
+            <div className="panel p-3" data-dual-proof-gate>
+              <div className="mb-2 flex items-center justify-between text-[11px]">
+                <span className="eyebrow">FieldProof Dual-Key Gate</span>
+                <span className={cn("inline-flex items-center gap-1 font-medium",
+                  running ? "text-muted-foreground" : decision?.result === "Verified" ? "text-success" : "text-failure")}>
+                  {decision?.result === "Verified" ? <ShieldCheck className="size-3.5" /> : <Lock className="size-3.5" />}
+                  {running ? "Evaluating both proofs…" : decision?.result === "Verified" ? "Dual-Proof Unlocked" : "Completion Locked"}
+                </span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center text-xs">
+                <div className={cn("rounded-lg border px-2.5 py-2",
+                  running ? "border-border bg-surface/50" : outcome.visual ? "border-success/50 bg-success/10 text-success" : "border-failure/50 bg-failure/10 text-failure")}>
+                  <div className="font-semibold">Key 1 · Visual Proof</div>
+                  <div className="mt-0.5 text-[10px] opacity-85">{running ? "Checking…" : outcome.visual ? "Passed & Reviewed" : "Failed / Incomplete"}</div>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground">+</span>
+                <div className={cn("rounded-lg border px-2.5 py-2",
+                  running || outcome.diagnostic === null ? "border-border bg-surface/50 text-muted-foreground" : outcome.diagnostic ? "border-success/50 bg-success/10 text-success" : "border-failure/50 bg-failure/10 text-failure")}>
+                  <div className="font-semibold">Key 2 · Telemetry Probe</div>
+                  <div className="mt-0.5 text-[10px] opacity-85">{running ? "Probing…" : outcome.diagnostic === null ? "Awaiting Key 1" : outcome.diagnostic ? "Reachable" : "Failed (Unreachable)"}</div>
+                </div>
+              </div>
+            </div>
             <CheckRow label="Visual verification"
               detail={running ? "Checking the new photo and your review…" : outcome.visual === false ? plainReason(decision!.reasons[0] ?? "") : "New photo accepted and every item reviewed."}
               pass={running ? "pending" : outcome.visual} />
@@ -191,26 +214,66 @@ function VerifyHero({ id, i, fixture, assessment, photoUrl, camera }: { id: stri
   const change = [...i.changeAnalyses].reverse().find((c) => c.claimId === i.currentClaimId);
   const after: Photo | undefined = i.photos.find((p) => p.evidenceId === i.acceptedPostRepairPhotoId) ?? (change && i.photos.find((p) => p.evidenceId === change.photoEvidenceId));
   const before = beforePhoto(i);
-  const [side, setSide] = useState<"before" | "after" | null>(null);
+  const [side, setSide] = useState<"before" | "after" | "compare" | null>(null);
+  const [split, setSplit] = useState(50);
   const showing = side ?? (after ? "after" : "before");
   const photo = showing === "after" ? after : before;
-  const outlines = usePhotoOutlines(id, i, photo?.evidenceId);
+  const beforeOutlines = usePhotoOutlines(id, i, before?.evidenceId);
+  const afterOutlines = usePhotoOutlines(id, i, after?.evidenceId);
+  const outlines = showing === "after" ? afterOutlines : beforeOutlines;
+  const afterChange = i.changeAnalyses.find((c) => c.photoEvidenceId === after?.evidenceId);
   const photoChange = i.changeAnalyses.find((c) => c.photoEvidenceId === photo?.evidenceId);
-  const tags = showing === "after" ? arTags(fixture, undefined, outlines, photoChange) : arTags(fixture, assessment, outlines);
+  const beforeTags = arTags(fixture, assessment, beforeOutlines);
+  const afterTags = arTags(fixture, undefined, afterOutlines, afterChange);
+  const tags = showing === "after" ? afterTags : beforeTags;
   const src = photo && photoUrl(photo.evidenceId);
+  const beforeSrc = before && photoUrl(before.evidenceId);
+  const afterSrc = after && photoUrl(after.evidenceId);
+
   return (
-    <div className="relative overflow-hidden rounded-[26px] bg-overlay shadow-lg shadow-black/15">
-      {src ? <ArFrame src={src} outlines={outlines} tags={tags} />
-        : <Link href={`/m/i/${id}/scan`} className="grid aspect-[4/3] place-items-center text-sm text-overlay-foreground/70"><span className="flex flex-col items-center gap-2"><Camera className="size-9" />Tap to open the camera</span></Link>}
+    <div className="relative overflow-hidden rounded-[26px] bg-overlay text-overlay-foreground shadow-lg shadow-black/15">
+      {showing === "compare" && beforeSrc && afterSrc ? (
+        <div className="relative select-none overflow-hidden" data-ar-compare>
+          <ArFrame src={beforeSrc} outlines={beforeOutlines} tags={beforeTags} interactive={false} />
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
+            <ArFrame src={afterSrc} outlines={afterOutlines} tags={afterTags} interactive={false} />
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-primary shadow-[0_0_12px_var(--primary)]" style={{ left: `${split}%` }}>
+            <span className=" absolute left-1/2 top-1/2 grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-overlay text-primary shadow-lg">
+              <SlidersHorizontal className="size-4" />
+            </span>
+          </div>
+          <span className="glass pointer-events-none absolute bottom-3 left-3 rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider">Before</span>
+          <span className="glass pointer-events-none absolute bottom-3 right-16 rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">After</span>
+          <input type="range" min={5} max={95} value={split} onChange={(e) => setSplit(Number(e.target.value))}
+            aria-label="Compare before and after photo" className="absolute inset-0 size-full cursor-ew-resize opacity-0" />
+        </div>
+      ) : src ? (
+        <ArFrame src={src} outlines={outlines} tags={tags} />
+      ) : (
+        <Link href={`/m/i/${id}/scan`} className="grid aspect-[4/3] place-items-center text-sm text-overlay-foreground/70"><span className="flex flex-col items-center gap-2"><Camera className="size-9" />Tap to open the camera</span></Link>
+      )}
       {before && (
         <div className="glass absolute left-3 top-3 flex rounded-full p-0.5 text-[11px] font-medium">
-          {(["before", "after"] as const).map((s) => (
+          {(["before", "after", ...(after ? ["compare" as const] : [])] as const).map((s) => (
             <button key={s} disabled={s === "after" && !after} onClick={() => setSide(s)}
-              className={cn("rounded-full px-3 py-1 capitalize transition-colors disabled:opacity-40", showing === s ? "bg-primary text-primary-foreground" : "opacity-80")}>{s}</button>
+              className={cn("rounded-full px-3 py-1 capitalize transition-colors disabled:opacity-40", showing === s ? "bg-primary text-primary-foreground" : "opacity-80")}>
+              {s}
+            </button>
           ))}
         </div>
       )}
-      {camera && <Link href={`/m/i/${id}/scan`} aria-label="New photo" className="glass absolute bottom-3 right-3 grid size-11 place-items-center rounded-full shadow-lg"><Camera className="size-5" /></Link>}
+      {camera && <Link href={`/m/i/${id}/scan`} aria-label="New photo" className="glass absolute right-3 top-3 grid size-11 place-items-center rounded-full shadow-lg"><Camera className="size-5" /></Link>}
+      {afterChange && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-overlay-foreground/15 bg-overlay/95 px-3 py-2 text-[11px]" data-change-telemetry>
+          <EvidenceBadge state={changeLabel[afterChange.verdict].state} label={changeLabel[afterChange.verdict].label} />
+          <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-overlay-foreground/75">
+            {afterChange.perceptualHashDistance != null && <span>pHash Δ: {afterChange.perceptualHashDistance}</span>}
+            {afterChange.targetRegionIoU != null && <span>IoU: {Math.round(afterChange.targetRegionIoU * 100)}%</span>}
+            {afterChange.componentShiftNormalized != null && <span>Shift: {(afterChange.componentShiftNormalized * 100).toFixed(1)}%</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

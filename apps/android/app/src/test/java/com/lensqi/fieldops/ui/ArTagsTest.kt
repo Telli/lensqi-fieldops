@@ -12,6 +12,7 @@ import com.lensqi.fieldops.data.api.VisualChangeAnalysis
 import com.lensqi.fieldops.data.api.VisualChangeVerdict
 import com.lensqi.fieldops.di.NetworkModule
 import com.lensqi.fieldops.ui.inspection.arTags
+import com.lensqi.fieldops.ui.inspection.assessmentForPhoto
 import com.lensqi.fieldops.ui.inspection.outlineOrder
 import com.lensqi.fieldops.ui.inspection.targetConcept
 import com.lensqi.fieldops.ui.theme.Fo
@@ -56,6 +57,17 @@ class ArTagsTest {
         val t = arTags(fixture, null, listOf(segment.copy(concept = "yellow ethernet cable")), change).single()
         assertEquals("Yellow cable near end · no change", t.label)
         assertEquals(Fo.Failure, t.tone)
+    }
+
+    @Test fun `foreign photo findings and change verdicts are ignored`() {
+        val foreignAssessment = assessment.copy(hypotheses = listOf(Hypothesis("yellow_cable_near_end_visible", ObservationStatus.Observed, "From another photo", listOf("other-photo-id"))))
+        assertNull(assessmentForPhoto(foreignAssessment, segment.photoEvidenceId))
+        val tagFromForeignAssessment = arTags(fixture, foreignAssessment, listOf(segment.copy(concept = "yellow ethernet cable"))).single()
+        assertTrue(tagFromForeignAssessment.label.contains("AI outline"))
+
+        val foreignChange = VisualChangeAnalysis("claim-1", "other-photo-id", targetPrompt = "yellow ethernet cable", verdict = VisualChangeVerdict.Changed, reason = "Moved in other photo", thresholdsVersion = "visual-change/1")
+        val tagFromForeignChange = arTags(fixture, null, listOf(segment.copy(concept = "yellow ethernet cable")), foreignChange).single()
+        assertEquals(Fo.Primary, tagFromForeignChange.tone)
     }
 
     @Test fun `the target region follows the AI's request`() {

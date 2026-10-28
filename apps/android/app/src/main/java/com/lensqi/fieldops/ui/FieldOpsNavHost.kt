@@ -108,6 +108,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val vm: InspectionViewModel = hiltViewModel(parent)
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
+                        analyzeLive = vm::analyzeLiveFrame,
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
                             vm.captureForReview(file, origin = "Phone")
@@ -126,6 +127,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val vm: InspectionViewModel = hiltViewModel(parent)
                     val stage = vm.state.collectAsStateWithLifecycle().value.view?.stage
                     GlassesScreen(
+                        inspectionId = vm.inspectionId,
                         prompt = vm.cameraPrompt(),
                         status = stage?.let { stageLabel(it) },
                         onClose = { nav.popBackStack() },

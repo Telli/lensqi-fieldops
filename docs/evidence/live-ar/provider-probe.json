@@ -1,0 +1,60 @@
+{
+  "detect": {
+    "status": 200,
+    "elapsedSeconds": 0.837,
+    "body": {
+      "frameId": "probe-frame-1",
+      "width": 640,
+      "height": 400,
+      "objects": [
+        {
+          "id": "1-0",
+          "concept": "yellow ethernet cable",
+          "label": "yellow ethernet cable",
+          "box": {
+            "left": 0.1890625,
+            "top": 0.5075,
+            "right": 0.3984375,
+            "bottom": 0.97
+          },
+          "confidence": 0.8358974456787109
+        }
+      ],
+      "inferenceMs": 821,
+      "refreshAfterMs": 4000,
+      "source": "AI inference"
+    }
+  },
+  "guide": {
+    "status": 200,
+    "elapsedSeconds": 10.557,
+    "body": {
+      "frameId": "probe-frame-1",
+      "recommendation": "Capture this view, then run the approved equipment check.",
+      "findings": [
+        {
+          "featureId": "switch_chassis_visible",
+          "status": "Observed",
+          "reason": "Gray switch chassis clearly visible with SW01 and LAB-SW-01 labels and multiple ports."
+        },
+        {
+          "featureId": "yellow_cable_near_end_visible",
+          "status": "Observed",
+          "reason": "Yellow cable with white connector visibly inserted in switch; port number label obscured by connector and not readable."
+        },
+        {
+          "featureId": "post_repair_view_captured",
+          "status": "Unknown",
+          "reason": "Stage is InitialScan with single photo; cannot confirm post-repair status from visual alone."
+        }
+      ],
+      "inferenceMs": 10540,
+      "refreshAfterMs": 12000,
+      "source": "AI inference"
+    }
+  },
+  "inspectionId": "I-2a3d632d01c5",
+  "label": "LIVE_META",
+  "input": "repository synthetic lab photo, resized to 640x400",
+  "fixturePreviewOnly": true
+}

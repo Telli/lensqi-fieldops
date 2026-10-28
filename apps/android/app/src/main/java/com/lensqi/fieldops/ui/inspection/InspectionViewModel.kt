@@ -55,6 +55,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 /** Everything the inspection screen draws. Stage, decision and labels come from the server; nothing is derived locally. */
@@ -120,6 +122,11 @@ class InspectionViewModel @Inject constructor(
     private val json: Json,
 ) : ViewModel() {
     val inspectionId: String = checkNotNull(savedState["inspectionId"])
+    suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): com.lensqi.fieldops.domain.live.LiveResponse {
+        return api.liveFrame(inspectionId, kind,
+            okhttp3.MultipartBody.Part.createFormData("image", "preview.jpg", bytes.toRequestBody("image/jpeg".toMediaType())),
+            frameId.toRequestBody("text/plain".toMediaType()))
+    }
     private val local = MutableStateFlow(InspectionUi())
     private var running: Job? = null
 
