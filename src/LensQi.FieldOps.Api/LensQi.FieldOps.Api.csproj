@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\LensQi.FieldOps.Core\LensQi.FieldOps.Core.csproj" />
     <ProjectReference Include="..\LensQi.FieldOps.Meta\LensQi.FieldOps.Meta.csproj" />
+    <ProjectReference Include="..\LensQi.FieldOps.Diagnostics\LensQi.FieldOps.Diagnostics.csproj" />
   </ItemGroup>
 
   <ItemGroup>

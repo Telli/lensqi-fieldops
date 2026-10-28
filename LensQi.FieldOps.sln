@@ -23,6 +23,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LensQi.FieldOps.StageOneGate", "tools\LensQi.FieldOps.StageOneGate\LensQi.FieldOps.StageOneGate.csproj", "{70924822-4475-4A4F-B014-EBB40F440BCF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LensQi.FieldOps.Diagnostics", "src\LensQi.FieldOps.Diagnostics\LensQi.FieldOps.Diagnostics.csproj", "{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -117,6 +119,18 @@ Global
 		{70924822-4475-4A4F-B014-EBB40F440BCF}.Release|x64.Build.0 = Release|Any CPU
 		{70924822-4475-4A4F-B014-EBB40F440BCF}.Release|x86.ActiveCfg = Release|Any CPU
 		{70924822-4475-4A4F-B014-EBB40F440BCF}.Release|x86.Build.0 = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|x64.Build.0 = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Debug|x86.Build.0 = Debug|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|x64.ActiveCfg = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|x64.Build.0 = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|x86.ActiveCfg = Release|Any CPU
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -129,5 +143,6 @@ Global
 		{AD42C234-643A-4BEE-83CA-EFB84A2F60CD} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{AF65F159-4393-4121-AC98-365763B2880B} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{70924822-4475-4A4F-B014-EBB40F440BCF} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

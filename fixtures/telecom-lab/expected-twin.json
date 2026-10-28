@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "LAB-RACK-01",
+  "fixtureRevision": 1,
+  "fixtureDescription": "Synthetic demonstration network: one unmanaged lab switch and one owned HTTP health endpoint. The P2 port mapping is an EXPECTED value; the HTTP probe cannot verify which physical port is used.",
+  "assets": [
+    {
+      "assetId": "LAB-SW-01",
+      "kind": "ethernet_switch",
+      "displayName": "Lab Switch 01",
+      "visualLabels": [
+        "SW01"
+      ]
+    },
+    {
+      "assetId": "LAB-NODE-A",
+      "kind": "test_endpoint",
+      "displayName": "Lab Node A",
+      "visualLabels": [
+        "NODE-A"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "connectionId": "LAB-CONN-A",
+      "fromAssetId": "LAB-SW-01",
+      "fromPortLabel": "P2",
+      "toAssetId": "LAB-NODE-A",
+      "cableLabel": "YELLOW-A",
+      "expectedState": "connected"
+    }
+  ],
+  "diagnostics": [
+    {
+      "diagnosticId": "NODE-A-HEALTH",
+      "type": "http_health",
+      "targetAlias": "lab-node-a",
+      "expectedHttpStatus": 200,
+      "timeoutMs": 3000,
+      "claimVerified": "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
+    }
+  ],
+  "visualRequirements": [
+    {
+      "requirementId": "switch_chassis_visible",
+      "mandatory": true,
+      "segmentationPrompt": "network switch"
+    },
+    {
+      "requirementId": "yellow_cable_near_end_visible",
+      "mandatory": true,
+      "segmentationPrompt": "yellow ethernet cable"
+    },
+    {
+      "requirementId": "post_repair_view_captured",
+      "mandatory": true
+    }
+  ],
+  "verificationPolicy": {
+    "requirePostRepairPhoto": true,
+    "requireFreshDiagnostic": true,
+    "requireTechnicianAcknowledgement": true,
+    "requireHumanReviewedVisualChecklist": true,
+    "diagnosticMaxAgeSeconds": 60,
+    "allowedDiagnosticSources": [
+      "LiveLocal",
+      "Simulated",
+      "RecordedReplay"
+    ],
+    "verifiedLiveRequiresSource": "LiveLocal"
+  }
+}
