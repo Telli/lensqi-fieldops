@@ -33,6 +33,7 @@ feature commit, not at submission time.
 | 2026-10-27T20:51:52-07:00 | `0937855` | T6.1 hardening: header-measured image limits, blur/luminance signals, model request timeout, per-inspection and per-IP rate limits, provider-down handling, sidecar kill, provider error redaction | dotnet test 125/125 green; secret_scan PASS; live smoke on :5199 with genuine Muse and SAM; eval --only c01-clear-p2,f01-seated-down PASS | None |
 | 2026-10-27T20:53:51-07:00 | `53ef016` | Post-hardening evaluation report eval-20261028T035339Z | 25/25 deterministic pass, 0 gated false completions, 12/12 receipts verified, genuine Muse + SAM | None |
 | 2026-10-27T22:03:45-07:00 | `c239c0a` | Android skeleton, FieldOpsApi, recorded contract (34 responses), CI job, emulator /health (T6.2 day 1) | gradlew testDebugUnitTest 41/41 + assembleDebug green; emulator screenshot docs/evidence/android/01-connect-health.png | None |
+| 2026-10-27T22:13:19-07:00 | `2cddec9` | Android capture, Room+WorkManager upload queue, RLE decoder; browser ?inspection= link (T6.2 day 2) | emulator photo on I-8937725d403b visible in API and browser; gradle tests 45/45; dotnet 125/125 | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
