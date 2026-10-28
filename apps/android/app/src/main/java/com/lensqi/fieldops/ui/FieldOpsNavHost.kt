@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -41,6 +42,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lensqi.fieldops.ui.camera.CameraScreen
+import com.lensqi.fieldops.ui.common.stageLabel
+import com.lensqi.fieldops.ui.glasses.GlassesScreen
 import com.lensqi.fieldops.ui.home.AssetsScreen
 import com.lensqi.fieldops.ui.home.HomeScreen
 import com.lensqi.fieldops.ui.home.HomeViewModel
@@ -84,6 +87,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     InspectionScreen(
                         onBack = { home.refresh(); nav.popBackStack() },
                         onCapture = { nav.navigate("camera") },
+                        onGlasses = { nav.navigate("glasses") },
                         onOpenReceipt = { url -> nav.navigate("receipt?url=${Uri.encode(url)}") },
                     )
                 }
@@ -96,6 +100,19 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         prompt = vm.cameraPrompt(),
                         onClose = { nav.popBackStack() },
                         onCaptured = { file -> vm.queuePhoto(file, origin = "Phone"); nav.popBackStack() },
+                    )
+                }
+                composable("glasses") { e ->
+                    // Same pinning as "camera": the photo belongs to the inspection underneath.
+                    val parent = remember(e) { nav.previousBackStackEntry } ?: return@composable
+                    val vm: InspectionViewModel = hiltViewModel(parent)
+                    val stage = vm.state.collectAsStateWithLifecycle().value.view?.stage
+                    GlassesScreen(
+                        prompt = vm.cameraPrompt(),
+                        status = stage?.let { stageLabel(it) },
+                        onClose = { nav.popBackStack() },
+                        // origin is "Glasses" for real glasses and "MockWearables" for the Mock Device Kit, never "Phone".
+                        onCaptured = { file, origin -> vm.queuePhoto(file, origin = origin); nav.popBackStack() },
                     )
                 }
                 composable("receipt?url={url}", arguments = listOf(navArgument("url") { type = NavType.StringType })) { e ->

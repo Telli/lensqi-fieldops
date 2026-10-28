@@ -70,7 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.lensqi.fieldops.data.api.ChecklistStatus
 import com.lensqi.fieldops.data.api.DiagnosticSource
-import com.lensqi.fieldops.data.api.EvidenceOrigin
+import com.lensqi.fieldops.ui.common.originLabel
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.ObservationStatus
@@ -114,7 +114,7 @@ private const val DIAG_FAILED = "Diagnostic failed after the repair claim"
  * Stage, verdicts and decisions are the server's; the screen only sends commands and shows what comes back.
  */
 @Composable
-fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit, vm: InspectionViewModel = hiltViewModel()) {
+fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit, vm: InspectionViewModel = hiltViewModel(), onGlasses: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -156,8 +156,8 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
             if (view != null) {
                 val asset = s.fixture?.assets?.firstOrNull { it.assetId == view.assetId }
                 item { Text("${asset?.displayName ?: view.assetId} · ${view.fixtureId}", style = MaterialTheme.typography.bodySmall) }
-                if (verifying) verificationItems(s, vm, view, onCapture, importPhoto, onOpenReceipt)
-                else investigationItems(s, vm, view, onCapture, importPhoto)
+                if (verifying) verificationItems(s, vm, view, onCapture, importPhoto, onOpenReceipt, onGlasses)
+                else investigationItems(s, vm, view, onCapture, importPhoto, onGlasses)
                 item {
                     TechDetails(
                         listOf(
@@ -172,7 +172,7 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
     }
 }
 
-private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit) {
+private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit, onGlasses: () -> Unit) {
     val a = s.latestAssessment
     val relevant = a?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }.orEmpty()
     val unclear = relevant.filter { it.status != ObservationStatus.Observed }
@@ -197,6 +197,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                 PrimaryButton("Capture", onCapture, Modifier.weight(1f), icon = Icons.Outlined.CameraAlt)
                 SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
             }
+            SecondaryButton("Use glasses", onGlasses, Modifier.fillMaxWidth(), icon = Icons.Outlined.Visibility)
             if (view.photos.isNotEmpty()) SecondaryButton(if (a == null) "Ask LensQi to look" else "Look at the latest photo again", vm::assessAndOutline, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Visibility)
         }
     }
@@ -260,7 +261,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
     item { Knowledge(s) }
 }
 
-private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit, onOpenReceipt: (String) -> Unit) {
+private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit, onOpenReceipt: (String) -> Unit, onGlasses: () -> Unit) {
     val accepted = view.photos.firstOrNull { it.evidenceId == view.acceptedPostRepairPhotoId }
     val change = view.changeAnalyses.lastOrNull { it.claimId == view.currentClaimId }
     val acceptedChange = accepted?.let { p -> view.changeAnalyses.lastOrNull { it.photoEvidenceId == p.evidenceId } }
@@ -303,6 +304,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                         PrimaryButton("Take photo", onCapture, Modifier.weight(1f), icon = Icons.Outlined.CameraAlt)
                         SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
                     }
+                    SecondaryButton("Use glasses", onGlasses, Modifier.fillMaxWidth(), icon = Icons.Outlined.Visibility)
                 }
             }
         }
@@ -448,7 +450,7 @@ private fun PhotoStrip(s: InspectionUi, vm: InspectionViewModel) {
         view.photos.forEach { p ->
             Column(Modifier.width(120.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 vm.artifactFor(p.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), null, Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop) }
-                Muted(if (p.origin == EvidenceOrigin.Phone) "Camera · ${whenText(p.observedAt)}" else "Imported · ${whenText(p.observedAt)}")
+                Muted("${originLabel(p.origin)} · ${whenText(p.observedAt)}")
             }
         }
     }
