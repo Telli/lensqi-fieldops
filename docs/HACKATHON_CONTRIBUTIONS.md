@@ -22,6 +22,7 @@ feature commit, not at submission time.
 | 2026-10-27T19:20:22-07:00 | `df419e0` | Unify model next-action vocabulary on the parent ProposedNextAction enum | 68 tests; Stage One gate re-run PASS (LIVE_META) | None |
 | 2026-10-27T19:20:22-07:00 | `b53d2ea` | Adopt the PRD reuse stance, prior-art register, project README, new gate evidence | n/a | None |
 | 2026-10-27T19:26:15-07:00 | `26d33e0` | SAM 3.1 spike: sidecar parser, genuine segmentation calls, overlay on original image, synthetic fixture photo (T1.1, T1.2) | LIVE_META evidence docs/evidence/sam-spike-20261028T022522Z.json; 1 match + 1 honest no-match | None |
+| 2026-10-27T19:33:36-07:00 | `9fa33e3` | Core inspection state machine, append-only events, idempotent commands, verification policy evaluator (T2.1–T2.4, T4.1, T4.2, T4.4) | 19 new Core tests incl. the ten PRD §17 negatives; 87 total | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
