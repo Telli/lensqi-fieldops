@@ -29,6 +29,8 @@ function Root() {
   return <Redirect to={typeof window !== "undefined" && window.innerWidth >= 1024 ? "/ops" : "/m"} replace />;
 }
 
+/** ?embed=1: shown inside the Android app, which draws its own navigation. */
+const embedded = () => new URLSearchParams(location.search).has("embed");
 const m = (node: React.ReactNode, immersive = false) => <MobileFrame immersive={immersive}>{node}</MobileFrame>;
 const ops = (node: React.ReactNode) => <OpsShell>{node}</OpsShell>;
 
@@ -47,7 +49,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/i/:id/knowledge">{(p) => m(<Knowledge id={p.id} />)}</Route>
         <Route path="/m/i/:id/diagnostics">{(p) => m(<Diagnostics id={p.id} />)}</Route>
         <Route path="/m/i/:id/verify">{(p) => m(<Verify id={p.id} />)}</Route>
-        <Route path="/m/i/:id/receipt">{(p) => m(<ReceiptPage id={p.id} />)}</Route>
+        <Route path="/m/i/:id/receipt">{(p) => m(<ReceiptPage id={p.id} />, embedded())}</Route>
         <Route path="/m/i/:id">{(p) => m(<Investigate id={p.id} />)}</Route>
         <Route path="/ops">{() => ops(<Overview />)}</Route>
         <Route path="/ops/inspections">{() => ops(<InspectionsList />)}</Route>

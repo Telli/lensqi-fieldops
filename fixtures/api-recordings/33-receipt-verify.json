@@ -1,14 +1,14 @@
 {
-  "bundle": "<repo>/src/LensQi.FieldOps.Api/data/receipts/I-810fe2d8ede4",
+  "bundle": "<repo>/src/LensQi.FieldOps.Api/data/receipts/I-5cb4b038251d",
   "isValid": true,
   "checks": [
-    "manifest digest matches (56854c2a6219…)",
-    "artifact photo-20b1e7028a matches (5889ea88e648…)",
-    "artifact photo-a033ab46ca matches (5889ea88e648…)",
-    "artifact photo-f4df8f35fe matches (f3392814c818…)",
-    "artifact photo-8dd75f5b97 matches (5c85c8ca9c6d…)",
+    "manifest digest matches (99b85670815e…)",
+    "artifact photo-373230b016 matches (5889ea88e648…)",
+    "artifact photo-badf2943d8 matches (5889ea88e648…)",
+    "artifact photo-7e8c03e70a matches (f3392814c818…)",
+    "artifact photo-70f3fc3ad9 matches (5c85c8ca9c6d…)",
     "4 artifact(s) listed",
-    "37 events contiguous",
+    "39 events contiguous",
     "receipt.html carries the manifest digest"
   ],
   "failures": []

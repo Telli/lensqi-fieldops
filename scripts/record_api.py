@@ -113,6 +113,7 @@ def main() -> int:
     r.call("artifacts", "GET", p + "/artifacts")
     r.call("receipt", "GET", p + "/receipt")
     r.call("receipt-verify", "GET", p + "/receipt/verify")
+    r.call("inspections", "GET", "/v1/inspections")
 
     # Error shapes the client must surface verbatim.
     r.call("error-verify-closed", "POST", p + "/verify", expect=409)

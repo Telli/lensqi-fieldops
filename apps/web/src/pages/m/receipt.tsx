@@ -143,6 +143,7 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
 }
 
 export default function ReceiptPage({ id }: { id: string }) {
+  if (new URLSearchParams(location.search).has("embed")) return <Page><FieldProofReceipt id={id} /></Page>;
   return (
     <>
       <TopBar title="FieldProof receipt" back={`/m/i/${id}/verify`} />

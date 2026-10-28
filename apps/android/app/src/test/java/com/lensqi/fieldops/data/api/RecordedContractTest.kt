@@ -21,6 +21,7 @@ class RecordedContractTest {
     private fun serializerFor(name: String): DeserializationStrategy<*> = when {
         name == "health" -> Health.serializer()
         name == "fixtures" -> ListSerializer(Fixture.serializer())
+        name == "inspections" -> ListSerializer(InspectionSummary.serializer())
         name.startsWith("inspection-created") || name == "inspection" -> InspectionView.serializer()
         name.startsWith("simulation-") -> SimulationResponse.serializer()
         name.startsWith("observation-") -> ObservationResponse.serializer()

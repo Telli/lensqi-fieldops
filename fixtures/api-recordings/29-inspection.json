@@ -1,110 +1,110 @@
 {
-  "inspectionId": "I-810fe2d8ede4",
+  "inspectionId": "I-5cb4b038251d",
   "fixtureId": "LAB-RACK-01",
   "fixtureRevision": 1,
   "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
   "assetId": "LAB-SW-01",
   "stage": "VerifiedComplete",
-  "lastSequence": 37,
-  "viewRequests": 0,
-  "currentClaimId": "claim-1fce7aa4c5",
-  "repairClaimedAt": "2026-10-28T06:58:41.036738+00:00",
+  "lastSequence": 39,
+  "viewRequests": 1,
+  "currentClaimId": "claim-bdb55484cc",
+  "repairClaimedAt": "2026-10-28T07:48:41.740259+00:00",
   "technicianAcknowledged": true,
   "photos": [
     {
-      "evidenceId": "photo-20b1e7028a",
+      "evidenceId": "photo-373230b016",
       "origin": "Phone",
       "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
-      "observedAt": "2026-10-28T06:58:32.384871+00:00",
+      "observedAt": "2026-10-28T07:48:12.400837+00:00",
       "quality": {
         "blurLaplacianVariance": 137.61,
         "meanLuminance": 43.996,
         "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
       },
       "perceptualHash": "80809269495ab4a8",
-      "recordedAt": "2026-10-28T06:58:32.466047+00:00"
+      "recordedAt": "2026-10-28T07:48:12.523921+00:00"
     },
     {
-      "evidenceId": "photo-a033ab46ca",
+      "evidenceId": "photo-badf2943d8",
       "origin": "Phone",
       "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
-      "observedAt": "2026-10-28T06:58:39.523713+00:00",
+      "observedAt": "2026-10-28T07:48:37.951602+00:00",
       "quality": {
         "blurLaplacianVariance": 137.61,
         "meanLuminance": 43.996,
         "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
       },
       "perceptualHash": "80809269495ab4a8",
-      "recordedAt": "2026-10-28T06:58:39.582312+00:00"
+      "recordedAt": "2026-10-28T07:48:38.029974+00:00"
     },
     {
-      "evidenceId": "photo-f4df8f35fe",
+      "evidenceId": "photo-7e8c03e70a",
       "origin": "Phone",
       "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
-      "observedAt": "2026-10-28T06:58:39.590559+00:00",
+      "observedAt": "2026-10-28T07:48:38.034436+00:00",
       "quality": {
         "blurLaplacianVariance": 137.384,
         "meanLuminance": 43.994,
         "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
       },
       "perceptualHash": "8080827155b22860",
-      "recordedAt": "2026-10-28T06:58:39.648433+00:00"
+      "recordedAt": "2026-10-28T07:48:38.108353+00:00"
     },
     {
-      "evidenceId": "photo-8dd75f5b97",
+      "evidenceId": "photo-70f3fc3ad9",
       "origin": "Phone",
       "artifactSha256": "5c85c8ca9c6d4aaf66738f58d0f7299d1eedaa11ec51ee15a248b063fb2ca76c",
-      "observedAt": "2026-10-28T06:58:41.038324+00:00",
+      "observedAt": "2026-10-28T07:48:41.741725+00:00",
       "quality": {
         "blurLaplacianVariance": 141.916,
         "meanLuminance": 43.907,
         "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
       },
       "perceptualHash": "809c81015d16a068",
-      "recordedAt": "2026-10-28T06:58:41.096258+00:00"
+      "recordedAt": "2026-10-28T07:48:41.820419+00:00"
     }
   ],
   "diagnostics": [
     {
-      "evidenceId": "diag-e1a45a45e4",
+      "evidenceId": "diag-5371706c46",
       "result": {
         "fixtureId": "LAB-RACK-01",
         "diagnosticId": "NODE-A-HEALTH",
         "targetAlias": "lab-node-a",
         "passed": false,
-        "completedAt": "2026-10-28T06:58:39.518122+00:00",
+        "completedAt": "2026-10-28T07:48:37.949027+00:00",
         "source": "Simulated",
-        "traceId": "e1a45a45e4ab4f3ea0234f29d260baa0",
+        "traceId": "5371706c46f84cec8e741d472a5530f4",
         "normalizedValue": "Unreachable",
         "rawDigest": null
       },
       "source": "Simulated"
     },
     {
-      "evidenceId": "diag-0f18545833",
+      "evidenceId": "diag-20ae8de09f",
       "result": {
         "fixtureId": "LAB-RACK-01",
         "diagnosticId": "NODE-A-HEALTH",
         "targetAlias": "lab-node-a",
         "passed": false,
-        "completedAt": "2026-10-28T06:58:41.03291+00:00",
+        "completedAt": "2026-10-28T07:48:41.739247+00:00",
         "source": "Simulated",
-        "traceId": "0f185458339143d985ce4798340ee105",
+        "traceId": "20ae8de09f8c4c42bd5a7aed35ea8459",
         "normalizedValue": "Unreachable",
         "rawDigest": null
       },
       "source": "Simulated"
     },
     {
-      "evidenceId": "diag-75b7ab4da3",
+      "evidenceId": "diag-c0d511b513",
       "result": {
         "fixtureId": "LAB-RACK-01",
         "diagnosticId": "NODE-A-HEALTH",
         "targetAlias": "lab-node-a",
         "passed": true,
-        "completedAt": "2026-10-28T06:58:42.330718+00:00",
+        "completedAt": "2026-10-28T07:48:44.289168+00:00",
         "source": "Simulated",
-        "traceId": "75b7ab4da30b4c699ca59bf06011c5c0",
+        "traceId": "c0d511b513594bb5b3fd8766b0c7685b",
         "normalizedValue": "Reachable",
         "rawDigest": null
       },
@@ -115,93 +115,93 @@
     {
       "requirementId": "switch_chassis_visible",
       "status": "Satisfied",
-      "reviewedAt": "2026-10-28T06:58:42.327691+00:00",
-      "reviewedByEvidenceId": "photo-8dd75f5b97"
+      "reviewedAt": "2026-10-28T07:48:44.286723+00:00",
+      "reviewedByEvidenceId": "photo-70f3fc3ad9"
     },
     {
       "requirementId": "yellow_cable_near_end_visible",
       "status": "Satisfied",
-      "reviewedAt": "2026-10-28T06:58:42.328804+00:00",
-      "reviewedByEvidenceId": "photo-8dd75f5b97"
+      "reviewedAt": "2026-10-28T07:48:44.287462+00:00",
+      "reviewedByEvidenceId": "photo-70f3fc3ad9"
     },
     {
       "requirementId": "post_repair_view_captured",
       "status": "Satisfied",
-      "reviewedAt": "2026-10-28T06:58:42.329498+00:00",
-      "reviewedByEvidenceId": "photo-8dd75f5b97"
+      "reviewedAt": "2026-10-28T07:48:44.288087+00:00",
+      "reviewedByEvidenceId": "photo-70f3fc3ad9"
     }
   ],
   "segmentations": [
     {
-      "evidenceId": "seg-d43906a947",
-      "sourcePhotoEvidenceId": "photo-20b1e7028a",
+      "evidenceId": "seg-a8487e0b99",
+      "sourcePhotoEvidenceId": "photo-373230b016",
       "concept": "yellow ethernet cable",
       "matched": true,
-      "maskSha256": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
-      "recordedAt": "2026-10-28T06:58:39.503547+00:00"
+      "maskSha256": "1a1d8440644ed8fb1ff4b91d37929332ca62bf6693bb41b91ba72719efb1a2b2",
+      "recordedAt": "2026-10-28T07:48:37.947091+00:00"
     },
     {
-      "evidenceId": "seg-f3924eafb7",
-      "sourcePhotoEvidenceId": "photo-f4df8f35fe",
+      "evidenceId": "seg-4081cf57bb",
+      "sourcePhotoEvidenceId": "photo-7e8c03e70a",
       "concept": "yellow ethernet cable",
       "matched": true,
-      "maskSha256": "e72ae5ae4784899f9306862bcdc4fefcf2c2d063f334bfe46b4ccbe72d6765a0",
-      "recordedAt": "2026-10-28T06:58:41.024967+00:00"
+      "maskSha256": "201055b352b33da3b4efb3a5530ab3be785214187c13aac584b8c916e3df237b",
+      "recordedAt": "2026-10-28T07:48:41.734657+00:00"
     },
     {
-      "evidenceId": "seg-1a2286bc13",
-      "sourcePhotoEvidenceId": "photo-8dd75f5b97",
+      "evidenceId": "seg-18cad34e2c",
+      "sourcePhotoEvidenceId": "photo-70f3fc3ad9",
       "concept": "yellow ethernet cable",
       "matched": true,
       "maskSha256": "644cefffbfe6247da651277fe1adbe288609d42b72320eabd9d05697ccb805ec",
-      "recordedAt": "2026-10-28T06:58:42.325935+00:00"
+      "recordedAt": "2026-10-28T07:48:44.285299+00:00"
     }
   ],
   "changeAnalyses": [
     {
-      "claimId": "claim-be182c50fa",
-      "photoEvidenceId": "photo-a033ab46ca",
+      "claimId": "claim-a6c4150f0f",
+      "photoEvidenceId": "photo-badf2943d8",
       "afterImageDigest": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
-      "referencePhotoEvidenceId": "photo-20b1e7028a",
+      "referencePhotoEvidenceId": "photo-373230b016",
       "beforeImageDigest": null,
       "targetPrompt": null,
       "beforeMaskDigest": null,
       "afterMaskDigest": null,
       "perceptualHashDistance": 0,
-      "duplicateOfEvidenceId": "photo-20b1e7028a",
+      "duplicateOfEvidenceId": "photo-373230b016",
       "targetRegionIoU": null,
       "componentShiftNormalized": null,
       "verdict": "DuplicateImage",
-      "reason": "Post-repair photo is the same image as photo-20b1e7028a",
+      "reason": "Post-repair photo is the same image as photo-373230b016",
       "thresholdsVersion": "visual-change/1",
       "rejectsPhoto": true
     },
     {
-      "claimId": "claim-be182c50fa",
-      "photoEvidenceId": "photo-f4df8f35fe",
+      "claimId": "claim-a6c4150f0f",
+      "photoEvidenceId": "photo-7e8c03e70a",
       "afterImageDigest": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
-      "referencePhotoEvidenceId": "photo-20b1e7028a",
+      "referencePhotoEvidenceId": "photo-373230b016",
       "beforeImageDigest": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
       "targetPrompt": "yellow ethernet cable",
-      "beforeMaskDigest": "9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88",
-      "afterMaskDigest": "e72ae5ae4784899f9306862bcdc4fefcf2c2d063f334bfe46b4ccbe72d6765a0",
+      "beforeMaskDigest": "1a1d8440644ed8fb1ff4b91d37929332ca62bf6693bb41b91ba72719efb1a2b2",
+      "afterMaskDigest": "201055b352b33da3b4efb3a5530ab3be785214187c13aac584b8c916e3df237b",
       "perceptualHashDistance": 17,
       "duplicateOfEvidenceId": null,
       "targetRegionIoU": 0,
-      "componentShiftNormalized": 0.2191,
+      "componentShiftNormalized": 0.219,
       "verdict": "Changed",
       "reason": "Visual change in the target region: image dHash distance 17 ≥ 12; 'yellow ethernet cable' mask IoU 0.000 ≤ 0.8; 'yellow ethernet cable' centroid moved 0.219 of its box diagonal ≥ 0.1",
       "thresholdsVersion": "visual-change/1",
       "rejectsPhoto": false
     },
     {
-      "claimId": "claim-1fce7aa4c5",
-      "photoEvidenceId": "photo-8dd75f5b97",
+      "claimId": "claim-bdb55484cc",
+      "photoEvidenceId": "photo-70f3fc3ad9",
       "afterImageDigest": "5c85c8ca9c6d4aaf66738f58d0f7299d1eedaa11ec51ee15a248b063fb2ca76c",
-      "referencePhotoEvidenceId": "photo-f4df8f35fe",
+      "referencePhotoEvidenceId": "photo-7e8c03e70a",
       "beforeImageDigest": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
       "targetPrompt": "yellow ethernet cable",
-      "beforeMaskDigest": "e72ae5ae4784899f9306862bcdc4fefcf2c2d063f334bfe46b4ccbe72d6765a0",
+      "beforeMaskDigest": "201055b352b33da3b4efb3a5530ab3be785214187c13aac584b8c916e3df237b",
       "afterMaskDigest": "644cefffbfe6247da651277fe1adbe288609d42b72320eabd9d05697ccb805ec",
       "perceptualHashDistance": 15,
       "duplicateOfEvidenceId": null,
@@ -213,7 +213,7 @@
       "rejectsPhoto": false
     }
   ],
-  "acceptedPostRepairPhotoId": "photo-8dd75f5b97",
+  "acceptedPostRepairPhotoId": "photo-70f3fc3ad9",
   "pendingPredictions": [],
   "predictionScores": [],
   "lastDecision": {

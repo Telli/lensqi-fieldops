@@ -146,6 +146,7 @@ data class InspectionView(
     val lastDecision: VerificationDecision? = null,
     val outcomeKind: VerificationOutcomeKind? = null,
     val changeAnalyses: List<VisualChangeAnalysis> = emptyList(),
+    val segmentations: List<SegmentationRef> = emptyList(),
     /** The post-repair photo the server will count for the current claim; null when none is accepted yet. */
     val acceptedPostRepairPhotoId: String? = null,
 )
@@ -302,3 +303,26 @@ data class SimulationRequest(val passed: Boolean?)
 
 @Serializable
 data class SimulationResponse(val diagnosticId: String, val passed: Boolean? = null, val label: String)
+
+/** GET /v1/inspections: one row per inspection, derived by the server from its event log. */
+@Serializable
+data class InspectionSummary(
+    val inspectionId: String,
+    val fixtureId: String,
+    val assetId: String,
+    val stage: InspectionStage,
+    val outcomeKind: VerificationOutcomeKind? = null,
+    val createdAt: String,
+    val updatedAt: String,
+    val photos: Int,
+    val diagnostics: Int,
+    val lastDecision: VerificationResult? = null,
+    val latestChange: VisualChangeVerdict? = null,
+    val currentClaimId: String? = null,
+    val workOrder: String? = null,
+    val claim: String? = null,
+)
+
+/** A segmentation recorded on the inspection; its geometry is the artifact "<evidenceId>.json". */
+@Serializable
+data class SegmentationRef(val evidenceId: String, val sourcePhotoEvidenceId: String, val concept: String, val matched: Boolean, val maskSha256: String? = null)

@@ -26,6 +26,9 @@ interface FieldOpsApi {
     @POST("v1/inspections")
     suspend fun createInspection(@Header(IDEMPOTENCY_KEY) key: String, @Body body: CreateInspectionRequest): InspectionView
 
+    @GET("v1/inspections")
+    suspend fun inspections(): List<InspectionSummary>
+
     @GET("v1/inspections/{id}")
     suspend fun inspection(@Path("id") id: String): InspectionView
 
@@ -71,6 +74,12 @@ interface FieldOpsApi {
 
     @GET("v1/inspections/{id}/receipt/verify")
     suspend fun verifyReceipt(@Path("id") id: String): ReceiptVerification
+
+    @GET("v1/inspections/{id}/events")
+    suspend fun events(@Path("id") id: String): List<JsonObject>
+
+    @GET("v1/simulation/diagnostics")
+    suspend fun simulation(): JsonObject
 
     @GET("v1/inspections/{id}/artifacts")
     suspend fun artifacts(@Path("id") id: String): List<String>
