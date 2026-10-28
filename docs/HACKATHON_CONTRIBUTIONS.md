@@ -38,6 +38,7 @@ feature commit, not at submission time.
 | 2026-10-27T22:42:20-07:00 | `5b4f24e` | Android day 4: fake fix denied and real fix verified (simulated) on the emulator, receipt WebView and re-verification | I-cefe5dfc57f5; screenshots 06-09 in docs/evidence/android; gradle unit tests green | None |
 | 2026-10-27T23:02:03-07:00 | `854bc67` | Android day 5: offline capture and automatic sync, cached view and knowledge labels, cold-install hero flow on the emulator | I-7ae373a6f895 offline sync digest match; I-bfd04a91ac9f cold install Denied then Verified (simulated); screenshots 10-15; gradle 47/47 | None |
 | 2026-10-27T23:29:59-07:00 | `665d286` | VK-T26 change evidence: dHash duplicate check, SAM mask IoU/shift, VisualChangeAnalyzed, policy 1.2; eval v2 with post-repair renders | dotnet 139/139; eval-20261028T061752Z 25/25, 0 probes on rejected photos; live genuine-SAM check of all three verdicts; Android 51/51 | None |
+| 2026-10-27T23:29:59-07:00 | `8d0059d` | LIVE_LOCAL_PROBE (loopback): live HTTP probe flow to VerifiedCompleteLive, Unavailable case, Track D runbook | I-ad1f169da81a VerifiedCompleteLive; I-d315eaa937a5 UNAVAILABLE; verify-receipt PASS on docs/evidence/receipt-loopback | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
