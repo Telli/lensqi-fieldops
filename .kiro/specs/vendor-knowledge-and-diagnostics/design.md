@@ -163,7 +163,8 @@ Resolve(pack, asset):
       else if asset.firmwareMajor unknown: fact Unverified  (reason: firmware_unknown)
       else if fact.requiresFirmwareMajor != asset.firmwareMajor: fact Inapplicable  (reason: firmware_mismatch)
       else fact Applicable
-  if no fact is Applicable: NoApplicableKnowledge
+  if no fact is Applicable:
+      ApplicabilityUnverified if any fact is Unverified (ask for firmware), else NoApplicableKnowledge
   if applicable facts conflict for same factKey: KnowledgeConflict
   return Applicable facts with pack metadata and source refs,
          plus Excluded facts with their verdict and reason (never silently dropped)
@@ -220,11 +221,13 @@ public sealed record KnowledgeResolution(
     IReadOnlyList<ExcludedFact> Excluded,
     IReadOnlyList<string> Warnings);
 
+// Pure and synchronous: the pack store is in memory and the fixture binding selects the pack.
+// The Api layer maps inspection → binding → asset and wraps this call.
 public interface IVendorKnowledgeResolver
 {
-    Task<KnowledgeResolution> ResolveAsync(
-        AssetIdentity asset, IReadOnlyList<string> issueTags,
-        CancellationToken ct);
+    KnowledgeResolution Resolve(
+        FixtureKnowledgeBinding binding, AssetIdentity asset,
+        IReadOnlyList<string> issueTags);
 }
 ```
 

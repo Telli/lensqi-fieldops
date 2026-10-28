@@ -8,17 +8,17 @@
 
 ## P0-A — Asset-bound knowledge pack (suggested 2–3 hours)
 
-- [ ] **VK-T01 — Add normative schema and loaders.** Place `knowledge-pack.schema.json` and the supplied sample packs under `fixtures/vendor-knowledge/`. Implement strict schema validation in `KnowledgePackValidator`; reject unknown schema versions, unknown fields, invalid HTTPS vendor source URLs, duplicate document/fact/capability IDs, unresolved document references, `SiteConfigured` facts inside `VendorLinked` packs, facts whose `requiresFirmwareMajor` differs from `identity.firmwareMajor`, and future `accessedOn` dates. Packs load only from the server-controlled pack directory; never from a request body.
+- [x] **VK-T01 — Add normative schema and loaders.** *(done 2026-10-27: `KnowledgePackValidator`, `FileKnowledgePackStore`, 27 Api tests)* Place `knowledge-pack.schema.json` and the supplied sample packs under `fixtures/vendor-knowledge/`. Implement strict schema validation in `KnowledgePackValidator`; reject unknown schema versions, unknown fields, invalid HTTPS vendor source URLs, duplicate document/fact/capability IDs, unresolved document references, `SiteConfigured` facts inside `VendorLinked` packs, facts whose `requiresFirmwareMajor` differs from `identity.firmwareMajor`, and future `accessedOn` dates. Packs load only from the server-controlled pack directory; never from a request body.
   - Acceptance: valid synthetic/MikroTik examples load; intentionally corrupted JSON is rejected with field-specific error.
   - Tests: `VendorKnowledgePackValidationTests` — port the 19 cases in `scripts/test_sample_pack_constraints.py` as the minimum negative set.
-- [ ] **VK-T02 — Compute immutable pack identity.** Hash exact JSON bytes with SHA-256, record `packId`, revision, digest, load timestamp and origin kind (`VendorLinked` or `Synthetic`); avoid in-place mutation after an inspection uses a pack.
+- [x] **VK-T02 — Compute immutable pack identity.** *(done 2026-10-27: SHA-256 over exact bytes in `LoadedKnowledgePack`; pinned-digest test)* Hash exact JSON bytes with SHA-256, record `packId`, revision, digest, load timestamp and origin kind (`VendorLinked` or `Synthetic`); avoid in-place mutation after an inspection uses a pack.
   - Acceptance: changing one byte changes digest and previous receipt is still associated with original revision.
-- [ ] **VK-T03 — Implement exact asset applicability.** Add `AssetIdentity` and pure `KnowledgeApplicability` checking manufacturer ID, product code, firmware major and any required revision. Model matching must not use fuzzy string equivalence.
+- [x] **VK-T03 — Implement exact asset applicability.** *(done 2026-10-27: `KnowledgeApplicability`, `KnowledgeConflictDetector`, 11 Core tests)* Add `AssetIdentity` and pure `KnowledgeApplicability` checking manufacturer ID, product code, firmware major and any required revision. Model matching must not use fuzzy string equivalence.
   - Acceptance: wrong model / unknown required firmware / incompatible firmware never returns an `Applicable` model-specific fact.
-- [ ] **VK-T04 — Build bounded fact resolution.** Return at most 10 (configurable) tag-matched, model-applicable fact cards with server-composed source citations, split from site configuration, plus the excluded facts with `Unverified`/`Inapplicable` verdicts and reasons. Reject fabricated document references and `factKey` conflicts. Expose `GET /api/vendors/knowledge-packs` for installed pack metadata.
+- [x] **VK-T04 — Build bounded fact resolution.** *(done 2026-10-27: `KnowledgeResolver`, `FixtureBindingInvariants`, `GET /api/vendors/knowledge-packs`, 8 Core tests)* Return at most 10 (configurable) tag-matched, model-applicable fact cards with server-composed source citations, split from site configuration, plus the excluded facts with `Unverified`/`Inapplicable` verdicts and reasons. Reject fabricated document references and `factKey` conflicts. Expose `GET /api/vendors/knowledge-packs` for installed pack metadata.
   - Acceptance: every `VendorDocumented` fact returned includes legitimate source title, URL and locator; no copied manual text embedded in public fixture.
 
-**Gate A:** An inspection bound to synthetic `LAB-SW-01` produces a synthetic, cited explanation; it never selects the MikroTik pack for that fictional device.
+**Gate A:** An inspection bound to synthetic `LAB-SW-01` produces a synthetic, cited explanation; it never selects the MikroTik pack for that fictional device. *(Passed 2026-10-27 at resolver level: `Synthetic_fixture_resolves_only_synthetic_facts_with_server_composed_citations`; the inspection endpoint itself is VK-T05+.)*
 
 ## P0-B — Grounded Muse evidence request (suggested 2–3 hours)
 
@@ -98,9 +98,11 @@
 ## Test commands (adapt to final solution paths)
 
 ```bash
-# Backend unit/integration tests
-dotnet test tests/LensQi.FieldOps.Core.Tests --nologo
-dotnet test tests/LensQi.FieldOps.Api.Tests --nologo
+# Backend unit/integration tests (solution root)
+dotnet test --nologo
+
+# Run the API locally; fails closed at startup on any invalid pack or binding
+dotnet run --project src/LensQi.FieldOps.Api
 
 # Compile Android client; use local documented Java/Gradle toolchain
 cd apps/android && ./gradlew :app:assembleDebug :app:testDebugUnitTest
