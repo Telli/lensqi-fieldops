@@ -53,6 +53,7 @@ import com.lensqi.fieldops.ui.common.SectionTitle
 import com.lensqi.fieldops.ui.common.SourceBadge
 import com.lensqi.fieldops.ui.common.stageLabel
 import com.lensqi.fieldops.ui.common.stageState
+import com.lensqi.fieldops.ui.theme.Appearance
 import com.lensqi.fieldops.ui.theme.Fo
 import java.time.Instant
 import java.time.LocalDate
@@ -258,6 +259,19 @@ fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
             OutlinedTextField(s.apiBase, vm::onBaseChanged, label = { Text("Server address") }, singleLine = true, colors = field, modifier = Modifier.fillMaxWidth())
         }
         item { PrimaryButton("Save and check connection", { vm.saveBase() }, busy = s.loading) }
+        item { SectionTitle("Appearance") }
+        item {
+            val current by vm.appearance.collectAsStateWithLifecycle(Appearance.System)
+            Row(Modifier.fillMaxWidth().background(Fo.Surface, RoundedCornerShape(10.dp)).border(1.dp, Fo.Border, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                Appearance.entries.forEach { a ->
+                    val on = a == current
+                    Box(
+                        Modifier.weight(1f).height(38.dp).background(if (on) Fo.Elevated else Fo.Surface, RoundedCornerShape(8.dp)).clickable { vm.setAppearance(a) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(a.name, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Fo.Foreground else Fo.Muted) }
+                }
+            }
+        }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
             // Works offline: the screen shows the device copy of the inspection until the server answers.

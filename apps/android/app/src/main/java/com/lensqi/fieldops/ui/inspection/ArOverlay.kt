@@ -152,7 +152,7 @@ fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, gu
         }
         tags.firstOrNull { it.concept == selected }?.let { t ->
             Column(
-                Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().background(Color(0xE60B0F14), RoundedCornerShape(10.dp))
+                Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().background(Fo.Background.copy(alpha = 0.92f), RoundedCornerShape(10.dp))
                     .border(1.dp, Fo.Border, RoundedCornerShape(10.dp)).padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -166,7 +166,7 @@ fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, gu
 @Composable
 private fun Chip(text: String, tone: Color, modifier: Modifier = Modifier, selected: Boolean = false) {
     Row(
-        modifier.background(Color(0xCC0B0F14), RoundedCornerShape(6.dp)).border(if (selected) 2.dp else 1.dp, tone.copy(alpha = if (selected) 0.9f else 0.6f), RoundedCornerShape(6.dp))
+        modifier.background(Fo.Background.copy(alpha = 0.85f), RoundedCornerShape(6.dp)).border(if (selected) 2.dp else 1.dp, tone.copy(alpha = if (selected) 0.9f else 0.6f), RoundedCornerShape(6.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.lensqi.fieldops.BuildConfig
+import com.lensqi.fieldops.ui.theme.Appearance
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,13 +21,17 @@ import javax.inject.Singleton
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
-/** The API base URL is the only setting. It is a device preference, never something the server or a model supplies. */
+/** Device preferences: the API base URL and the appearance. Never something the server or a model supplies. */
 @Singleton
 class SettingsStore @Inject constructor(@ApplicationContext private val context: Context) {
     private val key = stringPreferencesKey("api_base")
     private val current = AtomicReference(DEFAULT_BASE.toHttpUrlOrNull()!!)
 
     val apiBase: Flow<String> = context.dataStore.data.map { it[key] ?: DEFAULT_BASE }
+
+    private val appearanceKey = stringPreferencesKey("appearance")
+    val appearance: Flow<Appearance> = context.dataStore.data.map { p -> Appearance.entries.firstOrNull { it.name == p[appearanceKey] } ?: Appearance.System }
+    suspend fun setAppearance(value: Appearance) { context.dataStore.edit { it[appearanceKey] = value.name } }
 
     init {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

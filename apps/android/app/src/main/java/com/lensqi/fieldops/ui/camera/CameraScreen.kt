@@ -48,7 +48,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.lensqi.fieldops.ui.common.PrimaryButton
 import com.lensqi.fieldops.ui.theme.Eyebrow
-import com.lensqi.fieldops.ui.theme.Fo
+import com.lensqi.fieldops.ui.theme.FoDark
+import com.lensqi.fieldops.ui.theme.ForceDark
 import java.io.File
 
 /**
@@ -56,7 +57,10 @@ import java.io.File
  * which hashes it on device and uploads the original bytes with source=Phone. [prompt] is the view the server asked for.
  */
 @Composable
-fun CameraScreen(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit) {
+fun CameraScreen(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit) = ForceDark { CameraContent(prompt, onClose, onCaptured) }
+
+@Composable
+private fun CameraContent(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
@@ -69,7 +73,7 @@ fun CameraScreen(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
             Text("Camera access is needed to capture evidence. Nothing is recorded without your tap.")
             PrimaryButton("Allow camera", { ask.launch(Manifest.permission.CAMERA) }, Modifier.fillMaxWidth())
-            Text("Back", color = Fo.Muted, modifier = Modifier.clickable(onClick = onClose).padding(8.dp))
+            Text("Back", color = FoDark.Muted, modifier = Modifier.clickable(onClick = onClose).padding(8.dp))
         }
         return
     }
@@ -88,26 +92,26 @@ fun CameraScreen(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit
             Modifier.statusBarsPadding().padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(glass).padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Close camera", tint = Fo.Foreground) }
+            IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Close camera", tint = FoDark.Foreground) }
             Text("Capture evidence", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(end = 12.dp)) {
-                Box(Modifier.size(7.dp).background(Fo.Failure, CircleShape))
-                Text("Full resolution", fontSize = 11.sp, color = Fo.Muted)
+                Box(Modifier.size(7.dp).background(FoDark.Failure, CircleShape))
+                Text("Full resolution", fontSize = 11.sp, color = FoDark.Muted)
             }
         }
 
         Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(glass).border(1.dp, Fo.Primary.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).padding(14.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(glass).border(1.dp, FoDark.Primary.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("WHAT TO CAPTURE", style = Eyebrow.copy(color = Fo.Primary))
+                Text("WHAT TO CAPTURE", style = Eyebrow.copy(color = FoDark.Primary))
                 Text(prompt, fontSize = 15.sp)
-                status?.let { Text(it, color = Fo.Failure, fontSize = 13.sp) }
+                status?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
             }
             Box(
-                Modifier.size(78.dp).border(3.dp, Fo.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
-                    .background(if (capturing) Fo.Muted else Fo.Foreground)
+                Modifier.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
+                    .background(if (capturing) FoDark.Muted else FoDark.Foreground)
                     .clickable(enabled = !capturing) {
                         capturing = true
                         status = null
@@ -122,8 +126,8 @@ fun CameraScreen(prompt: String, onClose: () -> Unit, onCaptured: (File) -> Unit
                         )
                     },
                 contentAlignment = Alignment.Center,
-            ) { if (capturing) CircularProgressIndicator(Modifier.size(28.dp), color = Fo.Background, strokeWidth = 3.dp) }
-            Text("Saved on this phone first, then uploaded unchanged.", fontSize = 12.sp, color = Fo.Muted)
+            ) { if (capturing) CircularProgressIndicator(Modifier.size(28.dp), color = FoDark.Background, strokeWidth = 3.dp) }
+            Text("Saved on this phone first, then uploaded unchanged.", fontSize = 12.sp, color = FoDark.Muted)
         }
     }
 }

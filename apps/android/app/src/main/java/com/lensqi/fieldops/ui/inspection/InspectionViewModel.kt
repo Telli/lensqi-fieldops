@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.ui.inspection
 
+import com.lensqi.fieldops.ui.theme.Fo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.lifecycle.SavedStateHandle
@@ -147,7 +148,7 @@ class InspectionViewModel @Inject constructor(
 
     fun artifactUrl(name: String): String = settings.currentBase().resolve("v1/inspections/$inspectionId/artifacts/$name").toString()
     /** The designed receipt page served by the API (embed mode: the app draws its own top bar). */
-    fun receiptUrl(): String = settings.currentBase().resolve("m/i/$inspectionId/receipt?embed=1").toString()
+    fun receiptUrl(): String = settings.currentBase().resolve("m/i/$inspectionId/receipt?embed=1&theme=${if (Fo.isDark) "dark" else "light"}").toString()
     fun receiptJsonUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt").toString()
     fun artifactFor(evidenceId: String): String? = state.value.artifacts.firstOrNull { it.startsWith("$evidenceId-") }
 
