@@ -25,10 +25,10 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Day 3: Thu Oct 29 — Epistemic loop
 
-- [ ] T2.1 Implement Core state machine and append-only evidence metadata, including known/suspected/unknown/conflicting.
-- [ ] T2.2 Implement explicit `RequestAnotherView` with no more than two additional views.
-- [ ] T2.3 Enforce allowed fixture IDs, evidence freshness, idempotent request IDs, typed bad-state responses.
-- [ ] T2.4 Make ambiguous scene force recapture or inconclusive; cannot auto-advance.
+- [x] T2.1 Implement Core state machine and append-only evidence metadata, including known/suspected/unknown/conflicting. *(Done 2026-10-28: `Core/Inspection/*`, 15 event types, `InspectionState.Replay`.)*
+- [x] T2.2 Implement explicit `RequestAnotherView` with no more than two additional views. *(Done: third request → `Inconclusive`.)*
+- [x] T2.3 Enforce allowed fixture IDs, evidence freshness, idempotent request IDs, typed bad-state responses. *(Done at Core level: `InspectionConflictException` codes; API mapping pending.)*
+- [x] T2.4 Make ambiguous scene force recapture or inconclusive; cannot auto-advance. *(Done.)*
 - [ ] **Gate:** targeted evidence request causes actual recapture; all state tests pass.
 
 ## Day 4: Fri Oct 30 — Diagnostics
@@ -40,10 +40,10 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Day 5: Sat Oct 31 — Fake-fix checkpoint
 
-- [ ] T4.1 Implement repair-claim action, invalidating earlier verification evidence.
-- [ ] T4.2 Implement deterministic dual-proof verification with human-reviewed visual checklist.
+- [x] T4.1 Implement repair-claim action, invalidating earlier verification evidence. *(Done in Core 2026-10-28.)*
+- [x] T4.2 Implement deterministic dual-proof verification with human-reviewed visual checklist. *(Done in Core: `VerificationPolicyEvaluator` v1.1.)*
 - [ ] T4.3 Record **visual pass / telemetry fail** and show `VerificationFailed` with human-readable reason.
-- [ ] T4.4 Add negative tests for stale, wrong fixture, unknown, simulated-as-live, and duplicate verify.
+- [x] T4.4 Add negative tests for stale, wrong fixture, unknown, simulated-as-live, and duplicate verify. *(Done: the ten PRD §17 cases plus view budget, freshness window, checklist review; 19 tests.)*
 - [ ] **Gate:** cannot be tricked by an apparently plugged-in cable; no false live verification in scripted suite.
 
 ## Day 6: Sun Nov 1 — Completion + receipts

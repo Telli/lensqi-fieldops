@@ -28,8 +28,8 @@ feature commit, not at submission time.
 
 - [x] Muse Spark real structured-output request, validated server-side — `docs/evidence/stage-one-gate-*.json` (`LIVE_META`)
 - [x] SAM 3.1 real object segmentation with box/mask overlay on the original image and a truthful no-match path — `docs/evidence/sam-spike-*.json` (`LIVE_META`); ROI crop and C# adapter pending
-- [ ] Bounded epistemic evidence collection loop (Core state machine)
-- [ ] Deterministic false-repair rejection and separately scoped live/simulated verification
+- [x] Bounded epistemic evidence collection loop: Core state machine, append-only events, view budget, idempotent commands (`Core/Inspection`)
+- [x] Deterministic false-repair rejection and separately scoped live/simulated verification: `VerificationPolicyEvaluator`, PRD §17 ten negative tests pass (API endpoints pending)
 - [ ] JSON/HTML evidence receipt with verifiable hashes
 - [x] Vendor-knowledge grounding: exact applicability, bounded cited retrieval, proposal validation (child spec VK-T01–T06)
 
