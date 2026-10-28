@@ -16,7 +16,15 @@ namespace LensQi.FieldOps.Tests;
 /// <summary>Drives the real API over HTTP with the simulated probe and a fake Muse: the PRD hero demo without hardware or paid calls.</summary>
 public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
 {
-    public string DataDir { get; } = Directory.CreateTempSubdirectory("fieldops-api-").FullName;
+    public string DataDir { get; }
+
+    // xUnit class fixtures need exactly one public constructor.
+    public FieldOpsApiFactory() : this(null) { }
+
+    private FieldOpsApiFactory(string? dataDir) => DataDir = dataDir ?? Directory.CreateTempSubdirectory("fieldops-api-").FullName;
+
+    /// <summary>A second API over an existing data directory (restart tests).</summary>
+    public static FieldOpsApiFactory Over(string dataDir) => new(dataDir);
     public FakeVisionChat FakeChat { get; } = new();
     public FakeSegmenter FakeSam { get; } = new();
     public FakeQualityAnalyzer FakeQuality { get; } = new();

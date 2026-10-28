@@ -80,7 +80,13 @@ builder.Services.AddSingleton(sp =>
     var o = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
     var dir = Path.IsPathRooted(o.DataDirectory) ? o.DataDirectory : Path.Combine(builder.Environment.ContentRootPath, o.DataDirectory);
     Directory.CreateDirectory(dir);
-    return new InspectionStore(dir);
+    var store = new InspectionStore(dir);
+    // A restart keeps open inspections: every persisted log is replayed against the installed twin, fail closed per file.
+    var skipped = store.LoadPersisted(sp.GetRequiredService<ExpectedTwinStore>().Find);
+    var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("InspectionStore");
+    log.LogInformation("Rehydrated {Count} inspection(s) from {Dir}", store.All.Count(), dir);
+    foreach (var s in skipped) log.LogWarning("Left inspection log {File} on disk: {Reason}", s.File, s.Reason);
+    return store;
 });
 builder.Services.AddSingleton(sp =>
 {
@@ -136,6 +142,7 @@ var app = builder.Build();
 _ = app.Services.GetRequiredService<IKnowledgePackStore>();
 _ = app.Services.GetRequiredService<IReadOnlyList<FixtureKnowledgeBinding>>();
 _ = app.Services.GetRequiredService<ExpectedTwinStore>();
+_ = app.Services.GetRequiredService<InspectionStore>();
 
 app.UseModelCallLimits();
 
