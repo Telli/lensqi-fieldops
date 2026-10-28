@@ -1,0 +1,5 @@
+{
+  "diagnosticId": "NODE-A-HEALTH",
+  "passed": true,
+  "label": "SIMULATED_PROBE"
+}

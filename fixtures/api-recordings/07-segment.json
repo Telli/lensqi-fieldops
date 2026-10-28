@@ -1,0 +1,100 @@
+{
+  "segmentation": {
+    "segmentationId": "seg-909ee85a23",
+    "photoEvidenceId": "photo-aeb16af71e",
+    "photoSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+    "concept": "yellow ethernet cable",
+    "model": "sam-3.1",
+    "responseId": "resp_6ae18061ca6171a5b20a499a",
+    "rawSha256": "692c70bb9c87eaa6204ca68f89e71fed591fd89182f04848e9ad6115f630f9c8",
+    "parser": "meta-sam-parser 0.1.0",
+    "elapsedSeconds": 1.3458645,
+    "matched": true,
+    "boxes": [
+      {
+        "objectId": "0",
+        "left": 304,
+        "top": 585,
+        "right": 630,
+        "bottom": 968,
+        "confidence": 0.7344398498535156
+      }
+    ],
+    "masks": [
+      {
+        "objectId": "0",
+        "width": 326,
+        "height": 383,
+        "left": 304,
+        "top": 585,
+        "right": 630,
+        "bottom": 968,
+        "rle": {
+          "size": [
+            383,
+            326
+          ],
+          "counts": "c;:a;5J5K5L5J5K5M3L4M3N2M3L4M3M3L4N2N2N2N2N2M3N2M3N2M2O10L2M4N2M3N3K4N3M2N2N2O1O1O1000001O00000O2O1N1O2N101O0O110O1O1O001N110O010O10O10O100O0010O01O0001000O1000O0010O100O001O100O100O010O100000000O100000000O10O1000000O010000000000O11O01O0O10000000000000000000000O1000000O01000O10001O00000001O000000000001O00O10010O0000000010O000000000010O00000000000001O000001O00O2O0001O0000O1010O0001O0000000000010O000010O0000010O000001O01O01O0001O00010O00010O0001O01O0001O01O01O0000010O000001O01O01O0000010O0000001O01O00001O0000010O00001O01O01O000010O01O0000010O01O010O0010O0010O0010O0001VOXO\\Fh0d9i000100O001O1O100O1O1O2O0O100O100O1O100O100O1O100O1J_EmNb:Q1700O1000O10000000O100O2K5XOoD0_;"
+        },
+        "confidence": 0.7344398498535156
+      }
+    ],
+    "maskSha256": "c277d0176c902c9d4cf4a77f8d05cb00e087e0d289bfab4671d148541f58d266",
+    "crop": {
+      "file": "seg-909ee85a23-crop-photo-aeb16af71e.jpg",
+      "sha256": "2fa291f7d04448762875cb0c51b270b27e00e637e2126c7229408d6514c7e00c",
+      "transform": {
+        "sourceEvidenceId": "photo-aeb16af71e",
+        "sourceSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+        "sourceWidth": 1600,
+        "sourceHeight": 1000,
+        "crop": {
+          "left": 208,
+          "top": 489,
+          "right": 726,
+          "bottom": 1000,
+          "width": 518,
+          "height": 511,
+          "isEmpty": false
+        },
+        "scale": 1,
+        "offsetX": 208,
+        "offsetY": 489
+      }
+    },
+    "label": "LIVE_META",
+    "note": "Boxes and masks are model interpretations of the photo; a crop is not independent evidence."
+  },
+  "state": {
+    "inspectionId": "I-35a13d6978fe",
+    "fixtureId": "LAB-RACK-01",
+    "fixtureRevision": 1,
+    "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "assetId": "LAB-SW-01",
+    "stage": "NeedsEvidence",
+    "lastSequence": 6,
+    "viewRequests": 0,
+    "currentClaimId": null,
+    "repairClaimedAt": null,
+    "technicianAcknowledged": false,
+    "photos": [
+      {
+        "evidenceId": "photo-aeb16af71e",
+        "origin": "Phone",
+        "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+        "observedAt": "2026-10-28T04:55:54.90506+00:00",
+        "quality": {
+          "blurLaplacianVariance": 137.384,
+          "meanLuminance": 43.994,
+          "analyzerVersion": "image-quality/1 (pillow 13.0.0)"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "checklist": [],
+    "pendingPredictions": [],
+    "predictionScores": [],
+    "lastDecision": null,
+    "outcomeKind": null
+  }
+}

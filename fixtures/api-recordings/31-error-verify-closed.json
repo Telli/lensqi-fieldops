@@ -1,0 +1,5 @@
+{
+  "code": "invalid_state",
+  "message": "Verification requires a pending repair claim (stage VerifiedComplete)",
+  "details": null
+}
