@@ -11,7 +11,7 @@ import { ArFrame } from "@/components/fo/ar-frame";
 import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { EvidenceBadge } from "@/components/fo/primitives";
 import { LensQiMark } from "@/components/fo/ai";
-import { aiSummary, nextMove } from "@/lib/ai";
+import { aiSummary, assetMatch, nextMove } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
 type Step = { label: string; state: "todo" | "doing" | "done" | "skipped" };
@@ -143,7 +143,8 @@ export default function Scan({ id }: { id: string }) {
   const tags = result ? arTags(fixture, result.assessment, outlines, result.change) : [];
   const target = result && !afterRepair ? targetConcept(fixture, result.assessment) : undefined;
   const expected = fixture?.assets.find((a) => a.assetId === i?.assetId);
-  const seen = result?.assessment?.assetId;
+  const match = assetMatch(result?.assessment, i?.assetId);
+  const name = expected?.displayName ?? i?.assetId;
   const rejected = result?.change && (result.change.verdict === "DuplicateImage" || result.change.verdict === "NoVisualChange");
   const findings = result?.assessment?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)) ?? [];
   const last = i?.photos[i.photos.length - 1];
@@ -185,9 +186,10 @@ export default function Scan({ id }: { id: string }) {
         <div className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">
           {!fixture ? "Loading…"
             : busy && !result ? <span className="opacity-80">Matching asset…</span>
-            : seen && seen !== i?.assetId ? <span className="text-warning">▲ Looks like {seen}, not {expected?.displayName ?? i?.assetId}</span>
-            : seen ? <span><span className="text-success">●</span> {expected?.displayName ?? i?.assetId} · matches site record</span>
-            : shown && shown.assetId === i?.assetId ? <span><span className="text-success">●</span> {expected?.displayName ?? i?.assetId} · matched earlier</span>
+            : match === "mismatch" ? <span className="text-warning">▲ Looks like {result?.assessment?.assetId}, not {name}</span>
+            : match === "match" ? <span><span className="text-success">●</span> {name} · matches site record</span>
+            : match === "unseen" ? <span className="text-warning">▲ Can't confirm {name} in this photo</span>
+            : assetMatch(shown, i?.assetId) === "match" ? <span><span className="text-success">●</span> {name} · matched earlier</span>
             : <span className="opacity-80">{expected?.displayName ?? i?.assetId} · from asset label</span>}
         </div>
         <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>
