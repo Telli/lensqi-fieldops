@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0",
+  "packId": "lab-switch-01.synthetic",
+  "packRevision": 1,
+  "originKind": "Synthetic",
+  "identity": {
+    "manufacturerId": "LensQiLab-SYNTHETIC",
+    "productCode": "LAB-8P-SYNTH",
+    "firmwareMajor": null,
+    "hardwareRevisions": []
+  },
+  "documents": [
+    {
+      "documentId": "SYN-LAB-PLAN",
+      "publisher": "LensQi FieldOps Demo",
+      "title": "Original synthetic lab wiring and inspection plan",
+      "url": null,
+      "documentVersion": "rev 1",
+      "accessedOn": "2026-10-27",
+      "rightsMode": "OriginalSynthetic"
+    }
+  ],
+  "facts": [
+    {
+      "factId": "LAB-PORT-MAP-01",
+      "factKey": "site.expectedConnection.LAB-CONN-A.port",
+      "assertedValue": "P2",
+      "statement": "The approved synthetic lab wiring plan expects the yellow cable to occupy the lab switch's P2 connector.",
+      "claimKind": "SiteConfigured",
+      "sourceDocumentId": "SYN-LAB-PLAN",
+      "sourceLocator": "Connections / LAB-CONN-A",
+      "tags": ["port", "wiring", "expected-state"],
+      "safetyClass": "ObserveOnly",
+      "requiresFirmwareMajor": null
+    },
+    {
+      "factId": "LAB-HEALTH-CHECK-01",
+      "factKey": "site.requiredDiagnostic.LAB-NODE-A",
+      "assertedValue": "NODE-A-HEALTH",
+      "statement": "The lab acceptance checklist requires the approved NODE-A-HEALTH endpoint check after a technician's repair claim.",
+      "claimKind": "SiteConfigured",
+      "sourceDocumentId": "SYN-LAB-PLAN",
+      "sourceLocator": "Acceptance checks / node A",
+      "tags": ["endpoint-reachability", "verification"],
+      "safetyClass": "ReadOnlyObservation",
+      "requiresFirmwareMajor": null
+    },
+    {
+      "factId": "LAB-CLAIM-BOUNDARY-01",
+      "factKey": "engineering.claimBoundary.health",
+      "assertedValue": "endpoint-only",
+      "statement": "An HTTP health result from Node A shows reachability for that endpoint at test time, not the exact physical switch port in use.",
+      "claimKind": "EngineeringNote",
+      "sourceDocumentId": "SYN-LAB-PLAN",
+      "sourceLocator": "Verification limitations",
+      "tags": ["endpoint-reachability", "claim-scope"],
+      "safetyClass": "ObserveOnly",
+      "requiresFirmwareMajor": null
+    }
+  ],
+  "capabilities": [
+    {
+      "capabilityId": "lab-endpoint-health",
+      "description": "Observe the approved lab node's health endpoint without changing equipment settings.",
+      "observationKind": "EndpointReachability",
+      "readOnly": true
+    }
+  ]
+}

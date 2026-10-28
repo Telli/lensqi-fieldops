@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lensqi:vendor-knowledge-pack:1.0",
+  "title": "LensQi FieldOps Vendor Knowledge Pack",
+  "description": "Source-linked fact cards bound to one equipment product. Vendor knowledge is not site topology or diagnostic authorization. Cross-item rules that JSON Schema cannot express (unique IDs, resolved document references, fact firmware scope equal to the pack identity, accessedOn not in the future) are enforced by the pack validator and MUST be implemented by the runtime loader as well.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "packId", "packRevision", "originKind", "identity", "documents", "facts", "capabilities"],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Stable machine identifier: letters, digits, dot, underscore, hyphen. No whitespace, quotes or path separators, so IDs are safe to echo in prompts, logs, URLs and receipts."
+    },
+    "firmwareMajor": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 30,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+    }
+  },
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "packId": {"type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "packRevision": {"type": "integer", "minimum": 1, "description": "Monotonic per packId. A new revision is a new immutable artifact; historical receipts keep referencing the digest they recorded."},
+    "originKind": {"enum": ["VendorLinked", "Synthetic"]},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manufacturerId", "productCode", "firmwareMajor", "hardwareRevisions"],
+      "description": "Exact applicability key. The runtime compares ordinal, case-normalized values; it never uses fuzzy matching.",
+      "properties": {
+        "manufacturerId": {"type": "string", "minLength": 2, "maxLength": 80},
+        "productCode": {"type": "string", "minLength": 2, "maxLength": 80},
+        "firmwareMajor": {
+          "$ref": "#/$defs/firmwareMajor",
+          "description": "Firmware major the pack is scoped to, or null when the pack carries no firmware-scoped facts. Every fact's requiresFirmwareMajor must be null or equal to this value."
+        },
+        "hardwareRevisions": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 40},
+          "uniqueItems": true,
+          "maxItems": 30,
+          "description": "Empty array: the pack does not restrict by hardware revision. Non-empty: the asset's revision must be known and listed; an unknown asset revision yields ApplicabilityUnverified and an unlisted one yields HardwareRevisionMismatch."
+        }
+      }
+    },
+    "documents": {
+      "type": "array", "minItems": 1, "maxItems": 30,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["documentId", "publisher", "title", "url", "documentVersion", "accessedOn", "rightsMode"],
+        "properties": {
+          "documentId": {"$ref": "#/$defs/identifier"},
+          "publisher": {"type": "string", "minLength": 2, "maxLength": 100},
+          "title": {"type": "string", "minLength": 3, "maxLength": 180},
+          "url": {"anyOf": [{"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 500}, {"type": "null"}]},
+          "documentVersion": {"type": ["string", "null"], "maxLength": 100},
+          "accessedOn": {"type": "string", "format": "date", "description": "Date a human reviewed the URL. Not proof of continued availability; must not be in the future."},
+          "rightsMode": {"enum": ["LinkOnly", "OriginalSynthetic"]}
+        }
+      }
+    },
+    "facts": {
+      "type": "array", "minItems": 1, "maxItems": 100,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["factId", "factKey", "assertedValue", "statement", "claimKind", "sourceDocumentId", "sourceLocator", "tags", "safetyClass", "requiresFirmwareMajor"],
+        "properties": {
+          "factId": {"$ref": "#/$defs/identifier"},
+          "factKey": {"type": "string", "minLength": 3, "maxLength": 100, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "Dotted semantic key. Two facts with the same factKey and firmware scope but different assertedValue are a contradiction and make the pack invalid."},
+          "assertedValue": {"type": "string", "minLength": 1, "maxLength": 120, "description": "Machine-comparable value. When it names a diagnostic ID it is a recommendation only; execution authority comes solely from the site fixture's approvedDiagnostics and the server probe registry."},
+          "statement": {"type": "string", "minLength": 10, "maxLength": 480, "description": "Short original paraphrase shown to technicians and the model. Never copied manual text. Treated as untrusted quoted data in prompts."},
+          "claimKind": {"enum": ["VendorDocumented", "SiteConfigured", "EngineeringNote"], "description": "VendorLinked packs may use only VendorDocumented or EngineeringNote. Runtime provenance labels Inferred and Measured are not pack claim kinds."},
+          "sourceDocumentId": {"$ref": "#/$defs/identifier"},
+          "sourceLocator": {"type": "string", "minLength": 3, "maxLength": 150},
+          "tags": {"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": {"type": "string", "minLength": 2, "maxLength": 50, "pattern": "^[a-z0-9][a-z0-9-]*$"}},
+          "safetyClass": {"enum": ["ObserveOnly", "ReadOnlyObservation", "HumanActionRequired"]},
+          "requiresFirmwareMajor": {"$ref": "#/$defs/firmwareMajor", "description": "null: applies regardless of firmware. Otherwise must equal identity.firmwareMajor; the fact is Unverified when the asset firmware is unknown and Inapplicable when it differs."}
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array", "maxItems": 30,
+      "description": "Kinds of read-only observation the product supports. Informational grounding for the model and UI only: never endpoints, hostnames, interface names, credentials or authorization.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["capabilityId", "description", "observationKind", "readOnly"],
+        "properties": {
+          "capabilityId": {"$ref": "#/$defs/identifier"},
+          "description": {"type": "string", "minLength": 5, "maxLength": 200},
+          "observationKind": {"enum": ["Visual", "InterfaceLinkState", "EndpointReachability", "AssetInventory"]},
+          "readOnly": {"const": true}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"originKind": {"const": "VendorLinked"}}, "required": ["originKind"]},
+      "then": {
+        "properties": {
+          "documents": {"items": {"properties": {"url": {"type": "string", "pattern": "^https://"}, "rightsMode": {"const": "LinkOnly"}}}},
+          "facts": {"items": {"properties": {"claimKind": {"enum": ["VendorDocumented", "EngineeringNote"]}}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"originKind": {"const": "Synthetic"}}, "required": ["originKind"]},
+      "then": {"properties": {"documents": {"items": {"properties": {"rightsMode": {"const": "OriginalSynthetic"}}}}}}
+    }
+  ]
+}

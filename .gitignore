@@ -1,0 +1,31 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.trx
+appsettings.*.local.json
+*.local.json
+.env
+.env.*
+
+# Android / Gradle
+apps/android/**/build/
+apps/android/.gradle/
+apps/android/local.properties
+apps/android/.idea/
+*.apk
+*.aab
+
+# Python (fixture validator)
+__pycache__/
+.venv/
+venv/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

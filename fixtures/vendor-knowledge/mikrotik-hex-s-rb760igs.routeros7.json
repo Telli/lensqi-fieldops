@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "packId": "mikrotik-hex-s-rb760igs.routeros7",
+  "packRevision": 1,
+  "originKind": "VendorLinked",
+  "identity": {
+    "manufacturerId": "MikroTik",
+    "productCode": "RB760iGS",
+    "firmwareMajor": "7",
+    "hardwareRevisions": []
+  },
+  "documents": [
+    {
+      "documentId": "MK-RB760IGS-SPEC",
+      "publisher": "MikroTik",
+      "title": "MikroTik hEX S product specifications",
+      "url": "https://mikrotik.com/product/hex_s",
+      "documentVersion": null,
+      "accessedOn": "2026-10-27",
+      "rightsMode": "LinkOnly"
+    },
+    {
+      "documentId": "MK-ROUTEROS-REST",
+      "publisher": "MikroTik",
+      "title": "RouterOS REST API manual",
+      "url": "https://manual.mikrotik.com/docs/developer-guides/rest-api/",
+      "documentVersion": "RouterOS v7 documentation",
+      "accessedOn": "2026-10-27",
+      "rightsMode": "LinkOnly"
+    }
+  ],
+  "facts": [
+    {
+      "factId": "MK-PRODUCT-PORTS",
+      "factKey": "manufacturer.portCount.ethernet",
+      "assertedValue": "5",
+      "statement": "The RB760iGS hEX S includes five Gigabit Ethernet ports and one SFP interface.",
+      "claimKind": "VendorDocumented",
+      "sourceDocumentId": "MK-RB760IGS-SPEC",
+      "sourceLocator": "Specification / Ethernet and Fiber",
+      "tags": ["asset-identification", "ports", "inventory"],
+      "safetyClass": "ObserveOnly",
+      "requiresFirmwareMajor": null
+    },
+    {
+      "factId": "MK-REST-GET-INTERFACE",
+      "factKey": "routeros.rest.interface.read",
+      "assertedValue": "GET:/rest/interface/{name}",
+      "statement": "RouterOS v7 REST can read a named interface's current properties through an authenticated GET request.",
+      "claimKind": "VendorDocumented",
+      "sourceDocumentId": "MK-ROUTEROS-REST",
+      "sourceLocator": "Read data",
+      "tags": ["interface", "diagnostic", "link-state"],
+      "safetyClass": "ReadOnlyObservation",
+      "requiresFirmwareMajor": "7"
+    },
+    {
+      "factId": "MK-REST-READONLY-USER",
+      "factKey": "routeros.rest.authentication.readOnly",
+      "assertedValue": "read+api+rest-api",
+      "statement": "The RouterOS documentation describes configuring a dedicated user with read-only REST and API policies for monitoring tasks.",
+      "claimKind": "VendorDocumented",
+      "sourceDocumentId": "MK-ROUTEROS-REST",
+      "sourceLocator": "Create a REST user / Restrict access",
+      "tags": ["diagnostic", "least-privilege", "authentication"],
+      "safetyClass": "ReadOnlyObservation",
+      "requiresFirmwareMajor": "7"
+    },
+    {
+      "factId": "MK-INTERFACE-SCOPE-NOTE",
+      "factKey": "engineering.claimBoundary.interfaceRunning",
+      "assertedValue": "link-state-only",
+      "statement": "A reported interface running flag should be treated as device-reported link status; site port mapping and application reachability require separate evidence.",
+      "claimKind": "EngineeringNote",
+      "sourceDocumentId": "MK-ROUTEROS-REST",
+      "sourceLocator": "Read data / interface example",
+      "tags": ["interface", "verification", "claim-scope"],
+      "safetyClass": "ObserveOnly",
+      "requiresFirmwareMajor": "7"
+    }
+  ],
+  "capabilities": [
+    {
+      "capabilityId": "routeros-interface-get",
+      "description": "Potential read-only status lookup for an operator-approved, named RouterOS interface.",
+      "observationKind": "InterfaceLinkState",
+      "readOnly": true
+    }
+  ]
+}
