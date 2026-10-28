@@ -68,8 +68,12 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, classN
         <div className="pointer-events-none absolute animate-mask rounded-lg border-2 border-dashed border-primary shadow-[0_0_0_9999px_color-mix(in_oklab,var(--overlay)_55%,transparent)]"
           style={{ left: pct(guideBox.left, size.w), top: pct(guideBox.top, size.h), width: pct(guideBox.right - guideBox.left, size.w), height: pct(guideBox.bottom - guideBox.top, size.h) }}>
           <span className="absolute inset-0 rounded-lg animate-ring" />
-          <span className="glass absolute bottom-1 left-1 whitespace-nowrap rounded-md border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary">{guide!.label}</span>
         </div>
+      )}
+      {size && guideBox && (
+        // Outside the box so the reveal animation's clip never cuts the caption.
+        <span className="glass pointer-events-none absolute whitespace-nowrap rounded-md border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary"
+          style={{ left: `calc(${pct(guideBox.left, size.w)} + 4px)`, top: `calc(${pct(guideBox.bottom, size.h)} - 1.75rem)` }}>{guide!.label}</span>
       )}
       {size && tags.map((t, k) => {
         const above = t.box.top / size.h > 0.12;

@@ -1,5 +1,14 @@
 package com.lensqi.fieldops.ui.inspection
 
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material.icons.outlined.AutoAwesome
+import com.lensqi.fieldops.ui.common.AiCard
+import com.lensqi.fieldops.ui.common.MoveKind
+import com.lensqi.fieldops.ui.common.ProgressSegments
+import com.lensqi.fieldops.ui.common.aiSummary
+import com.lensqi.fieldops.ui.common.nextMove
+import com.lensqi.fieldops.ui.common.progressStep
+import com.lensqi.fieldops.ui.theme.FoDark
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -128,7 +137,12 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
     Column {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
-            Text(if (verifying) "Repair verification" else "Investigation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                // The equipment is the title; whether this is verification shows in the stage badge and the AI card.
+                val name = view?.let { v -> s.fixture?.assets?.firstOrNull { it.assetId == v.assetId }?.displayName ?: v.assetId }
+                Text(name ?: "Inspection", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                if (verifying) Text("Repair verification", style = MaterialTheme.typography.bodySmall)
+            }
             view?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage)) }
             Spacer(Modifier.width(12.dp))
         }
@@ -155,8 +169,8 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
             s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
             if (view != null) {
                 val asset = s.fixture?.assets?.firstOrNull { it.assetId == view.assetId }
-                item { Text("${asset?.displayName ?: view.assetId} · ${view.fixtureId}", style = MaterialTheme.typography.bodySmall) }
-                view.evidenceRequests.filter { it.answeredByPhotoId == null }.takeIf { it.isNotEmpty() }?.let { open ->
+                // Before a claim the AI card already leads with the request; after one, it gets its own banner.
+                view.evidenceRequests.filter { it.answeredByPhotoId == null }.takeIf { it.isNotEmpty() && verifying }?.let { open ->
                     item {
                         // A reviewer's request: what to photograph next. It changes no decision; the next photo answers it.
                         Column(
@@ -191,89 +205,74 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
 
 private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit, onGlasses: () -> Unit) {
     val a = s.latestAssessment
-    val relevant = a?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }.orEmpty()
-    val unclear = relevant.filter { it.status != ObservationStatus.Observed }
-    val needsView = a?.nextAction == ProposedNextAction.RequestView && view.stage == InspectionStage.NeedsEvidence
-    val diag = view.diagnostics.lastOrNull()
-    val canRepair = view.stage in listOf(InspectionStage.FaultConfirmed, InspectionStage.FaultSuspected, InspectionStage.AwaitingRepair)
-    val done = listOf(a != null, a != null, a != null && !needsView, s.outlines.isNotEmpty(), diag != null, false)
-    val active = done.indexOfFirst { !it }
+    val findings = a?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }.orEmpty()
+    val move = nextMove(view, a)
+    val latest = view.photos.lastOrNull()
+    val target = targetConcept(s.fixture, a)
 
+    // Hero: the latest photo with LensQi's outlines, and the camera one tap away.
     item {
-        Step(1, "Initial observation", done[0], active == 0) {
-            val visible = relevant.size - unclear.size
-            Text(
-                when {
-                    a != null -> "LensQi looked at ${view.photos.size} photo${if (view.photos.size == 1) "" else "s"}: $visible part${if (visible == 1) "" else "s"} visible" + if (unclear.isNotEmpty()) ", ${unclear.size} unclear." else "."
-                    view.photos.isEmpty() -> "Capture a wide photo of the equipment."
-                    else -> "Photo saved. Ask LensQi to look at it."
-                },
-            )
-            PhotoStrip(s, vm)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton("Capture", onCapture, Modifier.weight(1f), icon = Icons.Outlined.CameraAlt)
-                SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(FoDark.Overlay)) {
+            val img = s.outlineImage
+            when {
+                img != null && s.outlinePhotoId == latest?.evidenceId -> ArOverlay(img, s.outlines, arTags(s.fixture, a, s.outlines), guide = target)
+                latest != null -> vm.artifactFor(latest.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), "Latest photo", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Crop) }
+                else -> Column(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(onClick = onCapture), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(Icons.Outlined.CameraAlt, null, tint = FoDark.Muted, modifier = Modifier.size(36.dp))
+                    Text("Tap to open the camera", color = FoDark.Muted, fontSize = 13.sp)
+                }
             }
-            SecondaryButton("Use glasses", onGlasses, Modifier.fillMaxWidth(), icon = Icons.Outlined.Visibility)
-            if (view.photos.isNotEmpty()) SecondaryButton(if (a == null) "Ask LensQi to look" else "Look at the latest photo again", vm::assessAndOutline, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Visibility)
+            if (latest != null) Box(
+                Modifier.align(Alignment.BottomEnd).padding(12.dp).size(46.dp).clip(CircleShape).background(FoDark.Overlay.copy(alpha = 0.7f)).clickable(onClick = onCapture),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.CameraAlt, "New photo", tint = FoDark.Foreground) }
+            if (view.photos.size > 1) Text("${view.photos.size} photos", fontSize = 11.sp, color = FoDark.Foreground,
+                modifier = Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.65f)).padding(horizontal = 10.dp, vertical = 4.dp))
         }
     }
+    // One AI card: what LensQi sees, the next move, the single action.
     item {
-        Step(2, "Hypothesis", done[1], active == 1) {
-            if (a == null) Muted("Waiting for the first observation.")
-            relevant.forEach { h ->
+        AiCard(aiSummary(view, a), move?.title, move?.hint) {
+            when (move?.kind) {
+                MoveKind.Scan -> {
+                    PrimaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
+                        SecondaryButton("Glasses", onGlasses, Modifier.weight(1f), icon = Icons.Outlined.Visibility)
+                    }
+                }
+                MoveKind.Assess -> PrimaryButton("Look at the photo", vm::assessAndOutline, Modifier.fillMaxWidth(), enabled = s.busy == null, busy = s.busy != null, icon = Icons.Outlined.AutoAwesome)
+                MoveKind.Check -> s.fixture?.diagnostics?.firstOrNull()?.let { c ->
+                    PrimaryButton("Run the check", { vm.runDiagnostic(c.diagnosticId) }, Modifier.fillMaxWidth(), enabled = s.busy == null, busy = s.busy != null, icon = Icons.Outlined.PlayArrow)
+                }
+                MoveKind.Plan -> {
+                    Field(s.workOrderText, vm::onWorkOrderChanged, "How will you fix it?")
+                    PrimaryButton("Save plan", { vm.workOrder(s.workOrderText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.workOrderText.isNotBlank(), icon = Icons.Outlined.Build)
+                }
+                MoveKind.Repair -> {
+                    Field(s.claimText, vm::onClaimChanged, "What did you do?")
+                    PrimaryButton("Repair done — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Build)
+                }
+                else -> {}
+            }
+        }
+    }
+    item { ProgressSegments(progressStep(view, a)) }
+    if (findings.isNotEmpty()) item {
+        Expandable("What LensQi found") {
+            findings.forEach { h ->
                 val (st, label) = observationLabel(h.status)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(featureName(h.featureId), fontWeight = FontWeight.Medium); EvidenceBadge(st, label) }
                 Muted(h.reason)
             }
-            if (a != null) Muted("AI suggestions, not evidence. Your review and the equipment check decide.")
+            Muted("Suggestions, not evidence. Your review and the equipment check decide.")
         }
     }
-    item {
-        Step(3, "Evidence requested", done[2], active == 2) {
-            if (needsView) {
-                Text(sentence(a?.requestedView))
-                Text("Required to continue", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
-                PrimaryButton("Capture another view", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
-            } else Muted(
-                when {
-                    a == null -> "—"
-                    diag == null -> "No extra photo needed. Run the equipment check next to confirm the fault."
-                    else -> "No extra photo needed right now."
-                },
-            )
-        }
-    }
-    item {
-        Step(4, "Parts outlined", done[3], active == 3) {
-            val img = s.outlineImage
-            when {
-                s.outlines.isNotEmpty() && img != null && s.outlinePhotoId == view.photos.lastOrNull()?.evidenceId -> {
-                    Muted("AI outlines: ${s.outlines.joinToString { it.concept }}. Tap a label for the AI's reason.")
-                    Box(Modifier.clip(RoundedCornerShape(12.dp))) {
-                        ArOverlay(img, s.outlines, arTags(s.fixture, a, s.outlines), guide = if (needsView) targetConcept(s.fixture, a) else null)
-                    }
-                }
-                a != null -> Muted("No part could be outlined in the latest photo. Nothing was guessed.")
-                else -> Muted("Outlined automatically when LensQi looks at a photo.")
-            }
-        }
-    }
-    item { Step(5, "Equipment check", done[4], active == 4) { EquipmentCheck(s, vm, view) } }
-    item {
-        Step(6, "Repair", false, active == 5 || canRepair, last = true) {
-            when {
-                canRepair && view.stage != InspectionStage.AwaitingRepair -> {
-                    Muted("Plan the fix, do it, then tell LensQi it's done.")
-                    Field(s.workOrderText, vm::onWorkOrderChanged, "Plan")
-                    SecondaryButton("Save plan", { vm.workOrder(s.workOrderText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.workOrderText.isNotBlank())
-                }
-                view.stage == InspectionStage.AwaitingRepair -> {
-                    Field(s.claimText, vm::onClaimChanged, "What did you do?")
-                    PrimaryButton("Repair completed — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Build)
-                }
-                else -> Muted("Available once the fault is confirmed.")
-            }
+    item { Expandable("Equipment check") { EquipmentCheck(s, vm, view) } }
+    if (view.photos.isNotEmpty()) item {
+        Expandable("Photos · ${view.photos.size}") {
+            PhotoStrip(s, vm)
+            if (a != null) SecondaryButton("Look at the latest photo again", vm::assessAndOutline, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.AutoAwesome)
         }
     }
     item { Knowledge(s) }
@@ -292,10 +291,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
 
     if (!decided) {
         item {
-            Panel {
-                Text("FieldProof runs two independent checks", style = MaterialTheme.typography.titleMedium)
-                Muted("A new photo that you've reviewed, and a fresh equipment check. Both must pass; a photo alone can't mark this work complete.")
-            }
+            AiCard(aiSummary(view, null), "Verify the repair", "A new photo you've reviewed and a fresh equipment check both have to pass. A photo alone can't mark this work complete.")
         }
         item { SectionTitle("1 · New photo after the repair") }
         item {
@@ -429,24 +425,6 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
 
 @Composable
 private fun Muted(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
-
-@Composable
-private fun Step(n: Int, title: String, done: Boolean, active: Boolean, last: Boolean = false, content: @Composable () -> Unit) {
-    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight()) {
-            Box(
-                Modifier.size(24.dp).clip(CircleShape).background(if (done) Fo.Primary else Color.Transparent)
-                    .border(1.dp, if (done) Fo.Primary else if (active) Fo.Warning else Fo.Border, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { Text("$n", fontSize = 11.sp, color = if (done) Fo.OnPrimary else if (active) Fo.Warning else Fo.Muted) }
-            if (!last) Box(Modifier.padding(top = 4.dp).width(1.dp).weight(1f).background(if (done) Fo.Primary.copy(alpha = 0.5f) else Fo.Border))
-        }
-        Column(Modifier.weight(1f).padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title.uppercase(), style = Eyebrow)
-            content()
-        }
-    }
-}
 
 @Composable
 private fun Outcome(color: Color, icon: ImageVector, title: String, body: String, content: @Composable () -> Unit) {

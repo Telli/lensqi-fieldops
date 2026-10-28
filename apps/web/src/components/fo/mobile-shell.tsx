@@ -1,26 +1,25 @@
 import { Link, useLocation } from "wouter";
-import { Home, ClipboardList, ScanLine, Boxes, User, ChevronLeft, Wifi, WifiOff, LayoutDashboard } from "lucide-react";
+import { Home, ScanLine, Boxes, ChevronLeft, Wifi, WifiOff, LayoutDashboard } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+// Three destinations: today's work, the camera, the equipment. Profile sits behind the avatar on Today.
 const tabs = [
-  { to: "/m", label: "Home", Icon: Home },
-  { to: "/m/inspections", label: "Inspections", Icon: ClipboardList },
+  { to: "/m", label: "Today", Icon: Home },
   { to: "/m/start", label: "Scan", Icon: ScanLine },
   { to: "/m/assets", label: "Assets", Icon: Boxes },
-  { to: "/m/profile", label: "Profile", Icon: User },
 ] as const;
 
 export function BottomNav() {
   const [path] = useLocation();
   return (
-    <nav className="sticky bottom-0 z-20 grid grid-cols-5 items-end border-t border-border bg-background/90 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+    <nav className="sticky bottom-0 z-20 grid grid-cols-3 items-end border-t border-border/60 bg-background/80 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
       {tabs.map(({ to, label, Icon }) => {
         const active = to === "/m" ? path === "/m" || path === "/m/" : path.startsWith(to);
         if (to === "/m/start")
           return (
             <Link key={to} href={to} className="flex flex-col items-center gap-1" aria-label="Start an inspection">
-              <span className="-mt-7 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 ring-4 ring-background">
+              <span className="-mt-8 grid size-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 ring-[6px] ring-background">
                 <Icon className="size-6" />
               </span>
               <span className="text-[10px] font-medium text-primary">{label}</span>
@@ -73,7 +72,7 @@ export function TopBar({ title, back, right }: { title: string; back?: string; r
 }
 
 export function Page({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("animate-rise space-y-5 px-4 py-4", className)}>{children}</div>;
+  return <div className={cn("animate-rise space-y-5 px-4 pb-12 pt-4", className)}>{children}</div>;
 }
 
 /** Phone-sized column; on a desktop it becomes a device frame with a link to the operations dashboard. */
