@@ -32,6 +32,11 @@ function onFixtureChange() {
 
 async function refresh() {
   state = await api("GET", `/v1/inspections/${inspectionId}`);
+  // Photos uploaded by another client (the Android app) are shown from the server's stored artifacts.
+  if (state.photos.some(p => !photoUrls[p.evidenceId])) {
+    const names = await api("GET", `/v1/inspections/${inspectionId}/artifacts`);
+    for (const p of state.photos) { const n = names.find(x => x.startsWith(p.evidenceId + "-")); if (n && !photoUrls[p.evidenceId]) photoUrls[p.evidenceId] = `/v1/inspections/${inspectionId}/artifacts/${n}`; }
+  }
   $("inspId").textContent = inspectionId;
   $("stages").innerHTML = STAGES.map(s => `<span class="stage ${s === state.stage ? (s === "VerificationFailed" ? "bad" : s === "VerifiedComplete" ? "ok" : "on") : ""}">${s}</span>`).join("");
   $("photos").innerHTML = state.photos.map(p => `<figure>${photoUrls[p.evidenceId] ? `<img src="${photoUrls[p.evidenceId]}" alt="">` : ""}<figcaption>${esc(p.evidenceId)} · ${esc(p.origin)}<br>${esc(p.artifactSha256.slice(0, 12))}…</figcaption></figure>`).join("") || `<span class="muted">No photos yet.</span>`;
@@ -154,4 +159,10 @@ $("verify").onclick = () => act(() => api("POST", `/v1/inspections/${inspectionI
 $("simFail").onclick = () => act(() => api("POST", "/v1/simulation/diagnostics/NODE-A-HEALTH", { passed: false }));
 $("simPass").onclick = () => act(() => api("POST", "/v1/simulation/diagnostics/NODE-A-HEALTH", { passed: true }));
 
-loadFixtures().catch(showError);
+// ?inspection=I-… opens an existing inspection, e.g. one started on the Android client.
+loadFixtures().then(async () => {
+  const id = new URLSearchParams(location.search).get("inspection");
+  if (!id) return;
+  inspectionId = id; $("inspection").classList.remove("hidden");
+  await act(loadKnowledge);
+}).catch(showError);

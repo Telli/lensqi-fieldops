@@ -21,12 +21,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lensqi.fieldops.data.api.DiagnosticSource
-import com.lensqi.fieldops.data.api.FixtureAsset
 import com.lensqi.fieldops.ui.common.SourceBadge
 
 /** Screen 0/1: point the app at the inspection API, prove it answers, then pick a fixture asset. */
 @Composable
-fun ConnectScreen(onAssetChosen: (fixtureId: String, asset: FixtureAsset) -> Unit, vm: ConnectViewModel = hiltViewModel()) {
+fun ConnectScreen(onInspectionCreated: (inspectionId: String) -> Unit, vm: ConnectViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     LazyColumn(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("LensQi FieldOps", style = MaterialTheme.typography.headlineSmall) }
@@ -62,7 +61,7 @@ fun ConnectScreen(onAssetChosen: (fixtureId: String, asset: FixtureAsset) -> Uni
                     Text(f.fixtureDescription, style = MaterialTheme.typography.bodySmall)
                     Text("twin ${f.sha256.take(12)}…", style = MaterialTheme.typography.labelSmall)
                     f.assets.forEach { a ->
-                        Button(onClick = { onAssetChosen(f.fixtureId, a) }, modifier = Modifier.fillMaxWidth()) { Text("Inspect ${a.displayName} (${a.assetId})") }
+                        Button(onClick = { vm.createInspection(f.fixtureId, a.assetId, onInspectionCreated) }, enabled = !s.creating, modifier = Modifier.fillMaxWidth()) { Text("Inspect ${a.displayName} (${a.assetId})") }
                     }
                 }
             }

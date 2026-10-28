@@ -1,0 +1,194 @@
+package com.lensqi.fieldops.ui.inspection
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.lensqi.fieldops.data.InspectionCache
+import com.lensqi.fieldops.data.api.ApiOutcome
+import com.lensqi.fieldops.data.api.ChecklistRequest
+import com.lensqi.fieldops.data.api.ChecklistStatus
+import com.lensqi.fieldops.data.api.DiagnosticSource
+import com.lensqi.fieldops.data.api.FieldOpsApi
+import com.lensqi.fieldops.data.api.Fixture
+import com.lensqi.fieldops.data.api.InspectionView
+import com.lensqi.fieldops.data.api.InvestigateResponse
+import com.lensqi.fieldops.data.api.KnowledgeResponse
+import com.lensqi.fieldops.data.api.ReceiptVerification
+import com.lensqi.fieldops.data.api.RepairClaimRequest
+import com.lensqi.fieldops.data.api.SegmentRequest
+import com.lensqi.fieldops.data.api.Segmentation
+import com.lensqi.fieldops.data.api.SimulationRequest
+import com.lensqi.fieldops.data.api.WorkOrderRequest
+import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.queue.CommandQueue
+import com.lensqi.fieldops.data.queue.PendingCommand
+import com.lensqi.fieldops.data.settings.SettingsStore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
+import javax.inject.Inject
+
+/** Everything the inspection screen draws. Stage, decision and labels come from the server; nothing is derived locally. */
+data class InspectionUi(
+    val view: InspectionView? = null,
+    val fixture: Fixture? = null,
+    val diagnosticsMode: DiagnosticSource? = null,
+    val pending: List<PendingCommand> = emptyList(),
+    val artifacts: List<String> = emptyList(),
+    val assessment: InvestigateResponse? = null,
+    val segmentation: Segmentation? = null,
+    val segmentationImage: Bitmap? = null,
+    val knowledge: KnowledgeResponse? = null,
+    val receiptCheck: ReceiptVerification? = null,
+    val busy: String? = null,
+    val error: String? = null,
+)
+
+@HiltViewModel
+class InspectionViewModel @Inject constructor(
+    savedState: SavedStateHandle,
+    private val api: FieldOpsApi,
+    private val cache: InspectionCache,
+    private val queue: CommandQueue,
+    private val settings: SettingsStore,
+) : ViewModel() {
+    val inspectionId: String = checkNotNull(savedState["inspectionId"])
+    private val local = MutableStateFlow(InspectionUi())
+    private var running: Job? = null
+
+    val state: StateFlow<InspectionUi> = combine(local, cache.observe(inspectionId), queue.observe(inspectionId)) { ui, view, pending ->
+        ui.copy(view = view ?: ui.view, pending = pending)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InspectionUi())
+
+    init {
+        viewModelScope.launch {
+            (apiCall { api.health() } as? ApiOutcome.Ok)?.let { h -> local.update { it.copy(diagnosticsMode = h.value.diagnosticsMode) } }
+            val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.also(cache::put)
+            refresh()
+            (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value?.firstOrNull { it.fixtureId == view?.fixtureId }?.let { f -> local.update { it.copy(fixture = f) } }
+            (apiCall { api.knowledge(inspectionId) } as? ApiOutcome.Ok)?.let { k -> local.update { it.copy(knowledge = k.value) } }
+        }
+        // A capture made while offline drains as soon as the screen opens with a connection.
+        queue.requestSync()
+        // New photos (from the queue or another client) need their artifact names for thumbnails.
+        viewModelScope.launch {
+            cache.observe(inspectionId).map { v -> v?.photos?.map { it.evidenceId }.orEmpty() }.distinctUntilChanged().collect { ids ->
+                if (ids.any { id -> local.value.artifacts.none { it.startsWith("$id-") } })
+                    (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
+            }
+        }
+    }
+
+    fun artifactUrl(name: String): String = settings.currentBase().resolve("v1/inspections/$inspectionId/artifacts/$name").toString()
+    fun receiptUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt.html").toString()
+    fun receiptJsonUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt").toString()
+    fun artifactFor(evidenceId: String): String? = state.value.artifacts.firstOrNull { it.startsWith("$evidenceId-") }
+
+    fun refresh() = viewModelScope.launch {
+        when (val r = apiCall { api.inspection(inspectionId) }) {
+            is ApiOutcome.Ok -> cache.put(r.value)
+            else -> report(r)
+        }
+        (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
+    }
+
+    fun queuePhoto(file: File, origin: String) = viewModelScope.launch {
+        runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }
+    }
+
+    fun syncNow() = viewModelScope.launch { queue.drain(); refresh() }
+
+    fun cancel() {
+        running?.cancel()
+        local.update { it.copy(busy = null, error = "Cancelled on this device; the server records the result only if the model already answered.") }
+    }
+
+    fun investigate() = act("Asking Muse Spark…") {
+        apiCall { api.investigate(inspectionId, key()) }.onOk { r ->
+            cache.put(r.state)
+            local.update { it.copy(assessment = r) }
+        }
+    }
+
+    fun segment(concept: String) = act("Asking SAM 3.1…") {
+        apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept.ifBlank { null })) }.onOk { r ->
+            cache.put(r.state)
+            val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)
+            local.update { it.copy(segmentation = r.segmentation, segmentationImage = bitmap) }
+        }
+    }
+
+    fun runDiagnostic(diagnosticId: String) = act("Running $diagnosticId…") {
+        apiCall { api.runDiagnostic(inspectionId, diagnosticId, key()) }.onOk { cache.put(it.state) }
+    }
+
+    fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
+        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { }
+    }
+
+    fun workOrder(summary: String) = act("Drafting work order…") { apiCall { api.workOrder(inspectionId, key(), WorkOrderRequest(summary)) }.onOk(cache::put) }
+
+    fun claim(description: String) = act("Recording repair claim…") {
+        apiCall { api.repairClaim(inspectionId, key(), RepairClaimRequest(description)) }.onOk { cache.put(it.state) }
+    }
+
+    fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
+        apiCall { api.checklist(inspectionId, key(), ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(cache::put)
+    }
+
+    fun acknowledge() = act("Recording acknowledgement…") { apiCall { api.acknowledge(inspectionId, key()) }.onOk(cache::put) }
+
+    fun verify() = act("Server is verifying…") {
+        apiCall { api.verify(inspectionId, key()) }.onOk { cache.put(it.state) }
+    }
+
+    fun checkReceipt() = act("Re-hashing the receipt bundle…") {
+        apiCall { api.verifyReceipt(inspectionId) }.onOk { v -> local.update { it.copy(receiptCheck = v) } }
+    }
+
+    private suspend fun loadArtifactBitmap(evidenceId: String): Bitmap? {
+        val names = (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value ?: return null
+        local.update { it.copy(artifacts = names) }
+        val name = names.firstOrNull { it.startsWith("$evidenceId-") } ?: return null
+        val body = (apiCall { api.artifact(inspectionId, name) } as? ApiOutcome.Ok)?.value ?: return null
+        return withContext(Dispatchers.IO) { body.byteStream().use { BitmapFactory.decodeStream(it) } }
+    }
+
+    private fun act(label: String, block: suspend () -> Unit) {
+        if (local.value.busy != null) return
+        running = viewModelScope.launch {
+            local.update { it.copy(busy = label, error = null) }
+            try { block() } finally { local.update { it.copy(busy = null) } }
+            refresh()
+        }
+    }
+
+    private inline fun <T> ApiOutcome<T>.onOk(handle: (T) -> Unit) {
+        if (this is ApiOutcome.Ok) handle(value) else report(this)
+    }
+
+    private fun report(outcome: ApiOutcome<*>) = local.update {
+        it.copy(error = when (outcome) {
+            is ApiOutcome.Rejected -> "${outcome.code}: ${outcome.message}"
+            is ApiOutcome.Unreachable -> "API unreachable: ${outcome.message}"
+            is ApiOutcome.Ok -> null
+        })
+    }
+
+    /** One fresh Idempotency-Key per user action. */
+    private fun key() = UUID.randomUUID().toString()
+}
