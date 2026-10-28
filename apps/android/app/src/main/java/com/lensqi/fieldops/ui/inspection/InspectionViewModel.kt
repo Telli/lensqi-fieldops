@@ -61,6 +61,7 @@ data class ReviewStep(val label: String, val state: StepState)
 /** The post-capture review: the frozen frame, what the server is doing with it, and what came back. */
 data class Review(
     val file: File,
+    val origin: String,
     val afterRepair: Boolean,
     val steps: List<ReviewStep>,
     val photoId: String? = null,
@@ -225,7 +226,7 @@ class InspectionViewModel @Inject constructor(
         val afterRepair = view?.currentClaimId != null
         val known = view?.photos?.map { it.evidenceId }?.toSet().orEmpty()
         val labels = if (afterRepair) listOf("Saving photo", "Comparing with before") else listOf("Saving photo", "Observing", "Matching asset", "Outlining parts")
-        local.update { it.copy(error = null, review = Review(file, afterRepair, labels.mapIndexed { i, l -> ReviewStep(l, if (i == 0) StepState.Doing else StepState.Todo) })) }
+        local.update { it.copy(error = null, review = Review(file, origin, afterRepair, labels.mapIndexed { i, l -> ReviewStep(l, if (i == 0) StepState.Doing else StepState.Todo) })) }
         running?.cancel()
         running = viewModelScope.launch {
             runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }

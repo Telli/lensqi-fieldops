@@ -146,6 +146,36 @@ public class HardeningTests
         Assert.Equal(JsonValueKind.Null, photo.GetProperty("quality").ValueKind);
     }
 
+    [Theory]
+    [InlineData("MockWearables", "MockWearables")]
+    [InlineData("glasses", "Glasses")]
+    [InlineData(null, "Phone")]
+    public async Task Upload_records_the_claimed_capture_origin(string? source, string expected)
+    {
+        using var f = new FieldOpsApiFactory();
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        var r = source is null ? await Upload(c, id, Photo) : await Upload(c, id, Photo, "f.png", ("source", source));
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(expected, (await Json(r)).GetProperty("origin").GetString());
+    }
+
+    [Theory]
+    [InlineData("Muse")]
+    [InlineData("SimulatedProbe")]
+    [InlineData("4")]
+    [InlineData("hololens")]
+    public async Task Upload_refuses_a_source_that_is_not_a_capture_origin(string source)
+    {
+        using var f = new FieldOpsApiFactory();
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        var r = await Upload(c, id, Photo, "f.png", ("source", source));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Equal("invalid_source", await Code(r));
+        Assert.Empty((await Json(await c.GetAsync($"/v1/inspections/{id}"))).GetProperty("photos").EnumerateArray());
+    }
+
     [Fact]
     public async Task Too_small_too_large_and_sizeless_images_are_refused_before_storage()
     {

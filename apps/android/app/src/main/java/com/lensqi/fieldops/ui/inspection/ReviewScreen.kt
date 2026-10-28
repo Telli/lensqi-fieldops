@@ -53,6 +53,8 @@ import com.lensqi.fieldops.ui.common.PrimaryButton
 import com.lensqi.fieldops.ui.common.SecondaryButton
 import com.lensqi.fieldops.ui.common.changeText
 import com.lensqi.fieldops.ui.common.featureName
+import com.lensqi.fieldops.ui.common.originLabel
+import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.ui.common.isPostRepairItem
 import com.lensqi.fieldops.ui.common.observationLabel
 import com.lensqi.fieldops.ui.common.sentence
@@ -96,6 +98,14 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
                     dot?.let { Box(Modifier.size(7.dp).background(it, CircleShape)) }
                     Text(text, fontSize = 12.sp, maxLines = 1, color = if (dot == Fo.Warning) Fo.Warning else Fo.Foreground)
                 }
+            }
+            // Where the photo came from, always visible: mock glasses are never presented as real glasses.
+            runCatching { EvidenceOrigin.valueOf(r.origin) }.getOrNull()?.takeIf { it != EvidenceOrigin.Phone }?.let { o ->
+                Text(
+                    "Photo from ${originLabel(o)}" + if (o == EvidenceOrigin.MockWearables) " · Meta Mock Device Kit, simulated" else "",
+                    fontSize = 12.sp, color = if (o == EvidenceOrigin.MockWearables) Fo.Warning else Fo.Muted,
+                    modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                )
             }
             Box(Modifier.fillMaxWidth()) {
                 if (outlinesReady) ArOverlay(s.outlineImage!!, s.outlines, tags, guide = target, guideLabel = "Target region")
