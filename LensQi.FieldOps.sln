@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LensQi.FieldOps.Diagnostics
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LensQi.FieldOps.VerifyReceipt", "tools\LensQi.FieldOps.VerifyReceipt\LensQi.FieldOps.VerifyReceipt.csproj", "{1D315A47-3723-4870-B81D-A0E4B5F1162C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LensQi.FieldOps.Eval", "tools\LensQi.FieldOps.Eval\LensQi.FieldOps.Eval.csproj", "{2E41E96C-BAEB-4E77-94F5-B628B490A50F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -145,6 +147,18 @@ Global
 		{1D315A47-3723-4870-B81D-A0E4B5F1162C}.Release|x64.Build.0 = Release|Any CPU
 		{1D315A47-3723-4870-B81D-A0E4B5F1162C}.Release|x86.ActiveCfg = Release|Any CPU
 		{1D315A47-3723-4870-B81D-A0E4B5F1162C}.Release|x86.Build.0 = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|x64.Build.0 = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Debug|x86.Build.0 = Debug|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|x64.ActiveCfg = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|x64.Build.0 = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|x86.ActiveCfg = Release|Any CPU
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -159,5 +173,6 @@ Global
 		{70924822-4475-4A4F-B014-EBB40F440BCF} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{D32D611B-B8D5-43E4-8BE8-F366D5D8E927} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1D315A47-3723-4870-B81D-A0E4B5F1162C} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{2E41E96C-BAEB-4E77-94F5-B628B490A50F} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

@@ -1,0 +1,812 @@
+{
+  "version": "eval-scenarios/1.0",
+  "note": "All images are Pillow renders of a fictional switch; none is a photograph. Expected Muse statuses are allowed sets, scored as model accuracy, never asserted as truth. Deterministic expectations (decision, stage, outcome kind) are hard pass/fail.",
+  "heldOut": [
+    "c03-clear-rotated",
+    "a05-glare",
+    "f05-closeup-down",
+    "r03-repaired-rotated"
+  ],
+  "scenarios": [
+    {
+      "id": "c01-clear-p2",
+      "category": "clear",
+      "description": "Clear wide view, cable seated in P2, endpoint up",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null
+      }
+    },
+    {
+      "id": "c02-clear-bright",
+      "category": "clear",
+      "description": "Clear view, brighter exposure",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "brightness": 1.3
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null
+      }
+    },
+    {
+      "id": "c03-clear-rotated",
+      "category": "clear",
+      "description": "Clear view, camera rotated 4 degrees",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "rotate": 4
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null
+      }
+    },
+    {
+      "id": "c04-clear-closeup",
+      "category": "clear",
+      "description": "Close-up of the port row, labels large",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "closeup": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null
+      }
+    },
+    {
+      "id": "c05-clear-p5",
+      "category": "clear",
+      "description": "Clear view, cable in P5 (expected P2): discrepancy visible, endpoint up",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 5
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null
+      }
+    },
+    {
+      "id": "a01-labels-occluded",
+      "category": "ambiguous",
+      "description": "Cable tie hides the P1-P4 labels",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "occludeLabels": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "viewRequestedOrUnknown": true
+      }
+    },
+    {
+      "id": "a02-dark",
+      "category": "ambiguous",
+      "description": "Very dark exposure",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "brightness": 0.25
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "viewRequestedOrUnknown": true
+      }
+    },
+    {
+      "id": "a03-blurred",
+      "category": "ambiguous",
+      "description": "Motion blur, labels unreadable",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "blur": 6
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "viewRequestedOrUnknown": true
+      }
+    },
+    {
+      "id": "a04-no-cable",
+      "category": "ambiguous",
+      "description": "No yellow cable in frame at all",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": null
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": false,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "viewRequestedOrUnknown": true
+      }
+    },
+    {
+      "id": "a05-glare",
+      "category": "ambiguous",
+      "description": "Strong glare over the port row",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "glare": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "viewRequestedOrUnknown": true
+      }
+    },
+    {
+      "id": "f01-seated-down",
+      "category": "fakefix",
+      "description": "Cable visibly seated in P2, endpoint down, technician claims repair",
+      "flow": "fakefix",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": false,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "VerificationFailed",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "f02-wrong-port-down",
+      "category": "fakefix",
+      "description": "Cable seated in P3 (looks fine), endpoint down",
+      "flow": "fakefix",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 3
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": false,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "VerificationFailed",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "f03-occluded-down",
+      "category": "fakefix",
+      "description": "Labels occluded, claim made anyway, endpoint down",
+      "flow": "fakefix",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "occludeLabels": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": false,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "VerificationFailed",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "f04-dark-down",
+      "category": "fakefix",
+      "description": "Dark photo, claim made, endpoint down",
+      "flow": "fakefix",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "brightness": 0.35
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": false,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "VerificationFailed",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "f05-closeup-down",
+      "category": "fakefix",
+      "description": "Convincing close-up of a seated plug, endpoint down",
+      "flow": "fakefix",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "closeup": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": false,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "VerificationFailed",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "r01-repaired-clear",
+      "category": "repaired",
+      "description": "Repair done, fresh clear photo, endpoint up",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "Verified",
+        "finalStage": "VerifiedComplete",
+        "outcomeKind": "VerifiedCompleteSimulated"
+      }
+    },
+    {
+      "id": "r02-repaired-closeup",
+      "category": "repaired",
+      "description": "Repair done, close-up after",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "closeup": true
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "Verified",
+        "finalStage": "VerifiedComplete",
+        "outcomeKind": "VerifiedCompleteSimulated"
+      }
+    },
+    {
+      "id": "r03-repaired-rotated",
+      "category": "repaired",
+      "description": "Repair done, rotated after-photo",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "rotate": -5
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "Verified",
+        "finalStage": "VerifiedComplete",
+        "outcomeKind": "VerifiedCompleteSimulated"
+      }
+    },
+    {
+      "id": "r04-repaired-checklist-unknown",
+      "category": "repaired",
+      "description": "Endpoint up but technician marks the cable item Unknown",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "brightness": 0.4
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Unknown",
+          "Suspected",
+          "Conflicting"
+        ]
+      },
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Unknown",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "NeedsHumanReview",
+        "finalStage": "NeedsEvidence",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "r05-repaired-checklist-conflict",
+      "category": "repaired",
+      "description": "Endpoint up but reviewer marks the cable item Conflicting",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Conflicting",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "NeedsHumanReview",
+        "finalStage": "NeedsEvidence",
+        "outcomeKind": null
+      }
+    },
+    {
+      "id": "w01-unknown-asset",
+      "category": "wrong",
+      "description": "Asset LAB-SW-99 is not in the fixture",
+      "flow": "createonly",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-99",
+      "samConcept": "yellow ethernet cable",
+      "expect": {
+        "createRejectedWith": "unknown_asset"
+      }
+    },
+    {
+      "id": "w02-unknown-fixture",
+      "category": "wrong",
+      "description": "Fixture LAB-RACK-02 is not installed",
+      "flow": "createonly",
+      "fixtureId": "LAB-RACK-02",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "expect": {
+        "createRejectedWith": "not_found"
+      }
+    },
+    {
+      "id": "w03-wrong-asset-label",
+      "category": "wrong",
+      "description": "Photo shows SW02 / LAB-SW-02 but the inspection is bound to LAB-SW-01",
+      "flow": "healthy",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2,
+        "chassisLabel": "SW02",
+        "assetLabel": "LAB-SW-02"
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Suspected",
+          "Unknown",
+          "Conflicting"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed",
+          "Suspected",
+          "Unknown",
+          "Conflicting"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpBeforeRepair": true,
+      "expect": {
+        "finalStageIn": [
+          "InitialScan",
+          "NeedsEvidence",
+          "FaultSuspected"
+        ],
+        "faultConfirmed": false,
+        "decision": null,
+        "modelMustNotClaimAsset": true
+      }
+    },
+    {
+      "id": "w04-no-post-repair-photo",
+      "category": "wrong",
+      "description": "Repair claimed but no fresh photo and no review",
+      "flow": "nophoto",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "Denied",
+        "finalStage": "NeedsEvidence",
+        "reasonContains": "post-repair image"
+      }
+    },
+    {
+      "id": "w05-simulated-never-live",
+      "category": "wrong",
+      "description": "Everything passes in Simulated mode: outcome must never be Live",
+      "flow": "repair",
+      "fixtureId": "LAB-RACK-01",
+      "assetId": "LAB-SW-01",
+      "samConcept": "yellow ethernet cable",
+      "render": {
+        "port": 2
+      },
+      "expectMuse": {
+        "switch_chassis_visible": [
+          "Observed"
+        ],
+        "yellow_cable_near_end_visible": [
+          "Observed"
+        ]
+      },
+      "expectSamMatch": true,
+      "checklist": {
+        "switch_chassis_visible": "Satisfied",
+        "yellow_cable_near_end_visible": "Satisfied",
+        "post_repair_view_captured": "Satisfied"
+      },
+      "endpointUpAfterRepair": true,
+      "expect": {
+        "decision": "Verified",
+        "finalStage": "VerifiedComplete",
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "outcomeKindNot": "VerifiedCompleteLive"
+      }
+    }
+  ]
+}
