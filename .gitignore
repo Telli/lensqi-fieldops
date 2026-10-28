@@ -40,3 +40,4 @@ data/
 
 # Agent worktrees
 .claude/worktrees/
+.agents/
