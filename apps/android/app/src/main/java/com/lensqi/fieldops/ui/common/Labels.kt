@@ -1,6 +1,7 @@
 package com.lensqi.fieldops.ui.common
 
 import com.lensqi.fieldops.data.api.ChecklistStatus
+import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.ObservationStatus
 import com.lensqi.fieldops.data.api.VisualChangeVerdict
@@ -80,4 +81,12 @@ fun friendly(code: String, message: String) = when (code) {
     "image_too_small" -> "That photo is too small. Move closer or use a higher resolution."
     "change_evidence_rejected" -> "That photo wasn't accepted as post-repair evidence. Take a new one."
     else -> message
+}
+
+/** Where a photo came from, as the technician reads it. Mock glasses are never called glasses. */
+fun originLabel(o: EvidenceOrigin) = when (o) {
+    EvidenceOrigin.Phone -> "Camera"
+    EvidenceOrigin.Glasses -> "Glasses"
+    EvidenceOrigin.MockWearables -> "Mock glasses"
+    else -> "Imported"
 }
