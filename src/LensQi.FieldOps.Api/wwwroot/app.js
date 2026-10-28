@@ -39,7 +39,7 @@ async function refresh() {
   }
   $("inspId").textContent = inspectionId;
   $("stages").innerHTML = STAGES.map(s => `<span class="stage ${s === state.stage ? (s === "VerificationFailed" ? "bad" : s === "VerifiedComplete" ? "ok" : "on") : ""}">${s}</span>`).join("");
-  $("photos").innerHTML = state.photos.map(p => `<figure>${photoUrls[p.evidenceId] ? `<img src="${photoUrls[p.evidenceId]}" alt="">` : ""}<figcaption>${esc(p.evidenceId)} · ${esc(p.origin)}<br>${esc(p.artifactSha256.slice(0, 12))}…</figcaption></figure>`).join("") || `<span class="muted">No photos yet.</span>`;
+  $("photos").innerHTML = state.photos.map(p => `<figure>${photoUrls[p.evidenceId] ? `<img src="${photoUrls[p.evidenceId]}" alt="">` : ""}<figcaption>${esc(p.evidenceId)} · ${esc(p.origin)}${changeTag(p.evidenceId)}<br>${esc(p.artifactSha256.slice(0, 12))}…</figcaption></figure>`).join("") || `<span class="muted">No photos yet.</span>`;
   $("diagnostics").innerHTML = state.diagnostics.map(d => {
     const r = d.result, cls = r.passed === true ? "pass" : r.passed === false ? "fail" : "unav";
     return `<div class="diag"><span class="src ${esc(r.source)}">${esc(r.source).toUpperCase()}</span><span class="${cls}">${r.passed === true ? "PASS" : r.passed === false ? "FAIL" : "UNAVAILABLE"}</span><span>${esc(r.diagnosticId)} → ${esc(r.normalizedValue ?? "n/a")}</span><span class="muted">${new Date(r.completedAt).toLocaleTimeString()}</span></div>`;
@@ -49,7 +49,15 @@ async function refresh() {
   $("events").innerHTML = ev.map(e => `<li><b>${esc(e.kind)}</b>${e.kind === "StageChanged" ? ` ${esc(e.from)} → ${esc(e.to)}: ${esc(e.reason)}` : ""} <span>${new Date(e.occurredAt).toLocaleTimeString()}</span></li>`).join("");
   $("receiptLinks").innerHTML = `<a href="/v1/inspections/${inspectionId}/receipt.html" target="_blank"><button>Open receipt</button></a> <a href="/v1/inspections/${inspectionId}/receipt" target="_blank"><button class="ghost">JSON</button></a> <button id="verifyReceipt" class="ghost">Verify bundle</button>`;
   $("verifyReceipt").onclick = async () => { const v = await api("GET", `/v1/inspections/${inspectionId}/receipt/verify`); banner(v.isValid ? "ok" : "bad", v.isValid ? "Receipt bundle integrity: PASS" : "Receipt bundle integrity: FAIL", (v.isValid ? v.checks : v.failures).join(" · ")); };
-  if (state.lastDecision) {
+  // Change evidence (VK-T26) for the newest photo under the current claim outranks an older decision banner.
+  const change = (state.changeAnalyses || []).at(-1);
+  const latestPhoto = state.photos.at(-1);
+  if (change && change.claimId === state.currentClaimId && latestPhoto && change.photoEvidenceId === latestPhoto.evidenceId) {
+    const rejected = change.verdict === "DuplicateImage" || change.verdict === "NoVisualChange";
+    banner(rejected ? "bad" : change.verdict === "Changed" ? "review" : "sim",
+      `CHANGE EVIDENCE: ${change.verdict}` + (rejected ? " · photo not accepted, capture a new view" : " · measured (visual), not a verification"),
+      change.reason + ` · thresholds ${change.thresholdsVersion}`);
+  } else if (state.lastDecision) {
     const d = state.lastDecision;
     if (d.result === "Verified") banner(d.outcomeKind === "VerifiedCompleteLive" ? "ok" : "sim", d.outcomeKind === "VerifiedCompleteLive" ? "VERIFIED COMPLETE · LIVE" : "VERIFIED COMPLETE · SIMULATED (not a live measurement)", d.verifiedClaims.join(" · "));
     else if (d.result === "NeedsHumanReview") banner("review", "NEEDS HUMAN REVIEW", d.reasons.join(" · "));
@@ -57,10 +65,14 @@ async function refresh() {
   }
   if (health.diagnosticsMode === "Simulated") { const s = await api("GET", "/v1/simulation/diagnostics"); $("simState").textContent = "simulated endpoint: " + JSON.stringify(s.outcomes); }
 }
+function changeTag(evidenceId) {
+  const c = (state.changeAnalyses || []).filter(a => a.photoEvidenceId === evidenceId).at(-1);
+  return c ? ` <span class="tag ${c.verdict === "Changed" ? "measured" : c.verdict === "Unscorable" ? "" : "bad"}">${esc(c.verdict)}</span>` : "";
+}
 function renderChecklist() {
   const f = fixtures.find(x => x.fixtureId === state.fixtureId);
   const reviewed = Object.fromEntries((state.checklist || []).map(c => [c.requirementId, c]));
-  const lastPhoto = state.photos.at(-1);
+  const lastPhoto = state.photos.find(p => p.evidenceId === state.acceptedPostRepairPhotoId) || null;
   $("checklist").innerHTML = f.visualRequirements.map(v => `<div class="check"><span>${esc(v.requirementId)} ${v.mandatory ? "<span class='tag'>mandatory</span>" : ""} ${v.segmentationPrompt ? `<span class='muted'>· SAM prompt “${esc(v.segmentationPrompt)}”</span>` : ""}<br><span class="muted">${reviewed[v.requirementId] ? "reviewed: " + esc(reviewed[v.requirementId].status) : (state.repairClaimedAt ? "not reviewed since claim" : "review opens after a repair claim")}</span></span>
     <span>${["Satisfied","NotSatisfied","Unknown","Conflicting"].map(s => `<button class="ghost" data-req="${esc(v.requirementId)}" data-status="${s}" ${lastPhoto && state.repairClaimedAt ? "" : "disabled"}>${s}</button>`).join(" ")}</span></div>`).join("");
   $("checklist").querySelectorAll("button").forEach(b => b.onclick = () => act(() => api("POST", `/v1/inspections/${inspectionId}/checklist`, { requirementId: b.dataset.req, status: b.dataset.status, photoEvidenceId: lastPhoto.evidenceId })));

@@ -1,131 +1,125 @@
 # LensQi FieldOps
 
-**See the problem. Prove the solution.** A visual AI agent for field technicians that turns observations of physical
-equipment into traceable, verified maintenance outcomes. Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
+**See the problem. Prove the solution.** Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
 
-The agent (Muse Spark 1.3) proposes hypotheses, evidence requests and pre-registered predictions; SAM 3.1 localizes the
-cited region; code owns every state transition and the fail-closed dual-proof verification gate. A repair is **Verified
-Complete** only when fresh post-repair visual evidence and an independent read-only diagnostic agree and a technician
-acknowledges. Documentation guides the investigation; it is never evidence that a repair succeeded.
+## What this is
 
-**Status (2026-10-28):** Core state machine, dual-proof verification, probes (simulated, replay, guarded live HTTP),
-inspection API, Muse visual assessment, vendor-knowledge grounding and hash-verified receipts are implemented with 99
-passing tests. Genuine Muse Spark and SAM 3.1 calls are recorded under `docs/evidence/`. Browser UI is the guaranteed P0 surface; the Android client is being built in parallel and is claimed only once it runs.
-Open: hardening, change evidence, live owned probe, Android, video; the parallel plan is `docs/OPUS_HANDOFF_PLAN.md`.
+1. A field technician photographs equipment. Muse Spark 1.3 says what it observes, suspects or cannot see, and asks for a better view instead of guessing.
+2. SAM 3.1 localizes the cited part (the yellow cable) on the original pixels; the crop is never treated as independent evidence.
+3. A read-only diagnostic, chosen only from the fixture's allowlist and resolved server-side, measures the endpoint. Every result is labelled LIVE, SIMULATED or REPLAY.
+4. Vendor and site documentation guides the investigation with cited facts; it is never evidence that a repair worked.
+5. When the technician claims a repair, change evidence compares the new photo with the earlier ones: a re-submitted or unchanged photo is rejected before any probe runs.
+6. Code, not the model, owns every state transition. A repair is **Verified Complete** only when a fresh accepted post-repair photo, a human-reviewed checklist, an acknowledgement and a fresh passing diagnostic all agree.
+7. A simulated or replayed measurement can never produce `VerifiedCompleteLive`.
+8. Every inspection issues a FieldProof receipt: canonical JSON, a digest per artifact, an append-only event trail, and an offline verifier that fails on a one-byte change.
+9. Surfaces: a browser UI (the guaranteed P0) and an Android client (Kotlin/Compose) that works offline and syncs a hashed capture when the network returns.
+10. Everything here was written during the event; no private LensIQ source is copied.
 
-## Read first
+![Change evidence rejecting a re-submitted post-repair photo](docs/evidence/ui/05-change-evidence-duplicate.jpg)
 
-| Document | Purpose |
-|---|---|
-| [docs/OPUS_HANDOFF_PLAN.md](docs/OPUS_HANDOFF_PLAN.md) | Day-by-day plan to finish the entry by Nov 4; traps already hit; cutlines |
-| [docs/PRODUCTION_DESIGN.md](docs/PRODUCTION_DESIGN.md) | Beyond the demo: near-production architecture, mobile app, roadmap |
-| [.claude/skills/](.claude/skills/) | Project skills for coding agents: conventions, Meta model wire details, run-and-verify, Android rules |
-| [PRD.md](PRD.md) | Product requirements v1.1: scope, state machine, trust invariants, schedule |
-| [.kiro/specs/lensqi-fieldops/](.kiro/specs/lensqi-fieldops/) | Parent spec: requirements, design, day-by-day tasks |
-| [.kiro/specs/vendor-knowledge-and-diagnostics/](.kiro/specs/vendor-knowledge-and-diagnostics/) | Child spec: vendor knowledge packs, grounded proposals, predictions, change evidence |
-| [docs/HACKATHON_CONTRIBUTIONS.md](docs/HACKATHON_CONTRIBUTIONS.md) | Event-period work ledger, commit by commit |
-| [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Provenance: no private source copied; third-party inputs |
-| [docs/DEMO_AND_EVALUATION.md](docs/DEMO_AND_EVALUATION.md) | Three-minute demo story and benchmark plan |
-| [docs/evidence/](docs/evidence/) | Recorded genuine Meta model calls with digests |
+## Measured, not claimed
 
-## Build and test
+Latest evaluation, `docs/evaluation/eval-20261028T061752Z.md`: 25 labelled scenarios (4 held out) over synthetic renders,
+genuine `muse-spark-1.3` and `sam-3.1` calls, simulated endpoint.
+
+| Metric | Result |
+|---|---:|
+| Deterministic expectations | 25 / 25 |
+| False completions with the full loop and gate | **0** |
+| Fake fixes a single model look would have accepted | 4 / 5 |
+| Change evidence on post-repair photos: duplicate / no change / changed / unscorable | 2 / 1 / 6 / 2 |
+| Probes run on a rejected post-repair photo | 0 |
+| Receipts verified / issued | 12 / 12 |
+
+Live code path: `docs/evidence/receipt-loopback/` is a genuine `LiveLocal` HTTP measurement of a loopback server standing
+in for the lab endpoint (`VerifiedCompleteLive`, labelled `LIVE_LOCAL_PROBE (loopback)`); the owned-hardware run is
+`docs/LIVE_PROBE_RUNBOOK.md`. Every evidence file and its label: [docs/evidence/README.md](docs/evidence/README.md).
+
+## Reproduce
+
+Prerequisites: .NET 10 SDK, Python 3.10+, and for genuine model calls a Meta Model API key in `.env`
+(`cp .env.example .env`, then set `MODEL_API_KEY`; the key is read only from server configuration or the environment).
+
+One command checks everything from a fresh clone (validators, tests, the hero flow over HTTP, receipts, two genuine-call
+scenarios) and prints `RESULT: PASS` or `FAIL`:
+
+```bash
+scripts/clean_room_check.sh
+```
+
+Step by step:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt
+```
 
 ```bash
 dotnet test --nologo
 ```
 
 ```bash
-dotnet run --project src/LensQi.FieldOps.Api
+dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
 ```
 
-The API loads every knowledge pack under `fixtures/vendor-knowledge/` at startup and refuses to start if any pack or
-binding is invalid. `GET /api/vendors/knowledge-packs` lists installed packs with byte-exact SHA-256.
-
-Fixture validators (Python 3.10+):
+Open <http://127.0.0.1:5199/> for the browser UI. The demo controls for the simulated endpoint appear only in Simulated
+mode (the default). The API refuses to start if any knowledge pack, fixture binding or expected twin is invalid.
 
 ```bash
-python -m pip install -r scripts/requirements.txt
+dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 --only c01-clear-p2,f01-seated-down
 ```
-
-```bash
-python scripts/validate_expected_twin.py && python scripts/validate_vendor_packs.py
-```
-
-```bash
-python scripts/test_expected_twin_constraints.py && python scripts/test_sample_pack_constraints.py
-```
-
-## Meta model calls
-
-Copy `.env.example` to `.env` and set `MODEL_API_KEY` (the file is gitignored; the key is never accepted from a request).
-Then run the Stage One gate, which makes two genuine `muse-spark-1.3` structured-output calls grounded in the synthetic
-pack, validates them server-side, and writes an evidence record:
-
-```bash
-dotnet run --project tools/LensQi.FieldOps.StageOneGate
-```
-
-## Browser inspection UI (P0 surface)
-
-Start the API and open <http://127.0.0.1:5199/>. The page is plain HTML and JavaScript served from `wwwroot`, no build step. It walks the loop in order: fixture and asset → photo (camera capture on phones) → Muse assessment with Observed / Suspected / Unknown / Conflicting badges → documentation facts with provenance labels and a grounded proposal → prediction and probe with a LIVE / SIMULATED / REPLAY badge → work order, repair claim, human-reviewed checklist, acknowledgement → Verify → receipt and bundle verification. Demo controls for the simulated endpoint appear only when the server runs in Simulated mode. Screenshots of a full run are in `docs/evidence/ui/`. Android is P1; no Android build is claimed.
-
-## Evaluation
-
-`fixtures/telecom-lab/eval/scenarios.json` holds 25 labelled scenarios over Pillow renders of the fictional switch (clear, ambiguous, fake fix, repaired, wrong asset), four of them held out. `tools/sam-parser/render_fixture.py` regenerates the images. With the API running in Simulated mode:
-
-```bash
-dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199
-```
-
-The runner makes genuine Muse Spark and SAM 3.1 calls, scores the deterministic expectations as hard pass/fail, reports model behaviour without asserting it as truth, compares a single-look baseline against the full loop on false completions, and writes `docs/evaluation/eval-<timestamp>.{json,md}`.
-
-## Segmentation (SAM 3.1)
-
-`POST /v1/inspections/{id}/segment` sends one noun phrase and the photo to `sam-3.1`, parses the special-token output through the Python sidecar, records the match (or an honest no-match), cuts a padded ROI from the original pixels with its transform, and stores the geometry beside the evidence. The browser draws the box and mask from the RLE on a canvas. The sidecar needs a Python with `meta-sam-parser` and Pillow: `pip install -r tools/sam-parser/requirements.txt`, then either set `FIELDOPS_PYTHON` or create `.venv` at the repo root.
-
-## Receipts
-
-Every inspection can issue a FieldProof receipt: `GET /v1/inspections/{id}/receipt` (JSON), `/receipt.html` (printable) and `/receipt/verify`. The bundle on disk (`data/receipts/{id}/`) carries `receipt.json`, `receipt.html` and a copy of every photo. The manifest digest is the SHA-256 of the canonical JSON; the CLI recomputes it and every artifact digest:
 
 ```bash
 dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- docs/evidence/receipt-sample
 ```
 
-Flip one byte in an artifact or edit one field in `receipt.json` and it fails. Digests prove bundle integrity only, never who captured the images.
-
-## SAM 3.1 spike
-
-Genuine `sam-3.1` calls on a synthetic fixture photo, parsed by the Python sidecar, with boxes and masks drawn on the original image (`docs/evidence/sam-spike-*`):
+Android (JDK 21 and the Android SDK; the emulator reaches the host at `10.0.2.2:5199`):
 
 ```bash
-python -m pip install -r tools/sam-parser/requirements.txt
+cd apps/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-```bash
-python tools/sam-parser/sam_spike.py --image fixtures/telecom-lab/images/lab-sw-01-initial-synthetic.jpg --prompt "yellow ethernet cable" --prompt "network switch"
-```
+## How it works
 
-## Layout
+| Piece | Where |
+|---|---|
+| Inspection state machine, append-only events, dual-proof policy (`fieldproof-policy/1.2`) | `src/LensQi.FieldOps.Core/Inspection/` |
+| Change evidence: dHash duplicates, SAM mask IoU and shift, versioned thresholds | `Core/Inspection/VisualChange.cs`, `Api/Infrastructure/Evidence/ChangeEvidenceService.cs` |
+| Muse Spark client (strict JSON schema), visual assessment, grounded proposals | `src/LensQi.FieldOps.Meta/Muse`, `Vision`, `Knowledge` |
+| SAM 3.1 client (Responses API) and the Python sidecar (parser, crop, image measurements) | `src/LensQi.FieldOps.Meta/Segmentation`, `tools/sam-parser/` |
+| Probes: simulated, recorded replay, guarded live HTTP; server-side alias resolution | `src/LensQi.FieldOps.Diagnostics/` |
+| Minimal API, hardening (timeouts, rate limits, image limits), browser UI | `src/LensQi.FieldOps.Api/` |
+| FieldProof receipts and the offline verifier | `src/LensQi.FieldOps.Core/Receipts/`, `tools/LensQi.FieldOps.VerifyReceipt/` |
+| Android client: CameraX capture, Room queue, WorkManager sync, cached views | `apps/android/` |
+| Expected twin, vendor knowledge packs, evaluation scenarios, API recordings | `fixtures/` |
 
-```text
-src/LensQi.FieldOps.Core         pure contracts, applicability, resolver, proposal validation (no provider deps)
-src/LensQi.FieldOps.Api          minimal API, inspection endpoints, receipts, browser UI (wwwroot)
-src/LensQi.FieldOps.Meta         MuseSparkChatClient, grounding composer, proposal service, SamSegmentationClient + sidecar
-src/LensQi.FieldOps.Diagnostics  allowlisted read-only probes (in progress)
-tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner (Muse)
-tools/LensQi.FieldOps.VerifyReceipt  recompute every digest in an issued receipt bundle
-tools/sam-parser                 SAM output parser sidecar and spike (Python, meta-sam-parser)
-fixtures/telecom-lab             expected twin + schema (synthetic LAB-RACK-01)
-fixtures/vendor-knowledge        knowledge packs, schemas, fixture binding
-scripts/                         fixture validators and negative tests
-```
+The hero flow over HTTP, endpoint by endpoint, is in `.claude/skills/fieldops-run-and-verify/SKILL.md` and runs end to end
+in `scripts/clean_room_check.sh`; every response the Android client codes against is recorded in `fixtures/api-recordings/`
+(`fixtures/api-recordings/index.json` lists method and path) by `scripts/record_api.py`.
 
-## Non-negotiable claims
+## Read next
 
-- `running=true` on an interface or HTTP 200 from an endpoint is a specific measured result, not proof of correct cabling.
-- Documentation citations and model predictions are not evidence that physical equipment was repaired.
-- A SHA-256 receipt detects tampering within its bundle, not fabrication of the original observation.
-- Simulated or replayed data is never labelled `VerifiedCompleteLive`.
+| Document | Purpose |
+|---|---|
+| [docs/DEMO_STORYBOARD.md](docs/DEMO_STORYBOARD.md) | The three-minute video, shot by shot, with what is simulated and what is live |
+| [docs/evidence/README.md](docs/evidence/README.md) | Every recorded artifact and its label |
+| [docs/LIVE_PROBE_RUNBOOK.md](docs/LIVE_PROBE_RUNBOOK.md) | Live probe against an owned endpoint |
+| [PRD.md](PRD.md) | Product requirements: scope, state machine, trust invariants |
+| [.kiro/specs/](.kiro/specs/) | Parent spec and the vendor-knowledge child spec, with task status |
+| [docs/PRODUCTION_DESIGN.md](docs/PRODUCTION_DESIGN.md) | Beyond the demo: architecture and roadmap |
+| [docs/HACKATHON_CONTRIBUTIONS.md](docs/HACKATHON_CONTRIBUTIONS.md) | Event-period work ledger, one row per commit |
+| [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Provenance and third-party inputs |
+| [docs/OPUS_HANDOFF_PLAN.md](docs/OPUS_HANDOFF_PLAN.md) | The parallel plan to the November 4 submission |
+
+## Limits, stated plainly
+
+- HTTP 200 from an endpoint is a measured fact about that endpoint at that moment, not proof of correct cabling; the
+  lab switch is unmanaged and no probe here can see which port is used.
+- Model output, documentation citations and predictions are not evidence that equipment was repaired.
+- A `Changed` change-evidence verdict means something in the target region changed; lighting or angle can cause it.
+  It is necessary for a repair claim, never sufficient.
+- A receipt detects tampering within its bundle; it cannot prove who captured the original image.
+- The images in this repository are synthetic renders. No real-equipment photographs or lab-hardware measurements are
+  included yet, and the Android client has run on the emulator, not on a physical phone.
 
 ## Provenance
 

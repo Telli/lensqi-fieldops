@@ -58,13 +58,13 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 - [x] T6.1 Harden cancellation, timeouts, image size, quality/occlusion and provider-down behavior. *(Done 2026-10-28: header-measured image size limits, blur/luminance signals on `PhotoRecorded`, 504 `model_timeout`, 429 `rate_limited` per inspection and per IP, provider-down 409 on all three model endpoints, sidecar timeout and process kill, provider error redaction with a no-data-URL-in-logs test; 125 tests.)*
 - [ ] T6.2 Android client built in parallel as Track B (`docs/OPUS_HANDOFF_PLAN.md`): skeleton Oct 28, capture Oct 29, investigate/localize Oct 30, verify/receipt Oct 31, offline Nov 1; spoken guidance and push-to-talk claim via Muse Voice Transcribe Nov 2–3 only if the Nov 1 gate is green. Claimed only with evidence in `docs/evidence/android/`. *(Progress 2026-10-28: days 1–5 gates met on the emulator (API 36.1) with screenshots 01–15 in `docs/evidence/android/`: /health, capture and queued upload, genuine Muse + SAM overlay, fake fix denied and real fix verified (simulated), receipt, airplane-mode capture then automatic sync, cold-install hero flow. Push-to-talk voice claim (P1) not started.)*
 - [ ] T6.3 Optional Meta Device Access Toolkit + clearly labeled MockDevice input; no actual hardware claim without test. *(Nov 3 at the earliest, Track B, labelled simulated.)*
-- [ ] **Gate:** clean-install demo and core tests pass.
+- [x] **Gate:** clean-install demo and core tests pass. *(2026-10-28: `scripts/clean_room_check.sh` from a fresh clone of GitHub prints RESULT: PASS; Android cold-install hero flow on the emulator, `docs/evidence/android/13-15`.)*
 
 ## Day 8: Tue Nov 3 — Evaluation/video
 
 - [x] T7.1 Run 20–30 labeled observations and a few independent held-out cases; measure one-shot vs active evidence workflow. *(Done 2026-10-28: 25 labelled synthetic scenarios (4 held out) in `fixtures/telecom-lab/eval/`, runner `tools/LensQi.FieldOps.Eval`, report `docs/evaluation/eval-20261028T032756Z.md`.)*
 - [x] T7.2 Record model IDs, genuine Meta calls, measured latency, inconclusive rates and false-completion count. *(Done: report records model ids, tokens, SAM images, median wall time, baseline-A vs proposed-B false completions, receipt verification.)*
-- [ ] T7.3 Record three-minute video: observe → ambiguous → request view → fake fix denied → fresh repair succeeds → receipt.
+- [ ] T7.3 Record three-minute video: observe → ambiguous → request view → fake fix denied → fresh repair succeeds → receipt. *(Storyboard with exact clicks and labels, dry-run through the API: `docs/DEMO_STORYBOARD.md`. Not recorded yet.)*
 - [ ] T7.4 Update `HACKATHON_CONTRIBUTIONS.md` and `PRIOR_ART.md` including new-work commits.
 - [ ] **Gate:** publicly runnable code, original/cleared fixture media, video links, reproducible demo.
 
@@ -74,7 +74,7 @@ The remaining work runs as four parallel tracks (backend, Android, demo/reproduc
 
 ## Day 9: Wed Nov 4 — Freeze and submit
 
-- [ ] T8.1 Stop feature additions; code/secret/license scan; README from fresh checkout; sanitize screenshots/logs.
+- [ ] T8.1 Stop feature additions; code/secret/license scan; README from fresh checkout; sanitize screenshots/logs. *(README rewritten and reproduced from a fresh clone by `scripts/clean_room_check.sh`; evidence index `docs/evidence/README.md`. Freeze, license scan and the tag remain.)*
 - [ ] T8.2 Check public repo/video live accessibility and accurate build-period attribution.
 - [ ] T8.3 Submit via Cerebral Valley before 9 PM ET / 6 PM Pacific.
 
