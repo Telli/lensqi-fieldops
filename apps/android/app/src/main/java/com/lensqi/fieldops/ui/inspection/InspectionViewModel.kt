@@ -54,6 +54,10 @@ data class InspectionUi(
     val segmentationImage: Bitmap? = null,
     val knowledge: KnowledgeResponse? = null,
     val receiptCheck: ReceiptVerification? = null,
+    /** Null until the technician edits it; the screen then falls back to Muse's or the fixture's suggestion. */
+    val concept: String? = null,
+    val workOrderText: String = "Reseat the yellow cable at port 2",
+    val claimText: String = "Reseated the yellow cable at port 2",
     val busy: String? = null,
     val error: String? = null,
 )
@@ -105,6 +109,10 @@ class InspectionViewModel @Inject constructor(
         }
         (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
     }
+
+    fun onConceptChanged(value: String) = local.update { it.copy(concept = value) }
+    fun onWorkOrderChanged(value: String) = local.update { it.copy(workOrderText = value) }
+    fun onClaimChanged(value: String) = local.update { it.copy(claimText = value) }
 
     fun queuePhoto(file: File, origin: String) = viewModelScope.launch {
         runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }
