@@ -17,8 +17,8 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 ## Day 2: Wed Oct 28 — Real SAM + ROI
 
-- [ ] T1.1 Integrate `sam-3.1` image segmentation with a short object noun prompt.
-- [ ] T1.2 Normalize special-token boxes/masks with Meta's `meta-sam-parser` in a small internal Python sidecar; define portable JSON ROI response (pixel boxes, COCO RLE masks, optional confidence). Test `data:` URL image input and `one_bit` mask encoding first.
+- [x] T1.1 Integrate `sam-3.1` image segmentation with a short object noun prompt. *(Spike done 2026-10-28: genuine calls, `yellow ethernet cable` found at 0.73 confidence, `network switch` honest no-match; C# adapter next.)*
+- [x] T1.2 Normalize special-token boxes/masks with Meta's `meta-sam-parser` in a small internal Python sidecar; portable JSON ROI response (half-open pixel boxes, COCO RLE masks, box-local bounds, confidence). *(Done 2026-10-28: `tools/sam-parser/sam_parse.py`; data-URL input and `one_bit` encoding confirmed.)*
 - [ ] T1.3 Implement image original/preview capture and high-res ROI crop, with transform test fixtures.
 - [ ] T1.4 Build minimal Android inspection screen showing image, ROI and next requested view.
 - [ ] **Gate:** real SAM response and working mask/box display, with explicit no-match behavior.
