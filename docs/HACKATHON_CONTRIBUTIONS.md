@@ -25,6 +25,7 @@ feature commit, not at submission time.
 | 2026-10-27T19:33:36-07:00 | `9fa33e3` | Core inspection state machine, append-only events, idempotent commands, verification policy evaluator (T2.1–T2.4, T4.1, T4.2, T4.4) | 19 new Core tests incl. the ten PRD §17 negatives; 87 total | None |
 | 2026-10-27T19:48:31-07:00 | `fe62d22` | Diagnostics probes (simulated, replay, guarded live HTTP), dispatcher, twin loader, append-only inspection store, evidence files, Muse visual assessment, inspection and simulation endpoints (T0.4, T3.1–T3.3, T4.3, T5.1) | 7 new Api tests incl. hero flow over HTTP; 94 total; smoke run with LIVE_META image assessment | None |
 | 2026-10-27T19:56:58-07:00 | `1b4adf8` | FieldProof receipts: canonical-JSON manifest digest, per-artifact SHA-256, printable HTML, receipt endpoints, verify-receipt CLI, knowledge and prediction blocks (T5.2, T5.3, VK-T11) | 5 new tests incl. three tamper cases; 99 total; CLI PASS on issued bundle and FAIL after one flipped byte | None |
+| 2026-10-27T20:03:57-07:00 | `554f98e` | Browser inspection UI (P0 surface) served by the API; inspection knowledge and grounded-proposal endpoints; decline-view; launch config (T1.4) | Driven end to end in a browser with a LIVE_META Muse assessment; screenshots in docs/evidence/ui/; 99 tests | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
