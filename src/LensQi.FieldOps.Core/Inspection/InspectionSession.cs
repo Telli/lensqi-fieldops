@@ -242,7 +242,7 @@ public sealed class InspectionSession
         var target = decision.Result switch
         {
             VerificationResult.Verified => InspectionStage.VerifiedComplete,
-            VerificationResult.Denied when decision.Reasons.Any(r => r.Contains("still fails", StringComparison.Ordinal)) => InspectionStage.VerificationFailed,
+            VerificationResult.Denied when decision.Reasons.Any(r => r.StartsWith(VerificationPolicyEvaluator.DiagnosticFailedPrefix, StringComparison.Ordinal)) => InspectionStage.VerificationFailed,
             VerificationResult.Denied => InspectionStage.NeedsEvidence,
             _ => InspectionStage.NeedsEvidence,
         };

@@ -15,7 +15,11 @@ public class InspectionNegativeTests
         k.Tick(); k.RecordProbe(k.Probe(false));      // remote endpoint still unreachable
         var d = k.Verify();
         Assert.Equal(VerificationResult.Denied, d.Result);
-        Assert.Contains(d.Reasons, r => r.Contains("still fails"));
+        var reason = Assert.Single(d.Reasons);
+        Assert.StartsWith(VerificationPolicyEvaluator.DiagnosticFailedPrefix, reason);
+        Assert.Contains("NODE-A-HEALTH measured Unreachable (Simulated probe)", reason);
+        Assert.EndsWith("Still required: “The approved lab endpoint returned HTTP 200 at test time (not physical port identity).”", reason);
+        Assert.DoesNotContain("not satisfied", reason);
         Assert.Equal(InspectionStage.VerificationFailed, k.Session.State.Stage);
         Assert.Null(d.OutcomeKind);
     }

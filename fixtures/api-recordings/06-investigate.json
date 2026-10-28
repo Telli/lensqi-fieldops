@@ -1,12 +1,12 @@
 {
-  "evidenceId": "assess-cb206c534e",
+  "evidenceId": "assess-ed6cc26e4e",
   "modelId": "muse-spark-1.3",
-  "promptDigest": "52f8ecb95cf7305855dc100d1ef65bbb17239012dadc84feffc1b31e776296fc",
-  "responseDigest": "cb206c534e788b3f0335fb36b586acc1ede1b72b3c84b821847b917f2a580909",
+  "promptDigest": "2434352a143cce63b3531d5e69f297668bf5dc5270dc3d5d2b9f050bd39a0b26",
+  "responseDigest": "ed6cc26e4ecf11e82aa233dce6ebfb4888fd0582288c7a828a85e16872ad8cbc",
   "usage": {
-    "inputTokenCount": 2892,
-    "outputTokenCount": 1178,
-    "totalTokenCount": 4070,
+    "inputTokenCount": 2896,
+    "outputTokenCount": 1151,
+    "totalTokenCount": 4047,
     "cachedInputTokenCount": null,
     "reasoningTokenCount": null,
     "inputAudioTokenCount": null,
@@ -14,7 +14,7 @@
     "outputAudioTokenCount": null,
     "outputTextTokenCount": null,
     "additionalCounts": {
-      "reasoning_tokens": 959
+      "reasoning_tokens": 940
     }
   },
   "assessment": {
@@ -23,25 +23,25 @@
       {
         "featureId": "switch_chassis_visible",
         "status": "Observed",
-        "reason": "Switch chassis clearly visible with SW01 and LAB-SW-01 labels and ports P1-P8 in frame.",
+        "reason": "Switch chassis with SW01 and LAB-SW-01 labels and ports P1-P8 clearly visible in frame.",
         "evidenceIds": [
-          "photo-36f941b410"
+          "photo-20b1e7028a"
         ]
       },
       {
         "featureId": "yellow_cable_near_end_visible",
         "status": "Observed",
-        "reason": "Yellow cable with connector clearly visible inserted in the port between P2 and P4; P2 itself appears empty.",
+        "reason": "Yellow cable with white connector clearly inserted into a switch port between P2 and P4.",
         "evidenceIds": [
-          "photo-36f941b410"
+          "photo-20b1e7028a"
         ]
       },
       {
         "featureId": "post_repair_view_captured",
-        "status": "Unknown",
-        "reason": "Stage is InitialScan with no repair context visible; cannot confirm post-repair status from this photo alone.",
+        "status": "Observed",
+        "reason": "Clear frontal view of switch faceplate and cable connection captured.",
         "evidenceIds": [
-          "photo-36f941b410"
+          "photo-20b1e7028a"
         ]
       }
     ],
@@ -51,31 +51,32 @@
     "modelId": "muse-spark-1.3",
     "schemaVersion": "visual-assessment/1.1"
   },
-  "events": 2,
+  "events": 1,
   "state": {
-    "inspectionId": "I-7ba6f25c240f",
+    "inspectionId": "I-810fe2d8ede4",
     "fixtureId": "LAB-RACK-01",
     "fixtureRevision": 1,
     "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
     "assetId": "LAB-SW-01",
-    "stage": "NeedsEvidence",
-    "lastSequence": 5,
+    "stage": "InitialScan",
+    "lastSequence": 4,
     "viewRequests": 0,
     "currentClaimId": null,
     "repairClaimedAt": null,
     "technicianAcknowledged": false,
     "photos": [
       {
-        "evidenceId": "photo-36f941b410",
+        "evidenceId": "photo-20b1e7028a",
         "origin": "Phone",
         "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
-        "observedAt": "2026-10-28T06:18:33.248472+00:00",
+        "observedAt": "2026-10-28T06:58:32.384871+00:00",
         "quality": {
           "blurLaplacianVariance": 137.61,
           "meanLuminance": 43.996,
           "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
         },
-        "perceptualHash": "80809269495ab4a8"
+        "perceptualHash": "80809269495ab4a8",
+        "recordedAt": "2026-10-28T06:58:32.466047+00:00"
       }
     ],
     "diagnostics": [],
