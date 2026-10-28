@@ -8,9 +8,10 @@ cited region; code owns every state transition and the fail-closed dual-proof ve
 Complete** only when fresh post-repair visual evidence and an independent read-only diagnostic agree and a technician
 acknowledges. Documentation guides the investigation; it is never evidence that a repair succeeded.
 
-**Status (2026-10-28):** specifications complete; vendor-knowledge layer and Muse client implemented with 68 passing tests;
-Stage One gate passed with genuine Meta model calls (`docs/evidence/`). Inspection state machine, SAM, probes,
-verification and receipts are in progress per `.kiro/specs/lensqi-fieldops/tasks.md`.
+**Status (2026-10-28):** Core state machine, dual-proof verification, probes (simulated, replay, guarded live HTTP),
+inspection API, Muse visual assessment, vendor-knowledge grounding and hash-verified receipts are implemented with 99
+passing tests. Genuine Muse Spark and SAM 3.1 calls are recorded under `docs/evidence/`. Open: C# SAM adapter and ROI
+crop, a UI surface, evaluation run; see `.kiro/specs/lensqi-fieldops/tasks.md`.
 
 ## Read first
 
@@ -61,6 +62,16 @@ pack, validates them server-side, and writes an evidence record:
 dotnet run --project tools/LensQi.FieldOps.StageOneGate
 ```
 
+## Receipts
+
+Every inspection can issue a FieldProof receipt: `GET /v1/inspections/{id}/receipt` (JSON), `/receipt.html` (printable) and `/receipt/verify`. The bundle on disk (`data/receipts/{id}/`) carries `receipt.json`, `receipt.html` and a copy of every photo. The manifest digest is the SHA-256 of the canonical JSON; the CLI recomputes it and every artifact digest:
+
+```bash
+dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- docs/evidence/receipt-sample
+```
+
+Flip one byte in an artifact or edit one field in `receipt.json` and it fails. Digests prove bundle integrity only, never who captured the images.
+
 ## SAM 3.1 spike
 
 Genuine `sam-3.1` calls on a synthetic fixture photo, parsed by the Python sidecar, with boxes and masks drawn on the original image (`docs/evidence/sam-spike-*`):
@@ -81,6 +92,7 @@ src/LensQi.FieldOps.Api          minimal API, pack loader, startup validation
 src/LensQi.FieldOps.Meta         MuseSparkChatClient, grounding composer, proposal service (SAM adapter next)
 src/LensQi.FieldOps.Diagnostics  allowlisted read-only probes (in progress)
 tools/LensQi.FieldOps.StageOneGate   genuine-call evidence runner (Muse)
+tools/LensQi.FieldOps.VerifyReceipt  recompute every digest in an issued receipt bundle
 tools/sam-parser                 SAM output parser sidecar and spike (Python, meta-sam-parser)
 fixtures/telecom-lab             expected twin + schema (synthetic LAB-RACK-01)
 fixtures/vendor-knowledge        knowledge packs, schemas, fixture binding

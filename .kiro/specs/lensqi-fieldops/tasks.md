@@ -49,8 +49,8 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 ## Day 6: Sun Nov 1 — Completion + receipts
 
 - [x] T5.1 Capture fresh post-repair frame and passing diagnostic; distinguish live vs simulated verification. *(Done at API level: `VerifiedCompleteSimulated` returned; receipts (T5.2/T5.3) pending.)*
-- [ ] T5.2 Create JSON + printable HTML evidence manifest, content hashes and verification CLI.
-- [ ] T5.3 Flip artifact bytes in tests and confirm receipt verification fails.
+- [x] T5.2 Create JSON + printable HTML evidence manifest, content hashes and verification CLI. *(Done 2026-10-28: `Core/Receipts`, `GET /v1/inspections/{id}/receipt[.html|/verify]`, `tools/LensQi.FieldOps.VerifyReceipt`.)*
+- [x] T5.3 Flip artifact bytes in tests and confirm receipt verification fails. *(Done: artifact byte flip, forged decision and dropped event all detected; sample bundle in `docs/evidence/receipt-sample/`.)*
 - [ ] **Gate:** full fault → failed fix → valid fix → receipt loop reliably reproduces.
 
 ## Day 7: Mon Nov 2 — Polish before wearable extras

@@ -1,0 +1,573 @@
+{
+  "receiptVersion": "fieldproof-receipt/1.1",
+  "generatedAt": "2026-10-28T02:56:32.732974+00:00",
+  "inspection": {
+    "inspectionId": "I-cd06bacb5caf",
+    "fixtureId": "LAB-RACK-01",
+    "fixtureRevision": 1,
+    "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "assetId": "LAB-SW-01",
+    "stage": "VerifiedComplete",
+    "outcomeKind": "VerifiedCompleteSimulated",
+    "repairClaimId": "claim-7f4d884bd5",
+    "repairClaimedAt": "2026-10-28T02:56:32.632053+00:00",
+    "technicianAcknowledged": true
+  },
+  "versions": {
+    "policyVersion": "fieldproof-policy/1.1",
+    "receiptVersion": "fieldproof-receipt/1.1",
+    "proposalSchema": "vendor-grounded-proposal/1.2",
+    "assessmentSchema": "visual-assessment/1.1"
+  },
+  "artifacts": [
+    {
+      "evidenceId": "photo-0bfce0f870",
+      "kind": "photo",
+      "path": "artifacts/photo-0bfce0f870-f3392814c818.jpg",
+      "sha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+      "bytes": 74871,
+      "mediaType": "image/jpeg",
+      "origin": "RecordedFixture",
+      "observedAt": "2026-10-28T02:56:32.522273+00:00"
+    },
+    {
+      "evidenceId": "photo-c6affe2300",
+      "kind": "photo",
+      "path": "artifacts/photo-c6affe2300-1fd29eea2fb7.jpg",
+      "sha256": "1fd29eea2fb7f373ec342d02efcf76a266d6aa211ad54f67358c2b51b9e92b2e",
+      "bytes": 70367,
+      "mediaType": "image/jpeg",
+      "origin": "RecordedFixture",
+      "observedAt": "2026-10-28T02:56:32.559282+00:00"
+    },
+    {
+      "evidenceId": "photo-dbeab86363",
+      "kind": "photo",
+      "path": "artifacts/photo-dbeab86363-1fd29eea2fb7.jpg",
+      "sha256": "1fd29eea2fb7f373ec342d02efcf76a266d6aa211ad54f67358c2b51b9e92b2e",
+      "bytes": 70367,
+      "mediaType": "image/jpeg",
+      "origin": "RecordedFixture",
+      "observedAt": "2026-10-28T02:56:32.63889+00:00"
+    }
+  ],
+  "modelCalls": [],
+  "diagnostics": [
+    {
+      "evidenceId": "diag-c97076babd",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-28T02:56:32.536037+00:00",
+        "source": "Simulated",
+        "traceId": "c97076babdeb43c488e66b71218e317a",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "recordedAt": "2026-10-28T02:56:32.536195+00:00"
+    },
+    {
+      "evidenceId": "diag-1a8149d5b7",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-28T02:56:32.61037+00:00",
+        "source": "Simulated",
+        "traceId": "1a8149d5b71b45a2936e1bb3c016e5c6",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "recordedAt": "2026-10-28T02:56:32.610697+00:00"
+    },
+    {
+      "evidenceId": "diag-2d6df409a5",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": true,
+        "completedAt": "2026-10-28T02:56:32.683509+00:00",
+        "source": "Simulated",
+        "traceId": "2d6df409a53242b6ab1467c244e8e7c9",
+        "normalizedValue": "Reachable",
+        "rawDigest": null
+      },
+      "recordedAt": "2026-10-28T02:56:32.683518+00:00"
+    }
+  ],
+  "predictions": [
+    {
+      "predictionId": "pred-2a8ca2b81b",
+      "diagnosticEvidenceId": "diag-1a8149d5b7",
+      "measuredValue": "Unreachable",
+      "outcome": "Falsified",
+      "sequence": 17,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.610697+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "predictionId": "pred-8c847a9299",
+      "diagnosticEvidenceId": "diag-2d6df409a5",
+      "measuredValue": "Reachable",
+      "outcome": "Confirmed",
+      "sequence": 29,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.683518+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    }
+  ],
+  "checklist": [
+    {
+      "requirementId": "post_repair_view_captured",
+      "status": "Satisfied",
+      "reviewedAt": "2026-10-28T02:56:32.672664+00:00"
+    },
+    {
+      "requirementId": "switch_chassis_visible",
+      "status": "Satisfied",
+      "reviewedAt": "2026-10-28T02:56:32.66096+00:00"
+    },
+    {
+      "requirementId": "yellow_cable_near_end_visible",
+      "status": "Satisfied",
+      "reviewedAt": "2026-10-28T02:56:32.666959+00:00"
+    }
+  ],
+  "decision": {
+    "result": "Verified",
+    "outcomeKind": "VerifiedCompleteSimulated",
+    "reasons": [
+      "Qualifying Simulated fixture checks passed; this is not a live measurement"
+    ],
+    "verifiedClaims": [
+      "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
+    ],
+    "policyVersion": "fieldproof-policy/1.1",
+    "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "isVerified": true
+  },
+  "knowledge": {
+    "packId": "lab-switch-01.synthetic",
+    "packSha256": "f61d928056adcf26ebd68efd8dd6a8c73f74eb2a4c13a583470c016e17b74251",
+    "packRevision": 1,
+    "status": "Applicable",
+    "citations": [
+      {
+        "factId": "LAB-PORT-MAP-01",
+        "claimKind": "SiteConfigured",
+        "provenance": "SiteConfigured",
+        "statement": "The approved synthetic lab wiring plan expects the yellow cable to occupy the lab switch\u0027s P2 connector.",
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Connections / LAB-CONN-A",
+        "accessedOn": "2026-10-27"
+      },
+      {
+        "factId": "LAB-HEALTH-CHECK-01",
+        "claimKind": "SiteConfigured",
+        "provenance": "SiteConfigured",
+        "statement": "The lab acceptance checklist requires the approved NODE-A-HEALTH endpoint check after a technician\u0027s repair claim.",
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Acceptance checks / node A",
+        "accessedOn": "2026-10-27"
+      },
+      {
+        "factId": "LAB-CLAIM-BOUNDARY-01",
+        "claimKind": "EngineeringNote",
+        "provenance": "Documented",
+        "statement": "An HTTP health result from Node A shows reachability for that endpoint at test time, not the exact physical switch port in use.",
+        "documentTitle": "Original synthetic lab wiring and inspection plan",
+        "publisher": "LensQi FieldOps Demo",
+        "sourceUrl": null,
+        "sourceLocator": "Verification limitations",
+        "accessedOn": "2026-10-27"
+      }
+    ],
+    "excluded": []
+  },
+  "events": [
+    {
+      "kind": "InspectionCreated",
+      "fixtureId": "LAB-RACK-01",
+      "fixtureRevision": 1,
+      "assetId": "LAB-SW-01",
+      "sequence": 1,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.469085+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PhotoRecorded",
+      "evidenceId": "photo-0bfce0f870",
+      "origin": "RecordedFixture",
+      "artifactSha256": "f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57",
+      "observedAt": "2026-10-28T02:56:32.522273+00:00",
+      "width": 0,
+      "height": 0,
+      "sequence": 2,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.523331+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "Created",
+      "to": "InitialScan",
+      "reason": "photo recorded",
+      "sequence": 3,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.523331+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-c97076babd",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-28T02:56:32.536037+00:00",
+        "source": "Simulated",
+        "traceId": "c97076babdeb43c488e66b71218e317a",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "sequence": 4,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.536195+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "InitialScan",
+      "to": "FaultConfirmed",
+      "reason": "diagnostic NODE-A-HEALTH failed",
+      "sequence": 5,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.536195+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "WorkOrderDrafted",
+      "summary": "Reseat yellow cable at P2",
+      "sequence": 6,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.544756+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "FaultConfirmed",
+      "to": "AwaitingRepair",
+      "reason": "work order drafted",
+      "sequence": 7,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.544756+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "RepairClaimed",
+      "claimId": "claim-17f2437108",
+      "description": "Reseated",
+      "sequence": 8,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.551165+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "AwaitingRepair",
+      "to": "ReadyToVerify",
+      "reason": "technician claimed repair; earlier post-repair evidence invalidated",
+      "sequence": 9,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.551165+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PhotoRecorded",
+      "evidenceId": "photo-c6affe2300",
+      "origin": "RecordedFixture",
+      "artifactSha256": "1fd29eea2fb7f373ec342d02efcf76a266d6aa211ad54f67358c2b51b9e92b2e",
+      "observedAt": "2026-10-28T02:56:32.559282+00:00",
+      "width": 0,
+      "height": 0,
+      "sequence": 10,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.559443+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PredictionRegistered",
+      "predictionId": "pred-2a8ca2b81b",
+      "diagnosticId": "NODE-A-HEALTH",
+      "predictedValue": "Reachable",
+      "basedOnFactIds": [
+        "LAB-HEALTH-CHECK-01"
+      ],
+      "sequence": 11,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.575873+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "switch_chassis_visible",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-c6affe2300",
+      "sequence": 12,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.584673+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "yellow_cable_near_end_visible",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-c6affe2300",
+      "sequence": 13,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.59137+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "post_repair_view_captured",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-c6affe2300",
+      "sequence": 14,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.597125+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "TechnicianAcknowledged",
+      "claimId": "claim-17f2437108",
+      "sequence": 15,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.602731+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-1a8149d5b7",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-28T02:56:32.61037+00:00",
+        "source": "Simulated",
+        "traceId": "1a8149d5b71b45a2936e1bb3c016e5c6",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "sequence": 16,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.610697+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PredictionScored",
+      "predictionId": "pred-2a8ca2b81b",
+      "diagnosticEvidenceId": "diag-1a8149d5b7",
+      "measuredValue": "Unreachable",
+      "outcome": "Falsified",
+      "sequence": 17,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.610697+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "VerificationEvaluated",
+      "requestId": "verify:61b4ba7279834df59698f4c2e4ac4a3c:548fa7a7af8f4332896620a5f8b8a29f",
+      "decision": {
+        "result": "Denied",
+        "outcomeKind": null,
+        "reasons": [
+          "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied"
+        ],
+        "verifiedClaims": [],
+        "policyVersion": "fieldproof-policy/1.1",
+        "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+        "isVerified": false
+      },
+      "sequence": 18,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.611445+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "ReadyToVerify",
+      "to": "VerificationFailed",
+      "reason": "Diagnostic \u0027NODE-A-HEALTH\u0027 still fails: The approved lab endpoint returned HTTP 200 at test time (not physical port identity). not satisfied",
+      "sequence": 19,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.611445+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "RepairClaimed",
+      "claimId": "claim-7f4d884bd5",
+      "description": "Moved cable to P2",
+      "sequence": 20,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.632053+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "VerificationFailed",
+      "to": "ReadyToVerify",
+      "reason": "technician claimed repair; earlier post-repair evidence invalidated",
+      "sequence": 21,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.632053+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PhotoRecorded",
+      "evidenceId": "photo-dbeab86363",
+      "origin": "RecordedFixture",
+      "artifactSha256": "1fd29eea2fb7f373ec342d02efcf76a266d6aa211ad54f67358c2b51b9e92b2e",
+      "observedAt": "2026-10-28T02:56:32.63889+00:00",
+      "width": 0,
+      "height": 0,
+      "sequence": 22,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.639045+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PredictionRegistered",
+      "predictionId": "pred-8c847a9299",
+      "diagnosticId": "NODE-A-HEALTH",
+      "predictedValue": "Reachable",
+      "basedOnFactIds": [
+        "LAB-HEALTH-CHECK-01"
+      ],
+      "sequence": 23,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.655468+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "switch_chassis_visible",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-dbeab86363",
+      "sequence": 24,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.66096+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "yellow_cable_near_end_visible",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-dbeab86363",
+      "sequence": 25,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.666959+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "ChecklistReviewed",
+      "requirementId": "post_repair_view_captured",
+      "status": "Satisfied",
+      "reviewedByEvidenceId": "photo-dbeab86363",
+      "sequence": 26,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.672664+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "TechnicianAcknowledged",
+      "claimId": "claim-7f4d884bd5",
+      "sequence": 27,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.67805+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-2d6df409a5",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": true,
+        "completedAt": "2026-10-28T02:56:32.683509+00:00",
+        "source": "Simulated",
+        "traceId": "2d6df409a53242b6ab1467c244e8e7c9",
+        "normalizedValue": "Reachable",
+        "rawDigest": null
+      },
+      "sequence": 28,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.683518+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "PredictionScored",
+      "predictionId": "pred-8c847a9299",
+      "diagnosticEvidenceId": "diag-2d6df409a5",
+      "measuredValue": "Reachable",
+      "outcome": "Confirmed",
+      "sequence": 29,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.683518+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "VerificationEvaluated",
+      "requestId": "verify:8a364216adce45aca03c12b3480876bd:917ba58794fc4bee8e16d9b32cff6ba6",
+      "decision": {
+        "result": "Verified",
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "reasons": [
+          "Qualifying Simulated fixture checks passed; this is not a live measurement"
+        ],
+        "verifiedClaims": [
+          "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
+        ],
+        "policyVersion": "fieldproof-policy/1.1",
+        "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+        "isVerified": true
+      },
+      "sequence": 30,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.683682+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    },
+    {
+      "kind": "StageChanged",
+      "from": "ReadyToVerify",
+      "to": "VerifiedComplete",
+      "reason": "Qualifying Simulated fixture checks passed; this is not a live measurement",
+      "sequence": 31,
+      "inspectionId": "I-cd06bacb5caf",
+      "occurredAt": "2026-10-28T02:56:32.683682+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061"
+    }
+  ],
+  "disclaimers": [
+    "This receipt verifies that the specified fixture checks passed or failed at the recorded times. It is not a safety, compliance or electrical certification.",
+    "SHA-256 digests detect alteration of this bundle after it was issued. They do not prove who captured the images, nor prevent replacement of the whole bundle. Signing is future work.",
+    "Diagnostics labelled Simulated or RecordedReplay are not live measurements and never yield VerifiedCompleteLive.",
+    "A passing endpoint check verifies endpoint reachability only; on an unmanaged switch it does not establish which physical port was used.",
+    "Model observations and predictions are annotations of photographs, not evidence of equipment state. Verification decisions are computed by code from measured evidence.",
+    "Vendor documentation citations guide the investigation; they are never evidence that a repair succeeded."
+  ],
+  "manifestSha256": "f19a458382558a52bbd3abdc430cd18bd1d9c214888a943fd565a4e8ca7d917e"
+}
