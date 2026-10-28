@@ -18,8 +18,11 @@ export interface FixtureDiagnostic { diagnosticId: string; type: string; targetA
 export interface VisualRequirement { requirementId: string; mandatory: boolean; segmentationPrompt?: string | null }
 export interface Fixture {
   fixtureId: string; fixtureRevision: number; sha256: string; fixtureDescription: string;
-  assets: FixtureAsset[]; diagnostics: FixtureDiagnostic[]; visualRequirements: VisualRequirement[];
+  assets: FixtureAsset[]; diagnostics: FixtureDiagnostic[]; visualRequirements: VisualRequirement[]; connections?: FixtureConnection[];
 }
+/** The site's expected installation state: what should be plugged where. Documentation of intent, not proof. */
+export interface FixtureConnection { connectionId: string; fromAssetId: string; fromPortLabel: string; toAssetId: string; cableLabel: string; expectedState: string }
+export interface EvidenceRequest { requestId: string; note: string; requestedBy: string; requestedAt: string; answeredByPhotoId?: string | null; answeredAt?: string | null }
 export interface ImageQuality { blurLaplacianVariance: number; meanLuminance: number; analyzerVersion: string }
 export interface Photo { evidenceId: string; origin: Origin; artifactSha256: string; observedAt: string; quality?: ImageQuality | null }
 export interface DiagnosticResult {
@@ -42,12 +45,13 @@ export interface Inspection {
   photos: Photo[]; diagnostics: { evidenceId: string; result: DiagnosticResult; source: DiagnosticSource }[];
   checklist: { requirementId: string; status: ChecklistStatus; reviewedAt?: string; reviewedByEvidenceId?: string | null }[];
   segmentations: Segmentation[]; changeAnalyses: ChangeAnalysis[]; acceptedPostRepairPhotoId?: string | null;
-  lastDecision?: Decision | null; outcomeKind?: OutcomeKind | null;
+  lastDecision?: Decision | null; outcomeKind?: OutcomeKind | null; evidenceRequests?: EvidenceRequest[];
 }
 export interface InspectionSummary {
   inspectionId: string; fixtureId: string; assetId: string; stage: Stage; outcomeKind?: OutcomeKind | null;
   createdAt: string; updatedAt: string; photos: number; diagnostics: number; lastDecision?: Decision["result"] | null;
   latestChange?: ChangeVerdict | null; currentClaimId?: string | null; workOrder?: string | null; claim?: string | null;
+  verificationAttempts?: number; openEvidenceRequest?: EvidenceRequest | null;
 }
 export interface Hypothesis { featureId: string; status: ObservationStatus; reason: string; evidenceIds: string[] }
 export interface Assessment {
@@ -72,7 +76,11 @@ export interface KnowledgeFact {
 export interface Knowledge { inspectionId: string; status: string; packId?: string | null; packSha256?: string | null; packRevision?: number | null; facts: KnowledgeFact[]; warnings: string[] }
 export interface EventRecord { kind: string; sequence: number; occurredAt: string; [k: string]: unknown }
 export interface ReceiptCheck { bundle: string; isValid: boolean; checks: string[]; failures: string[] }
-export interface KnowledgePack { packId: string; title?: string; revision?: number; sha256?: string; [k: string]: unknown }
+export interface PackDocument { documentId: string; publisher: string; title: string; url?: string | null; documentVersion?: string | null; accessedOn: string; rightsMode: string; factCount: number }
+export interface KnowledgePack {
+  packId: string; packRevision: number; originKind: string; sha256: string; manufacturerId: string; productCode: string;
+  firmwareMajor?: string | null; factCount: number; documentCount: number; loadedAt: string; hardwareRevisions: string[]; documents: PackDocument[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -123,6 +131,7 @@ export const api = {
   claim: (id: string, description: string) => request<{ claimId: string; state: Inspection }>("POST", `${I(id)}/repair-claims`, { description }),
   review: (id: string, requirementId: string, status: ChecklistStatus, photoEvidenceId: string) =>
     request<Inspection>("POST", `${I(id)}/checklist`, { requirementId, status, photoEvidenceId }),
+  requestEvidence: (id: string, note: string) => request<Inspection>("POST", `${I(id)}/evidence-requests`, { note }),
   acknowledge: (id: string) => request<Inspection>("POST", `${I(id)}/acknowledge`),
   verify: (id: string) => request<{ decision: Decision; state: Inspection }>("POST", `${I(id)}/verify`),
   receipt: (id: string) => request<Record<string, unknown>>("GET", `${I(id)}/receipt`),

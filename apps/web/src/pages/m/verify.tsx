@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Camera, Terminal, RotateCcw, ShieldCheck, ShieldX, FileCheck2, Wrench, Loader2, UserCheck, Scale } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
+import { EvidenceRequestBanner } from "@/components/fo/evidence-request";
 import { CheckRow, EvidenceBadge, Section, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -64,6 +65,7 @@ export default function Verify({ id }: { id: string }) {
     <>
       <TopBar title="Repair verification" back={`/m/i/${id}`} right={diag && <SourceBadge source={diag.source} />} />
       <Page>
+        <EvidenceRequestBanner id={id} requests={i.evidenceRequests} />
         {!decision && !running && (
           <div className="panel space-y-1 p-4">
             <div className="text-base font-semibold">FieldProof runs two independent checks</div>

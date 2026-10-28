@@ -36,6 +36,11 @@ The rebuilt technician app and operations dashboard, walked through end to end o
 | `ui-v2/10-ar-scan-outline-tags.jpg` | Web scan after capture: real SAM outline with a label pinned to its box, coloured by Muse's finding; asset pill from the AI's asset reading. SAM found no "network switch" region in this render, so that finding has no label (nothing placed by guesswork). | `LIVE_META`, `SYNTHETIC_IMAGE` |
 | `ui-v2/11-ar-target-region.jpg` | The AI asked for a closer view: the unclear part's outline is the target region, everything else darkened, amber "not clear" label. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 | `ui-v2/12-hands-free-view.jpg` | Hands-free view (web): one spoken instruction from live state, latest photo with outlines and its source. | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v2/13-ops-evidence-strip-request.jpg` | Ops workspace: evidence strip with each photo's origin and SHA-256, the request sent to the technician ("Waiting for a photo"), required-evidence checklist. | `META_WEARABLE_MOCK`, `LIVE_META` |
+| `ui-v2/14-ops-asset-expected-state.jpg`, `ui-v2/19-tech-asset-expected-state.jpg` | Asset detail (ops and technician): the site record's expected connection (port P2 → Lab Node A, cable YELLOW-A, connected), labelled as intent not proof; latest outlined photo; inspection history with attempts. | `SYNTHETIC_IMAGE`, `LIVE_META` |
+| `ui-v2/15-ops-knowledge-documents.jpg` | Knowledge packs with identity (firmware, hardware applicability) and each source document: publisher, version, access date, fact count, official link. | documented |
+| `ui-v2/16-ops-reports-integrity.jpg` | Reports with status filters, attempts per inspection and a live integrity column (each receipt bundle re-hashed on the server: 40/40 intact at capture). | `SIMULATED_PROBE` |
+| `ui-v2/17-tech-home-evidence-requested.jpg`, `ui-v2/18-tech-investigation-request-banner.jpg` | The ops request on the technician's home and as a banner on the investigation, with the action to answer it. | — |
 
 ## Browser UI (first version, replaced)
 
@@ -72,6 +77,8 @@ camera captures are the emulator's virtual scene, labelled `Phone`.
 | `android/24-glasses-01` … `24-glasses-06-mock-display-hud.png` | Glasses capture through Meta's Wearables Device Access Toolkit 1.0.1: entry point; real registration path stopping at "Meta AI app not installed" (no hardware here); Mock Device Kit streaming a lab clip and the emulator camera; a mock photo queued and labelled "Mock glasses"; the instruction on a mock Meta Ray-Ban Display. See `docs/GLASSES.md`. | `EMULATOR`, `META_WEARABLE_MOCK` |
 | `android/25-ar-review-mock-glasses.png` | Post-capture review after a mock-glasses capture: "Photo from Mock glasses · simulated", the asset pill matching the site record, the yellow cable outlined by SAM with its AI label, findings from Muse. Stored on the server as origin `MockWearables`. | `EMULATOR`, `META_WEARABLE_MOCK`, `LIVE_META`, `SYNTHETIC_IMAGE` |
 | `android/26-glasses-streaming-mock.png` | Glasses capture screen streaming from mock Ray-Ban Meta glasses, with the spoken instruction panel and the shutter. | `EMULATOR`, `META_WEARABLE_MOCK` |
+| `android/27-home-evidence-requested.png`, `android/28-inspection-request-banner.png` | The ops request on the Android home and inspection; answered by the next photo (server shows `answeredByPhotoId`, ops shows "Answered · show photo"). | `EMULATOR` |
+| `android/29-asset-expected-state.png` | Android asset screen: expected installation state from the site record and the asset's inspection history. | `EMULATOR` |
 
 ## Receipt bundles
 

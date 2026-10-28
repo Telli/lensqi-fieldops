@@ -1,0 +1,88 @@
+{
+  "evidenceId": "diag-c3337cb87d",
+  "result": {
+    "fixtureId": "LAB-RACK-01",
+    "diagnosticId": "NODE-A-HEALTH",
+    "targetAlias": "lab-node-a",
+    "passed": false,
+    "completedAt": "2026-10-28T09:18:25.622398+00:00",
+    "source": "Simulated",
+    "traceId": "c3337cb87d2e40298721a885c522a8e0",
+    "normalizedValue": "Unreachable",
+    "rawDigest": null
+  },
+  "source": "Simulated",
+  "events": 2,
+  "state": {
+    "inspectionId": "I-3a3f101a9f39",
+    "fixtureId": "LAB-RACK-01",
+    "fixtureRevision": 1,
+    "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+    "assetId": "LAB-SW-01",
+    "stage": "FaultConfirmed",
+    "lastSequence": 10,
+    "viewRequests": 1,
+    "currentClaimId": null,
+    "repairClaimedAt": null,
+    "technicianAcknowledged": false,
+    "photos": [
+      {
+        "evidenceId": "photo-1b266686b9",
+        "origin": "Phone",
+        "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
+        "observedAt": "2026-10-28T09:18:14.940828+00:00",
+        "quality": {
+          "blurLaplacianVariance": 137.61,
+          "meanLuminance": 43.996,
+          "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
+        },
+        "perceptualHash": "80809269495ab4a8",
+        "recordedAt": "2026-10-28T09:18:15.051519+00:00"
+      }
+    ],
+    "diagnostics": [
+      {
+        "evidenceId": "diag-c3337cb87d",
+        "result": {
+          "fixtureId": "LAB-RACK-01",
+          "diagnosticId": "NODE-A-HEALTH",
+          "targetAlias": "lab-node-a",
+          "passed": false,
+          "completedAt": "2026-10-28T09:18:25.622398+00:00",
+          "source": "Simulated",
+          "traceId": "c3337cb87d2e40298721a885c522a8e0",
+          "normalizedValue": "Unreachable",
+          "rawDigest": null
+        },
+        "source": "Simulated"
+      }
+    ],
+    "checklist": [],
+    "segmentations": [
+      {
+        "evidenceId": "seg-fc6b85e55d",
+        "sourcePhotoEvidenceId": "photo-1b266686b9",
+        "concept": "yellow ethernet cable",
+        "matched": true,
+        "maskSha256": "2ec5128e764e03f69f970a8fec6706276a1c2fffba50bda94b400337f4ed6cf3",
+        "recordedAt": "2026-10-28T09:18:25.615989+00:00"
+      }
+    ],
+    "changeAnalyses": [],
+    "acceptedPostRepairPhotoId": null,
+    "pendingPredictions": [],
+    "predictionScores": [],
+    "lastDecision": null,
+    "evidenceRequests": [
+      {
+        "requestId": "3e7bee00-3f78-497c-a507-cc259d45395b",
+        "note": "Show the yellow cable connector at port 2 up close",
+        "requestedBy": "Operations desk",
+        "requestedAt": "2026-10-28T09:18:25.618273+00:00",
+        "answeredByPhotoId": null,
+        "answeredAt": null
+      }
+    ],
+    "outcomeKind": null
+  }
+}

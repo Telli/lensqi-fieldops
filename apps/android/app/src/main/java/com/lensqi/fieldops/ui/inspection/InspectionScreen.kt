@@ -156,6 +156,23 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
             if (view != null) {
                 val asset = s.fixture?.assets?.firstOrNull { it.assetId == view.assetId }
                 item { Text("${asset?.displayName ?: view.assetId} · ${view.fixtureId}", style = MaterialTheme.typography.bodySmall) }
+                view.evidenceRequests.filter { it.answeredByPhotoId == null }.takeIf { it.isNotEmpty() }?.let { open ->
+                    item {
+                        // A reviewer's request: what to photograph next. It changes no decision; the next photo answers it.
+                        Column(
+                            Modifier.fillMaxWidth().background(Fo.Warning.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+                                .border(1.dp, Fo.Warning.copy(alpha = 0.5f), RoundedCornerShape(14.dp)).padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            open.forEach { r ->
+                                Text("EVIDENCE REQUESTED · ${r.requestedBy.uppercase()} · ${whenText(r.requestedAt).uppercase()}", style = Eyebrow.copy(color = Fo.Warning))
+                                Text(r.note)
+                            }
+                            PrimaryButton("Take the photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+                            Muted("Your next photo answers it. A request never changes the verification result.")
+                        }
+                    }
+                }
                 if (verifying) verificationItems(s, vm, view, onCapture, importPhoto, onOpenReceipt, onGlasses)
                 else investigationItems(s, vm, view, onCapture, importPhoto, onGlasses)
                 item {

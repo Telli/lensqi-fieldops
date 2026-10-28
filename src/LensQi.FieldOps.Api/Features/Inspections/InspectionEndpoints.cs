@@ -25,6 +25,7 @@ public static class InspectionEndpoints
     public sealed record ChecklistRequest(string RequirementId, ChecklistStatus Status, string PhotoEvidenceId);
     public sealed record RepairClaimRequest(string Description);
     public sealed record WorkOrderRequest(string Summary);
+    public sealed record EvidenceRequestBody(string Note);
     public sealed record SegmentationRequest(string PhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId);
     public sealed record PredictionRequest(string DiagnosticId, string PredictedValue, IReadOnlyList<string> BasedOnFactIds);
 
@@ -38,6 +39,8 @@ public static class InspectionEndpoints
             assets = t.Twin.Assets.Select(a => new { a.AssetId, a.Kind, a.DisplayName }),
             diagnostics = t.Twin.Diagnostics.Select(d => new { d.DiagnosticId, d.Type, d.TargetAlias, d.ClaimVerified }),
             visualRequirements = t.Twin.VisualRequirements,
+            // The site's expected installation state (port, cable, peer); documentation of intent, never proof of the current state.
+            connections = t.Twin.Connections,
             t.Twin.VerificationPolicy,
         })));
 
@@ -202,6 +205,14 @@ public static class InspectionEndpoints
         g.MapPost("/inspections/{id}/checklist", (string id, ChecklistRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.ReviewChecklist(RequestId(http, $"check:{req.RequirementId}:{req.Status}:{req.PhotoEvidenceId}"), req.RequirementId, req.Status, req.PhotoEvidenceId, clock.GetUtcNow()); return Results.Ok(View(s)); })));
 
+        // A reviewer on the operations desk asks the technician for more evidence. There are no user accounts yet,
+        // so the requester is recorded as the operations desk, not as a named person.
+        g.MapPost("/inspections/{id}/evidence-requests", (string id, EvidenceRequestBody req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Note) || req.Note.Length > 500) return ApiResults.BadRequest("note_invalid", "note is required and at most 500 characters");
+            return Guard(() => store.Execute(id, s => { s.RequestEvidence(RequestId(http, "evidence-request"), req.Note, "Operations desk", clock.GetUtcNow()); return Results.Ok(View(s)); }));
+        });
+
         g.MapPost("/inspections/{id}/acknowledge", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.Acknowledge(RequestId(http, "ack:" + s.State.CurrentClaimId), clock.GetUtcNow()); return Results.Ok(View(s)); })));
 
@@ -242,7 +253,7 @@ public static class InspectionEndpoints
 
     public sealed record InspectionSummary(string InspectionId, string FixtureId, string AssetId, string Stage, string? OutcomeKind,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, int Photos, int Diagnostics, string? LastDecision, string? LatestChange,
-        string? CurrentClaimId, string? WorkOrder, string? Claim);
+        string? CurrentClaimId, string? WorkOrder, string? Claim, int VerificationAttempts, EvidenceRequest? OpenEvidenceRequest);
 
     public static InspectionSummary Summary(InspectionSession s)
     {
@@ -250,7 +261,8 @@ public static class InspectionEndpoints
         return new InspectionSummary(st.InspectionId, st.FixtureId, st.AssetId, st.Stage.ToString(), st.LastDecision?.OutcomeKind?.ToString(),
             s.Events[0].OccurredAt, s.Events[^1].OccurredAt, st.Photos.Count, st.Diagnostics.Count, st.LastDecision?.Result.ToString(),
             st.ChangeAnalyses.LastOrDefault()?.Verdict.ToString(), st.CurrentClaimId,
-            s.Events.OfType<WorkOrderDrafted>().LastOrDefault()?.Summary, s.Events.OfType<RepairClaimed>().LastOrDefault()?.Description);
+            s.Events.OfType<WorkOrderDrafted>().LastOrDefault()?.Summary, s.Events.OfType<RepairClaimed>().LastOrDefault()?.Description,
+            s.Events.OfType<VerificationEvaluated>().Count(), st.EvidenceRequests.LastOrDefault(r => r.AnsweredByPhotoId is null));
     }
 
     public static object View(InspectionSession s)
@@ -263,7 +275,7 @@ public static class InspectionEndpoints
             photos = st.Photos, diagnostics = st.Diagnostics.Select(d => new { d.EvidenceId, d.Result, source = d.Result.Source.ToString() }),
             checklist = st.Checklist.Values, segmentations = st.Segmentations, changeAnalyses = st.ChangeAnalyses,
             acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
-            lastDecision = st.LastDecision,
+            lastDecision = st.LastDecision, evidenceRequests = st.EvidenceRequests,
             outcomeKind = st.LastDecision?.OutcomeKind?.ToString(),
         };
     }

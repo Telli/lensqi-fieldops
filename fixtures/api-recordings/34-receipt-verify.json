@@ -1,0 +1,15 @@
+{
+  "bundle": "<repo>/src/LensQi.FieldOps.Api/data/receipts/I-3a3f101a9f39",
+  "isValid": true,
+  "checks": [
+    "manifest digest matches (89af352818d7…)",
+    "artifact photo-1b266686b9 matches (5889ea88e648…)",
+    "artifact photo-01ee3f8762 matches (5889ea88e648…)",
+    "artifact photo-bdc6eef07f matches (f3392814c818…)",
+    "artifact photo-cddf0e57df matches (5c85c8ca9c6d…)",
+    "4 artifact(s) listed",
+    "40 events contiguous",
+    "receipt.html carries the manifest digest"
+  ],
+  "failures": []
+}

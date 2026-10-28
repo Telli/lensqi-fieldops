@@ -200,7 +200,9 @@ class InspectionViewModel @Inject constructor(
     /** What the camera asks for: the AI's requested view, or a post-repair photo once a repair is claimed. */
     fun cameraPrompt(): String {
         val v = state.value.view
+        val asked = v?.evidenceRequests?.firstOrNull { it.answeredByPhotoId == null }
         return when {
+            asked != null -> "Requested: ${asked.note}"
             v?.currentClaimId != null -> "Take a new photo of the repaired connection"
             state.value.latestAssessment?.nextAction == ProposedNextAction.RequestView -> sentence(state.value.latestAssessment?.requestedView)
             else -> "Point at the equipment and capture a wide view"

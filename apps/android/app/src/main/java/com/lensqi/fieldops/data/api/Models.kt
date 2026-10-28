@@ -70,7 +70,16 @@ data class Fixture(
     val diagnostics: List<FixtureDiagnostic>,
     val visualRequirements: List<VisualRequirement>,
     val verificationPolicy: JsonObject,
+    val connections: List<FixtureConnection> = emptyList(),
 )
+
+/** The site's expected installation state for a link: documentation of intent, never proof of what is plugged in. */
+@Serializable
+data class FixtureConnection(val connectionId: String, val fromAssetId: String, val fromPortLabel: String, val toAssetId: String, val cableLabel: String, val expectedState: String)
+
+/** A reviewer's request for more evidence; open until a photo is recorded after it. It never changes a decision. */
+@Serializable
+data class EvidenceRequest(val requestId: String, val note: String, val requestedBy: String, val requestedAt: String, val answeredByPhotoId: String? = null, val answeredAt: String? = null)
 
 @Serializable
 data class FixtureAsset(val assetId: String, val kind: String, val displayName: String)
@@ -149,6 +158,7 @@ data class InspectionView(
     val segmentations: List<SegmentationRef> = emptyList(),
     /** The post-repair photo the server will count for the current claim; null when none is accepted yet. */
     val acceptedPostRepairPhotoId: String? = null,
+    val evidenceRequests: List<EvidenceRequest> = emptyList(),
 )
 
 @Serializable
@@ -321,6 +331,8 @@ data class InspectionSummary(
     val currentClaimId: String? = null,
     val workOrder: String? = null,
     val claim: String? = null,
+    val verificationAttempts: Int = 0,
+    val openEvidenceRequest: EvidenceRequest? = null,
 )
 
 /** A segmentation recorded on the inspection; its geometry is the artifact "<evidenceId>.json". */

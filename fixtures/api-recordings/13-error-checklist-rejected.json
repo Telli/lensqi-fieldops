@@ -1,5 +1,0 @@
-{
-  "code": "change_evidence_rejected",
-  "message": "Photo 'photo-badf2943d8' was rejected by change analysis (DuplicateImage); capture a new post-repair view",
-  "details": null
-}
