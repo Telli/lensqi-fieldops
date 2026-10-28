@@ -35,6 +35,7 @@ feature commit, not at submission time.
 | 2026-10-27T22:03:45-07:00 | `c239c0a` | Android skeleton, FieldOpsApi, recorded contract (34 responses), CI job, emulator /health (T6.2 day 1) | gradlew testDebugUnitTest 41/41 + assembleDebug green; emulator screenshot docs/evidence/android/01-connect-health.png | None |
 | 2026-10-27T22:13:19-07:00 | `2cddec9` | Android capture, Room+WorkManager upload queue, RLE decoder; browser ?inspection= link (T6.2 day 2) | emulator photo on I-8937725d403b visible in API and browser; gradle tests 45/45; dotnet 125/125 | None |
 | 2026-10-27T22:18:54-07:00 | `c015d38` | Android day 3 gate: Muse assessment and SAM overlay on the emulator | screenshots docs/evidence/android/04-muse-assessment.png, 05-sam-overlay.png | None |
+| 2026-10-27T22:42:20-07:00 | `5b4f24e` | Android day 4: fake fix denied and real fix verified (simulated) on the emulator, receipt WebView and re-verification | I-cefe5dfc57f5; screenshots 06-09 in docs/evidence/android; gradle unit tests green | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
