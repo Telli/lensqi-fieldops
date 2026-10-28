@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arTags, nextStep } from "./ar";
+import { arTags, assessmentForPhoto, nextStep } from "./ar";
 import { nextMove } from "./ai";
 import type { Assessment, ChangeAnalysis, Fixture, Inspection, SegmentationGeometry } from "./api";
 
@@ -32,6 +32,18 @@ describe("photo-bound AR labels", () => {
     const withCrop = { ...outline, crop: { file: "seg-a-crop.jpg" } };
     expect(arTags(fixture, assessment, [withCrop])[0]?.cropFile).toBe("seg-a-crop.jpg");
     expect(arTags(fixture, assessment, [outline])[0]?.cropFile).toBeNull();
+  });
+});
+
+describe("photo-bound findings", () => {
+  it("keeps only the findings that cite the photo being shown", () => {
+    const mixed: Assessment = { ...assessment, hypotheses: [
+      { featureId: "cable", status: "Observed", reason: "In A", evidenceIds: ["photo-a"] },
+      { featureId: "switch", status: "Unknown", reason: "In B", evidenceIds: ["photo-b"] },
+      { featureId: "label", status: "Suspected", reason: "Cites nothing", evidenceIds: [] },
+    ] };
+    expect(assessmentForPhoto(mixed, "photo-b")?.hypotheses.map((h) => h.reason)).toEqual(["In B"]);
+    expect(assessmentForPhoto(mixed, "photo-c")).toBeUndefined();
   });
 });
 

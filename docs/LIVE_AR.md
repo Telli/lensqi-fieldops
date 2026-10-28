@@ -13,7 +13,20 @@ The live view shows moving outlines, tracking status, local updates per second, 
 3. A separate request, at most every 12 seconds, asks Muse Spark for guidance. The live-only profile uses minimal reasoning; saved-photo assessment keeps its existing profile. Neither request blocks local tracking.
 4. Frame IDs and a bounded frame history align delayed detections with the current view. Missing frame history, occlusion, inconsistent motion and expired detections clear boxes. Guidance expires after 20 seconds or a substantial scene change.
 
-These are continuous 2D image trackers with periodic AI inference, designed to work across browsers, glasses streams and Android cameras without requiring 3D SLAM hardware; on ARCore-capable Android phones, an optional ARCore 3D spatial-anchor and depth mode can raycast SAM 2D detections into 3D world-locked anchors and compute metric camera-to-target distance. In 2D mode, rapid motion, weak texture, rotation and occlusion can lose a target until the next detection reacquires it. Model latency and detection accuracy vary with equipment, lighting, network and provider load. Targets are the fixture's configured parts, not unrestricted recognition of every object.
+These are continuous 2D image trackers with periodic AI inference that work across browsers, glasses streams and Android cameras. Android phones with Google Play Services for AR add the ARCore mode below. In 2D mode, rapid motion, weak texture, rotation and occlusion can lose a target until the next detection reacquires it. Model latency and detection accuracy vary with equipment, lighting, network and provider load. Targets are the fixture's configured parts, not unrestricted recognition of every object.
+
+## ARCore mode (Android phones)
+
+When Google Play Services for AR is installed, **3D AR: On** runs live assistance on an ARCore session instead of CameraX. On a supported phone without it, **Get 3D AR** starts the Play Store install. Elsewhere (emulators without ARCore, unsupported phones, browsers, glasses) there is no 3D control and assistance stays 2D.
+
+1. ARCore owns the camera and draws it full screen. Every 100 ms its CPU image is copied, made upright and fed to the same 2D tracker and quality checks; uploads use the same endpoints and limits.
+2. For a frame that may be uploaded for detection, the app keeps ARCore's camera pose and projection at that instant and the depth it measured: the Depth API image on phones that support it, otherwise hit tests against the feature points and planes ARCore is tracking.
+3. When SAM's boxes for that frame return, each box with a depth measurement inside it becomes an ARCore anchor at the unprojected point, with its physical width and height. A box with no measurement stays 2D and gets no distance.
+4. Each frame projects the anchors through the current camera. A part followed by both keeps its live 2D box and shows the distance from the camera to its anchor (`≈ 42 cm`); an anchor without a live track is drawn fainter with "seen N s ago". Distance coaching ("Move about 18 cm closer…") appears only from those measured distances.
+5. An anchor is removed when a later detection frame looks straight at it and does not find the part, when it goes 20 seconds without confirmation, or when ARCore stops tracking it. Two parts with the same concept stay two anchors.
+6. The shutter hands the camera back to CameraX and takes the evidence photo at full resolution once its preview streams. Anchors are not kept across that switch.
+
+The status pill reports ARCore's own state ("Live AR · ARCore tracking + depth", "AR paused · add light", …). If the session cannot start or the camera stays busy, the screen says so and continues in 2D.
 
 ## Frame and session handling
 
@@ -31,9 +44,11 @@ These are continuous 2D image trackers with periodic AI inference, designed to w
 | Genuine Muse live-profile request on the same fixture | 3.13 seconds; recommended capture followed by an approved equipment check |
 | Browser moving-video check with recorded provider detections | Followed 32 pixels of movement without another model call, about 8 local updates/second; occlusion cleared the box |
 | Native Android emulator camera | CameraX analysis ran at about 8–9 updates/second; Start/Pause and native preview rendered without a runtime crash |
-| Automated suites | 175 .NET tests, 21 web tests and 91 Android unit tests passed (including the glasses follow-up); production web bundle and debug APK built |
+| Automated suites | 175 .NET tests, 23 web tests and 104 Android unit tests passed, including ARCore geometry tests (`ArSpatialTest`: unprojection round trip with ARCore-style matrices, distance equals the measured depth, no depth means no anchor, world-locking under camera motion, refutation and expiry); production web bundle and debug APK built |
+| ARCore on the emulator | Not possible: the arm64 emulator has no Google Play Services for AR. The camera showed no 3D control and ran 2D assistance at 8 updates/second with genuine AI guidance (`android-2d-fallback-no-arcore.png`) |
+| ARCore on a phone | **Not yet run.** The ARCore session, depth sampling, anchors and the AR-to-CameraX shutter hand-off have not been exercised on hardware |
 
-The provider timings are bounded observations, not throughput benchmarks. The browser test uses a synthetic moving camera source and recorded genuine detections. The phone-camera emulator check uses its virtual-room camera; the subsequent glasses check uses the SDK mock's HEVC lab clip and real providers. Neither establishes tracking accuracy on physical hardware. Physical Android cameras and glasses, camera rotation across devices, Bluetooth audio routing and thermal/battery behavior remain to be validated.
+The provider timings are bounded observations, not throughput benchmarks. The browser test uses a synthetic moving camera source and recorded genuine detections. The phone-camera emulator check uses its virtual-room camera; the subsequent glasses check uses the SDK mock's HEVC lab clip and real providers. Neither establishes tracking accuracy on physical hardware. Physical Android cameras and glasses, the ARCore mode on an ARCore phone, camera rotation across devices, Bluetooth audio routing and thermal/battery behavior remain to be validated.
 
 See [evidence and screenshots](evidence/live-ar/README.md).
 

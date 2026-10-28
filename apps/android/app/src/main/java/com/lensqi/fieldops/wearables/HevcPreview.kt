@@ -37,6 +37,9 @@ fun isParameterSetsOnly(bytes: ByteArray): Boolean = annexBNals(bytes).let { nal
 
 private val PARAMETER_OR_SEI = setOf(32, 33, 34, 39, 40)
 
+/** True when [bytes] holds an intra random access picture (HEVC NAL types 16..21), where decoding can restart cleanly. */
+fun hasRandomAccessPicture(bytes: ByteArray): Boolean = annexBNals(bytes).any { hevcNalType(it) in 16..21 }
+
 /**
  * Keeps the latest VPS, SPS and PPS seen on the stream. The glasses send the VPS once at stream start, so a decoder created
  * later (the preview surface arrived late, or was recreated) must be primed with the remembered set.
@@ -77,6 +80,12 @@ class HevcPreview(private val decodeImages: Boolean = false) {
     private var rendered = 0
     private var consumer: ((Bitmap) -> Unit)? = null
     private var lastImage = 0L
+    private var failures = 0
+    private var retryAt = 0L
+    @Volatile private var gap = false
+
+    /** Frames were dropped before reaching this decoder: skip until the next keyframe instead of decoding garbage. */
+    fun markGap() { gap = true }
 
     /** Borrowed pixels are valid only during this callback. Keep the decoder primed until the camera stops:
      * DAT cannot request a keyframe, and a late consumer may otherwise see only undecodable inter frames. */
@@ -95,6 +104,12 @@ class HevcPreview(private val decodeImages: Boolean = false) {
         if (fed++ == 0) Log.i(TAG, "first frame: ${raw.size} bytes, NAL types ${annexBNals(bytes).map(::hevcNalType)}")
         val target = surface
         if (!decodeImages && target == null) return@synchronized
+        if (gap) {
+            if (!hasRandomAccessPicture(bytes)) { stopCodec(); return@synchronized }
+            gap = false
+        }
+        // A decoder that failed (for example, no free hardware HEVC decoder) is retried with backoff, not on every frame.
+        if (codec == null && SystemClock.elapsedRealtime() < retryAt) return@synchronized
         try {
             if (codec != null && size != width to height) stopCodec()
             val fresh = codec == null
@@ -117,8 +132,11 @@ class HevcPreview(private val decodeImages: Boolean = false) {
             if (configOnly && fresh) return@synchronized
             queue(bytes, presentationTimeUs, if (configOnly) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
             drain()
+            failures = 0
         } catch (e: Exception) {
-            Log.w(TAG, "Preview decode failed; restarting on the next frame", e)
+            failures++
+            retryAt = SystemClock.elapsedRealtime() + minOf(8_000L, 250L shl minOf(failures, 5))
+            Log.w(TAG, "Decode failed ($failures); retrying in ${retryAt - SystemClock.elapsedRealtime()} ms", e)
             stopCodec()
         }
     }

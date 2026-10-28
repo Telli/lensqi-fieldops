@@ -5,9 +5,12 @@
 - `browser-live-tracking.png`: actual browser worker tracking a moving synthetic video source. The smoke test replays the genuine detection from the first probe, moves the image 32 pixels without a fresh detection, then checks disappearance, pause, single-flight requests, no evidence uploads and camera cleanup.
 - `android-camera-ready.png`: native Android camera before starting assistance, with the frame-processing disclosure.
 - `android-live-assist.png`: native CameraX analyzer active on the emulator's virtual room, showing local update rate. This captures the earlier no-target status wording; it now says “No parts found” until a target has actually been tracked. It is not evidence of real equipment tracking on a physical Android device.
+- `android-2d-fallback-no-arcore.png`: the rebuilt app on the arm64 emulator, which has no Google Play Services for AR. No 3D control is offered; live assistance runs in 2D ("Live 2D assistance · AI inferred") with genuine guidance from the running API. It is not evidence of ARCore behaviour.
 
 ![Browser tracking](browser-live-tracking.png)
 
 ![Android camera ready](android-camera-ready.png)
 
 ![Android live analyzer](android-live-assist.png)
+
+![Android 2D fallback without ARCore](android-2d-fallback-no-arcore.png)
