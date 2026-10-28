@@ -4,8 +4,34 @@
     {
       "name": "fieldops-api",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/LensQi.FieldOps.Api", "--no-launch-profile", "--urls", "http://127.0.0.1:5199"],
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/LensQi.FieldOps.Api",
+        "--no-launch-profile",
+        "--urls",
+        "http://127.0.0.1:5199"
+      ],
       "port": 5199
+    },
+    {
+      "name": "fieldops-api-live-loopback",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/LensQi.FieldOps.Api",
+        "--no-launch-profile",
+        "--urls",
+        "http://127.0.0.1:5202",
+        "--Diagnostics:Mode",
+        "LiveLocal",
+        "--Diagnostics:Targets:lab-node-a",
+        "http://127.0.0.1:8765/health",
+        "--Storage:DataDirectory",
+        "data/live-loopback"
+      ],
+      "port": 5202
     }
   ]
 }

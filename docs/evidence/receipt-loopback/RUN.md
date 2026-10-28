@@ -1,0 +1,11 @@
+# LIVE_LOCAL_PROBE (loopback) run 2026-10-28T06:18:14Z
+
+API http://127.0.0.1:5202 in LiveLocal mode; the probe target is server configuration (alias lab-node-a), not part of this log.
+Photos: f02-wrong-port-down.jpg → f02-wrong-port-down-post.jpg (RecordedFixture).
+
+- inspection I-ad1f169da81a
+- fault probe: {'fixtureId': 'LAB-RACK-01', 'diagnosticId': 'NODE-A-HEALTH', 'targetAlias': 'lab-node-a', 'passed': False, 'completedAt': '2026-10-28T06:18:10.958045+00:00', 'source': 'LiveLocal', 'traceId': '16c90b8c8518442796a7c07c21e488e9', 'normalizedValue': 'Unreachable', 'rawDigest': 'b47a55e09e9d3af62b1d6a73975ca7f455b4a76cf3d39e552fef398a7bdba7a9'}
+- change evidence: {'claimId': 'claim-1f195cbb7d', 'photoEvidenceId': 'photo-f2166f6373', 'afterImageDigest': 'f3392814c8183c8124c7065ef0189eabc132e948797ab60113225283ab8f0f57', 'referencePhotoEvidenceId': 'photo-b2844809c9', 'beforeImageDigest': '5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928', 'targetPrompt': 'yellow ethernet cable', 'beforeMaskDigest': '9864632d5bcf0a70e7e8231c1d15ec3e2c94a797db138b8a1bf3b9fb13d8df88', 'afterMaskDigest': 'c277d0176c902c9d4cf4a77f8d05cb00e087e0d289bfab4671d148541f58d266', 'perceptualHashDistance': 17, 'duplicateOfEvidenceId': None, 'targetRegionIoU': 0, 'componentShiftNormalized': 0.2191, 'verdict': 'Changed', 'reason': "Visual change in the target region: image dHash distance 17 ≥ 12; 'yellow ethernet cable' mask IoU 0.000 ≤ 0.8; 'yellow ethernet cable' centroid moved 0.219 of its box diagonal ≥ 0.1", 'thresholdsVersion': 'visual-change/1', 'rejectsPhoto': False}
+- decision: {'result': 'Verified', 'outcomeKind': 'VerifiedCompleteLive', 'reasons': ['Specified live fixture checks passed'], 'verifiedClaims': ['The approved lab endpoint returned HTTP 200 at test time (not physical port identity).'], 'policyVersion': 'fieldproof-policy/1.2', 'fixtureDigest': 'e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061', 'isVerified': True}
+- receipt valid: True
+- unavailable inspection I-d315eaa937a5: {'fixtureId': 'LAB-RACK-01', 'diagnosticId': 'NODE-A-HEALTH', 'targetAlias': 'lab-node-a', 'passed': None, 'completedAt': '2026-10-28T06:18:13.708832+00:00', 'source': 'LiveLocal', 'traceId': '1bd3e020c6ee44fc9e9e33af359a670d', 'normalizedValue': None, 'rawDigest': None}
