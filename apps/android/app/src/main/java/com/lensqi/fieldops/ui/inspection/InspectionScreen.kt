@@ -26,13 +26,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -140,11 +135,11 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
 
         // Localize (SAM)
         item {
-            var concept by rememberSaveable { mutableStateOf("") }
-            val suggested = s.assessment?.assessment?.requestedSegmentationConcept ?: s.fixture?.visualRequirements?.firstOrNull { it.segmentationPrompt != null }?.segmentationPrompt
-            LaunchedEffect(suggested) { if (concept.isBlank() && suggested != null) concept = suggested }
+            // Held by the view model: a lazy item that scrolls off screen loses its own state.
+            val concept = s.concept ?: s.assessment?.assessment?.requestedSegmentationConcept
+                ?: s.fixture?.visualRequirements?.firstOrNull { it.segmentationPrompt != null }?.segmentationPrompt.orEmpty()
             Section("Localize", "inferred", Provenance.Inferred) {
-                OutlinedTextField(concept, { concept = it }, label = { Text("Concept (one noun phrase)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(concept, vm::onConceptChanged, label = { Text("Concept (one noun phrase)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Button(onClick = { vm.segment(concept) }, enabled = s.busy == null && !view?.photos.isNullOrEmpty()) { Text("Segment with SAM 3.1") }
                 s.segmentation?.let { seg ->
                     if (seg.matched) Text("${seg.model} “${seg.concept}”: ${seg.boxes.size} box(es), ${seg.masks.size} mask(s), ${"%.1f".format(seg.elapsedSeconds)} s · ${seg.label}", style = MaterialTheme.typography.labelSmall)
@@ -185,12 +180,12 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
 
         // Repair
         item {
-            var summary by rememberSaveable { mutableStateOf("Reseat the yellow cable at port 2") }
-            var claim by rememberSaveable { mutableStateOf("Reseated the yellow cable at port 2") }
+            val summary = s.workOrderText
+            val claim = s.claimText
             Section("Repair", "technician", MaterialTheme.colorScheme.primary) {
-                OutlinedTextField(summary, { summary = it }, label = { Text("Work order") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(summary, vm::onWorkOrderChanged, label = { Text("Work order") }, modifier = Modifier.fillMaxWidth())
                 OutlinedButton(onClick = { vm.workOrder(summary) }, enabled = s.busy == null) { Text("Draft work order") }
-                OutlinedTextField(claim, { claim = it }, label = { Text("Repair claim") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(claim, vm::onClaimChanged, label = { Text("Repair claim") }, modifier = Modifier.fillMaxWidth())
                 Button(onClick = { vm.claim(claim) }, enabled = s.busy == null) { Text("Claim repair") }
                 view?.currentClaimId?.let { Text("Current claim $it at ${view.repairClaimedAt?.take(19)}", style = MaterialTheme.typography.labelSmall) }
             }
