@@ -35,7 +35,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 
 - [x] T3.1 Implement allowlisted `IDiagnosticProbe` with HTTP health check, no arbitrary URL, strict local target resolution. *(Done 2026-10-28: `LiveLocalHttpHealthProbe`, redirects/oversize/exceptions fail closed; alias map is server config.)*
 - [x] T3.2 Implement `SimulatedProbe` and `RecordedReplayProbe` with explicit provenance. *(Done; demo switch at `POST /v1/simulation/diagnostics/{id}`, only in Simulated mode.)*
-- [x] T3.3 Validate failure/success against isolated fixture; document what the probe actually establishes. *(Done with the simulated fixture over HTTP; live owned endpoint still to be exercised.)*
+- [x] T3.3 Validate failure/success against isolated fixture; document what the probe actually establishes. *(Done with the simulated fixture over HTTP. 2026-10-28: live code path exercised against a loopback `http.server` (`docs/evidence/receipt-loopback/`, labelled LIVE_LOCAL_PROBE (loopback)); owned LAN endpoint still to be run by the owner with `docs/LIVE_PROBE_RUNBOOK.md`.)*
 - [x] **Gate:** end-to-end probe flow, bounded failures, simulator visibly labeled. *(Passed: `ProbeTests`, HTTP smoke.)*
 
 ## Day 5: Sat Oct 31 — Fake-fix checkpoint

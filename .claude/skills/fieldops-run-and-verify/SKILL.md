@@ -7,7 +7,7 @@ description: How to build, test, run the FieldOps API and browser UI, drive the 
 
 ## Build and test
 ```bash
-dotnet test --nologo            # ~125 tests across Core, Meta, Api
+dotnet test --nologo            # ~139 tests across Core, Meta, Api
 ```
 Python helpers (once): `python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt`. Fixture validators: `python scripts/validate_expected_twin.py && python scripts/validate_vendor_packs.py`.
 
@@ -39,8 +39,11 @@ dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 
 ```
 Writes `docs/evaluation/eval-<stamp>.{json,md}`; re-render scenario images with `.venv/bin/python tools/sam-parser/render_fixture.py --scenarios fixtures/telecom-lab/eval/scenarios.json --out fixtures/telecom-lab/eval/images`.
 
+## Change evidence (VK-T26, `ChangeEvidence` section)
+Every photo uploaded after the current repair claim is analysed in the upload request: byte digest or dHash within 3 of any earlier photo → `DuplicateImage` (no SAM call); otherwise one SAM call with the concept of the newest matched pre-claim segmentation, compared by mask IoU and centroid shift → `NoVisualChange` or `Changed`; no reference or no mask → `Unscorable`. DuplicateImage/NoVisualChange send the session back to NeedsEvidence, lock the checklist for that photo (`change_evidence_rejected`) and so no probe can run at verify. The response carries `changeAnalysis`; the view carries `changeAnalyses` and `acceptedPostRepairPhotoId`. Eval scenarios use `<id>-post.jpg` renders (`postRender`) for distinct post-repair photos.
+
 ## Live probe
-Set `Diagnostics:Mode=LiveLocal` and `Diagnostics:Targets:lab-node-a=http://<owned-host>/health` (env `Diagnostics__Mode`, `Diagnostics__Targets__lab-node-a`). Only then can a receipt show `VerifiedCompleteLive`. Redirects, oversize bodies and errors yield `Unavailable`.
+Set `Diagnostics:Mode=LiveLocal` and `Diagnostics:Targets:lab-node-a=http://<owned-host>/health` (env `Diagnostics__Mode`, `Diagnostics__Targets__lab-node-a`). Only then can a receipt show `VerifiedCompleteLive`. Redirects, oversize bodies and errors yield `Unavailable`. Rehearse with the `fieldops-api-live-loopback` launch config (port 5202) plus a loopback `python3 -m http.server 8765`, then `scripts/live_probe_flow.py`; see `docs/LIVE_PROBE_RUNBOOK.md`.
 
 ## When something breaks
 - Empty model content → reasoning budget (see fieldops-meta-models).
