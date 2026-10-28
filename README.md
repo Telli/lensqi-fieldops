@@ -17,6 +17,9 @@ hardening pass, live owned probe, video; see `.kiro/specs/lensqi-fieldops/tasks.
 
 | Document | Purpose |
 |---|---|
+| [docs/OPUS_HANDOFF_PLAN.md](docs/OPUS_HANDOFF_PLAN.md) | Day-by-day plan to finish the entry by Nov 4; traps already hit; cutlines |
+| [docs/PRODUCTION_DESIGN.md](docs/PRODUCTION_DESIGN.md) | Beyond the demo: near-production architecture, mobile app, roadmap |
+| [.claude/skills/](.claude/skills/) | Project skills for coding agents: conventions, Meta model wire details, run-and-verify, Android rules |
 | [PRD.md](PRD.md) | Product requirements v1.1: scope, state machine, trust invariants, schedule |
 | [.kiro/specs/lensqi-fieldops/](.kiro/specs/lensqi-fieldops/) | Parent spec: requirements, design, day-by-day tasks |
 | [.kiro/specs/vendor-knowledge-and-diagnostics/](.kiro/specs/vendor-knowledge-and-diagnostics/) | Child spec: vendor knowledge packs, grounded proposals, predictions, change evidence |
