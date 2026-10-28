@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,18 +9,26 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Untracked local.properties (apps/android/local.properties) holds the Wearables Developer Center credentials.
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.lensqi.fieldops"
     compileSdk = 35
 
     defaultConfig {
         applicationId = "com.lensqi.fieldops"
-        minSdk = 26
+        minSdk = 31 // Meta Wearables DAT 1.0.1 requires API 31 (was 26)
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         // The emulator reaches the host's loopback at 10.0.2.2; a phone on the LAN overrides this in Settings.
         buildConfigField("String", "DEFAULT_API_BASE", "\"http://10.0.2.2:5199/\"")
+        // Meta Wearables DAT attestation. Empty unless set in local.properties; never commit real values.
+        manifestPlaceholders["mwdat_application_id"] = localProperties.getProperty("mwdat_application_id", "")
+        manifestPlaceholders["mwdat_client_token"] = localProperties.getProperty("mwdat_client_token", "")
     }
 
     buildTypes {
@@ -81,6 +91,15 @@ dependencies {
     implementation(libs.camerax.view)
     implementation(libs.datastore.preferences)
     implementation(libs.coil.compose)
+
+    // Meta Wearables Device Access Toolkit (Ray-Ban Meta glasses). The Mock Device Kit is debug-only: release builds
+    // get the no-op MockGlasses from src/release and can never produce "MockWearables" evidence.
+    implementation(libs.mwdat.core)
+    implementation(libs.mwdat.camera)
+    implementation(libs.mwdat.display)
+    implementation(libs.mwdat.inputs)
+    debugImplementation(libs.mwdat.mockdevice)
+    implementation(libs.androidx.exifinterface)
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

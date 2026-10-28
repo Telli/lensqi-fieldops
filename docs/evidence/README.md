@@ -69,6 +69,9 @@ camera captures are the emulator's virtual scene, labelled `Phone`.
 | `android/21-restyle-home.png` | Restyled home: connection badge, counts and work requiring verification, from `GET /v1/inspections`. | `EMULATOR` |
 | `android/22-restyle-verified.png` | Real fix verified, labelled Simulated, with before/after photos and the receipt integrity check (intact, 10 checks). | `EMULATOR`, `SIMULATED_PROBE` |
 | `android/23-restyle-receipt.png` | The designed FieldProof receipt from the API's web app, embedded in the Android app. | `EMULATOR`, `SIMULATED_PROBE` |
+| `android/24-glasses-01` … `24-glasses-06-mock-display-hud.png` | Glasses capture through Meta's Wearables Device Access Toolkit 1.0.1: entry point; real registration path stopping at "Meta AI app not installed" (no hardware here); Mock Device Kit streaming a lab clip and the emulator camera; a mock photo queued and labelled "Mock glasses"; the instruction on a mock Meta Ray-Ban Display. See `docs/GLASSES.md`. | `EMULATOR`, `META_WEARABLE_MOCK` |
+| `android/25-ar-review-mock-glasses.png` | Post-capture review after a mock-glasses capture: "Photo from Mock glasses · simulated", the asset pill matching the site record, the yellow cable outlined by SAM with its AI label, findings from Muse. Stored on the server as origin `MockWearables`. | `EMULATOR`, `META_WEARABLE_MOCK`, `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `android/26-glasses-streaming-mock.png` | Glasses capture screen streaming from mock Ray-Ban Meta glasses, with the spoken instruction panel and the shutter. | `EMULATOR`, `META_WEARABLE_MOCK` |
 
 ## Receipt bundles
 
