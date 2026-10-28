@@ -76,6 +76,12 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
                         Tag(view.stage.name, stageColor(view.stage))
                         TextButton(onClick = { vm.refresh() }) { Text("Refresh") }
                     }
+                    s.viewCachedAt?.let { at ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Tag("CACHED", Provenance.Simulated)
+                            Text("Offline: last server view from ${at.take(19)}Z. Nothing new is decided until the API answers.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
         }
@@ -149,6 +155,30 @@ fun InspectionScreen(onCapture: () -> Unit, onOpenReceipt: (url: String) -> Unit
                         Text("Crop from the original pixels (not independent evidence)", style = MaterialTheme.typography.labelSmall)
                         AsyncImage(vm.artifactUrl(c.file), "crop", Modifier.fillMaxWidth(0.6f))
                     }
+                }
+            }
+        }
+
+        // Vendor knowledge (documented / site configured)
+        s.knowledge?.let { k ->
+            item {
+                Section("Vendor knowledge", "documented", Provenance.Documented) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (s.knowledgeCachedAt != null) Tag("CACHED", Provenance.Simulated)
+                        Text("pack ${k.packId ?: "none"} rev ${k.packRevision ?: "-"} · ${k.status} · ${k.packSha256?.take(12) ?: ""}…", style = MaterialTheme.typography.labelSmall)
+                    }
+                    s.knowledgeCachedAt?.let { Text("Copy saved on this device at ${it.take(19)}Z; the pack digest above identifies exactly what it was.", style = MaterialTheme.typography.bodySmall) }
+                    k.facts.forEach { f ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Tag(if (f.provenance == "SiteConfigured") "site configured" else "documented", Provenance.Documented)
+                                Text(f.factId, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
+                            }
+                            Text(f.statement, style = MaterialTheme.typography.bodySmall)
+                            Text("${f.citation.documentTitle} — ${f.citation.sourceLocator} · accessed ${f.citation.accessedOn}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    k.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
             }
         }

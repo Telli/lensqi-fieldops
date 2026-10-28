@@ -57,8 +57,8 @@ fun ConnectScreen(onInspectionCreated: (inspectionId: String) -> Unit, vm: Conne
                 }
             }
         }
-        if (s.health != null) item {
-            // Resume an inspection started earlier on this phone or in the browser.
+        item {
+            // Resume an inspection started earlier on this phone or in the browser; works offline from the device copy.
             var existing by rememberSaveable { mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(existing, { existing = it.trim() }, label = { Text("Open inspection (I-…)") }, singleLine = true, modifier = Modifier.weight(1f))

@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lensqi.fieldops.data.InspectionCache
+import com.lensqi.fieldops.data.SnapshotStore
 import com.lensqi.fieldops.data.api.ApiOutcome
 import com.lensqi.fieldops.data.api.ChecklistRequest
 import com.lensqi.fieldops.data.api.ChecklistStatus
@@ -53,6 +54,10 @@ data class InspectionUi(
     val segmentation: Segmentation? = null,
     val segmentationImage: Bitmap? = null,
     val knowledge: KnowledgeResponse? = null,
+    /** Set when the knowledge shown is the on-device copy because the API is unreachable. */
+    val knowledgeCachedAt: String? = null,
+    /** Set when the inspection view shown is the on-device copy because the API is unreachable. */
+    val viewCachedAt: String? = null,
     val receiptCheck: ReceiptVerification? = null,
     /** Null until the technician edits it; the screen then falls back to Muse's or the fixture's suggestion. */
     val concept: String? = null,
@@ -69,6 +74,7 @@ class InspectionViewModel @Inject constructor(
     private val cache: InspectionCache,
     private val queue: CommandQueue,
     private val settings: SettingsStore,
+    private val snapshots: SnapshotStore,
 ) : ViewModel() {
     val inspectionId: String = checkNotNull(savedState["inspectionId"])
     private val local = MutableStateFlow(InspectionUi())
@@ -84,10 +90,14 @@ class InspectionViewModel @Inject constructor(
             val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.also(cache::put)
             refresh()
             (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value?.firstOrNull { it.fixtureId == view?.fixtureId }?.let { f -> local.update { it.copy(fixture = f) } }
-            (apiCall { api.knowledge(inspectionId) } as? ApiOutcome.Ok)?.let { k -> local.update { it.copy(knowledge = k.value) } }
+            loadKnowledge()
         }
         // A capture made while offline drains as soon as the screen opens with a connection.
         queue.requestSync()
+        // Every server view is kept on the device so the screen still shows the last known state offline.
+        viewModelScope.launch {
+            cache.observe(inspectionId).collect { v -> if (v != null) snapshots.save(viewKey, InspectionView.serializer(), v) }
+        }
         // New photos (from the queue or another client) need their artifact names for thumbnails.
         viewModelScope.launch {
             cache.observe(inspectionId).map { v -> v?.photos?.map { it.evidenceId }.orEmpty() }.distinctUntilChanged().collect { ids ->
@@ -104,7 +114,17 @@ class InspectionViewModel @Inject constructor(
 
     fun refresh() = viewModelScope.launch {
         when (val r = apiCall { api.inspection(inspectionId) }) {
-            is ApiOutcome.Ok -> cache.put(r.value)
+            is ApiOutcome.Ok -> {
+                cache.put(r.value)
+                local.update { it.copy(viewCachedAt = null) }
+                if (local.value.knowledgeCachedAt != null) loadKnowledge()
+            }
+            is ApiOutcome.Unreachable -> {
+                report(r)
+                if (state.value.view == null) snapshots.load(viewKey, InspectionView.serializer())?.let { snap ->
+                    local.update { it.copy(view = snap.value, viewCachedAt = snap.fetchedAt) }
+                }
+            }
             else -> report(r)
         }
         (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
@@ -167,6 +187,22 @@ class InspectionViewModel @Inject constructor(
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
         apiCall { api.verifyReceipt(inspectionId) }.onOk { v -> local.update { it.copy(receiptCheck = v) } }
     }
+
+    private suspend fun loadKnowledge() {
+        when (val k = apiCall { api.knowledge(inspectionId) }) {
+            is ApiOutcome.Ok -> {
+                snapshots.save(knowledgeKey, KnowledgeResponse.serializer(), k.value)
+                local.update { it.copy(knowledge = k.value, knowledgeCachedAt = null) }
+            }
+            is ApiOutcome.Unreachable -> snapshots.load(knowledgeKey, KnowledgeResponse.serializer())?.let { snap ->
+                local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
+            }
+            is ApiOutcome.Rejected -> report(k)
+        }
+    }
+
+    private val viewKey get() = "inspection-"
+    private val knowledgeKey get() = "knowledge-"
 
     private suspend fun loadArtifactBitmap(evidenceId: String): Bitmap? {
         val names = (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value ?: return null
