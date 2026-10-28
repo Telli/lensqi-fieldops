@@ -23,6 +23,7 @@ feature commit, not at submission time.
 | 2026-10-27T19:20:22-07:00 | `b53d2ea` | Adopt the PRD reuse stance, prior-art register, project README, new gate evidence | n/a | None |
 | 2026-10-27T19:26:15-07:00 | `26d33e0` | SAM 3.1 spike: sidecar parser, genuine segmentation calls, overlay on original image, synthetic fixture photo (T1.1, T1.2) | LIVE_META evidence docs/evidence/sam-spike-20261028T022522Z.json; 1 match + 1 honest no-match | None |
 | 2026-10-27T19:33:36-07:00 | `9fa33e3` | Core inspection state machine, append-only events, idempotent commands, verification policy evaluator (T2.1–T2.4, T4.1, T4.2, T4.4) | 19 new Core tests incl. the ten PRD §17 negatives; 87 total | None |
+| 2026-10-27T19:48:31-07:00 | `fe62d22` | Diagnostics probes (simulated, replay, guarded live HTTP), dispatcher, twin loader, append-only inspection store, evidence files, Muse visual assessment, inspection and simulation endpoints (T0.4, T3.1–T3.3, T4.3, T5.1) | 7 new Api tests incl. hero flow over HTTP; 94 total; smoke run with LIVE_META image assessment | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
