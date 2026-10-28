@@ -37,3 +37,6 @@ data/
 
 # Android source packages named data (not runtime data)
 !apps/android/app/src/**/data/
+
+# Agent worktrees
+.claude/worktrees/

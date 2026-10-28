@@ -49,6 +49,7 @@ import com.lensqi.fieldops.ui.home.ProfileScreen
 import com.lensqi.fieldops.ui.home.StartScreen
 import com.lensqi.fieldops.ui.inspection.InspectionScreen
 import com.lensqi.fieldops.ui.inspection.InspectionViewModel
+import com.lensqi.fieldops.ui.inspection.ReviewScreen
 import com.lensqi.fieldops.ui.receipt.ReceiptScreen
 import com.lensqi.fieldops.ui.theme.Fo
 
@@ -84,6 +85,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     InspectionScreen(
                         onBack = { home.refresh(); nav.popBackStack() },
                         onCapture = { nav.navigate("camera") },
+                        onReview = { nav.navigate("review") },
                         onOpenReceipt = { url -> nav.navigate("receipt?url=${Uri.encode(url)}") },
                     )
                 }
@@ -95,8 +97,16 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
                         onClose = { nav.popBackStack() },
-                        onCaptured = { file -> vm.queuePhoto(file, origin = "Phone"); nav.popBackStack() },
+                        onCaptured = { file ->
+                            vm.captureForReview(file, origin = "Phone")
+                            nav.navigate("review") { popUpTo("camera") { inclusive = true } }
+                        },
                     )
+                }
+                composable("review") { e ->
+                    val parent = remember(e) { nav.previousBackStackEntry } ?: return@composable
+                    val vm: InspectionViewModel = hiltViewModel(parent)
+                    ReviewScreen(vm, onContinue = { nav.popBackStack() }, onRetake = { nav.navigate("camera") { popUpTo("review") { inclusive = true } } })
                 }
                 composable("receipt?url={url}", arguments = listOf(navArgument("url") { type = NavType.StringType })) { e ->
                     ReceiptScreen(requireNotNull(e.arguments?.getString("url")), onBack = { nav.popBackStack() })

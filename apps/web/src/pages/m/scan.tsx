@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { X, Images, ChevronUp, Check, Loader2, AlertTriangle, Camera as CameraIcon, ArrowRight } from "lucide-react";
+import { X, Images, ChevronUp, Check, Loader2, AlertTriangle, Camera as CameraIcon, ArrowRight, Glasses } from "lucide-react";
 import { api, type Assessment, type ChangeAnalysis, type Inspection, type SegmentationGeometry } from "@/lib/api";
 import { friendlyError, qk } from "@/lib/hooks";
 import { useInspectionBundle } from "@/lib/inspection";
 import { changeLabel, featureName, isPostRepairItem, observationState, sentence } from "@/lib/labels";
-import { EvidencePhoto } from "@/components/fo/evidence-photo";
+import { ArFrame } from "@/components/fo/ar-frame";
+import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { EvidenceBadge } from "@/components/fo/primitives";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,8 @@ export default function Scan({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<Step[]>([]);
   const [drawer, setDrawer] = useState(false);
-  const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; geometry?: SegmentationGeometry | null; change?: ChangeAnalysis | null; state: Inspection } | null>(null);
+  const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; outlines: SegmentationGeometry[]; change?: ChangeAnalysis | null; state: Inspection } | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
   const afterRepair = !!i?.currentClaimId && (i.stage === "ReadyToVerify" || i.stage === "NeedsEvidence");
@@ -57,14 +59,14 @@ export default function Scan({ id }: { id: string }) {
     setPreview(URL.createObjectURL(blob));
     const plan: Step[] = afterRepair
       ? [{ label: "Saving photo", state: "doing" }, { label: "Comparing with before", state: "todo" }]
-      : [{ label: "Saving photo", state: "doing" }, { label: "Observing", state: "todo" }, { label: "Outlining the part", state: "todo" }];
+      : [{ label: "Saving photo", state: "doing" }, { label: "Observing", state: "todo" }, { label: "Matching asset", state: "todo" }, { label: "Outlining parts", state: "todo" }];
     setSteps(plan);
     try {
       const up = await api.upload(id, blob, name, source);
       setStep(0, "done");
       let state = up.state;
       let assessment: Assessment | undefined;
-      let geometry: SegmentationGeometry | null | undefined;
+      const outlines: SegmentationGeometry[] = [];
       if (afterRepair) {
         setStep(1, "done");
       } else {
@@ -78,20 +80,23 @@ export default function Scan({ id }: { id: string }) {
           setStep(1, "skipped");
           toast.message("The AI couldn't look at this photo", { description: friendlyError(e) });
         }
-        setStep(2, "doing");
-        const prompts = (fixture?.visualRequirements ?? []).map((v) => v.segmentationPrompt).filter((p): p is string => !!p);
-        const concept = assessment?.requestedSegmentationConcept ?? prompts[prompts.length - 1];
-        try {
-          const seg = await api.segment(id, concept);
-          geometry = seg.segmentation;
-          state = seg.state;
-          setStep(2, "done");
-        } catch (e) {
-          setStep(2, "skipped");
-          toast.message("Couldn't outline the part", { description: friendlyError(e) });
+        // The asset match is the AI's reading of the label against the inspection's asset; the server keeps both.
+        setStep(2, assessment ? "done" : "skipped");
+        setStep(3, "doing");
+        let failed = 0;
+        for (const concept of outlineOrder(fixture, assessment ?? prior)) {
+          try {
+            const seg = await api.segment(id, concept);
+            if (seg.segmentation.matched) outlines.push(seg.segmentation);
+            state = seg.state;
+          } catch (e) {
+            failed++;
+            toast.message(`Couldn't outline the ${concept}`, { description: friendlyError(e) });
+          }
         }
+        setStep(3, failed ? "skipped" : "done");
       }
-      setResult({ evidenceId: up.evidenceId, assessment, geometry, change: up.changeAnalysis, state });
+      setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
       setDrawer(true);
       qc.setQueryData(qk.inspection(id), state);
     } catch (e) {
@@ -129,6 +134,14 @@ export default function Scan({ id }: { id: string }) {
   };
 
   const next = afterRepair ? `/m/i/${id}/verify` : `/m/i/${id}`;
+  // After a repair the outline comes from the server's change check, so read it back from the stored segmentations.
+  const stored = usePhotoOutlines(id, result?.state, result?.evidenceId);
+  const outlines = result?.outlines.length ? result.outlines : stored;
+  const shown = result?.assessment ?? (afterRepair ? undefined : prior);
+  const tags = result ? arTags(fixture, result.assessment, outlines, result.change) : [];
+  const target = result && !afterRepair ? targetConcept(fixture, result.assessment) : undefined;
+  const expected = fixture?.assets.find((a) => a.assetId === i?.assetId);
+  const seen = result?.assessment?.assetId;
   const rejected = result?.change && (result.change.verdict === "DuplicateImage" || result.change.verdict === "NoVisualChange");
 
   return (
@@ -137,7 +150,8 @@ export default function Scan({ id }: { id: string }) {
       <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-cover", (live !== "on" || preview) && "hidden")} />
       {preview && (
         <div className="absolute inset-x-0 top-14 bottom-0 grid place-items-start">
-          <EvidencePhoto src={result ? photoUrl(result.evidenceId) ?? preview : preview} geometry={result?.geometry} className="w-full" />
+          <ArFrame src={result ? photoUrl(result.evidenceId) ?? preview : preview} outlines={outlines} tags={tags} selected={selected} onSelect={setSelected}
+            guide={target ? { concept: target, label: `Target region · ${sentence(result?.assessment?.requestedView) || target}` } : null} className="w-full" />
         </div>
       )}
       {!preview && live === "off" && (
@@ -165,14 +179,15 @@ export default function Scan({ id }: { id: string }) {
       <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3">
         <Link href={i?.currentClaimId ? `/m/i/${id}/verify` : `/m/i/${id}`} className="glass grid size-10 place-items-center rounded-full" aria-label="Close camera"><X className="size-5" /></Link>
         <div className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">
-          {fixture ? <span><span className="text-success">●</span> {fixture.assets.find((a) => a.assetId === i?.assetId)?.displayName ?? i?.assetId} · from asset label</span> : "Loading…"}
+          {!fixture ? "Loading…"
+            : busy && !result ? <span className="opacity-80">Matching asset…</span>
+            : seen && seen !== i?.assetId ? <span className="text-warning">▲ Looks like {seen}, not {expected?.displayName ?? i?.assetId}</span>
+            : seen ? <span><span className="text-success">●</span> {expected?.displayName ?? i?.assetId} · matches site record</span>
+            : shown && shown.assetId === i?.assetId ? <span><span className="text-success">●</span> {expected?.displayName ?? i?.assetId} · matched earlier</span>
+            : <span className="opacity-80">{expected?.displayName ?? i?.assetId} · from asset label</span>}
         </div>
+        <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>
       </div>
-      {result?.geometry?.matched && (
-        <div className="absolute right-3 top-16">
-          <span className="glass flex items-center gap-1.5 rounded-md border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary animate-rise">AI outline · {result.geometry.concept}</span>
-        </div>
-      )}
 
       {/* Investigation panel */}
       <div className="absolute inset-x-0 bottom-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

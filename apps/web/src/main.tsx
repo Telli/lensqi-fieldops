@@ -8,6 +8,7 @@ import { OpsShell } from "@/components/fo/ops-shell";
 import Home from "@/pages/m/home";
 import Start from "@/pages/m/start";
 import Scan from "@/pages/m/scan";
+import GlassesView from "@/pages/m/glasses";
 import Investigate from "@/pages/m/investigate";
 import Asset from "@/pages/m/asset";
 import Knowledge from "@/pages/m/knowledge";
@@ -45,6 +46,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/assets">{() => m(<Assets />)}</Route>
         <Route path="/m/profile">{() => m(<Profile />)}</Route>
         <Route path="/m/i/:id/scan">{(p) => m(<Scan key={p.id} id={p.id} />, true)}</Route>
+        <Route path="/m/i/:id/glasses">{(p) => m(<GlassesView key={p.id} id={p.id} />, true)}</Route>
         <Route path="/m/i/:id/asset">{(p) => m(<Asset id={p.id} />)}</Route>
         <Route path="/m/i/:id/knowledge">{(p) => m(<Knowledge id={p.id} />)}</Route>
         <Route path="/m/i/:id/diagnostics">{(p) => m(<Diagnostics id={p.id} />)}</Route>
