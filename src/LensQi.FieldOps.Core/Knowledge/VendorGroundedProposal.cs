@@ -1,21 +1,35 @@
 namespace LensQi.FieldOps.Core.Knowledge;
 
 /// <summary>
-/// Model-facing action vocabulary owned by this spec (design.md §5). Core maps each value onto the parent
-/// FieldProof allowlist; the model never sees parent action names.
+/// The single next-action vocabulary for every model proposal (parent design.md, FieldOps v1.1). The knowledge
+/// prompt offers all values except SegmentRegion, which only the parent visual-assessment prompt may propose.
 /// </summary>
-public enum VendorGroundedNextAction
+public enum ProposedNextAction
 {
     RequestView,
-    RunApprovedDiagnostic,
-    RequestAssetConfirmation,
-    RequestHumanAction,
-    Abstain,
+    SegmentRegion,
+    RunApprovedProbe,
+    PrepareWorkOrder,
+    RequestHumanReview,
+    StopInconclusive,
+}
+
+public static class ProposedNextActions
+{
+    /// <summary>Actions a vendor-knowledge proposal may carry. SegmentRegion is excluded by design.</summary>
+    public static readonly IReadOnlyList<ProposedNextAction> KnowledgeAllowed =
+    [
+        ProposedNextAction.RequestView,
+        ProposedNextAction.RunApprovedProbe,
+        ProposedNextAction.PrepareWorkOrder,
+        ProposedNextAction.RequestHumanReview,
+        ProposedNextAction.StopInconclusive,
+    ];
 }
 
 public enum PredictionOutcome { Confirmed, Falsified, Unscorable }
 
-/// <summary>Pre-registered prediction (VK-R11). Required when NextAction is RunApprovedDiagnostic.</summary>
+/// <summary>Pre-registered prediction (VK-R11). Required when NextAction is RunApprovedProbe.</summary>
 public sealed record Prediction(
     string DiagnosticId,
     string PredictedValue,
@@ -29,5 +43,5 @@ public sealed record VendorGroundedProposal(
     string? Hypothesis,
     string? RequestedVisualEvidence,
     string? ProposedDiagnosticId,
-    VendorGroundedNextAction NextAction,
+    ProposedNextAction NextAction,
     Prediction? Prediction);

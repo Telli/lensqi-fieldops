@@ -37,7 +37,7 @@ These notes complement the three Kiro files. They should be read by Codex before
 }
 ```
 
-`nextAction` is one of the five `VendorGroundedNextAction` values defined in `design.md` §5; Core maps it onto the parent action allowlist and the model never emits parent action names.
+`nextAction` is one of the five `ProposedNextAction` values defined in `design.md` §5; Core maps it onto the parent action allowlist and the model never emits parent action names.
 
 If Muse requests `MK-REST-GET-INTERFACE` for synthetic `LAB-SW-01`, that fact ID is unavailable in the active pack and MUST be rejected.
 

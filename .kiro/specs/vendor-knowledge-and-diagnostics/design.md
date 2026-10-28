@@ -236,18 +236,14 @@ public interface IVendorKnowledgeResolver
 Add optional fields to the existing `VisualAssessment` contract, validated in C#:
 
 ```csharp
-// JSON field names: assetId, usedFactIds, hypothesis, requestedVisualEvidence, proposedDiagnosticId, nextAction.
-// This enum is OWNED BY THIS SPEC so the contract does not depend on the parent's action names.
-// Core maps each value onto the parent FieldProof action allowlist (see table below); the model never
-// sees or emits parent action names directly.
-public enum VendorGroundedNextAction
-{
-    RequestView,               // ask the technician for a specific additional photo or angle
-    RunApprovedDiagnostic,     // propose one diagnostic; ProposedDiagnosticId is required
-    RequestAssetConfirmation,  // model/firmware/revision cannot be confirmed; ask a human or inventory
-    RequestHumanAction,        // a HumanActionRequired fact applies; staged physical step, technician authorizes
-    Abstain                    // documentation is missing, inapplicable or conflicting; no model-specific advice
-}
+// JSON field names: assetId, usedFactIds, hypothesis, requestedVisualEvidence, proposedDiagnosticId, nextAction, prediction.
+// nextAction uses the PARENT enum ProposedNextAction (FieldOps v1.1 design.md) so there is one wire vocabulary.
+// Knowledge proposals may carry every value except SegmentRegion; ProposedNextActions.KnowledgeAllowed lists them.
+//   RequestView        — ask for a specific additional photo or angle (requestedVisualEvidence required)
+//   RunApprovedProbe   — propose one fixture-approved diagnostic (proposedDiagnosticId + prediction required)
+//   PrepareWorkOrder   — a HumanActionRequired fact applies; staged physical step the technician authorizes
+//   RequestHumanReview — asset, firmware or documentation cannot be confirmed; a human or inventory decides
+//   StopInconclusive   — documentation missing, inapplicable or conflicting; no model-specific advice
 
 public sealed record VendorGroundedProposal(
     string AssetId,
@@ -255,21 +251,22 @@ public sealed record VendorGroundedProposal(
     string? Hypothesis,
     string? RequestedVisualEvidence,
     string? ProposedDiagnosticId,
-    VendorGroundedNextAction NextAction,
-    Prediction? Prediction);   // required when NextAction == RunApprovedDiagnostic (§6a)
+    ProposedNextAction NextAction,
+    Prediction? Prediction);   // required when NextAction == RunApprovedProbe (§6a)
 ```
 
-**Mapping onto the parent allowlist.** Core holds one static table from `VendorGroundedNextAction` to the parent FieldProof next-action and inspection-stage rules. The table is code, not configuration, and is the only place the two vocabularies meet:
+**Per-action validation.** `KnowledgeActionValidator` applies these rules on top of the parent's stage rules; the stage machine (parent R7) decides whether the action is permitted in the current `InspectionStage`:
 
-| `VendorGroundedNextAction` | Parent effect | Extra validation |
+| `ProposedNextAction` | Parent effect | Knowledge-layer validation |
 |---|---|---|
-| `RequestView` | Existing "request additional visual evidence" action | `RequestedVisualEvidence` non-empty, qualitative only (VK-R05.1) |
-| `RunApprovedDiagnostic` | Existing `RunReadOnlyDiagnostic` dispatch | `ProposedDiagnosticId` present, in fixture allowlist and probe registry; `Prediction` present for the same ID with a value from the registry's closed set (§6a) |
-| `RequestAssetConfirmation` | Session stays `NeedsEvidence`; UI asks for asset confirmation (VK-R09.4) | Allowed whenever resolution status is not `Applicable` |
-| `RequestHumanAction` | Existing staged physical action requiring technician authorization | At least one cited fact has `safetyClass = HumanActionRequired` |
-| `Abstain` | Session stays `NeedsEvidence` or `Inconclusive`; no model-specific instruction emitted | Always allowed |
+| `RequestView` | Request additional visual evidence | `requestedVisualEvidence` non-empty, qualitative only (VK-R05.1) |
+| `RunApprovedProbe` | Dispatch a fixture-approved read-only probe | `proposedDiagnosticId` in fixture allowlist and probe registry; `prediction` present for the same ID with a value from the registry's closed set (§6a) |
+| `PrepareWorkOrder` | Draft a technician-authorized physical step (parent FR-07) | At least one cited fact has `safetyClass = HumanActionRequired` |
+| `RequestHumanReview` | Session stays `NeedsEvidence`; UI asks for asset or firmware confirmation (VK-R09.4) | Always allowed |
+| `StopInconclusive` | Session stays `NeedsEvidence` or `Inconclusive`; no model-specific instruction | Always allowed |
+| `SegmentRegion` | Parent visual-assessment prompt only | Always rejected for knowledge proposals; segmentation targets come from the fixture's `visualRequirements[].segmentationPrompt` |
 
-If the parent has no permitted action for the current inspection stage, or the extra validation fails, the proposal is rejected with `action_not_allowed` and a `KnowledgeProposalRejected` event. The server never approximates a nearer action. Adding a value to the enum requires adding a table row and a negative test; a value without a row fails closed.
+Any failure is rejected with `action_not_allowed` and a `KnowledgeProposalRejected` event. The server never approximates a nearer action.
 
 **Server validation:** `AssetId` must equal the inspection's bound asset. `UsedFactIds` must be a subset of `KnowledgeResolution.Facts`; IDs must belong to the same pack digest and model/revision. `ProposedDiagnosticId` must be in the *site fixture* allowlist and server registry, not in untrusted prose. If invalid, return `Inconclusive` or `NeedsEvidence` and append a `KnowledgeProposalRejected` event; never “repair” the action by guessing what the LLM meant. The `/knowledge/reason` endpoint takes an idempotency key and counts against the parent's bounded model-call budget per inspection (VK-R10.5); it never adds extra model turns.
 
@@ -325,7 +322,7 @@ The scientific-method loop inside a maintenance ticket: the model must say what 
 ```csharp
 public enum PredictionOutcome { Confirmed, Falsified, Unscorable }
 
-// Emitted by the model inside VendorGroundedProposal when NextAction == RunApprovedDiagnostic.
+// Emitted by the model inside VendorGroundedProposal when NextAction == RunApprovedProbe.
 public sealed record Prediction(
     string DiagnosticId,
     string PredictedValue,                  // must be in the registry's closed set for the observation kind
@@ -517,4 +514,4 @@ The `VendorLinked` pack contains short newly written paraphrases and links, not 
 - No mixing manufacturer facts with site-authorized topology.
 - No prediction outcome ever acts as a verification gate; the measurement decides.
 - No `Changed` verdict is treated as repair correctness; it is a necessary condition only.
-- No access to private LensIQ monorepo at runtime. Reuse is limited to the labeled infrastructure-scaffolding import commit defined in `docs/SOURCES_AND_RIGHTS.md`; all domain code is event-period work.
+- No access to private LensIQ monorepo at runtime and no private source copied (PRD §4A); all code is event-period work.
