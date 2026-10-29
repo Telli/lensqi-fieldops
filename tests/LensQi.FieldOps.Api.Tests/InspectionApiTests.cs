@@ -81,6 +81,8 @@ public sealed class FakeCropper : IRoiCropper
 public sealed class FakeVisionChat : IChatClient
 {
     public string CannedResponse { get; set; } = "{}";
+    /// <summary>When non-empty, each call answers with the next queued response before falling back to <see cref="CannedResponse"/>.</summary>
+    public Queue<string> Responses { get; } = new();
     public int Images { get; private set; }
     public Exception? Throw { get; set; }
     /// <summary>When set, the call waits this long (honouring cancellation) before answering.</summary>
@@ -90,7 +92,7 @@ public sealed class FakeVisionChat : IChatClient
         Images += messages.SelectMany(m => m.Contents).OfType<DataContent>().Count();
         if (Delay is { } d) await Task.Delay(d, cancellationToken);
         if (Throw is { } ex) throw ex;
-        return new ChatResponse(new ChatMessage(ChatRole.Assistant, CannedResponse)) { ModelId = "fake-muse" };
+        return new ChatResponse(new ChatMessage(ChatRole.Assistant, Responses.TryDequeue(out var next) ? next : CannedResponse)) { ModelId = "fake-muse" };
     }
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
