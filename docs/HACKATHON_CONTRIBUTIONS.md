@@ -69,6 +69,7 @@ as implementation commits land.
 | 2026-10-28T22:32:01-07:00 | `8c39f29` | Correction: .NET test totals in the rows for c722a14 and ba64285 were 208 (95 Core, 18 Meta, 95 API), not 216; for 180b3f4 it was 210 (96, 18, 96), not 218 | dotnet test --nologo on the current head: 96 + 18 + 96 = 210 passed | None |
 | 2026-10-28T23:07:14-07:00 | `9cc5c85` | Continuous technician API journey with fake models and simulated diagnostics; speech/privacy and referral claim corrections, guided-task storyboard, contribution exclusions; Open feasibility deferred pending owner access (GT-T21, Tasks 1–4) | 211 .NET tests and 25 web tests passed; web production build and secret scan PASS; offline CLI receipt PASS and tamper rejection; docs/evidence/tasks/technician-journey.md | None |
 | 2026-10-29T11:52:41-07:00 | `46348ef` | Review fixes: link-inspection under the task lock, step-check retry reuses its photo and verdict, generic 500 bodies; docs brought up to the reviewed code | dotnet 214/214 (3 new TaskApiTests); web 25/25 and Android 107/107 unchanged; secret_scan PASS | None |
+| 2026-10-29T12:31:07-07:00 | `3215c23` | UX pass and GT-T34–T37: one-tap plan from home, one-tap start, photo check never blocks Done, typing beside the mic, persisted task request ids, bare www. links caught, linked FieldProof outcome on the task summary | dotnet 220/220; web 25/25 + build; Android 107/107 + assembleDebug; browser at phone size with one genuine plan; secret_scan PASS | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
