@@ -56,6 +56,7 @@ feature commit, not at submission time.
 | 2026-10-28T17:15:47-07:00 | `6bbec93` | Open-scene live guidance (screen error text, model-named outline targets) and rotation-safe live assist; first ARCore run on a Galaxy S23 Ultra | 178 .NET (new LiveVision guidance/focus/validation tests), 23 web, 104 Android unit tests; phone: ARCore tracking + depth with genuine SAM/Muse calls, no anchors (no target in view), shutter hand-off not run; secret_scan PASS | None |
 | 2026-10-28T17:56:57-07:00 | `c722a14` | Guided-task backend: TaskSession, server-enforced plan safety, TaskPlanner/StepCoach, /v1/tasks API | 216 .NET tests (21 new Core TaskSession, 9 new TaskApi); fakes only, no genuine model calls yet; secret_scan PASS | None |
 | 2026-10-28T18:05:17-07:00 | `ba64285` | Guided-task web flow (two-mode home, plan, step runner with voice and photo checks) and first genuine task calls | 216 .NET, 25 web tests; browser: home, plan, step runner, Done to step 2, check card; genuine Muse: 3 plans incl. restricted panel, 1 question, 1 step check (docs/evidence/tasks); camera, voice input and phone not exercised | None |
+| 2026-10-28T18:15:21-07:00 | `3d999b6` | Guided tasks on Android: two-mode home, plan, step runner on the live camera with voice, photo checks | 107 Android unit tests; emulator: plan, step runner, real step check (CantTell), real live coaching within the step, Done to step 2; voice input and phone not exercised | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
