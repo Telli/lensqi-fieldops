@@ -13,10 +13,11 @@ export interface LiveFeedback {
   /** Error or status text the AI read off a screen in view, while its guidance is current. */
   screenText: string | null;
 }
-const initial: LiveFeedback = { objects: [], status: 'Ready', recommendation: 'Keep the equipment and connection in view.', updatedAt: null, width: 0, height: 0, fps: 0, telemetry: null, screenText: null };
+const initial: LiveFeedback = { objects: [], status: 'Ready', recommendation: 'Keep the work area in view.', updatedAt: null, width: 0, height: 0, fps: 0, telemetry: null, screenText: null };
 
 /** Local tracking never waits for HTTP. Detection and guidance each have one cancellable request in flight. */
-export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active: boolean, id: string) {
+/** `endpoint` is the session the frames belong to, e.g. `/v1/tasks/T-1` or `/v1/inspections/I-1`. */
+export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active: boolean, endpoint: string) {
   const [enabled, setEnabled] = useState(false);
   const [feedback, setFeedback] = useState<LiveFeedback>(initial);
   const generation = useRef(0);
@@ -50,12 +51,12 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
       const now = performance.now();
       if (guidanceAt && now - guidanceAt > 20000) { guidance = ''; screenText = null; guidanceAt = 0; }
       const quality = data.brightness < 35 && !guidance ? 'Add light so the parts and labels are visible.'
-        : data.motion > 32 ? 'Move more slowly so I can keep track of the connection.'
-        : data.sharpness < 3 && !guidance ? 'Hold steady and bring the equipment into focus.' : '';
+        : data.motion > 32 ? 'Move more slowly so I can keep track of the parts.'
+        : data.sharpness < 3 && !guidance ? 'Hold steady and bring the parts into focus.' : '';
       setFeedback({ objects, width: video.current?.videoWidth ?? 0, height: video.current?.videoHeight ?? 0, fps,
         telemetry: { brightness: data.brightness, sharpness: data.sharpness, motion: data.motion },
         status: error || (objects.length ? `Tracking ${objects.length} part${objects.length === 1 ? '' : 's'}` : busy.detect ? 'Finding parts…' : detected ? 'Tracking lost · finding parts again' : scanned ? 'No parts found · keep scanning' : 'Looking for equipment…'),
-        recommendation: quality || guidance || (objects.length ? 'Keep the connection visible. Capture a photo when ready.' : 'Aim at the equipment and hold steady for detection.'),
+        recommendation: quality || guidance || (objects.length ? 'Keep these parts in view.' : 'Aim at the work area and hold steady.'),
         updatedAt: guidanceAt || null, screenText });
     };
     worker.onerror = () => { processing = false; setEnabled(false); setFeedback({ ...initial, status: 'Live tracking could not start. Try again.' }); };
@@ -66,7 +67,7 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
       due[kind] = capturedAt + minimum;
       try {
         const form = new FormData(); form.append('image', blob, 'preview.jpg'); form.append('frameId', frameId);
-        const response = await fetch(`/v1/inspections/${encodeURIComponent(id)}/live/${kind}`, { method: 'POST', body: form, signal: abort.signal });
+        const response = await fetch(`${endpoint}/live/${kind}`, { method: 'POST', body: form, signal: abort.signal });
         if (disposed || generation.current !== run) return;
         if (!response.ok) {
           const retry = Number(response.headers.get('Retry-After'));
@@ -114,6 +115,6 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
     const visibility = () => { if (document.hidden) { reset(); setEnabled(false); } };
     document.addEventListener('visibilitychange', visibility);
     return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', visibility); reset(); };
-  }, [enabled, active, id, video]);
+  }, [enabled, active, endpoint, video]);
   return { enabled, setEnabled, ...feedback };
 }

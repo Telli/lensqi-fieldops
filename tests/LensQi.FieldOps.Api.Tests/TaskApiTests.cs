@@ -102,6 +102,7 @@ public class TaskApiTests
         var photoId = checkedStep.GetProperty("check").GetProperty("photoId").GetString();
         var artifacts = Directory.EnumerateFiles(Path.Combine(f.DataDir, "evidence", id)).Select(Path.GetFileName).ToList();
         Assert.Contains(artifacts, a => a!.StartsWith(photoId + "-"));
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/v1/tasks/{id}/artifacts/{photoId}")).StatusCode);
 
         var done = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2:complete", null));
         Assert.Equal("Completed", done.GetProperty("phase").GetString());

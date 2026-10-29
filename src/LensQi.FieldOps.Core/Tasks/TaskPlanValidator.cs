@@ -32,7 +32,7 @@ public static class RestrictedTopics
 public static class TaskPlanValidator
 {
     public const int MaxSteps = 25;
-    private static readonly Regex Concept = new("^[A-Za-z][A-Za-z0-9 -]{0,38}[A-Za-z0-9]$", RegexOptions.CultureInvariant);
+    private static readonly Regex Concept = new("^[A-Za-z][A-Za-z0-9 '-]{0,38}[A-Za-z0-9]$", RegexOptions.CultureInvariant);
 
     public static bool IsConcept(string phrase) =>
         Concept.IsMatch(phrase) && phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 4;

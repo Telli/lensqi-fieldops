@@ -1,0 +1,11 @@
+{
+    "answer": "I can't see the lift points in this view. Point the camera low at the side sill behind the front wheel and at the manual diagram. Confirm the exact stand spots in your owner's manual, and never stay under a car on the jack alone.",
+    "focus": [
+        "front side sill",
+        "manual diagram"
+    ],
+    "stepId": "s2",
+    "photoId": null,
+    "modelId": "muse-spark-1.3",
+    "source": "AI inference"
+}
