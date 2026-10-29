@@ -131,17 +131,31 @@ public static class TaskEndpoints
             var image = await ReadImage((await http.ReadFormAsync(ct)).Files.GetFile("image"), limits, ct);
             if (image.Error is { } bad) return bad;
             var (bytes, mediaType, width, height) = image.Value!.Value;
-            var evidenceId = "step-" + Guid.NewGuid().ToString("N")[..10];
-            var stored = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
-            var requestId = RequestId(http, "check:" + stored.Sha256);
+            var requestId = RequestId(http, "check");
             return await GuardAsync(async () =>
             {
-                store.Execute(id, s => s.RecordPhoto(requestId + ":photo", evidenceId, stored.Sha256, width, height, TaskPhotoPurpose.StepCheck, stepId, clock.GetUtcNow()));
+                // A retried key returns the recorded check; after a failed model call it re-checks the photo already saved.
+                if (store.Execute(id, s => s.Replayed(requestId))?.OfType<StepChecked>().FirstOrDefault() is { } earlier)
+                    return Results.Ok(CheckResult(earlier, store.Find(id)!));
+                var photo = store.Execute(id, s => s.Replayed(requestId + ":photo"))?.OfType<TaskPhotoRecorded>().FirstOrDefault();
+                if (photo is not null && ArtifactPath(files, id, photo.EvidenceId) is { } savedPath)
+                {
+                    bytes = File.ReadAllBytes(savedPath);
+                    mediaType = EvidenceFileStore.DetectImageType(bytes)!;
+                }
+                else
+                {
+                    var evidenceId = "step-" + Guid.NewGuid().ToString("N")[..10];
+                    var stored = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
+                    photo = store.Execute(id, s => s.RecordPhoto(requestId + ":photo", evidenceId, stored.Sha256, width, height, TaskPhotoPurpose.StepCheck, stepId, clock.GetUtcNow()))
+                        .OfType<TaskPhotoRecorded>().Single();
+                }
                 var result = await coach.CheckAsync(store.Find(id)!.State, step, bytes, mediaType, ct);
                 if (result.Value is not { } check || check.Reason is not { Length: > 0 and <= 400 } || check.Reason.Contains("://"))
                     return ModelFailure(result.Error, "The step check is unavailable; the photo is saved, try again or decide yourself");
-                store.Execute(id, s => s.RecordCheck(requestId, stepId, evidenceId, check.Verdict, check.Reason, result.ModelId, clock.GetUtcNow()));
-                return Results.Ok(new { check = new { stepId, photoId = evidenceId, verdict = check.Verdict, reason = check.Reason, result.ModelId, source = "AI inference" }, task = View(store.Find(id)!) });
+                var recorded = store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, check.Reason, result.ModelId, clock.GetUtcNow()))
+                    .OfType<StepChecked>().Single();
+                return Results.Ok(CheckResult(recorded, store.Find(id)!));
             });
         }).DisableAntiforgery().AsModelCall();
 
@@ -188,14 +202,19 @@ public static class TaskEndpoints
         g.MapPost("/{id}/link-inspection", (string id, HttpRequest http, TaskStore store, ExpectedTwinStore twins, InspectionStore inspections, TimeProvider clock) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
-            if (task.State.InspectionId is { } existing) return Results.Ok(new { inspectionId = existing, task = View(task) });
             if (task.State.Site is not { } site || twins.Find(site.FixtureId) is not { } twin)
                 return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Only a technician task on an installed site record can be verified with FieldProof");
             return Guard(() =>
             {
-                var inspection = inspections.Create(twin, site.AssetId, clock.GetUtcNow());
-                store.Execute(id, s => s.LinkInspection(RequestId(http, "link"), inspection.State.InspectionId, clock.GetUtcNow()));
-                return Results.Ok(new { inspectionId = inspection.State.InspectionId, task = View(store.Find(id)!) });
+                // Check and create under the task's lock, so concurrent calls link one inspection and leave no orphan.
+                var inspectionId = store.Execute(id, s =>
+                {
+                    if (s.State.InspectionId is { } existing) return existing;
+                    var inspection = inspections.Create(twin, site.AssetId, clock.GetUtcNow());
+                    s.LinkInspection(RequestId(http, "link"), inspection.State.InspectionId, clock.GetUtcNow());
+                    return inspection.State.InspectionId;
+                });
+                return Results.Ok(new { inspectionId, task = View(store.Find(id)!) });
             });
         });
 
@@ -275,6 +294,12 @@ public static class TaskEndpoints
     private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.Plan?.Title, s.Phase, s.Plan?.Steps.Count ?? 0,
         s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt);
 
+    private static object CheckResult(StepChecked c, TaskSession session) => new
+    {
+        check = new { c.StepId, c.PhotoId, c.Verdict, c.Reason, c.ModelId, source = "AI inference" },
+        task = View(session),
+    };
+
     /// <summary>The task with each step's status and its latest photo check, for the clients.</summary>
     private static object View(TaskSession session)
     {
@@ -309,7 +334,6 @@ public static class TaskEndpoints
         catch (TaskConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (KeyNotFoundException ex) { return ApiResults.NotFound($"Task '{ex.Message}' not found"); }
-        catch (Exception ex) { return Results.Json(new ApiError("internal", ex.GetType().Name + ": " + ex.Message), statusCode: 500); }
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
@@ -318,6 +342,5 @@ public static class TaskEndpoints
         catch (OperationCanceledException) { throw; }
         catch (TaskConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (KeyNotFoundException ex) { return ApiResults.NotFound($"Task '{ex.Message}' not found"); }
-        catch (Exception ex) { return Results.Json(new ApiError("internal", ex.GetType().Name + ": " + ex.Message), statusCode: 500); }
     }
 }

@@ -3,7 +3,7 @@
 
 **Spec ID:** `guided-tasks`  
 **Version:** 1.0 · October 28, 2026  
-**Status:** To implement. Nothing in this spec is claimed as built; implementation started October 28.  
+**Status:** Mostly implemented on October 28–29; see §7 for each requirement's state from the October 29 code review. Requirements stay the target where the code falls short.  
 **Parent:** LensQi PRD v2.0 (`../../../PRD.md`), `design.md`, `tasks.md`  
 **Related specs:** `../lensqi-fieldops/` (FieldProof inspection loop, the technician closer), `../vendor-knowledge-and-diagnostics/` (cited knowledge for site records)  
 **Hackathon:** Meta Global AI Developer Hackathon · *Push the Frontier* · public indie-track entry
@@ -163,3 +163,24 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 - **Technician gate (Nov 1):** A technician task linked to `LAB-SW-01` reaches a FieldProof decision through the existing endpoints.
 - **Evidence gate (Nov 2):** Genuine oil-change and IP-camera plans, a step check, a voice question and SAM outlines recorded; S23 Ultra phone run recorded with what did and did not happen (including whether ARCore anchors appeared).
 - **Always:** the FieldProof loop, clean-room check and existing tests stay green.
+
+## 7. Implementation status (code review, October 29, 2026)
+
+Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107 Android unit tests passed. "Met" means implemented and covered by tests or recorded evidence; it does not mean validated on a phone or with a real microphone. Differences from `design.md` are listed in its §0.
+
+| Requirement | State | Gaps |
+|---|---|---|
+| GT-R01 Modes and creation | Met | Goal limit is 3–300 characters (not 1–200). A third mode, free-form help, was added |
+| GT-R02 AI-written plan | Met | — |
+| GT-R03 Safety policy | Met for plans | GT-R03.1 link check catches `://` only. GT-R03.6 applies length and link checks to guidance, answers and reasons; the "stay inside the step" rule is prompt-only |
+| GT-R04 Plan acceptance and steps | Partly met | GT-R04.2: a Low-risk plan with no cautions and no professional flag can start without acknowledgement. GT-R04.6: idempotency is in memory and lost on restart; clients send a fresh key per request |
+| GT-R05 Live scan with AR | Partly met | Step `lookFor` is sent first. GT-R05.3: Android distance advice is not aimed at the step's main part. No phone run of the task step runner; no ARCore anchor recorded on a real part |
+| GT-R06 Step guidance | Partly met | GT-R06.3: the prompt is not shared with `LiveSceneService`; inspections keep their own |
+| GT-R07 Voice | Partly met | GT-R07.1: Android task speech is not gated by `SpokenFeedbackGate`. GT-R07.3: no typed question box on the Android step runner. GT-R07.4: grammar is next, back, repeat, check, skip, mute, unmute (no pause). Not exercised with a real microphone |
+| GT-R08 Questions | Partly met | GT-R08.3 is not structurally enforced: the server appends a referral only when the question matches a restricted phrase |
+| GT-R09 Step photo check | Partly met | GT-R09.5: the Android offline queue does not carry step-check photos |
+| GT-R10 Technician link | Partly met | Linked journey to `VerifiedCompleteSimulated` passes with fakes (`TechnicianJourneyTests`). GT-R10.4: task screens do not show the linked inspection's outcome |
+| GT-R11 Task record and storage | Met | No shared JSONL helper with the inspection store (mechanics are duplicated) |
+| GT-R12 Android generalization | Partly met | GT-R12.3 met. GT-R12.1 and GT-R12.2 (queue and glasses `sessionId`) not started |
+| GT-R13 Honest labelling | Met in docs and UI reviewed | GT-R13.3: no genuine spoken question or SAM outline on a real step part recorded yet |
+

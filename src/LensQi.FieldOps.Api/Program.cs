@@ -16,6 +16,7 @@ using LensQi.FieldOps.Meta.Knowledge;
 using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Vision;
 using LensQi.FieldOps.Api.Infrastructure.Knowledge;
+using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Diagnostics;
 using LensQi.FieldOps.Core.Knowledge;
 using LensQi.FieldOps.Meta.Muse;
@@ -164,6 +165,13 @@ _ = app.Services.GetRequiredService<IReadOnlyList<FixtureKnowledgeBinding>>();
 _ = app.Services.GetRequiredService<ExpectedTwinStore>();
 _ = app.Services.GetRequiredService<InspectionStore>();
 _ = app.Services.GetRequiredService<TaskStore>();
+
+// An unexpected exception is logged by the middleware; the client gets the error shape without its type or message.
+app.UseExceptionHandler(error => error.Run(async context =>
+{
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new ApiError("internal", "Unexpected server error"));
+}));
 
 app.UseModelCallLimits();
 

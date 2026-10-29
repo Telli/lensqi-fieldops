@@ -4,7 +4,7 @@
 **Spec:** `guided-tasks` · `requirements.md` (GT-R01–GT-R13), `design.md`  
 **Dependency:** The FieldProof inspection loop (`../lensqi-fieldops/tasks.md`) stays green throughout; no task here may weaken it.  
 **Timebox:** October 29 to November 4, 2026 (submission 9 PM ET). Web (Oct 30) and Android (Oct 31) can run in parallel once the API contract is frozen at the end of Oct 29.  
-**Status:** Boxes are checked only with a commit, passing tests, and evidence where a task asks for it. Work landed early on the `guided-tasks` branch (Oct 28); notes say what is partial.
+**Status:** Boxes are checked only with a commit, passing tests, and evidence where a task asks for it. Work landed early on the `guided-tasks` branch (Oct 28); notes say what is partial. Code review on Oct 29 at `044c906`: 211 .NET, 25 web and 107 Android unit tests passed; findings are in "Review findings" below and in `design.md` §0.
 
 ## Day 0: Wed Oct 28 — Plan and docs
 
@@ -68,7 +68,7 @@
 
 - [ ] **GT-T24 — Genuine Muse and SAM calls.** Oil-change plan (2025 Civic), IP-camera mounting plan, one restricted goal showing a referral plan (and a rejected hands-on plan if the model produces one), one step check, one voice question, SAM outlines on step targets; stored under `docs/evidence/tasks/` with model ids and digests (GT-R13.3). *(partial Oct 28: plans, restricted referral, typed question, step checks and live coaching recorded; no spoken question and no SAM outline on a real step part yet)*
 - [ ] **GT-T25 — S23 Ultra phone run.** DIY task with ARCore on a real part; spoken step; voice question answered from the camera view; "next step" by voice; shutter hand-off to a full-resolution step photo. Record what happened, including whether anchors and distance appeared; do not claim what did not.
-- [ ] **GT-T26 — Docs match what ran.** Update `PRD.md` §1 status, `docs/LIVE_AR.md`, README, `docs/evidence/README.md` and `docs/HACKATHON_CONTRIBUTIONS.md` ledger rows; check this file's boxes only for completed work.
+- [ ] **GT-T26 — Docs match what ran.** Update `PRD.md` §1 status, `docs/LIVE_AR.md`, README, `docs/evidence/README.md` and `docs/HACKATHON_CONTRIBUTIONS.md` ledger rows; check this file's boxes only for completed work. *(partial Oct 29: PRD §1, README, LIVE_AR, evidence index, requirements §7 and design §0 brought up to the reviewed code; to repeat after the phone run)*
 - [ ] **Gate:** every claim in README and PRD §1 points to evidence or a passing test.
 
 ## Days 6–7: Tue Nov 3 – Wed Nov 4 — Buffer, polish, submit
@@ -80,6 +80,17 @@
 ## Added Oct 29: free-form help
 
 - [x] **GT-T30 — Free-form help ("Just ask").** `TaskMode.Freeform`: no plan, in progress at once, questions and live coaching about anything in view, `Finish`; recognized restricted phrases trigger an appended referral when the answer lacks “professional”; this safeguard does not structurally reject unsafe free-form answers; web `/m/t/:id/live` and Android `FreeformScreen`; "Make a plan" opens a planned task with the last question as the goal. *(done Oct 29: Core and API tests; browser and emulator with genuine Muse answers, including the gas-line referral; `docs/evidence/tasks/`)*
+
+## Review findings (Oct 29)
+
+From the code review of `044c906`. None breaks the FieldProof gate; the first three are defects, the rest are spec gaps already noted above.
+
+- [x] **GT-T31 — Serialize `link-inspection`.** *(done Oct 29: the check, inspection creation and link run under the task's lock; `Concurrent_links_create_one_inspection`)* The "already linked" check runs outside the task lock and the inspection is created before `LinkInspection`; two concurrent calls create two inspections, one orphaned, and the second call gets 409. Check and create under the task's lock, or create the inspection only after the link is reserved.
+- [x] **GT-T32 — Step-check retry with the same key.** *(done Oct 29: a replayed key returns the recorded check without a model call; after a failed model call it re-checks the photo already saved instead of saving another; `TaskSession.Replayed`; `A_step_check_retried_with_the_same_key_reuses_its_photo_and_replays_its_verdict`)* A retry with the same `Idempotency-Key` after a model failure saves a new photo id, the photo command replays the old one, and `RecordCheck` then refuses the new id (`invalid_state`). Reuse the recorded photo for a replayed key. Current clients send a fresh key per request, so this bites only when a queue retries.
+- [x] **GT-T33 — Do not return exception details.** *(done Oct 29: task and inspection guards no longer catch unexpected exceptions; `UseExceptionHandler` logs them and answers `{code: "internal", message: "Unexpected server error"}`; `An_unexpected_server_error_does_not_reveal_its_details`)* `Guard`/`GuardAsync` in `TaskEndpoints` put the exception type and message in the 500 body; log them and return a generic `internal` error.
+- [ ] **GT-T34 — Link check and acknowledgement.** Treat `www.` addresses as links in plans and answers (GT-R03.1), and decide whether a Low-risk plan with no cautions still needs acknowledgement (GT-R04.2); update the requirement or the code to match.
+- [ ] **GT-T35 — Persist task idempotency.** Record the request id on task events (as inspections do for verify decisions) so a retried command after a restart replays instead of failing with "already finished".
+- [ ] **GT-T36 — Show the linked inspection's outcome on the task screens** (web done screen, Android summary), with its live or simulated label (GT-R10.4).
 
 ## Cutlines
 

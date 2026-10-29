@@ -6,16 +6,16 @@ description: Architecture invariants, code layout, commit and ledger discipline 
 # FieldOps conventions
 
 ## Invariants (never violate; tests enforce most of them)
-1. `InspectionSession` (Core) is the only thing that changes `InspectionStage`. Endpoints translate HTTP into session commands; models and probes produce typed inputs.
-2. Model output is untrusted until a validator accepts it: `KnowledgeActionValidator` for grounded proposals, the session's `RecordAssessment` for visual assessments. Reject, never repair.
+1. `InspectionSession` (Core) is the only thing that changes `InspectionStage`, and `TaskSession` the only thing that changes a guided task's phase or steps; a task step check never feeds the verification gate. Endpoints translate HTTP into session commands; models and probes produce typed inputs.
+2. Model output is untrusted until a validator accepts it: `KnowledgeActionValidator` for grounded proposals, the session's `RecordAssessment` for visual assessments, `TaskPlanValidator` (restricted categories from the user's words) for task plans. Reject, never repair.
 3. Diagnostics run only from a fixture-approved `diagnosticId` resolved by `DiagnosticDispatcher` through server configuration. No URL, host, command or credential from any request or model.
 4. Provenance labels: photos = evidence; Muse/SAM = inferred; probes = measured with `DiagnosticSource`; packs = documented/site-configured. Simulated or replay never becomes `VerifiedCompleteLive`.
 5. Events are append-only, sequential, server-timestamped, and carry the fixture digest. `InspectionState.Replay` must reproduce state; add a `[JsonDerivedType]` for every new event.
 6. Everything judged is event-period work. No private LensIQ source is copied (PRD §4A).
 
 ## Layout
-- `src/LensQi.FieldOps.Core` pure: contracts, `Inspection/` (events, state, session, policy, twin, RoiCrop), `Knowledge/` (packs, applicability, resolver, validator), `Receipts/`, `Diagnostics/` (registry contract). No provider or ASP.NET references.
-- `src/LensQi.FieldOps.Meta` Muse (`Muse/`), grounding (`Knowledge/`), visual assessment (`Vision/`), SAM + sidecar (`Segmentation/`).
+- `src/LensQi.FieldOps.Core` pure: contracts, `Inspection/` (events, state, session, policy, twin, RoiCrop), `Tasks/` (task events, state, session, plan validator), `Knowledge/` (packs, applicability, resolver, validator), `Receipts/`, `Diagnostics/` (registry contract). No provider or ASP.NET references.
+- `src/LensQi.FieldOps.Meta` Muse (`Muse/`), grounding (`Knowledge/`), visual assessment (`Vision/`), SAM + sidecar (`Segmentation/`), task planner and step coach (`Tasks/`).
 - `src/LensQi.FieldOps.Diagnostics` probes and dispatcher.
 - `src/LensQi.FieldOps.Api` minimal API: `Features/<Area>/<Area>Endpoints.cs` with a static `Map...` method, `Infrastructure/` stores and loaders, `wwwroot/` the built web app (source in `apps/web`, never edit `wwwroot` by hand), `Program.cs` wiring.
 - `tools/` consoles: StageOneGate (Muse evidence), VerifyReceipt, Eval; `tools/sam-parser/` Python sidecar.

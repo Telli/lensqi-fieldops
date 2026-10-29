@@ -44,12 +44,16 @@ Free-form answers use prompt instructions, output checks and a referral safeguar
 a question matches the configured restricted phrases and the answer lacks “professional”. This weaker mechanism does
 not block every unsafe answer. Only FieldProof marks anything verified.
 
-**Status (October 28, 2026):** guided tasks run on the `guided-tasks` branch on web and Android, with genuine plans,
-questions, step checks and live step coaching recorded in [docs/evidence/tasks/](docs/evidence/tasks/) (browser and
-emulator; no phone run of the task flow yet, and voice input not yet tried with a real microphone). The technician's
-FieldProof inspection loop below is unchanged. The Android ARCore mode's first phone run (Galaxy S23 Ultra) has not yet
-produced anchors or distance on real equipment ([docs/LIVE_AR.md](docs/LIVE_AR.md)). Plan: [PRD.md](PRD.md),
-[.kiro/specs/guided-tasks/](.kiro/specs/guided-tasks/).
+**Status (October 29, 2026):** guided tasks, free-form help and the technician hand-off to FieldProof are built on
+the `guided-tasks` branch for web and Android. On October 29 the suites passed: 214 .NET tests, 25 web tests and 107
+Android unit tests. Genuine plans, typed questions, step checks and live step coaching are recorded in
+[docs/evidence/tasks/](docs/evidence/tasks/) from the browser and the emulator. A technician task linked to an
+inspection reaches `VerifiedCompleteSimulated` and an offline-verified receipt in an API journey test with fake models
+([technician-journey.md](docs/evidence/tasks/technician-journey.md)). Not yet: a phone run of the task flow, voice with
+a real microphone, ARCore anchors or distance on a real part (the first S23 Ultra ARCore run produced none,
+[docs/LIVE_AR.md](docs/LIVE_AR.md)), a typed question box and spoken-feedback gating on the Android step runner, the
+offline queue for step-check photos, and glasses on tasks. Plan and status per task: [PRD.md](PRD.md) §1,
+[.kiro/specs/guided-tasks/tasks.md](.kiro/specs/guided-tasks/tasks.md).
 
 ### The FieldProof inspection loop (Technician mode, built)
 
@@ -144,6 +148,10 @@ cd apps/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
 | Piece | Where |
 |---|---|
+| Guided-task session, append-only events, plan validator with restricted categories | `src/LensQi.FieldOps.Core/Tasks/` |
+| Task planner and step coach (guidance, questions, step checks) on Muse Spark | `src/LensQi.FieldOps.Meta/Tasks/` |
+| `/v1/tasks` API and its JSONL task store | `src/LensQi.FieldOps.Api/Features/Tasks/`, `Api/Infrastructure/Tasks/` |
+| Task screens: web `apps/web/src/pages/m/task/`, `lib/tasks.ts`, `lib/voice.ts`; Android `ui/task/`, `voice/Voice.kt` | `apps/web/`, `apps/android/` |
 | Inspection state machine, append-only events, dual-proof policy (`fieldproof-policy/1.2`) | `src/LensQi.FieldOps.Core/Inspection/` |
 | Change evidence: dHash duplicates, SAM mask IoU and shift, versioned thresholds | `Core/Inspection/VisualChange.cs`, `Api/Infrastructure/Evidence/ChangeEvidenceService.cs` |
 | Muse Spark client (strict JSON schema), visual assessment, grounded proposals | `src/LensQi.FieldOps.Meta/Muse`, `Vision`, `Knowledge` |
@@ -167,7 +175,9 @@ in `scripts/clean_room_check.sh`; every response the Android client codes agains
 | [docs/evidence/README.md](docs/evidence/README.md) | Every recorded artifact and its label |
 | [docs/LIVE_PROBE_RUNBOOK.md](docs/LIVE_PROBE_RUNBOOK.md) | Live probe against an owned endpoint |
 | [PRD.md](PRD.md) | Product requirements: scope, state machine, trust invariants |
-| [.kiro/specs/](.kiro/specs/) | Parent spec and the vendor-knowledge child spec, with task status |
+| [.kiro/specs/](.kiro/specs/) | Guided-tasks spec, the FieldProof parent spec and the vendor-knowledge child spec, with task status |
+| [docs/evidence/tasks/README.md](docs/evidence/tasks/README.md) | Guided-task recordings: genuine plans, questions, checks, emulator screenshots, the technician journey |
+| [docs/PITCH.md](docs/PITCH.md) | Product pitch and feature review |
 | [docs/PRODUCTION_DESIGN.md](docs/PRODUCTION_DESIGN.md) | Beyond the demo: architecture and roadmap |
 | [docs/HACKATHON_CONTRIBUTIONS.md](docs/HACKATHON_CONTRIBUTIONS.md) | Event-period work ledger, one row per commit |
 | [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Provenance and third-party inputs |
@@ -182,7 +192,13 @@ in `scripts/clean_room_check.sh`; every response the Android client codes agains
   It is necessary for a repair claim, never sufficient.
 - A receipt detects tampering within its bundle; it cannot prove who captured the original image.
 - The images in this repository are synthetic renders. No real-equipment photographs or lab-hardware measurements are
-  included yet, and the Android client has run on the emulator, not on a physical phone.
+  included yet. The Android inspection and guided-task flows have run on the emulator; the only physical-phone run so far
+  is the S23 Ultra ARCore live-assist check in `docs/LIVE_AR.md`, which produced no anchor or distance.
+- Task plans are AI-written guidance, not manufacturer instructions or safety certification. A step photo check is a
+  suggestion; a task's `Completed` phase is not verification.
+- Free-form answers about restricted work rely on a phrase match and an appended referral, not structural rejection.
+- Task command idempotency keys are held in memory: after an API restart a retried task command is checked against
+  state again rather than replayed. Inspection verify decisions are persisted by request id.
 
 ## Provenance
 

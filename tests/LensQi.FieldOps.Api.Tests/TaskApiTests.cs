@@ -163,6 +163,73 @@ public class TaskApiTests
     }
 
     [Fact]
+    public async Task Concurrent_links_create_one_inspection()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Technician", goal = "Reseat the yellow cable on port 2", fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => c.PostAsync($"/v1/tasks/{id}/link-inspection", null)));
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        var linked = (await Task.WhenAll(responses.Select(Body))).Select(b => b.GetProperty("inspectionId").GetString()).Distinct().ToList();
+        Assert.Single(linked);
+        Assert.Single((await Body(await c.GetAsync("/v1/inspections"))).EnumerateArray());
+        var events = JsonDocument.Parse(await c.GetStringAsync($"/v1/tasks/{id}/events")).RootElement;
+        Assert.Single(events.EnumerateArray(), e => e.GetProperty("kind").GetString() == "InspectionLinked");
+    }
+
+    [Fact]
+    public async Task A_step_check_retried_with_the_same_key_reuses_its_photo_and_replays_its_verdict()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        await c.PostAsync($"/v1/tasks/{id}/steps/s1:complete", null);
+        Task<HttpResponseMessage> Check() => c.SendAsync(new HttpRequestMessage(HttpMethod.Post, $"/v1/tasks/{id}/steps/s2/check")
+            { Content = Image(), Headers = { { "Idempotency-Key", "check-retry-1" } } });
+
+        f.FakeChat.Throw = new HttpRequestException("down");
+        var failed = await Check();
+        Assert.Equal("provider_unavailable", (await Body(failed)).GetProperty("code").GetString());
+
+        f.FakeChat.Throw = null;
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "LooksDone", reason = "The plug is back in and the pan is dry." });
+        var retried = await Check();
+        Assert.Equal(HttpStatusCode.OK, retried.StatusCode);
+        var check = (await Body(retried)).GetProperty("check");
+        Assert.Equal("LooksDone", check.GetProperty("verdict").GetString());
+
+        var events = JsonDocument.Parse(await c.GetStringAsync($"/v1/tasks/{id}/events")).RootElement.EnumerateArray().ToList();
+        var photo = Assert.Single(events, e => e.GetProperty("kind").GetString() == "TaskPhotoRecorded");
+        Assert.Equal(photo.GetProperty("evidenceId").GetString(), check.GetProperty("photoId").GetString());
+        Assert.Single(events, e => e.GetProperty("kind").GetString() == "StepChecked");
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(f.DataDir, "evidence", id)));
+
+        var calls = f.FakeChat.Images;
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "NotYet", reason = "Different answer that must not be used." });
+        var replayed = (await Body(await Check())).GetProperty("check");
+        Assert.Equal("LooksDone", replayed.GetProperty("verdict").GetString());
+        Assert.Equal(calls, f.FakeChat.Images);
+    }
+
+    [Fact]
+    public async Task An_unexpected_server_error_does_not_reveal_its_details()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        // A file where the task's evidence folder should be makes saving the question frame fail with an IOException.
+        Directory.CreateDirectory(Path.Combine(f.DataDir, "evidence"));
+        File.WriteAllText(Path.Combine(f.DataDir, "evidence", id), "not a folder");
+        var form = Image(); form.Add(new StringContent("Is this the drain plug?"), "question");
+
+        var r = await c.PostAsync($"/v1/tasks/{id}/ask", form);
+        Assert.Equal(HttpStatusCode.InternalServerError, r.StatusCode);
+        var text = await r.Content.ReadAsStringAsync();
+        Assert.Equal("internal", JsonDocument.Parse(text).RootElement.GetProperty("code").GetString());
+        Assert.DoesNotContain("Exception", text);
+        Assert.DoesNotContain(f.DataDir, text);
+    }
+
+    [Fact]
     public async Task Tasks_survive_a_restart()
     {
         string dir, id;

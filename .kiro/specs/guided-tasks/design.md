@@ -2,9 +2,28 @@
 ## Kiro Technical Design
 
 **Spec ID:** `guided-tasks` · **Version 1.0** · October 28, 2026  
-**Status:** Design for implementation. Nothing here is claimed as built.  
+**Status:** Design written before implementation; most of it was built on October 28–29. §0 records where the code differs, from a review of `044c906` on October 29. The sections after §0 describe the design as written.  
 **Stack:** ASP.NET Core 10 minimal API · React web (`apps/web`) · Kotlin/Compose Android (`apps/android`) · Muse Spark 1.3 + SAM 3.1  
 **References:** `requirements.md`, `tasks.md`, PRD v2.0 §4 (safety policy), §7 (state machines), §9 (architecture), §18 (task trust invariants); `../lensqi-fieldops/design.md` for the FieldProof inspection loop.
+
+## 0. As built (code review, October 29, 2026)
+
+Where the implementation differs from the design below. Tests passed on the reviewed commit: 211 .NET, 25 web, 107 Android unit tests; 214 .NET after the review fixes.
+
+| Area | As built |
+|---|---|
+| Modes | `TaskMode` adds `Freeform` ("Just ask"): no plan, `InProgress` at once, questions and live coaching, ended with `Finish`. Planning, accepting and the FieldProof link are refused for it |
+| Events | Twelve types: the eleven in §2.2 plus `TaskPhotoRecorded(evidenceId, sha256, width, height, purpose, stepId?)`. `PlanProposed` also records the model id, prompt and response digests and the manual photo ids |
+| Session rules | Goal 3–300 characters, details up to 1000. Accepting starts the first step. Safety acknowledgement is required only when risk is above Low, a professional is required, or any step has a caution. A step with a required photo check needs a check (any verdict) before it can be marked done. Finishing or skipping the last open step completes the task. Idempotency outcomes are held in memory per session, so they are lost on restart |
+| Validator | As §2.4, plus: a hands-on step in a High-risk plan needs a caution; apostrophes are allowed in `lookFor`; the link check looks for `://` only (a bare `www.` address is not caught). A rejected plan is requested once more with the rejection reason, then the error is returned |
+| Meta | `TaskPlanner` and `StepCoach` share a `MuseStructured` helper. There is no separate `StepChecker`: the check is `StepCoach.CheckAsync`. The scene prompt was **not** extracted from `LiveSceneService`; inspections keep their own prompt, and the live endpoints share one handler (`RunLive`) with per-session concept and guidance functions |
+| Ask | The API appends a fixed referral when `RestrictedTopics` matches the **question** and the answer does not contain "professional". Restricted wording in the goal of the task does not trigger it, and unsafe answer content is not structurally rejected |
+| API | Create takes `fixtureId` and `assetId` (not a `siteLink` object) and up to 3 manual photos; extra routes `POST /{id}/plan` (retry a failed plan), `/{id}/finish` (free-form), `/{id}/abandon`. `link-inspection` returns the existing inspection when already linked |
+| Store | `TaskStore` mirrors `InspectionStore` (in-memory sessions, per-task lock, append-only JSONL, rehydrate on start); the shared JSONL helper was **not** extracted |
+| Web | Routes `/m` (Do it yourself, Just ask, Technician), `/m/tech` (technician home), `/m/new`, `/m/t/:id`, `/m/t/:id/step/:stepId`, `/m/t/:id/done`, `/m/t/:id/live` (free-form), `/ops/tasks`. Each POST gets a fresh `Idempotency-Key`, so a client retry is a new command |
+| Voice grammar | Same phrase table on web and Android: next, back, repeat, check (also "take a photo"), skip, mute, unmute. No "pause". The whole utterance must match; anything else is a question |
+| Android | One `ui/task/TaskScreens.kt` and `TaskViewModels.kt`; `voice/Voice.kt` holds `Speaker`, `rememberVoiceInput` (on-device recognizer when available on Android 12+) and `parseCommand`. **Not built:** `SpokenFeedbackGate` on task speech, a typed question box on the step runner, `distanceAdvice` aimed at the step's main `lookFor` (it uses all tracked objects), the `sessionId` / `StepCheckPhoto` queue generalization, the glasses rename |
+| Review fixes | The three defects found on Oct 29 are fixed (GT-T31–T33 in `tasks.md`): `link-inspection` checks and creates under the task lock; a step-check retry with the same key reuses the saved photo and replays a recorded verdict; unexpected exceptions are logged and answered with a generic `internal` error. Remaining gaps are GT-T34–T36 |
 
 ## 1. Architecture and code boundaries
 
