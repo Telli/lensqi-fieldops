@@ -65,6 +65,10 @@ class LiveCameraSession(
 
     fun nextFrameId(): String = synchronized(lock) { "live-$prefix-${++sequence}" }
 
+    @Volatile private var lastUpload: ByteArray? = null
+    /** The most recent frame sent for detection or guidance (at most a few seconds old), for a question about the view. */
+    fun latestJpeg(): ByteArray? = lastUpload
+
     /** True when a detection or guidance request would be sent for a frame analysed now. */
     fun uploadDue(now: Long): Boolean = synchronized(lock) { !closed && KINDS.any { it !in busy && now >= (due[it] ?: 0) } }
 
@@ -133,6 +137,7 @@ class LiveCameraSession(
         }
         if (kinds.isEmpty()) return
         val bytes = encode()
+        lastUpload = bytes
         for (kind in kinds) scope.launch {
             val interval = if (kind == "detect") 4000L else 12000L
             synchronized(lock) { due[kind] = now + interval }

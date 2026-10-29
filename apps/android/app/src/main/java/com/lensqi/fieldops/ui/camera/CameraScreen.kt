@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,10 +93,20 @@ import kotlin.math.min
  * which hashes it on device and uploads the original bytes with source=Phone. [prompt] is the view the server asked for.
  */
 @Composable
-fun CameraScreen(prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured) }
+fun CameraScreen(
+    prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
+    header: String? = null, onGuidance: (String) -> Unit = {},
+    details: (@Composable ColumnScope.() -> Unit)? = null, controls: (@Composable (CameraHandle) -> Unit)? = null,
+) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls) }
+
+/** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
+class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean)
 
 @Composable
-private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit) {
+private fun CameraContent(
+    prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
+    header: String?, onGuidance: (String) -> Unit, details: (@Composable ColumnScope.() -> Unit)?, controls: (@Composable (CameraHandle) -> Unit)?,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
@@ -146,7 +157,7 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
             ImageCapture.OutputFileOptions.Builder(file).build(),
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) = onCaptured(file)
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) { capturing = false; onCaptured(file) }
                 override fun onError(exception: ImageCaptureException) { capturing = false; status = "Capture failed: ${exception.message}" }
             },
         )
@@ -157,6 +168,8 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
     val executor = remember { Executors.newSingleThreadExecutor() }
     val session = remember(liveEnabled) { if (liveEnabled) LiveCameraSession(analyze = analyzeLive) else null }
     val feedback = session?.state?.collectAsState()?.value ?: LiveCameraState()
+    // New AI guidance (its age resets to 0), not the local light and focus hints that change every frame.
+    LaunchedEffect(feedback.guidanceAge) { if (liveEnabled && feedback.guidanceAge == 0L) onGuidance(feedback.recommendation) }
     DisposableEffect(session) { onDispose { session?.close() } }
     DisposableEffect(controller, session, arActive) {
         if (session != null && !arActive) controller.setImageAnalysisAnalyzer(executor) { image ->
@@ -241,7 +254,8 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButton(onClick = onClose, modifier = Modifier.clip(CircleShape).background(glass)) { Icon(Icons.Outlined.Close, "Close camera", tint = FoDark.Foreground) }
-            Spacer(Modifier.weight(1f))
+            if (header != null) Text(header, color = FoDark.Foreground, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f).clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 12.dp, vertical = 8.dp))
+            else Spacer(Modifier.weight(1f))
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -279,7 +293,7 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
                 }
                 Text(if (liveEnabled) "${feedback.fps} tracking updates/s · AI guidance ${feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}"
                     else if (arAvailability == ArAvailability.Ready && spatialEnabled) "Sampled frames go to AI for guidance; ARCore measures distance on this phone. Only shutter photos are saved."
-                    else "Sampled frames go to AI for guidance. Only shutter photos are saved to the inspection.", fontSize = 11.sp, color = FoDark.Muted)
+                    else "Sampled frames go to AI for guidance. Only shutter photos are saved.", fontSize = 11.sp, color = FoDark.Muted)
             }
             // LensQi's ask: the view the server needs next.
             Row(
@@ -293,15 +307,20 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
                     (status ?: arFailure)?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
                 }
             }
-            Box(
+            details?.invoke(this)
+            val shutter = {
+                if (!capturing) {
+                    capturing = true
+                    status = null
+                    if (arActive) pendingCapture = true else takePhoto()
+                    liveEnabled = false
+                }
+            }
+            if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled))
+            else Box(
                 Modifier.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
                     .background(if (capturing) FoDark.Primary else FoDark.Foreground)
-                    .clickable(enabled = !capturing) {
-                        capturing = true
-                        status = null
-                        if (arActive) pendingCapture = true else takePhoto()
-                        liveEnabled = false
-                    },
+                    .clickable(enabled = !capturing, onClick = shutter),
                 contentAlignment = Alignment.Center,
             ) { if (capturing) CircularProgressIndicator(Modifier.size(28.dp), color = FoDark.Background, strokeWidth = 3.dp) }
         }
