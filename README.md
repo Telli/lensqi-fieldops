@@ -1,8 +1,33 @@
 # LensQi FieldOps
 
-**See the problem. Prove the solution.** Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
+**See the task. Do it right. Prove it when it matters.** Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
 
 ## What this is
+
+LensQi walks a person through a hands-on technical job with a live camera, AR outlines, AI-written steps and voice. It
+has two modes built on one guided-task core:
+
+- **DIY mode** for everyday technical users: "change the oil in my 2025 Civic", "mount an IP camera". The user states a
+  goal, Muse Spark writes a plan labelled "AI-written plan · check your owner's manual" with a risk level, per-step
+  cautions and stop-if conditions, and the live camera and voice guide each step. SAM 3.1 outlines the parts a step needs;
+  ARCore adds anchors and measured distance on supported Android phones, with 2D tracking elsewhere. Spoken guidance,
+  push-to-talk questions and voice commands use on-device speech recognition, so only text reaches the server. An
+  optional step photo check suggests whether a step looks done; the user decides.
+- **Technician mode** for installs, repairs and on-site help, with the same guided steps. A task tied to a site record
+  finishes with the approved equipment check and a FieldProof verified receipt.
+
+The server enforces the safety policy, not just the prompt: gas lines and appliances, main electrical panels and live
+mains wiring, EV high-voltage systems, airbags, refrigerant and structural work get prepare-and-observe steps and a
+referral to a professional, never hands-on steps. Only FieldProof marks anything verified.
+
+**Status (October 28, 2026):** guided tasks run on the `guided-tasks` branch on web and Android, with genuine plans,
+questions, step checks and live step coaching recorded in [docs/evidence/tasks/](docs/evidence/tasks/) (browser and
+emulator; no phone run of the task flow yet, and voice input not yet tried with a real microphone). The technician's
+FieldProof inspection loop below is unchanged. The Android ARCore mode's first phone run (Galaxy S23 Ultra) has not yet
+produced anchors or distance on real equipment ([docs/LIVE_AR.md](docs/LIVE_AR.md)). Plan: [PRD.md](PRD.md),
+[.kiro/specs/guided-tasks/](.kiro/specs/guided-tasks/).
+
+### The FieldProof inspection loop (Technician mode, built)
 
 1. A field technician photographs equipment. Muse Spark 1.3 says what it observes, suspects or cannot see, and asks for a better view instead of guessing.
 2. SAM 3.1 localizes the cited part (the yellow cable) on the original pixels; the crop is never treated as independent evidence.
