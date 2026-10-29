@@ -25,6 +25,8 @@ data class LiveCameraState(
     val viewSpace: Boolean = false,
     /** ARCore's tracking state in words, while AR runs. */
     val tracking: String? = null,
+    /** Text the AI read off a screen in view, while its guidance is current. */
+    val screenText: String? = null,
     val brightness: Double = 100.0,
     val sharpness: Double = 10.0,
     val motion: Double = 0.0,
@@ -53,7 +55,7 @@ class LiveCameraSession(
     private val prefix = UUID.randomUUID().toString(); private var sequence = 0
     private var lastFrame = 0L; private var fpsAt = 0L; private var ticks = 0; private var fps = 0
     private val busy = mutableSetOf<String>(); private val due = mutableMapOf<String, Long>()
-    private var guidance = ""; private var guidanceFrame = ""; private var guidanceAt = 0L; private var error = ""; private var detected = false; private var scanned = false
+    private var guidance = ""; private var screenText: String? = null; private var guidanceFrame = ""; private var guidanceAt = 0L; private var error = ""; private var detected = false; private var scanned = false
 
     fun close() {
         closed = true
@@ -97,7 +99,7 @@ class LiveCameraSession(
             val objects = if (spatial == null) tracker.objects
                 else fuseTracks(tracker.objects.mapNotNull { o -> spatial.toView(o.box)?.let { o.copy(box = it) } }, spatial.anchored)
 
-            if (guidance.isNotEmpty() && !tracker.current(guidanceFrame)) { guidance = ""; guidanceAt = 0 }
+            if (guidance.isNotEmpty() && !tracker.current(guidanceFrame)) { guidance = ""; screenText = null; guidanceAt = 0 }
             val quality = frameQuality(frame)
             val distance = spatial?.let { distanceAdvice(objects) }
             val advice = when {
@@ -124,7 +126,7 @@ class LiveCameraSession(
             mutable.value = LiveCameraState(
                 objects = objects, status = statusText, recommendation = advice, width = width, height = height,
                 guidanceAge = guidanceAt.takeIf { it > 0 }?.let { (now - it) / 1000 }, fps = fps,
-                viewSpace = spatial != null, tracking = spatial?.tracking,
+                viewSpace = spatial != null, tracking = spatial?.tracking, screenText = screenText,
                 brightness = quality.brightness, sharpness = quality.sharpness, motion = motion,
             )
             KINDS.filter { it !in busy && now >= (due[it] ?: 0) }.also { busy.addAll(it) }
@@ -145,7 +147,7 @@ class LiveCameraSession(
                             scanned = scanned || accepted
                             detected = detected || tracker.objects.isNotEmpty()
                         } else if (tracker.current(frame.id)) {
-                            guidance = result.recommendation.orEmpty(); guidanceFrame = frame.id; guidanceAt = now
+                            guidance = result.recommendation.orEmpty(); screenText = result.screenText; guidanceFrame = frame.id; guidanceAt = now
                         }
                     }
                 }

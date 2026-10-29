@@ -10,8 +10,10 @@ export interface LiveQualityTelemetry {
 export interface LiveFeedback {
   objects: LiveObject[]; status: string; recommendation: string; updatedAt: number | null;
   width: number; height: number; fps: number; telemetry: LiveQualityTelemetry | null;
+  /** Error or status text the AI read off a screen in view, while its guidance is current. */
+  screenText: string | null;
 }
-const initial: LiveFeedback = { objects: [], status: 'Ready', recommendation: 'Keep the equipment and connection in view.', updatedAt: null, width: 0, height: 0, fps: 0, telemetry: null };
+const initial: LiveFeedback = { objects: [], status: 'Ready', recommendation: 'Keep the equipment and connection in view.', updatedAt: null, width: 0, height: 0, fps: 0, telemetry: null, screenText: null };
 
 /** Local tracking never waits for HTTP. Detection and guidance each have one cancellable request in flight. */
 export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active: boolean, id: string) {
@@ -27,7 +29,7 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
     const pending = new Set<AbortController>();
     const busy = { detect: false, guide: false }, due = { detect: 0, guide: 0 };
     let serial = 0, disposed = false, processing = false, last = 0, ticks = 0, fpsAt = performance.now(), fps = 0;
-    let objects: LiveObject[] = [], guidance = '', guidanceAt = 0, guidanceFrame = '', detected = false, scanned = false, error = '';
+    let objects: LiveObject[] = [], guidance = '', screenText: string | null = null, pendingScreen: string | null = null, guidanceAt = 0, guidanceFrame = '', detected = false, scanned = false, error = '';
     let waitingGuidance: { frameId: string; text: string; time: number } | null = null;
     const reset = () => {
       generation.current++; pending.forEach(c => c.abort()); worker.terminate();
@@ -38,15 +40,15 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
       const data = e.data;
       if (data.kind === 'guidance-current') {
         if (waitingGuidance && waitingGuidance.frameId === data.frameId) {
-          if (data.current) { guidance = waitingGuidance.text; guidanceAt = waitingGuidance.time; guidanceFrame = data.frameId; }
+          if (data.current) { guidance = waitingGuidance.text; screenText = pendingScreen; guidanceAt = waitingGuidance.time; guidanceFrame = data.frameId; }
           waitingGuidance = null;
-        } else if (guidanceFrame === data.frameId && !data.current) { guidance = ''; guidanceAt = 0; }
+        } else if (guidanceFrame === data.frameId && !data.current) { guidance = ''; screenText = null; guidanceAt = 0; }
         return;
       }
       if (data.kind === 'detection') { scanned ||= data.accepted; detected ||= data.accepted && data.objects.length > 0; objects = data.objects; return; }
       processing = false; objects = data.objects;
       const now = performance.now();
-      if (guidanceAt && now - guidanceAt > 20000) { guidance = ''; guidanceAt = 0; }
+      if (guidanceAt && now - guidanceAt > 20000) { guidance = ''; screenText = null; guidanceAt = 0; }
       const quality = data.brightness < 35 && !guidance ? 'Add light so the parts and labels are visible.'
         : data.motion > 32 ? 'Move more slowly so I can keep track of the connection.'
         : data.sharpness < 3 && !guidance ? 'Hold steady and bring the equipment into focus.' : '';
@@ -54,7 +56,7 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
         telemetry: { brightness: data.brightness, sharpness: data.sharpness, motion: data.motion },
         status: error || (objects.length ? `Tracking ${objects.length} part${objects.length === 1 ? '' : 's'}` : busy.detect ? 'Finding parts…' : detected ? 'Tracking lost · finding parts again' : scanned ? 'No parts found · keep scanning' : 'Looking for equipment…'),
         recommendation: quality || guidance || (objects.length ? 'Keep the connection visible. Capture a photo when ready.' : 'Aim at the equipment and hold steady for detection.'),
-        updatedAt: guidanceAt || null });
+        updatedAt: guidanceAt || null, screenText });
     };
     worker.onerror = () => { processing = false; setEnabled(false); setFeedback({ ...initial, status: 'Live tracking could not start. Try again.' }); };
     const request = async (kind: 'detect' | 'guide', blob: Blob, frameId: string, capturedAt: number) => {
@@ -76,7 +78,7 @@ export function useLiveAssist(video: RefObject<HTMLVideoElement | null>, active:
         // The server cooldown begins after network transit. Wait from completion to avoid racing that boundary.
         error = ''; due[kind] = performance.now() + Math.max(minimum, result.refreshAfterMs ?? minimum);
         if (kind === 'detect') worker.postMessage({ kind: 'detect', frameId, objects: result.objects });
-        else { waitingGuidance = { frameId, text: result.recommendation, time: capturedAt }; worker.postMessage({ kind: 'guide', frameId }); }
+        else { waitingGuidance = { frameId, text: result.recommendation, time: capturedAt }; pendingScreen = typeof result.screenText === 'string' ? result.screenText : null; worker.postMessage({ kind: 'guide', frameId }); }
       } catch (e) {
         if (!disposed) { error = e instanceof Error && e.name !== 'AbortError' ? e.message : 'AI timed out · retrying'; due[kind] = Math.max(due[kind], performance.now() + 5000); }
       } finally { clearTimeout(timeout); pending.delete(abort); busy[kind] = false; }

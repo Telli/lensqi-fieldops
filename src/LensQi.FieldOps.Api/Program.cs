@@ -111,6 +111,7 @@ builder.Services.AddSingleton<IDiagnosticProbe>(sp => new RecordedReplayProbe(sp
 builder.Services.AddSingleton<IDiagnosticProbe>(sp => new LiveLocalHttpHealthProbe(LiveLocalHttpHealthProbe.CreateClient(), sp.GetRequiredService<DiagnosticsOptions>(), sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<DiagnosticDispatcher>();
 builder.Services.AddSingleton<VisualAssessmentService>();
+builder.Services.AddSingleton<LiveSceneService>();
 builder.Services.AddSingleton<ReceiptService>();
 builder.Services.AddSingleton<GroundedProposalService>();
 

@@ -244,6 +244,7 @@ export default function Scan({ id }: { id: string }) {
               <LensQiMark className="size-6" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm leading-snug">{busy ? (afterRepair ? "Comparing with the photo from before…" : "Looking at your photo…") : assist.enabled && live === "on" ? assist.recommendation : prompt}</div>
+                {!busy && assist.enabled && live === "on" && assist.screenText && <p className="mt-1 line-clamp-3 text-xs opacity-70">On screen: “{assist.screenText}”</p>}
                 {steps.length > 0 && <StepLine steps={steps} />}
               </div>
             </div>

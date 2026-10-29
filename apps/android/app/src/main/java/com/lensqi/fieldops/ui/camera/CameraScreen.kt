@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,10 +101,11 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var status by remember { mutableStateOf<String?>(null) }
     var capturing by remember { mutableStateOf(false) }
-    var liveEnabled by remember { mutableStateOf(false) }
+    // Survive rotation: turning the phone must not switch live assist or 3D AR off.
+    var liveEnabled by rememberSaveable { mutableStateOf(false) }
     var arAvailability by remember { mutableStateOf(ArCore.availability(context)) }
     LaunchedEffect(arAvailability) { if (arAvailability == ArAvailability.Checking) { delay(250); arAvailability = ArCore.availability(context) } }
-    var spatialEnabled by remember { mutableStateOf(true) }
+    var spatialEnabled by rememberSaveable { mutableStateOf(true) }
     var arFailure by remember { mutableStateOf<String?>(null) }
     var pendingCapture by remember { mutableStateOf(false) }
     val arActive = liveEnabled && spatialEnabled && arAvailability == ArAvailability.Ready && arFailure == null
@@ -287,6 +289,7 @@ private fun CameraContent(prompt: String, analyzeLive: suspend (String, ByteArra
                 LensQiMark(24)
                 Column(Modifier.weight(1f)) {
                     Text(if (liveEnabled) feedback.recommendation else prompt, fontSize = 15.sp, lineHeight = 20.sp, color = FoDark.Foreground)
+                    if (liveEnabled) feedback.screenText?.let { Text("On screen: “$it”", fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted, maxLines = 3) }
                     (status ?: arFailure)?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
                 }
             }
