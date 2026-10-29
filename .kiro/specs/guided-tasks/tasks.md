@@ -29,7 +29,7 @@
   - Tests: verdict recorded as `StepChecked`; step stays incomplete.
 - [x] **GT-T08 — `TaskEndpoints`.** All `/v1/tasks` routes in `design.md` §4 with `Idempotency-Key`, `ApiResults`, limits; live detect/guide on `LiveVisionGate` with step `lookFor` first (GT-R01, GT-R05.2, GT-R05.6). *(done Oct 28: c722a14, 9 API tests)*
   - Tests with `FakeVisionChat` / `FakeSegmenter`: create plan; rejected unsafe plan; accept and steps; ask; step check; live detect concepts; artifact scoping.
-- [x] **Gate (end of Oct 29):** `dotnet test --nologo` passes including all new Core and API tests; FieldProof tests unchanged; API contract frozen and recorded (`fixtures/api-recordings/` or an equivalent contract note) for web and Android. *(met Oct 28: 216 .NET tests; recorded responses in `docs/evidence/tasks/` serve as the contract)*
+- [x] **Gate (end of Oct 29):** `dotnet test --nologo` passes including all new Core and API tests; FieldProof tests unchanged; API contract frozen and recorded (`fixtures/api-recordings/` or an equivalent contract note) for web and Android. *(met Oct 28: 208 .NET tests; recorded responses in `docs/evidence/tasks/` serve as the contract)*
 
 ## Day 2: Fri Oct 30 — Web DIY flow
 
