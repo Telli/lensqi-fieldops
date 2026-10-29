@@ -2,6 +2,23 @@
 
 **See the task. Do it right. Prove it when it matters.** Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
 
+## Built for the Meta Global AI Developer Hackathon
+
+Event-period implementation includes guided tasks on web and Android, “Just ask” camera help, the FieldProof
+inspection workflow, approved diagnostics, receipts and the operations dashboard. Muse Spark 1.3
+(`muse-spark-1.3`) serves plans, coaching, step checks and inspection assessment; SAM 3.1 (`sam-3.1`) serves
+segmentation. Muse Spark Open is **not integrated**: the requested hackathon alias and credentials remain unconfirmed
+([feasibility record](docs/evidence/tasks/open-model-feasibility.md)).
+
+The v1.1/v2.0 specification kits and pre-event design material are not claimed as new implemented functionality.
+No private LensIQ source is copied. The [contribution ledger](docs/HACKATHON_CONTRIBUTIONS.md) separates
+implementation from baseline/design material and records remaining attribution questions.
+
+From a clean checkout of this branch, `dotnet test --nologo` exercises the API with fake models and simulated probes,
+including `TechnicianJourneyTests`. `scripts/clean_room_check.sh --source . --no-meta` clones committed work and
+checks the inspection demo and receipts without paid model calls; it does not provide a fake-model interactive
+planner. Genuine calls are skipped explicitly. Neither command uses Docker. See [journey evidence and reproduction](docs/evidence/tasks/technician-journey.md).
+
 ## What this is
 
 LensQi walks a person through a hands-on technical job with a live camera, AR outlines, AI-written steps and voice. It
@@ -11,16 +28,21 @@ has two modes built on one guided-task core:
   goal, Muse Spark writes a plan labelled "AI-written plan · check your owner's manual" with a risk level, per-step
   cautions and stop-if conditions, and the live camera and voice guide each step. SAM 3.1 outlines the parts a step needs;
   ARCore adds anchors and measured distance on supported Android phones, with 2D tracking elsewhere. Spoken guidance,
-  push-to-talk questions and voice commands use on-device speech recognition, so only text reaches the server. An
+  push-to-talk questions and voice commands send only recognised text to LensQi. Android uses `SpeechRecognizer`,
+  preferring the on-device recognizer where available on Android 12+; its system fallback may use a provider service.
+  Web uses the Web Speech API, which in some browsers sends audio to the browser vendor. The web UI discloses this
+  and offers typing instead. An
   optional step photo check suggests whether a step looks done; the user decides.
 - **Technician mode** for installs, repairs and on-site help, with the same guided steps. A task tied to a site record
   finishes with the approved equipment check and a FieldProof verified receipt.
 - **Free-form help ("Just ask")** for spontaneous use: the camera opens at once and the user asks about whatever is in
   view by voice or text, with no plan first. "Make a plan" turns a longer job into a guided task.
 
-The server enforces the safety policy, not just the prompt: gas lines and appliances, main electrical panels and live
-mains wiring, EV high-voltage systems, airbags, refrigerant and structural work get prepare-and-observe steps and a
-referral to a professional, never hands-on steps. Only FieldProof marks anything verified.
+For recognized restricted categories (gas, mains electrical, EV high voltage, airbags, refrigerant and structural work),
+`TaskPlanValidator` structurally rejects plans containing hands-on steps or missing the required professional referral.
+Free-form answers use prompt instructions, output checks and a referral safeguard: the server appends a referral when
+a question matches the configured restricted phrases and the answer lacks “professional”. This weaker mechanism does
+not block every unsafe answer. Only FieldProof marks anything verified.
 
 **Status (October 28, 2026):** guided tasks run on the `guided-tasks` branch on web and Android, with genuine plans,
 questions, step checks and live step coaching recorded in [docs/evidence/tasks/](docs/evidence/tasks/) (browser and

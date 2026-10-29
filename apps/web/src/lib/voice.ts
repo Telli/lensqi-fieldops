@@ -48,7 +48,7 @@ interface Recognition {
 type RecognitionCtor = new () => Recognition;
 
 /**
- * Push-to-talk speech recognition in the browser (Web Speech API). Recognition runs in the browser; only the final text is
+ * Push-to-talk speech recognition in the browser (Web Speech API). The browser may use a remote speech provider; only the final text is
  * used. Unsupported browsers report it so the page can offer typing instead.
  */
 export function usePushToTalk(onFinal: (text: string) => void) {

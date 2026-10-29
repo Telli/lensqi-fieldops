@@ -26,7 +26,7 @@
 
 - **DIY mode** for everyday technical users. Example goals: *"Change the oil in my 2025 Civic"*, *"Mount an IP camera over the garage door"*.
 - **Technician mode** for installs, repairs and on-site help. A technician task can be tied to a **site record**; that unlocks the fixture-approved equipment check and the **FieldProof verified receipt**, which stay the technician's closer.
-- **Free-form help ("Just ask")** for spontaneous use: no goal or plan first. The camera opens at once; the user asks about whatever is in view (an error on a screen, an unfamiliar part, a quick fix) by voice or text, live coaching outlines what LensQi points at, and "Make a plan" turns a longer job into a guided task. The same safety policy applies: a question about professionals-only work always gets the referral, enforced by the server.
+- **Free-form help ("Just ask")** for spontaneous use: no goal or plan first. The camera opens at once; the user asks about whatever is in view (an error on a screen, an unfamiliar part, a quick fix) by voice or text, live coaching outlines what LensQi points at, and "Make a plan" turns a longer job into a guided task. Free-form answers use prompt instructions, output checks and a referral safeguard for recognized restricted phrases. This is weaker than the structural plan validator and does not block every unsafe answer.
 
 **The guided task, in both modes:**
 
@@ -48,7 +48,7 @@
 | Live camera assistance (web, Android CameraX, glasses stream): 2D tracking, periodic SAM detection, Muse live guidance about anything in view | Built; checked in the browser and on the emulator (`docs/LIVE_AR.md`) |
 | Android ARCore mode: anchors from measured depth and camera-to-part distance | Built with geometry unit tests. First phone run on a Galaxy S23 Ultra ran live assist on an ARCore session with genuine model calls, but produced **no anchor or distance yet** (no fixture part in view). Anchors on real equipment and the AR-to-CameraX shutter hand-off are untested on hardware |
 | Meta glasses through the Wearables Device Access Toolkit | Exercised against the Mock Device Kit only; no real glasses tested |
-| Guided tasks (DIY and Technician), task plans, safety validator, step checks, voice questions and commands | **Built on the `guided-tasks` branch (Oct 28)** with tests (Core, API, web, Android). Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), a question, step checks and live step coaching are recorded in `docs/evidence/tasks/`; checked in the browser and on the emulator. **Not yet:** a phone run of the task flow, voice input with a real microphone, ARCore anchors on a real part, offline queue for step photos, glasses on tasks, a linked technician task driven to a FieldProof decision |
+| Guided tasks (DIY and Technician), task plans, safety validator, step checks, voice questions and commands | **Built on the `guided-tasks` branch (Oct 28)** with tests (Core, API, web, Android). Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), a question, step checks and live step coaching are recorded in `docs/evidence/tasks/`; checked in the browser and on the emulator. **Not yet:** a phone run of the task flow, voice input with a real microphone, ARCore anchors on a real part, offline queue for step photos, glasses on tasks, a user-operated linked technician task driven to a FieldProof decision (the API integration journey now passes with fakes; see `docs/evidence/tasks/technician-journey.md`) |
 
 ## 2. Problem, users, and jobs to be done
 
@@ -77,7 +77,7 @@ People increasingly attempt technical jobs themselves using scattered videos, fo
 5. **The user decides; FieldProof verifies.** A step photo check is a suggestion. Only the FieldProof gate in Technician mode marks anything verified.
 6. **Active perception beats passive classification.** Ask for a better view, outline the part, measure distance only where ARCore measured it.
 7. **Structured, inspectable record.** Each plan, step, question, check and decision is an append-only event with an origin and a server timestamp.
-8. **Voice stays on the device.** Speech-to-text runs on the phone or in the browser; only text reaches the server.
+8. **Only recognised text reaches LensQi.** Android prefers on-device recognition where available on Android 12+; system fallback and browser recognition may send audio to their providers. Web offers a disclosed typed alternative; Android task typing remains unfinished.
 9. **Honest labelling.** Simulated checks are labelled simulated, mock devices are labelled mock, and nothing is described as run, tested or verified until it has been.
 10. **New hackathon work must be obvious.** A clean standalone repository, dated commits, and a demo showing only event-built functionality.
 
@@ -154,7 +154,7 @@ The category is decided from the user's own words as well as the model's label: 
 
 ### P2 — Stretch / post-hackathon
 
-- Muse Voice Transcribe as an alternative to on-device speech-to-text; multilingual guidance.
+- Muse Voice Transcribe as an alternative to client-managed speech recognition; multilingual guidance.
 - Saved household or fleet asset history ("last oil change 5,000 miles ago").
 - Managed-switch SNMP/LLDP evidence, signed receipts, PDF export (v1.1 P2 items).
 - Muse Image "what done looks like" illustrations, unmistakably labelled **conceptual**, never step-check or verification evidence.
@@ -268,9 +268,9 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 #### GT-06 — Voice (P0)
 
 - **Speak guidance:** the step instruction and new guidance are spoken through text-to-speech, rate-limited by the existing spoken-feedback gate (no repeats of unchanged advice).
-- **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer on Android 12+) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Where speech recognition is unavailable, a typed box replaces it.
+- **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Web offers a typed box. Android task typed fallback is still a requirement, not implemented.
 - **Voice commands:** a shared grammar on web and Android recognises next, back, repeat, take photo, check step and pause; unrecognised speech is treated as a question.
-- No audio is sent to the server or stored.
+- No audio is sent to or stored by LensQi; browser/system recognition providers may process audio.
 
 **Acceptance:** Command-grammar tests pass on both clients with the same cases; network traces show only text in `/ask`.
 
@@ -469,7 +469,7 @@ lensqi-fieldops/
 
 - **Muse Spark 1.3 (P0):** write task plans (strict schema, low reasoning), coach the current step and answer questions from a frame, suggest step-check verdicts, and in Technician mode assess inspection photos and propose evidence requests.
 - **SAM 3.1 (P0):** outline one concrete concept per request (a step's `lookFor`, a guidance focus phrase, or a fixture's `segmentationPrompt`). It does not judge whether a step is done or certify anything.
-- **Muse Voice Transcribe (P2):** not used in P0; speech-to-text runs on the device.
+- **Muse Voice Transcribe (P2):** not used in P0; speech recognition uses the client platform APIs, which may use a provider service.
 - **Muse Image (stretch):** conceptual illustration only, labelled as generated.
 - **Muse Code:** development tool only.
 
@@ -517,7 +517,7 @@ Enum values are the PascalCase names from the parent `design.md` (`ObservationSt
 ## 10. Data, security, and privacy
 
 - **Camera:** explicit capture and an explicit Start for live assist; the Start control explains that sampled frames go to AI. Live frames are not stored as evidence; provider processing is subject to the provider's own data handling.
-- **Microphone and speech:** the microphone opens only while push-to-talk is held or active; speech-to-text runs on the device (Android `SpeechRecognizer`, browser Web Speech API). Only the recognised text reaches the server. Browsers whose Web Speech implementation sends audio to the browser vendor's service are disclosed in the UI; the typed fallback avoids it. No audio is uploaded to or stored by LensQi.
+- **Microphone and speech:** the microphone opens only while push-to-talk is held or active; Android `SpeechRecognizer` prefers the on-device recognizer where available on Android 12+, otherwise the system service; web uses the Web Speech API. These services may send audio to their providers. Only the recognised text reaches the server. Browsers whose Web Speech implementation sends audio to the browser vendor's service are disclosed in the UI; the typed fallback avoids it. No audio is uploaded to or stored by LensQi.
 - **Manual photos:** sent to Muse only to ground the plan; stored under the task id; users are told not to photograph personal documents.
 - **Permissions:** camera and microphone only when needed; optional glasses integration follows Meta registration and device access permissions.
 - **Network safety:** diagnostics cannot accept URLs or hosts from the model or request body; aliases resolve from an operator-controlled allowlist.
@@ -582,7 +582,7 @@ Repository: **`lensqi-fieldops`**, initialized from scratch during the build win
 - [ ] DIY task from spoken or typed goal to done screen, on web at phone size and on Android, with genuine Muse plans and SAM outlines.
 - [ ] Restricted-category plans rejected when they contain hands-on steps, in tests and in one genuine-call run.
 - [ ] Step runner with live AR: SAM outlines of step parts; ARCore distance only from measured depth; 2D elsewhere.
-- [ ] Voice: spoken guidance, push-to-talk question answered within the step, voice commands; no audio sent to the server.
+- [ ] Voice: spoken guidance, push-to-talk question answered within the step, voice commands; no audio sent to the LensQi server.
 - [ ] Step photo check suggests a verdict; the user decides.
 - [ ] Technician task linked to a site record reaches a FieldProof decision; fake fix rejected; receipt verifies.
 - [ ] Genuine-call evidence under `docs/evidence/tasks/` with model ids and digests; every claim matches what ran.
@@ -672,7 +672,7 @@ Keep the workflow stage (`InspectionStage`) distinct from verification provenanc
 |---|---|---|
 | Product shape | **Decided Oct 28: two modes on one guided-task core; FieldProof kept as the technician closer** | — |
 | DIY instruction source | **Decided Oct 28: AI-written plans, clearly labelled, with manual photos as optional grounding** | Licensed manufacturer data becomes available (post-hackathon) |
-| Voice | **Decided Oct 28: speak guidance, push-to-talk questions, voice commands; speech-to-text on the device** | On-device recognition fails on the demo phone → typed fallback for questions |
+| Voice | **Decided Oct 28: speak guidance, push-to-talk questions, voice commands; client-platform speech recognition, on-device where available** | Recognition fails on the demo phone → use web typed questions; Android task typing remains unfinished |
 | Restricted categories | Gas, mains electrical, EV high voltage, airbags/SRS, refrigerant, structural | Add categories when evaluation shows gaps; never remove one for the demo |
 | Indie-track private-code reuse | Fresh implementation, no code copied | Written clarification plus rights approval |
 | Repo visibility | New repo public | Competition rules change |

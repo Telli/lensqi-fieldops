@@ -89,6 +89,7 @@ export default function ModeHome() {
             <ArrowRight className="size-5" />
           </button>
         </form>
+        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
         {voice.error && <p className="mt-2 text-xs text-warning">{voice.error}</p>}
       </section>
 

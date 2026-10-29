@@ -54,6 +54,7 @@ export default function NewTask() {
           ))}
         </div>
 
+        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">What do you want to do?</span>
           <div className="flex items-start gap-2">

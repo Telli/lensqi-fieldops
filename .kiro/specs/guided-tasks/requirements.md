@@ -97,18 +97,18 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 ### GT-R07 — Voice (P0)
 
 1. WHEN a step opens or step guidance changes, THE CLIENT SHALL speak it through text-to-speech, gated so unchanged advice is not repeated and utterances are spaced.
-2. WHEN the user holds or taps push-to-talk, THE CLIENT SHALL recognise speech on the device (Android `SpeechRecognizer`, using the on-device recognizer on Android 12+; the browser Web Speech API where available) and SHALL open the microphone only while push-to-talk is active.
+2. WHEN the user holds or taps push-to-talk, THE CLIENT SHALL use Android `SpeechRecognizer` (preferring the on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API; these services may process audio remotely. THE CLIENT SHALL open the microphone only while push-to-talk is active.
 3. WHERE speech recognition is unavailable, THE CLIENT SHALL offer a typed question box instead.
 4. WHEN recognised text matches the command grammar (next, back, repeat, take photo, check step, pause), THE CLIENT SHALL perform that action and confirm it on screen; OTHERWISE THE CLIENT SHALL send the text as a question.
 5. THE COMMAND GRAMMAR SHALL be the same on web and Android and SHALL be covered by the same test cases on both.
-6. THE SYSTEM SHALL NOT upload or store audio. WHERE a browser's speech service sends audio to the browser vendor, THE CLIENT SHALL disclose it before first use.
+6. THE LENSQI SERVER SHALL NOT receive or store audio. WHERE a browser's speech service sends audio to the browser vendor, THE CLIENT SHALL disclose it before first use.
 7. WHEN the Android client first uses push-to-talk, IT SHALL request `RECORD_AUDIO`; IF refused, IT SHALL fall back to typed questions.
 
 ### GT-R08 — Questions within the step (P0)
 
 1. WHEN a question arrives at `/ask` with optional frame, THE STEP COACH SHALL answer from the goal, the accepted plan, the current step and the frame, and THE API SHALL append `QuestionAnswered(stepId, question, answer, photo?)`.
 2. IF an answer fails the output checks in GT-R03.6, THE API SHALL reject it and SHALL NOT record it as answered.
-3. WHEN a question asks for hands-on work in a restricted category, THE ANSWER SHALL be a referral and SHALL NOT contain hands-on instructions.
+3. WHEN a question asks for hands-on work in a restricted category, THE ANSWER SHALL be a referral and SHALL NOT contain hands-on instructions. **Implementation gap:** this is a target behavior; the current prompt, output checks and appended-referral safeguard do not structurally enforce the absence of hands-on instructions.
 4. WHEN a question frame is sent, THE SYSTEM SHALL store it under the task id with a digest and purpose `Question`.
 
 ### GT-R09 — Step photo check (P0)
