@@ -33,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -87,12 +88,13 @@ private fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 48) {
 @Composable
 fun TaskRow(t: TaskSummary, onOpen: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(40.dp).background(if (t.mode == TaskMode.Diy) Fo.Primary.copy(alpha = .14f) else Fo.Warning.copy(alpha = .14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (t.mode == TaskMode.Diy) Icons.Outlined.AutoAwesome else Icons.Outlined.Build, null, tint = if (t.mode == TaskMode.Diy) Fo.Primary else Fo.Warning)
+        val tech = t.mode == TaskMode.Technician
+        Box(Modifier.size(40.dp).background(if (tech) Fo.Warning.copy(alpha = .14f) else Fo.Primary.copy(alpha = .14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Icon(when (t.mode) { TaskMode.Diy -> Icons.Outlined.AutoAwesome; TaskMode.Freeform -> Icons.Outlined.CameraAlt; TaskMode.Technician -> Icons.Outlined.Build }, null, tint = if (tech) Fo.Warning else Fo.Primary)
         }
         Column(Modifier.weight(1f)) {
-            Text(t.title ?: t.goal, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(when (t.phase) {
+            Text(if (t.mode == TaskMode.Freeform) "Just ask" else t.title ?: t.goal, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(if (t.mode == TaskMode.Freeform) "Free-form help · ${if (t.phase == TaskPhase.Completed) "ended" else "open"}" else when (t.phase) {
                 TaskPhase.Completed -> "Done"; TaskPhase.Abandoned -> "Stopped"
                 TaskPhase.Planned -> if (t.title != null) "Plan ready" else "No plan yet"
                 TaskPhase.InProgress -> "${t.currentStepTitle ?: "In progress"} · ${t.finished}/${t.steps}"
@@ -104,7 +106,7 @@ fun TaskRow(t: TaskSummary, onOpen: () -> Unit) {
 
 /** Two ways in: say what you want to do yourself, or go to technician work. */
 @Composable
-fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
+fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
     val voice = rememberVoiceInput { goal = it }
@@ -127,11 +129,28 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onTechnician
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(if (voice.listening) voice.heard.ifEmpty { goal } else goal, { goal = it }, Modifier.weight(1f),
-                        placeholder = { Text("e.g. Change the oil in my 2025 Civic") }, minLines = 2, maxLines = 3)
+                        placeholder = { Text("e.g. Change the oil in my 2025 Civic") }, minLines = 2, maxLines = 3,
+                        // The card is always dark; the field's text must be light in both app themes.
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = FoDark.Foreground, unfocusedTextColor = FoDark.Foreground,
+                            focusedPlaceholderColor = FoDark.Muted, unfocusedPlaceholderColor = FoDark.Muted, focusedBorderColor = FoDark.Primary, unfocusedBorderColor = FoDark.Border, cursorColor = FoDark.Primary))
                     if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
                 }
                 voice.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 PrimaryButton("Plan it", { onPlan(goal.trim()) }, Modifier.fillMaxWidth(), enabled = goal.trim().length >= 3, icon = Icons.Outlined.AutoAwesome)
+            }
+        }
+        item {
+            Panel(Modifier.clickable(enabled = !s.creating, onClick = onJustAsk)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(44.dp).background(Fo.Primary.copy(alpha = .14f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        if (s.creating) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Outlined.CameraAlt, null, tint = Fo.Primary)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Just ask", fontWeight = FontWeight.SemiBold)
+                        Text("Point the camera at anything and ask. No plan needed: an error on a screen, a part you don't recognise, a quick fix.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
+                }
             }
         }
         item {
@@ -424,4 +443,64 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
         }
         item { Box(Modifier.height(24.dp)) }
     }
+}
+
+private const val LOOK = "What am I looking at, and is anything wrong?"
+
+/**
+ * Free-form help: the live camera and a conversation, no plan. Questions by voice use the latest live frame; "Look" takes
+ * a full-resolution photo and asks about it. A longer job can become a step-by-step plan.
+ */
+@Composable
+fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> Unit) {
+    val s by vm.state.collectAsStateWithLifecycle()
+    val t = s.task
+    val camera = remember { HandleRef() }
+    val open = t?.phase == TaskPhase.InProgress
+    val answers = t?.answers.orEmpty().asReversed()
+    val voice = rememberVoiceInput { said ->
+        when (parseCommand(said)) {
+            VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) }
+            VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
+            VoiceCommand.Unmute -> vm.speaker.enabled = true
+            VoiceCommand.Check -> camera.value?.capture?.invoke()
+            else -> vm.ask(said, camera.value?.latestFrame?.invoke())
+        }
+    }
+    CameraScreen(
+        prompt = answers.firstOrNull()?.answer ?: "Point at anything and ask: an error on a screen, a part you don't recognise, a quick fix.",
+        analyzeLive = vm::analyzeLiveFrame,
+        onClose = onClose,
+        onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
+        header = "Just ask · no plan",
+        onGuidance = { vm.speaker.speak(it) },
+        details = {
+            val note = s.error ?: voice.error
+            if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }
+                if (voice.listening) Text(voice.heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
+                note?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
+                if (!open) Text("This session has ended.", color = FoDark.Muted, fontSize = 12.sp)
+            }
+        },
+        controls = { handle ->
+            camera.value = handle
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (voice.listening) FoDark.Primary else Color.Black.copy(alpha = .4f))
+                    .border(1.dp, FoDark.Border, RoundedCornerShape(16.dp)).clickable(enabled = open && voice.supported && s.busy != "ask") { if (voice.listening) voice.stop() else voice.start() },
+                    contentAlignment = Alignment.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (s.busy == "ask") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(if (voice.listening) Icons.Outlined.Stop else Icons.Outlined.Mic, null, tint = FoDark.Foreground)
+                        Text(if (s.busy == "ask") "Thinking…" else if (voice.listening) "Stop" else if (voice.supported) "Ask" else "Voice unavailable", color = FoDark.Foreground)
+                    }
+                }
+                StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onPlan(answers.firstOrNull()?.question?.takeIf { it != LOOK }.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
+                Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }
+            }
+        },
+    )
 }

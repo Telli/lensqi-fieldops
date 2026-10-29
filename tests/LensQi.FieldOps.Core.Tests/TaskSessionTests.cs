@@ -153,4 +153,20 @@ public class TaskSessionTests
         Assert.Equal("I-1", tech.State.InspectionId);
         Assert.Throws<TaskConflictException>(() => TaskSession.Create("T-3", TaskMode.Diy, "Oil", null, new SiteLink("F", "A"), T0));
     }
+
+    [Fact]
+    public void Free_form_help_is_live_at_once_takes_questions_and_never_gets_a_plan()
+    {
+        var s = TaskSession.Create("T-9", TaskMode.Freeform, "", null, null, T0);
+        Assert.Equal(TaskPhase.InProgress, s.State.Phase);
+        Assert.Equal(TaskSession.FreeformGoal, s.State.Goal);
+        s.RecordAnswer("q1", null, "What does this error mean?", "The router lost its uplink.", null, "muse", T0);
+        Assert.Single(s.State.Answers);
+        Assert.Throws<TaskConflictException>(() => s.ProposePlan("p", Plan(), "muse", "p", "r", [], T0));
+        Assert.Throws<TaskConflictException>(() => s.LinkInspection("l", "I-1", T0));
+        s.Finish("end", T0);
+        Assert.Equal(TaskPhase.Completed, TaskSession.Rehydrate(s.Events).State.Phase);
+        Assert.Throws<TaskConflictException>(() => s.RecordAnswer("q2", null, "More?", "No.", null, "muse", T0));
+        Assert.Throws<TaskConflictException>(() => Started().Finish("x", T0));
+    }
 }

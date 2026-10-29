@@ -77,6 +77,10 @@
 - [ ] **GT-T28 — Demo video.** Storyboard from PRD §5: DIY goal, guided step with AR, voice question and command, step check, safety boundary, technician closer, engineering proof; simulated checks labelled.
 - [ ] **GT-T29 — Submit.** Public repository and video accessible; submission before 9 PM ET / 6 PM Pacific on Nov 4.
 
+## Added Oct 29: free-form help
+
+- [x] **GT-T30 — Free-form help ("Just ask").** `TaskMode.Freeform`: no plan, in progress at once, questions and live coaching about anything in view, `Finish`; a question naming professionals-only work always gets the referral (server-enforced); web `/m/t/:id/live` and Android `FreeformScreen`; "Make a plan" opens a planned task with the last question as the goal. *(done Oct 29: Core and API tests; browser and emulator with genuine Muse answers, including the gas-line referral; `docs/evidence/tasks/`)*
+
 ## Cutlines
 
 - If the contract is not frozen by end of Oct 29, Android ships the step runner only and the web flow is the guaranteed surface.

@@ -2,7 +2,7 @@ package com.lensqi.fieldops.data.api
 
 import kotlinx.serialization.Serializable
 
-@Serializable enum class TaskMode { Diy, Technician }
+@Serializable enum class TaskMode { Diy, Technician, Freeform }
 @Serializable enum class TaskPhase { Planned, InProgress, Completed, Abandoned }
 @Serializable enum class RiskLevel { Low, Moderate, High }
 @Serializable enum class StepStatus { Todo, Active, Done, Skipped }

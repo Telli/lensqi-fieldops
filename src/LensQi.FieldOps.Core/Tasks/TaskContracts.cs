@@ -1,7 +1,10 @@
 namespace LensQi.FieldOps.Core.Tasks;
 
-/// <summary>DIY: an everyday technical user with a goal. Technician: installs and repairs, optionally on a site record.</summary>
-public enum TaskMode { Diy, Technician }
+/// <summary>
+/// DIY: an everyday technical user with a goal and a plan. Technician: installs and repairs, optionally on a site record.
+/// Freeform: spontaneous help with whatever the camera shows, no plan; it can be turned into a planned task later.
+/// </summary>
+public enum TaskMode { Diy, Technician, Freeform }
 
 public enum TaskPhase { Planned, InProgress, Completed, Abandoned }
 

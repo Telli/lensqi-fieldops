@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowRight, ChevronRight, Mic, Square, User, Wrench, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, ChevronRight, Loader2, MessageCircle, Mic, Square, User, Wrench, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { friendlyError } from "@/lib/hooks";
 import { ConnBadge, Page } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { useHealth } from "@/lib/hooks";
 import { fmtWhen, greeting } from "@/lib/labels";
-import { useTasks, type TaskSummary } from "@/lib/tasks";
+import { taskKeys, tasks, useTasks, type TaskSummary } from "@/lib/tasks";
 import { usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
-export function taskHref(t: Pick<TaskSummary, "taskId" | "phase">) {
+export function taskHref(t: Pick<TaskSummary, "taskId" | "phase" | "mode">) {
+  if (t.mode === "Freeform") return `/m/t/${t.taskId}/live`;
   return t.phase === "InProgress" ? `/m/t/${t.taskId}/step` : t.phase === "Completed" ? `/m/t/${t.taskId}/done` : `/m/t/${t.taskId}`;
 }
 
@@ -17,13 +21,13 @@ export function TaskRow({ t }: { t: TaskSummary }) {
   const pct = t.steps ? Math.round((100 * t.finished) / t.steps) : 0;
   return (
     <Link href={taskHref(t)} className="flex items-center gap-3 p-3.5 hover:bg-muted/50">
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", t.mode === "Diy" ? "bg-primary/12 text-primary" : "bg-warning/12 text-warning")}>
-        {t.mode === "Diy" ? <Sparkles className="size-[18px]" /> : <Wrench className="size-[18px]" />}
+      <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", t.mode === "Technician" ? "bg-warning/12 text-warning" : "bg-primary/12 text-primary")}>
+        {t.mode === "Diy" ? <Sparkles className="size-[18px]" /> : t.mode === "Freeform" ? <MessageCircle className="size-[18px]" /> : <Wrench className="size-[18px]" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{t.title ?? t.goal}</span>
+        <span className="block truncate text-sm font-medium">{t.mode === "Freeform" ? "Just ask" : t.title ?? t.goal}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
+          {t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
           {t.steps > 0 && t.phase === "InProgress" ? ` · ${t.finished}/${t.steps}` : ""} · {fmtWhen(t.updatedAt)}
         </span>
         {t.phase === "InProgress" && <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-border"><span className="block h-full bg-primary" style={{ width: `${pct}%` }} /></span>}
@@ -42,6 +46,14 @@ export default function ModeHome() {
   const voice = usePushToTalk((text) => setGoal(text));
   const go = () => goal.trim().length >= 3 && nav(`/m/new?mode=Diy&goal=${encodeURIComponent(goal.trim())}`);
   const recent = (list.data ?? []).filter((t) => t.phase !== "Abandoned").slice(0, 5);
+  const qc = useQueryClient();
+  const [opening, setOpening] = useState(false);
+  // Spontaneous help: straight to the camera, no goal or plan first.
+  const justAsk = async () => {
+    setOpening(true);
+    try { const r = await tasks.create({ mode: "Freeform", goal: "" }); qc.setQueryData(taskKeys.one(r.task.taskId), r.task); nav(`/m/t/${r.task.taskId}/live`); }
+    catch (e) { toast.error(friendlyError(e)); setOpening(false); }
+  };
 
   return (
     <Page className="space-y-6 pt-5">
@@ -79,6 +91,15 @@ export default function ModeHome() {
         </form>
         {voice.error && <p className="mt-2 text-xs text-warning">{voice.error}</p>}
       </section>
+
+      <button onClick={justAsk} disabled={opening} className="panel flex w-full items-center gap-3 p-4 text-left hover:border-primary/40">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">{opening ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">Just ask</span>
+          <span className="block text-xs text-muted-foreground">Point the camera at anything and ask. No plan needed: an error on a screen, a part you don't recognise, a quick fix.</span>
+        </span>
+        <ChevronRight className="size-4 text-muted-foreground" />
+      </button>
 
       <Link href="/m/tech" className="panel flex items-center gap-3 p-4 hover:border-primary/40">
         <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-warning/12 text-warning"><Wrench className="size-5" /></span>

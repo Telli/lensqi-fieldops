@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { request } from "./api";
 import { friendlyError } from "./hooks";
 
-export type TaskMode = "Diy" | "Technician";
+export type TaskMode = "Diy" | "Technician" | "Freeform";
 export type TaskPhase = "Planned" | "InProgress" | "Completed" | "Abandoned";
 export type RiskLevel = "Low" | "Moderate" | "High";
 export type CautionKind = "Hot" | "Electrical" | "Lifting" | "Chemical" | "Height" | "Sharp" | "Pressure" | "Other";
@@ -51,6 +51,7 @@ export const tasks = {
   start: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:start`),
   complete: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:complete`),
   skip: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:skip`),
+  finish: (id: string) => request<Task>("POST", `${T(id)}/finish`),
   abandon: (id: string, reason?: string) => request<Task>("POST", `${T(id)}/abandon`, { reason }),
   check: (id: string, stepId: string, photo: Blob) => {
     const f = new FormData(); f.append("image", photo, "step.jpg");

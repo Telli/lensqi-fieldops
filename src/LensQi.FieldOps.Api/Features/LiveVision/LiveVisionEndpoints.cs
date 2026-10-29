@@ -88,7 +88,8 @@ public static class LiveVisionEndpoints
         {
             var task = store.Find(id);
             if (task is null) return ApiResults.NotFound("Task not found");
-            if (task.State.IsClosed || task.State.Plan is null) return ApiResults.Conflict("task_not_active", "Live assistance runs on an open task with a plan");
+            if (task.State.IsClosed || (task.State.Plan is null && task.State.Mode != TaskMode.Freeform))
+                return ApiResults.Conflict("task_not_active", "Live assistance runs on an open task with a plan, or free-form help");
             // The current step's parts lead; what the latest guidance named follows.
             var stepParts = task.State.CurrentStep?.LookFor ?? [];
             return await RunLive(context, id, kind, sam, gate, options, focus => [.. stepParts, .. focus],

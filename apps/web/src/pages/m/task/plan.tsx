@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, Redirect, useLocation } from "wouter";
 import { AlertTriangle, ArrowRight, Camera, Clock, Hand, Loader2, OctagonX, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page, TopBar } from "@/components/fo/mobile-shell";
@@ -34,6 +34,7 @@ export default function TaskPlanPage({ id }: { id: string }) {
   const replan = useTaskAct(id, () => tasks.plan(id));
   const accept = useTaskAct(id, () => tasks.accept(id, ack));
 
+  if (t?.mode === "Freeform") return <Redirect to={`/m/t/${id}/live`} replace />;
   if (isLoading || !t) return <><TopBar title="Plan" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
   const plan = t.plan;
   if (!plan)

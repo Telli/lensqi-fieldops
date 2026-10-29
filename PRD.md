@@ -26,6 +26,7 @@
 
 - **DIY mode** for everyday technical users. Example goals: *"Change the oil in my 2025 Civic"*, *"Mount an IP camera over the garage door"*.
 - **Technician mode** for installs, repairs and on-site help. A technician task can be tied to a **site record**; that unlocks the fixture-approved equipment check and the **FieldProof verified receipt**, which stay the technician's closer.
+- **Free-form help ("Just ask")** for spontaneous use: no goal or plan first. The camera opens at once; the user asks about whatever is in view (an error on a screen, an unfamiliar part, a quick fix) by voice or text, live coaching outlines what LensQi points at, and "Make a plan" turns a longer job into a guided task. The same safety policy applies: a question about professionals-only work always gets the referral, enforced by the server.
 
 **The guided task, in both modes:**
 
@@ -199,7 +200,7 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 
 ### Product shape
 
-- **Home** shows two entries: **"Do it yourself"** (a goal box with a mic button) and **"Technician"** (jobs, site records, "verify a repair"). Recent tasks appear under both.
+- **Home** shows three entries: **"Do it yourself"** (a goal box with a mic button), **"Just ask"** (straight to the camera for free-form help) and **"Technician"** (jobs, site records, "verify a repair"). Recent tasks appear under them.
 - **Plan screen** before starting: steps, tools and parts, time estimate, risk level, safety warnings and "stop and get a pro if…" conditions, under the label "AI-written plan · check your owner's manual". Starting means accepting the safety notes.
 - **Step screen**, one step at a time: live camera with AR outlines of the parts the step needs, ARCore distance where the phone has ARCore; the step instruction, spoken aloud; mic for questions about what the camera sees; voice commands; "Check this step" photo; Next and Back.
 - **Done screen:** a summary of the task record. Technician tasks tied to a site record continue into the existing verify-and-receipt flow.

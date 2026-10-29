@@ -15,6 +15,8 @@ has two modes built on one guided-task core:
   optional step photo check suggests whether a step looks done; the user decides.
 - **Technician mode** for installs, repairs and on-site help, with the same guided steps. A task tied to a site record
   finishes with the approved equipment check and a FieldProof verified receipt.
+- **Free-form help ("Just ask")** for spontaneous use: the camera opens at once and the user asks about whatever is in
+  view by voice or text, with no plan first. "Make a plan" turns a longer job into a guided task.
 
 The server enforces the safety policy, not just the prompt: gas lines and appliances, main electrical panels and live
 mains wiring, EV high-voltage systems, airbags, refrigerant and structural work get prepare-and-observe steps and a

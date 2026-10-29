@@ -11,6 +11,7 @@ import NewTask from "@/pages/m/task/new";
 import TaskPlanPage from "@/pages/m/task/plan";
 import TaskStepPage from "@/pages/m/task/step";
 import TaskDone from "@/pages/m/task/done";
+import FreeformLive from "@/pages/m/task/live";
 import Start from "@/pages/m/start";
 import Scan from "@/pages/m/scan";
 import GlassesView from "@/pages/m/glasses";
@@ -55,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/new">{() => m(<NewTask />)}</Route>
         <Route path="/m/t/:id/step/:stepId">{(p) => m(<TaskStepPage key={p.id} id={p.id} stepId={p.stepId} />, true)}</Route>
         <Route path="/m/t/:id/step">{(p) => m(<TaskStepPage key={p.id} id={p.id} />, true)}</Route>
+        <Route path="/m/t/:id/live">{(p) => m(<FreeformLive key={p.id} id={p.id} />, true)}</Route>
         <Route path="/m/t/:id/done">{(p) => m(<TaskDone id={p.id} />)}</Route>
         <Route path="/m/t/:id">{(p) => m(<TaskPlanPage id={p.id} />)}</Route>
         <Route path="/m/start">{() => m(<Start />)}</Route>
