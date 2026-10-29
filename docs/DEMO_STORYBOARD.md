@@ -1,10 +1,26 @@
-# Demo storyboard (T7.3): three minutes, nothing faked
+# Demo storyboard: guided tasks and FieldProof
 
-The video shows only what exists and runs. Every model call in it is genuine (`muse-spark-1.3`, `sam-3.1`). Every probe
-result carries its badge: the main story uses the **SIMULATED** endpoint and says so on screen. The images are
-synthetic renders of a fictional switch, and a caption says so. Live measurement appears only in the segment built
-for it, with its exact label. The photo sequence below was dry-run through the API on 2026-10-28 and produces exactly
-the verdicts listed. Every scene was walked through in the rebuilt web app on 2026-10-28 (stills in `docs/evidence/ui-v2/`).
+The main video introduces guided tasks, then the FieldProof inspection workflow. Genuine model recordings and
+fake-model integration evidence must be labelled separately. Synthetic equipment images and simulated diagnostics
+stay visibly labelled. Do not present the API journey test as footage of a person completing physical work.
+
+## Current three-minute story
+
+| Time | Scene | What to show and say |
+| --- | --- | --- |
+| 0:00–0:15 | The problem | A plausible cable photo with a failed simulated equipment check: “Looking done is not enough.” |
+| 0:15–0:40 | DIY plan | Create “Mount a wired PoE IP camera above my garage door”; show AI-written label, tools, cautions and stop conditions. Use the genuine recorded plan if not making a live call. |
+| 0:40–1:10 | Guided step | Show the step runner, instruction and camera. Ask a typed question; explain that speech is implemented but real-microphone task use remains unvalidated. Only show SAM outlines actually returned. |
+| 1:10–1:30 | Step photo check | Show the recorded unrelated-photo `CantTell` result, then that the user still controls progression. A suggestion is not verification. |
+| 1:30–1:45 | Safety boundary | Show the genuine breaker-panel referral plan. Explain that recognized restricted plans cannot contain hands-on steps; free-form referrals are a weaker safeguard. |
+| 1:45–2:00 | Technician handoff | Show site `LAB-RACK-01`, asset `LAB-SW-01`, and the linked inspection. The automated API journey is fake-model integration evidence; label it as such. A continuous user-operated hardware demonstration is still pending. |
+| 2:00–2:35 | FieldProof | Use the inspection sequence below: reject reused evidence; reject a changed photo with a failing simulated check; accept fresh evidence plus human review and a passing simulated check. Keep the SIMULATED badge visible. |
+| 2:35–2:50 | Receipt | Show the offline verifier passing, then rejecting a one-byte change in a separate copy. |
+| 2:50–3:00 | Measured close | “25 synthetic scenarios with simulated diagnostics; zero false completions in that evaluation.” Close with the repository and tagline. |
+
+The inspection-only shot list below is a reference for recording the FieldProof segment, not an additional three
+minutes. Rehearse the current task navigation; older inspection screenshots predate the new mode home. “Just ask”
+is an optional replacement for part of the DIY plan segment if time permits.
 
 ## Setup (before recording)
 
@@ -20,12 +36,12 @@ the verdicts listed. Every scene was walked through in the rebuilt web app on 20
 Record each scene as its own clip, so the edit never depends on one perfect take. The reference stills for every scene
 are `docs/evidence/ui-v2/01–09`.
 
-## Shot list
+## Inspection recording reference (older three-minute cut)
 
 | Time | Scene | Exact actions | What the screen shows |
 |---|---|---|---|
 | 0:00–0:12 | **Cold open: the fake fix is refused** | Clip from scene 5. | Two check rows (visual ✓, equipment check ✕) and the red **Verification failed** card: "The equipment still fails its check after the repair." **SIMULATED** in the top bar. Caption: "The cable looks fine. The endpoint is still down. Not verified." |
-| 0:12–0:25 | **Start** | Home → **Start an inspection** → **Lab Switch 01**. | Greeting, live counts, the asset list. Caption: "The asset comes from its label; the AI never guesses a serial." |
+| 0:12–0:25 | **Start** | Mode home → **Technician** → **Start an inspection** → **Lab Switch 01**. | Greeting, live counts, the asset list. Caption: "The asset comes from its label; the AI never guesses a serial." |
 | 0:25–0:55 | **Uncertainty, then a requested view** | Camera opens → gallery → `a01-labels-occluded.jpg`. Wait for *Saving photo ✓ Observing ✓ Outlining the part ✓*. **Continue investigation**: step 3 asks for a closer view → **Capture another view** → gallery → `c01-clear-p2.jpg`. | The AI outline of the yellow cable on the photo; "Yellow cable near end · AI hypothesis" with the reason; "Next: Move closer and show the switch faceplate…". Caption: "Genuine Muse Spark and SAM 3.1 calls. The AI asks instead of guessing." (`ui-v2/02`, `03`) |
 | 0:55–1:15 | **The fault is measured** | Investigation step 5 → **Open approved checks** → **Demo controls** (endpoint off) → **Run approved check**. | **Fail — endpoint unreachable**, Source *Sim*, "What a pass proves: …HTTP 200 at test time (not physical port identity)". Caption: "Only checks the site approved. Documentation guides; it never proves a repair." |
 | 1:15–1:50 | **Two fake fixes** | Back → Repair: plan "Reseat the yellow cable in port 2" → **Save** → "Reseated the yellow cable in port 2" → **Repair completed — verify**. (a) **Take post-repair photo** → `c01-clear-p2.jpg` again → **Photo not accepted · Same photo**. (b) **Take another photo** → `c03-clear-rotated.jpg` → **Change detected** → **Continue to verification** → **Looks right** ×3 → **I reviewed this evidence myself** → **Run verification**. | (a) "This is the same picture as an earlier one." (`ui-v2/04`) (b) Visual ✓, Equipment check ✕, **Verification failed** (`ui-v2/05`). Caption: "A changed photo is necessary, never sufficient." |

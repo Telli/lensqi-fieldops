@@ -1,0 +1,30 @@
+[
+  {
+    "path": "receipt/artifacts/photo-7244bda2c0-f29b2b7674dd.png",
+    "sha256": "f29b2b7674dda961e136115a5400fd177e45f37f275ac3209810650e7835f68c"
+  },
+  {
+    "path": "receipt/artifacts/photo-c953fc5da0-6046911dd687.png",
+    "sha256": "6046911dd6875f5276ffb8dad0bbbb656d27db99818810c2f3c2af987ea535f9"
+  },
+  {
+    "path": "receipt/artifacts/photo-ebe6b426e3-7b5b2d3d552e.png",
+    "sha256": "7b5b2d3d552e9163e64d5d3d38ca8d4cde52d838747b805424d744eb806c3ff6"
+  },
+  {
+    "path": "receipt/receipt.html",
+    "sha256": "a61277147b830f73b3d01509065831691268564969ad3b48c561b6c24d1827ef"
+  },
+  {
+    "path": "receipt/receipt.json",
+    "sha256": "96a316c636e29c6713f8dc9a2d51358b61ccda5c07130d88fece91f66679043d"
+  },
+  {
+    "path": "run.json",
+    "sha256": "60b94328a3801babf9982973e82a74053e7da2704af349aa13d6e18a6133d567"
+  },
+  {
+    "path": "task-events.jsonl",
+    "sha256": "f0ea1fb82b2fe97daf8491b4b7ad1172f6fd22cd2963ecc8e608867711c9a367"
+  }
+]

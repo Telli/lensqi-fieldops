@@ -128,7 +128,7 @@ Lives in `src/LensQi.FieldOps.Meta/Tasks/`. All three use `MuseSparkChatClient` 
 
 - A generalized `LiveSceneService`. The scene prompt and context builder are extracted into a shared component; `LiveSceneService` keeps its inspection context (site record parts) and `StepCoach` supplies goal, accepted plan, current step and its `lookFor`.
 - `GuideAsync(frame)` returns step-bound guidance and focus phrases (validated like `ValidScene`).
-- `AskAsync(question, frame?)` returns a bounded answer within the current step; restricted hands-on requests get a referral.
+- `AskAsync(question, frame?)` returns a bounded answer within the current step; the prompt requests a referral for restricted work, and the API appends one for recognized restricted phrases when the answer lacks “professional”. This does not structurally reject unsafe answer content.
 - Guidance outside the current step is dropped by the prompt and by a check that focus phrases and advice relate to the step.
 
 ### 3.3 StepChecker
@@ -167,7 +167,7 @@ Existing `/v1/inspections/*` routes are unchanged. `link-inspection` calls the s
 
 ### Voice on the server
 
-None. The API accepts text questions and goals only. Speech-to-text runs on the device.
+None. The API accepts text questions and goals only. Android prefers on-device recognition where available on Android 12+; system and browser speech services may process audio remotely. Only recognised text reaches LensQi.
 
 ## 5. Web (`apps/web`)
 
@@ -188,7 +188,7 @@ Technician keeps `/m/start`, `/m/i/*` and `/ops/*`. The ops dashboard gains a Ta
 - `lib/tasks.ts`: API client, types matching §2.1, hooks `useTask(id)` and `useActTask(id)` (TanStack Query mutations with idempotency keys).
 - `lib/voice.ts`:
   - `useSpeak()` lifted from `pages/m/glasses.tsx` (speechSynthesis with de-duplication and spacing).
-  - `usePushToTalk()` over `webkitSpeechRecognition` / `SpeechRecognition`; returns `supported: false` when missing so the UI shows a typed box; shows a one-time notice where the browser's service may send audio to the browser vendor.
+  - `usePushToTalk()` over `webkitSpeechRecognition` / `SpeechRecognition`; returns `supported: false` when missing so the UI shows a typed box; task screens show a notice before use that the browser's service may send audio to the browser vendor.
   - `parseCommand(text)` → `next | back | repeat | takePhoto | checkStep | pause | null` with a small synonym table ("next step", "go back", "say that again", …). `null` means "send as a question".
 - `lib/use-live-assist.ts` takes an endpoint base so it serves `/v1/tasks/{id}` and `/v1/inspections/{id}`.
 

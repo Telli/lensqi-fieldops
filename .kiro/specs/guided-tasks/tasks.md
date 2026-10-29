@@ -49,7 +49,7 @@
   - Tests: view-model state for plan, accept, step, check, ask, errors.
 - [x] **GT-T16 — Task screens.** `TaskHomeScreen`, `NewTaskScreen`, `PlanScreen`, `StepScreen`, `TaskDoneScreen`; `FieldOpsNavHost` starts on the mode home; technician routes unchanged (GT-R12.3). *(done Oct 28: 3d999b6)*
 - [x] **GT-T17 — Step camera.** `StepScreen` on `CameraScreen` / `LiveCameraSession` and the ARCore renderer with a task live-frame analyzer; `distanceAdvice` on the step's main `lookFor`; full-resolution shutter hand-off (GT-R05.3, GT-R05.4). *(done Oct 28: 3d999b6 via `CameraScreen` slots; distance advice is not yet targeted at the step's main part; shutter hand-off untested on hardware)*
-- [ ] **GT-T18 — Voice.** `voice/Speaker` over `TextToSpeech` with `SpokenFeedbackGate`; `voice/VoiceInput` push-to-talk over `SpeechRecognizer` (on-device on Android 12+); `CommandGrammar`; `RECORD_AUDIO` on first use with typed fallback (GT-R07). *(partial Oct 28: Speaker, push-to-talk and grammar with tests; `SpokenFeedbackGate` not wired, no typed fallback on Android, not exercised with a real microphone)*
+- [ ] **GT-T18 — Voice.** `voice/Speaker` over `TextToSpeech` with `SpokenFeedbackGate`; `voice/VoiceInput` push-to-talk over `SpeechRecognizer` (on-device where available on Android 12+, otherwise the system service); `CommandGrammar`; `RECORD_AUDIO` on first use with typed fallback (GT-R07). *(partial Oct 28: Speaker, push-to-talk and grammar with tests; `SpokenFeedbackGate` not wired, no typed fallback on Android, not exercised with a real microphone)*
   - Tests: the same command cases as web.
 - [ ] **GT-T19 — Queue and glasses generalization.** `CommandQueue` / `PendingCommand` / `SyncWorker` to `sessionId` and `StepCheckPhoto`; `GlassesLiveService` / `GlassesLiveState` rename (GT-R09.5, GT-R12.1, GT-R12.2).
   - Tests: existing queue and sync tests pass; offline step-check photo syncs.
@@ -58,11 +58,11 @@
 ## Day 4: Sun Nov 1 — Technician mode
 
 - [x] **GT-T20 — Technician tasks and site link.** Technician goal entry with site picker; `SiteLink` validated at creation; install and repair plans (GT-R10.1). *(done Oct 28: site picker on web and Android; genuine site-aware plan recorded)*
-- [ ] **GT-T21 — `link-inspection`.** Create or link an `InspectionSession` for the task's asset; `InspectionLinked`; task detail shows the inspection stage and outcome (GT-R10.2–GT-R10.4). *(partial Oct 28: link-inspection works and is tested; task detail does not yet show the inspection stage, and a linked task has not been driven to a FieldProof decision)*
+- [ ] **GT-T21 — `link-inspection`.** Create or link an `InspectionSession` for the task's asset; `InspectionLinked`; task detail shows the inspection stage and outcome (GT-R10.2–GT-R10.4). *(partial Oct 28: link-inspection works and is tested; task detail does not yet show the inspection stage, and the API journey now reaches a FieldProof decision with fakes (see GT-T21 evidence below); no continuous hardware run)*
   - Tests: linked technician task reaches `VerifiedCompleteSimulated` through existing endpoints; unlinked task shows no verification label; DIY link rejected.
 - [x] **GT-T22 — Home reorganization.** Web and Android home with both entries and recent tasks; technician jobs, site records and "verify a repair" reachable. *(done Oct 28: web and Android)*
 - [x] **GT-T23 — Ops Tasks list (P1).** Technician tasks with their linked inspections in `/ops`. *(done Oct 28: 20d2a85, `/ops/tasks`)*
-- [ ] **Gate:** a technician task linked to `LAB-SW-01` goes plan → steps → linked inspection → fake fix denied → real fix verified (simulated, labelled) → receipt verifies.
+- [x] **Gate (API integration with fakes):** a technician task linked to `LAB-SW-01` goes plan → steps → linked inspection → fake fix denied → real fix verified (simulated, labelled) → receipt verifies. *(done Oct 28: `TechnicianJourneyTests`, 211 .NET tests passed; `docs/evidence/tasks/technician-journey.md`; no inspection Core, endpoints or policy changes. User-operated/hardware journey remains unvalidated.)*
 
 ## Day 5: Mon Nov 2 — Genuine-call evidence and phone run
 
@@ -79,7 +79,7 @@
 
 ## Added Oct 29: free-form help
 
-- [x] **GT-T30 — Free-form help ("Just ask").** `TaskMode.Freeform`: no plan, in progress at once, questions and live coaching about anything in view, `Finish`; a question naming professionals-only work always gets the referral (server-enforced); web `/m/t/:id/live` and Android `FreeformScreen`; "Make a plan" opens a planned task with the last question as the goal. *(done Oct 29: Core and API tests; browser and emulator with genuine Muse answers, including the gas-line referral; `docs/evidence/tasks/`)*
+- [x] **GT-T30 — Free-form help ("Just ask").** `TaskMode.Freeform`: no plan, in progress at once, questions and live coaching about anything in view, `Finish`; recognized restricted phrases trigger an appended referral when the answer lacks “professional”; this safeguard does not structurally reject unsafe free-form answers; web `/m/t/:id/live` and Android `FreeformScreen`; "Make a plan" opens a planned task with the last question as the goal. *(done Oct 29: Core and API tests; browser and emulator with genuine Muse answers, including the gas-line referral; `docs/evidence/tasks/`)*
 
 ## Cutlines
 
@@ -94,7 +94,7 @@
 - [ ] DIY task end to end on web and Android with genuine plans and SAM outlines
 - [ ] Restricted plans with hands-on steps rejected in tests and in a genuine run
 - [ ] Live AR step runner: ARCore distance only from measured depth; 2D elsewhere
-- [ ] Spoken guidance, push-to-talk questions and voice commands; no audio sent to the server
+- [ ] Spoken guidance, push-to-talk questions and voice commands; no audio sent to the LensQi server
 - [ ] Step check suggests; the user decides
 - [ ] Technician task linked to a site record reaches a FieldProof decision; receipt verifies
 - [ ] Evidence under `docs/evidence/tasks/`; docs claim only what ran

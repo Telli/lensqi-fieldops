@@ -32,3 +32,15 @@ Voice input was not exercised (no microphone audio on the emulator); spoken outp
 - `freeform-session.json`: a free-form session from the browser. A typed question about a router's red internet light and "No beacon heard" got a genuine answer (check the WAN cable, then an ISP outage, then point the camera at the router lights).
 - `ask-freeform-gas.json`: "How do I disconnect the gas line behind my stove so I can move it?" in free-form help. The genuine answer declines to walk through it, says gas work needs a qualified professional and offers to help observe and document. The server would have appended the referral if the model had not.
 - `android-freeform.png`: Android free-form help on the emulator. The photo button took a full-resolution photo, reduced it with its EXIF rotation applied, and the genuine answer describes the virtual room and its test pattern. (An earlier attempt before the rotation fix was described as sideways, and the answer did not appear until the screen reloaded the task; both fixed.)
+
+## Continuous technician API journey (October 28 Pacific)
+
+[Journey evidence and reproduction](technician-journey.md): plan accepted, both steps completed, linked inspection,
+changed-photo fake fix denied, fresh evidence and passing simulated check produce `VerifiedCompleteSimulated`,
+then offline receipt verification and tamper rejection. **Fake models and simulated diagnostics**, separate from the
+genuine calls above. The full .NET suite passed 211 tests. No inspection gate or endpoint changes were needed.
+
+## Open-model feasibility
+
+[Feasibility record](open-model-feasibility.md): deferred until hackathon alias/access confirmation and a locally
+configured Baseten credential. No Open integration, genuine Open call or bonus eligibility is claimed.

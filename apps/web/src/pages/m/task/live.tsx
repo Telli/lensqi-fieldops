@@ -103,6 +103,7 @@ export default function FreeformLive({ id }: { id: string }) {
       </div>
 
       <div className="max-h-[55%] space-y-3 overflow-y-auto rounded-t-3xl border-t border-overlay-foreground/10 bg-overlay px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
         {assist.enabled ? (
           <div className="flex gap-2.5 rounded-2xl border border-overlay-foreground/15 p-3">
             <LensQiMark className="size-6" />

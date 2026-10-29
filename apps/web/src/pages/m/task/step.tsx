@@ -148,6 +148,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       </div>
 
       <div className="max-h-[58%] space-y-3 overflow-y-auto rounded-t-3xl border-t border-overlay-foreground/10 bg-overlay px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
         <div className="flex gap-1" aria-hidden>{steps.map((s, k) => <span key={s.id} className={cn("h-1 flex-1 rounded-full", s.status === "Done" ? "bg-primary" : k === n ? "bg-primary/50" : s.status === "Skipped" ? "bg-overlay-foreground/30" : "bg-overlay-foreground/15")} />)}</div>
         <div>
           <h1 className="text-lg font-semibold leading-snug">{step.title}</h1>
