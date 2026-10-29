@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutGrid, ClipboardList, Boxes, KanbanSquare, BookOpen, FileCheck2, Smartphone } from "lucide-react";
+import { LayoutGrid, ClipboardList, Boxes, KanbanSquare, BookOpen, FileCheck2, Smartphone, ListChecks } from "lucide-react";
 import { Logo, SourceBadge } from "@/components/fo/primitives";
 import { useHealth } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { ThemeControl } from "@/components/fo/theme-control";
 
 const nav = [
   { to: "/ops", label: "Overview", Icon: LayoutGrid },
+  { to: "/ops/tasks", label: "Guided tasks", Icon: ListChecks },
   { to: "/ops/inspections", label: "Inspections", Icon: ClipboardList },
   { to: "/ops/assets", label: "Assets", Icon: Boxes },
   { to: "/ops/work-orders", label: "Work Orders", Icon: KanbanSquare },

@@ -22,3 +22,7 @@ The rebuilt app on the arm64 emulator (virtual-room camera, no ARCore), pointed 
 - `android-live-coaching.png`: live coaching on step 2 with genuine SAM and Muse calls; the guidance stays within the step ("go to the PoE switch inside to switch it off…").
 
 Voice input was not exercised (no microphone audio on the emulator); spoken output was not checked by ear. No phone run of the task flow yet.
+
+## Technician task on the site record (2026-10-28)
+
+`plan-technician.json`: Technician mode, "Reseat the yellow cable on the lab switch and confirm the link to Node A", on `LAB-RACK-01 / LAB-SW-01`. The genuine plan used the site record (port P2, yellow cable, Node A), Low risk, 7 steps with two hands-on. The steps were then skipped through the API (no work done) and the task was linked to FieldProof inspection `I-ebdf6b18bb3b` on the same asset; the ops dashboard's Guided tasks page lists it with that link. No verification was run on that inspection.
