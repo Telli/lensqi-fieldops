@@ -7,7 +7,9 @@ description: How to build, test, run the FieldOps API and browser UI, drive the 
 
 ## Build and test
 ```bash
-dotnet test --nologo            # ~142 tests across Core, Meta, Api
+dotnet test --nologo            # 214 tests across Core, Meta, Api (Oct 29)
+npm --prefix apps/web test      # 25 web tests
+cd apps/android && ./gradlew :app:testDebugUnitTest   # 107 Android unit tests
 ```
 Python helpers (once): `python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt`. Fixture validators: `python scripts/validate_expected_twin.py && python scripts/validate_vendor_packs.py`.
 
@@ -15,7 +17,7 @@ Python helpers (once): `python3 -m venv .venv && .venv/bin/pip install -r script
 ```bash
 dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
 ```
-Open `http://127.0.0.1:5199/m` (technician app) or `/ops` (operations dashboard). The UI is `apps/web` (React + Tailwind + TanStack Query), built into `wwwroot` and committed: after any UI change run `cd apps/web && npm run build` and commit `wwwroot` too (the clean-room check diffs it against a fresh build). `npm run dev` serves on 5173 with a proxy to 5199. The launch config `.claude/launch.json` (`fieldops-api`) does the same for the preview pane. The API fails closed at startup on any invalid pack, binding or twin. Restarting keeps inspections: every `data/inspections/*.jsonl` log is replayed through `InspectionSession.Rehydrate`; a log with a different fixture digest, a sequence gap or bad JSON is left on disk and named in a startup warning. `/health` reports `diagnosticsMode`; the UI's demo controls exist only in `Simulated` mode.
+Open `http://127.0.0.1:5199/m` (mode home: Do it yourself, Just ask, Technician; the technician home is `/m/tech`) or `/ops` (operations dashboard, guided tasks at `/ops/tasks`). The UI is `apps/web` (React + Tailwind + TanStack Query), built into `wwwroot` and committed: after any UI change run `cd apps/web && npm run build` and commit `wwwroot` too (the clean-room check diffs it against a fresh build). `npm run dev` serves on 5173 with a proxy to 5199. The launch config `.claude/launch.json` (`fieldops-api`) does the same for the preview pane. The API fails closed at startup on any invalid pack, binding or twin. Restarting keeps inspections and tasks (`data/tasks/*.jsonl`, replayed through `TaskSession.Rehydrate`): every `data/inspections/*.jsonl` log is replayed through `InspectionSession.Rehydrate`; a log with a different fixture digest, a sequence gap or bad JSON is left on disk and named in a startup warning. `/health` reports `diagnosticsMode`; the UI's demo controls exist only in `Simulated` mode.
 
 ## Hero flow over HTTP (curl), simulated probe
 1. `POST /v1/inspections {fixtureId:"LAB-RACK-01", assetId:"LAB-SW-01"}` → `inspectionId`
@@ -27,6 +29,15 @@ Open `http://127.0.0.1:5199/m` (technician app) or `/ops` (operations dashboard)
 7. Set simulation `passed:true`, claim again, upload, checklist, acknowledge, verify → **Verified, VerifiedCompleteSimulated**
 8. `GET .../receipt.html`, `GET .../receipt/verify`; CLI: `dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- src/LensQi.FieldOps.Api/data/receipts/{id}` (flip a byte in `artifacts/` to see FAIL)
 Use an `Idempotency-Key` header to prove replay on `/verify`. Errors come back as `{code, message}` with HTTP 409 for typed conflicts.
+
+## Guided task over HTTP (curl)
+1. `POST /v1/tasks {mode:"Diy", goal:"Change the engine oil in my 2025 Honda Civic", details:"1.5L turbo"}` (genuine Muse plan; multipart adds up to 3 `manual` photos) → `task.taskId`, or `planError` with `invalid_plan` / `unsafe_plan` / `provider_unavailable`; retry with `POST /v1/tasks/{id}/plan`
+2. `POST /v1/tasks/{id}/accept {safetyAcknowledged:true}` → first step active
+3. `POST .../steps/{stepId}/check` multipart `image` (suggested verdict only) · `POST .../ask` multipart `question` (+ optional `image`) · `POST .../live/detect|guide` multipart `image`, `frameId`
+4. `POST .../steps/{stepId}:complete` or `:skip`; the last one completes the task. A step whose check is `required` needs a check first
+5. Technician: create with `mode:"Technician", fixtureId:"LAB-RACK-01", assetId:"LAB-SW-01"`, then `POST .../link-inspection` → `inspectionId`, and run the hero flow above on it. `TechnicianJourneyTests` does this end to end with fakes
+6. Free-form help: `POST /v1/tasks {mode:"Freeform"}` → ask and live at once; `POST .../finish` ends it
+A restricted goal (for example "Replace the breaker panel in my garage") must come back with `restricted` set, `professionalRequired: true` and no `handsOn` step.
 
 ## Hardening limits (T6.1, `Hardening` section in `appsettings.json`)
 - Photos: pixel size is read from the file header (the form's `width`/`height` are ignored); under 320×240 → 400 `image_too_small`, over 50 MP → `image_too_large`, no readable header → `image_unreadable`. Blur (Laplacian variance) and mean luminance from `tools/sam-parser/image_quality.py` ride on `PhotoRecorded.quality` as signals only; a sidecar failure records `null` and never blocks.

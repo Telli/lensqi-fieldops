@@ -2,7 +2,7 @@
 ## Product Requirements Document — Meta Global AI Developer Hackathon
 
 **Version:** 2.0 — Guided tasks for DIY users and technicians (re-architecture)  
-**Date:** October 28, 2026  
+**Date:** October 28, 2026 (status in §1 updated October 29, 2026)  
 **Track / theme:** Indie Developer / Push the Frontier  
 **Build period:** October 27–November 4, 2026  
 **Submission:** November 4, 2026, 9:00 PM Eastern / 6:00 PM Pacific  
@@ -39,7 +39,9 @@
 
 **Core innovation:** the model writes and coaches; application code decides. A deterministic plan validator enforces safety rules the prompt cannot override, every step and answer is an append-only event, and in Technician mode the existing epistemic state machine and dual-proof gate (§7, §17) refuse to call a repair verified on appearance alone. The memorable moments are a DIY plan that refuses to hand a user hands-on airbag steps, and the v1.1 fake-fix rejection: a cable that looks connected while an independent check still fails.
 
-### What exists today (October 28, 2026)
+### What exists today (reviewed October 29, 2026)
+
+Status from a code review of the `guided-tasks` branch at `044c906` and a fresh run of the automated suites on October 29: **211 .NET tests** (96 Core, 18 Meta, 97 API), **25 web tests** and **107 Android unit tests** passed. Three defects found in that review (GT-T31–T33) were then fixed, bringing the .NET suite to 214. Nothing on a physical phone or with a real microphone was re-run for this review.
 
 | Capability | State |
 |---|---|
@@ -48,7 +50,12 @@
 | Live camera assistance (web, Android CameraX, glasses stream): 2D tracking, periodic SAM detection, Muse live guidance about anything in view | Built; checked in the browser and on the emulator (`docs/LIVE_AR.md`) |
 | Android ARCore mode: anchors from measured depth and camera-to-part distance | Built with geometry unit tests. First phone run on a Galaxy S23 Ultra ran live assist on an ARCore session with genuine model calls, but produced **no anchor or distance yet** (no fixture part in view). Anchors on real equipment and the AR-to-CameraX shutter hand-off are untested on hardware |
 | Meta glasses through the Wearables Device Access Toolkit | Exercised against the Mock Device Kit only; no real glasses tested |
-| Guided tasks (DIY and Technician), task plans, safety validator, step checks, voice questions and commands | **Built on the `guided-tasks` branch (Oct 28)** with tests (Core, API, web, Android). Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), a question, step checks and live step coaching are recorded in `docs/evidence/tasks/`; checked in the browser and on the emulator. **Not yet:** a phone run of the task flow, voice input with a real microphone, ARCore anchors on a real part, offline queue for step photos, glasses on tasks, a user-operated linked technician task driven to a FieldProof decision (the API integration journey now passes with fakes; see `docs/evidence/tasks/technician-journey.md`) |
+| Guided-task core: `TaskSession` with append-only JSONL events and replay, `TaskPlanValidator` with the restricted categories, `TaskPlanner` and `StepCoach` (guide, ask, step check), `/v1/tasks` API | **Built** (commits `c722a14`, `180b3f4`) with Core and API tests. Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), typed questions, step checks and live step coaching are recorded in `docs/evidence/tasks/` |
+| Web task flow: three-entry home, goal entry with push-to-talk, plan screen with safety acknowledgement, step runner (live outlines, spoken instruction, questions, voice commands, photo check), done screen, free-form help, ops Guided tasks list | **Built** (`ba64285`, `20d2a85`, `180b3f4`); checked in the browser pane at phone size. Camera and microphone were not available in that pane |
+| Android task flow: home, new task, plan, step runner on `CameraScreen` (CameraX or ARCore), free-form help, Speaker and push-to-talk | **Built** (`3d999b6`, `180b3f4`); checked on the arm64 emulator (2D, no ARCore). Not yet: a typed question box on the step runner, `SpokenFeedbackGate` on task speech, distance coaching aimed at the step's main part, the offline queue for step-check photos, glasses on tasks |
+| Technician task linked to a site-record inspection | **Built**; `TechnicianJourneyTests` drives plan → steps → linked inspection → fake fix denied → `VerifiedCompleteSimulated` → offline receipt verification with fake models and simulated diagnostics (`docs/evidence/tasks/technician-journey.md`). The task screens do not yet show the linked inspection's stage; no user-operated run with genuine models |
+| Free-form help ("Just ask") | **Built** (`180b3f4`); genuine answers on web and the emulator, including a gas-line referral. Its restricted-work safeguard is a phrase match plus an appended referral, not structural rejection |
+| Voice | Spoken guidance and push-to-talk code on both clients with one command grammar; **not yet exercised with a real microphone** or checked by ear on a phone |
 
 ## 2. Problem, users, and jobs to be done
 
@@ -251,7 +258,7 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 
 #### GT-04 — Plan acceptance and step flow (P0)
 
-- A task cannot start a step before `PlanAccepted(safetyAcknowledged: true)`.
+- A task cannot start a step before `PlanAccepted(safetyAcknowledged: true)`. *(As built: acknowledgement is required when the plan's risk is above Low, a professional is required, or any step has a caution; a Low-risk plan with no cautions can start without it. Accepting starts the first step.)*
 - Steps can be started, completed or skipped; Back returns to a previous step without deleting events. A task ends `Completed` or `Abandoned`.
 - Every command is idempotent by `Idempotency-Key`; an out-of-order command returns a typed conflict.
 
@@ -269,7 +276,7 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 
 - **Speak guidance:** the step instruction and new guidance are spoken through text-to-speech, rate-limited by the existing spoken-feedback gate (no repeats of unchanged advice).
 - **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Web offers a typed box. Android task typed fallback is still a requirement, not implemented.
-- **Voice commands:** a shared grammar on web and Android recognises next, back, repeat, take photo, check step and pause; unrecognised speech is treated as a question.
+- **Voice commands:** a shared grammar on web and Android recognises next, back, repeat, check (including "take a photo"), skip, mute and unmute; the whole utterance must be a command, and anything else is treated as a question. *(As built; "pause" from the original plan is not a command.)*
 - No audio is sent to or stored by LensQi; browser/system recognition providers may process audio.
 
 **Acceptance:** Command-grammar tests pass on both clients with the same cases; network traces show only text in `/ask`.
@@ -555,6 +562,8 @@ Enum values are the PascalCase names from the parent `design.md` (`ObservationSt
 | **Nov 3–4** | Buffer, demo polish, video, final checks, submit | Submission before 6 PM Pacific on Nov 4 |
 
 Web (Oct 30) and Android (Oct 31) can run in parallel once the contract is frozen.
+
+**Progress at October 29:** the Oct 29–Nov 1 build items landed early, on October 28 (backend, web, Android, technician link, ops list), plus free-form help. Open before Nov 2: the Android gaps listed in §1, showing a linked inspection's stage on the task screens, the offline step-photo queue, a genuine spoken question and SAM outlines on a real step part, and the S23 Ultra phone run of the task flow. Status per task: `.kiro/specs/guided-tasks/tasks.md`.
 
 **Kill switches:** If the task API is not frozen by end of Oct 29, cut Android task screens to the step runner only and keep the web flow as the guaranteed surface. If ARCore anchors do not appear on real parts during the phone run, demo 2D tracking and state that distance was not shown. If voice recognition is unreliable on a device, keep spoken guidance and the typed question box, and drop voice commands from the video. If the technician link is not working on Nov 1, demo the existing FieldProof loop separately and do not claim the link. The FieldProof loop must stay green throughout; no task work may weaken it.
 

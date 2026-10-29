@@ -34,6 +34,9 @@ public sealed class TaskSession
 
     public static TaskSession Rehydrate(IEnumerable<TaskEvent> events) => new(events.ToList());
 
+    /// <summary>The events an earlier command with this request ID appended, or null when the ID has not been used.</summary>
+    public IReadOnlyList<TaskEvent>? Replayed(string requestId) => _outcomes.GetValueOrDefault(requestId);
+
     // ---------------- commands ----------------
 
     public IReadOnlyList<TaskEvent> RecordPhoto(string requestId, string evidenceId, string sha256, int width, int height, TaskPhotoPurpose purpose, string? stepId, DateTimeOffset now) =>

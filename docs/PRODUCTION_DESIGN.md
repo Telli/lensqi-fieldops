@@ -1,5 +1,7 @@
 # LensQi FieldOps — beyond the demo: near-production design and plan
 
+> **Scope note (October 29, 2026).** Written for the FieldProof inspection product before the guided-task re-architecture. Guided tasks (plans, step coaching, voice, free-form help) are specified in `PRD.md` v2.0 and `.kiro/specs/guided-tasks/`; a production plan for them is not written yet.
+
 **Written:** October 28, 2026. **Scope:** what it takes to turn the hackathon system into something a first paying site can run, including the mobile app. Nothing here is built; the hackathon repository is the starting point and its invariants carry over unchanged.
 
 ## 1. What stays, what changes
