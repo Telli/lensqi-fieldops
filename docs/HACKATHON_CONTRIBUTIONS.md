@@ -58,6 +58,7 @@ feature commit, not at submission time.
 | 2026-10-28T18:05:17-07:00 | `ba64285` | Guided-task web flow (two-mode home, plan, step runner with voice and photo checks) and first genuine task calls | 216 .NET, 25 web tests; browser: home, plan, step runner, Done to step 2, check card; genuine Muse: 3 plans incl. restricted panel, 1 question, 1 step check (docs/evidence/tasks); camera, voice input and phone not exercised | None |
 | 2026-10-28T18:15:21-07:00 | `3d999b6` | Guided tasks on Android: two-mode home, plan, step runner on the live camera with voice, photo checks | 107 Android unit tests; emulator: plan, step runner, real step check (CantTell), real live coaching within the step, Done to step 2; voice input and phone not exercised | None |
 | 2026-10-28T18:16:36-07:00 | `20d2a85` | Ops Guided tasks list; technician task on the site record linked to FieldProof | 25 web tests; genuine technician plan (site-aware: port P2, Node A); link to I-ebdf6b18bb3b shown on /ops/tasks; no verification run | None |
+| 2026-10-28T22:17:07-07:00 | `180b3f4` | Free-form help (Just ask): camera and questions without a plan on web and Android, server-enforced referral | 218 .NET (new Core and API free-form tests), 25 web, 107 Android; genuine answers in browser and on the emulator incl. gas-line referral (docs/evidence/tasks) | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
