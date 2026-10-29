@@ -50,6 +50,9 @@ class TaskListViewModel @Inject constructor(private val api: FieldOpsApi) : View
         (apiCall { api.tasks() } as? ApiOutcome.Ok)?.value?.let { list -> _state.update { it.copy(tasks = list) } }
     }
 
+    /** Free-form help: straight to the camera, no goal or plan. */
+    fun justAsk(onCreated: (String) -> Unit) = create(TaskMode.Freeform, "", null, null, null, emptyList(), onCreated)
+
     fun create(mode: TaskMode, goal: String, details: String?, fixtureId: String?, assetId: String?, manuals: List<File>, onCreated: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(creating = true, error = null) }
         val parts = manuals.take(3).map { MultipartBody.Part.createFormData("manual", it.name, it.asRequestBody("image/jpeg".toMediaType())) }
@@ -109,9 +112,20 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
         _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer) }
         answer?.let { speaker.speak(it, force = true) }
+        // The answer is now part of the task's record; reload it so conversation views show it.
+        if (answer != null) refresh()
     }
 
     fun clearAnswer() = _state.update { it.copy(answer = null) }
+
+    /** Ends free-form help. */
+    fun finish(onDone: () -> Unit) = act("finish", { api.finishTask(taskId, key()) }) { onDone() }
+
+    /** Asks about a full-resolution shutter photo, reduced to at most 1600 px on its long side before upload. */
+    fun askAboutPhoto(question: String, photo: File) = viewModelScope.launch {
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { downscaledJpeg(photo, 1600) }
+        ask(question, bytes)
+    }
 
     fun linkInspection(onLinked: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(busy = "link", error = null) }
@@ -122,4 +136,21 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): LiveResponse =
         api.taskLiveFrame(taskId, kind, jpeg("image", bytes), text(frameId))
+}
+
+private fun downscaledJpeg(file: File, maxSide: Int): ByteArray? {
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    val decoded = android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    // Decoding drops the camera's EXIF rotation; apply it so the model sees the photo upright.
+    val degrees = when (android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+        android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+        android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+    }
+    val bitmap = if (degrees == 0f) decoded else android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, android.graphics.Matrix().apply { postRotate(degrees) }, true).also { if (it !== decoded) decoded.recycle() }
+    return java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it); bitmap.recycle() }.toByteArray()
 }

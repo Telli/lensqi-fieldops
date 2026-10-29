@@ -49,7 +49,7 @@ public static class TaskEndpoints
                 if (body is null) return ApiResults.BadRequest("A JSON body or multipart form is required");
                 (mode, goal, details, fixtureId, assetId) = (body.Mode, body.Goal, body.Details, body.FixtureId, body.AssetId);
             }
-            if (!Enum.TryParse<TaskMode>(mode, ignoreCase: true, out var taskMode)) return ApiResults.BadRequest("invalid_mode", "mode must be Diy or Technician");
+            if (!Enum.TryParse<TaskMode>(mode, ignoreCase: true, out var taskMode)) return ApiResults.BadRequest("invalid_mode", "mode must be Diy, Technician or Freeform");
             SiteLink? site = null;
             PlanSiteContext? siteContext = null;
             if (!string.IsNullOrWhiteSpace(fixtureId) || !string.IsNullOrWhiteSpace(assetId))
@@ -74,7 +74,8 @@ public static class TaskEndpoints
                     store.Execute(id, s => s.RecordPhoto("manual:" + stored.Sha256, evidenceId, stored.Sha256, m.Width, m.Height, TaskPhotoPurpose.Manual, null, clock.GetUtcNow()));
                     manualIds.Add(evidenceId);
                 }
-                var planError = await Plan(store, planner, id, siteContext, [.. manuals.Select(m => (m.Bytes, m.MediaType))], manualIds, clock, ct);
+                // Free-form help starts at once with the camera; there is no plan to write.
+                var planError = taskMode == TaskMode.Freeform ? null : await Plan(store, planner, id, siteContext, [.. manuals.Select(m => (m.Bytes, m.MediaType))], manualIds, clock, ct);
                 return Results.Created($"/v1/tasks/{id}", new { task = View(store.Find(id)!), planError });
             });
         }).DisableAntiforgery().AsModelCall();
@@ -114,6 +115,9 @@ public static class TaskEndpoints
 
         g.MapPost("/{id}/steps/{stepId}:skip", (string id, string stepId, HttpRequest http, TaskStore store, TimeProvider clock) =>
             Guard(() => { store.Execute(id, s => s.SkipStep(RequestId(http, "skip"), stepId, clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
+
+        g.MapPost("/{id}/finish", (string id, HttpRequest http, TaskStore store, TimeProvider clock) =>
+            Guard(() => { store.Execute(id, s => s.Finish(RequestId(http, "finish"), clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
 
         g.MapPost("/{id}/abandon", (string id, AbandonRequest req, HttpRequest http, TaskStore store, TimeProvider clock) =>
             Guard(() => { store.Execute(id, s => s.Abandon(RequestId(http, "abandon"), req.Reason, clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
@@ -172,8 +176,11 @@ public static class TaskEndpoints
                 if (result.Value is not { } a || a.Answer is not { Length: > 0 and <= 1200 } || a.Answer.Contains("://") || a.Focus is not { Count: <= 2 } || !a.Focus.All(TaskPlanValidator.IsConcept))
                     return ModelFailure(result.Error, "LensQi couldn't answer that just now; try again");
                 gate.SetFocus(id, a.Focus);
-                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, a.Answer, photoId, result.ModelId, clock.GetUtcNow()));
-                return Results.Ok(new { answer = a.Answer, focus = a.Focus, stepId = state.CurrentStepId, photoId, result.ModelId, source = "AI inference" });
+                // Professionals-only work named in the question always gets the referral, whatever the model wrote.
+                var answer = RestrictedTopics.Classify(question) != RestrictedCategory.None && !a.Answer.Contains("professional", StringComparison.OrdinalIgnoreCase)
+                    ? a.Answer + " " + Referral : a.Answer;
+                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow()));
+                return Results.Ok(new { answer, focus = a.Focus, stepId = state.CurrentStepId, photoId, result.ModelId, source = "AI inference" });
             });
         }).DisableAntiforgery().AsModelCall();
 
@@ -205,6 +212,8 @@ public static class TaskEndpoints
         });
         return app;
     }
+
+    public const string Referral = "This is work for a qualified professional; LensQi can help you look and document, not do it.";
 
     private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId);
     private sealed record PlanError(string Code, string Message);

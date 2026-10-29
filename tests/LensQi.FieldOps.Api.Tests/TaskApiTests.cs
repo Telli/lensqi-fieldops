@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using LensQi.FieldOps.Api.Features.Tasks;
 
 namespace LensQi.FieldOps.Tests;
 
@@ -189,5 +190,29 @@ public class TaskApiTests
         Assert.Contains("uses 1 manual photo", task.GetProperty("plan").GetProperty("sourceNote").GetString());
         Assert.Equal("Manual", task.GetProperty("photos")[0].GetProperty("purpose").GetString());
         Assert.Equal(1, f.FakeChat.Images);
+    }
+
+    [Fact]
+    public async Task Free_form_help_skips_the_planner_answers_from_the_frame_and_keeps_the_safety_referral()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, created) = await Create(c, new { mode = "Freeform" });
+        Assert.Equal("InProgress", created.GetProperty("task").GetProperty("phase").GetString());
+        Assert.Equal(0, f.FakeChat.Images);
+
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "The screen says the router has no internet. Check the WAN light.", focus = new[] { "WAN light" } });
+        var form = Image(); form.Add(new StringContent("What does this error mean?"), "question");
+        Assert.StartsWith("The screen says", (await Body(await c.PostAsync($"/v1/tasks/{id}/ask", form))).GetProperty("answer").GetString());
+
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "Turn the valve a quarter turn.", focus = Array.Empty<string>() });
+        var gas = new MultipartFormDataContent { { new StringContent("How do I disconnect this gas line?"), "question" } };
+        Assert.EndsWith(TaskEndpoints.Referral, (await Body(await c.PostAsync($"/v1/tasks/{id}/ask", gas))).GetProperty("answer").GetString());
+
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { seen = "A router with a red light.", screenText = (string?)null, recommendation = "Look at the WAN light.", focus = new[] { "WAN light" }, expectedEquipmentInView = false });
+        var frame = Image(); frame.Add(new StringContent("frame-1"), "frameId");
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsync($"/v1/tasks/{id}/live/guide", frame)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/plan", null)).StatusCode);
+        Assert.Equal("Completed", (await Body(await c.PostAsync($"/v1/tasks/{id}/finish", null))).GetProperty("phase").GetString());
     }
 }

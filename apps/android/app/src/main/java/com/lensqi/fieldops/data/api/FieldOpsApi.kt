@@ -127,6 +127,9 @@ interface FieldOpsApi {
     @POST("v1/tasks/{id}/ask")
     suspend fun ask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part("question") question: RequestBody, @Part image: MultipartBody.Part?): AskResponse
 
+    @POST("v1/tasks/{id}/finish")
+    suspend fun finishTask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
+
     @POST("v1/tasks/{id}/link-inspection")
     suspend fun linkInspection(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): LinkInspectionResponse
 

@@ -19,9 +19,12 @@ public sealed class TaskSession
     public TaskState State { get; private set; }
     public IReadOnlyList<TaskEvent> Events => _events;
 
+    public const string FreeformGoal = "Free-form help";
+
     public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now)
     {
         goal = goal?.Trim() ?? "";
+        if (mode == TaskMode.Freeform && goal.Length == 0) goal = FreeformGoal;
         details = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
         if (goal.Length is < 3 or > 300) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Describe the goal in 3 to 300 characters");
         if (details is { Length: > 1000 }) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Details are limited to 1000 characters");
@@ -46,6 +49,7 @@ public sealed class TaskSession
     public IReadOnlyList<TaskEvent> ProposePlan(string requestId, TaskPlan plan, string modelId, string promptDigest, string responseDigest, IReadOnlyList<string> manualPhotoIds, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
+            Require(State.Mode != TaskMode.Freeform, "Free-form help has no plan; start a planned task instead");
             Require(State.Phase == TaskPhase.Planned && State.Plan is null, "This task already has a plan");
             foreach (var id in manualPhotoIds)
                 Require(State.Photos.Any(p => p.EvidenceId == id && p.Purpose == TaskPhotoPurpose.Manual), $"Manual photo '{id}' is not part of this task");
@@ -86,7 +90,7 @@ public sealed class TaskSession
     public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
-            Require(State.Plan is not null && !State.IsClosed, "Questions need an open task with a plan");
+            Require((State.Plan is not null || State.Mode == TaskMode.Freeform) && !State.IsClosed, "Questions need an open task with a plan, or free-form help");
             if (stepId is not null) Step(stepId);
             if (photoId is not null) Require(State.Photos.Any(p => p.EvidenceId == photoId), $"Photo '{photoId}' is not part of this task");
             if (string.IsNullOrWhiteSpace(question) || question.Length > 500) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Questions are 1 to 500 characters");
@@ -113,6 +117,14 @@ public sealed class TaskSession
             Step(stepId);
             Require(!State.IsFinished(stepId), $"Step {stepId} is already finished");
             return Commit(Advance(new StepSkipped(0, State.TaskId, now, stepId), stepId, now));
+        });
+
+    /// <summary>Ends a free-form session; planned tasks finish by completing or skipping their steps.</summary>
+    public IReadOnlyList<TaskEvent> Finish(string requestId, DateTimeOffset now) =>
+        Idempotent(requestId, () =>
+        {
+            Require(State.Mode == TaskMode.Freeform && !State.IsClosed, "Only open free-form help is ended this way");
+            return Commit([new TaskCompleted(0, State.TaskId, now)]);
         });
 
     public IReadOnlyList<TaskEvent> Abandon(string requestId, string? reason, DateTimeOffset now) =>

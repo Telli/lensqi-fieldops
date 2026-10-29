@@ -5,7 +5,8 @@ import { fmtWhen } from "@/lib/labels";
 import { useTasks, type TaskMode } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
-const filters: { label: string; mode?: TaskMode }[] = [{ label: "All" }, { label: "Technician", mode: "Technician" }, { label: "DIY", mode: "Diy" }];
+const filters: { label: string; mode?: TaskMode }[] = [{ label: "All" }, { label: "Technician", mode: "Technician" }, { label: "DIY", mode: "Diy" }, { label: "Free-form", mode: "Freeform" }];
+const modeLabel: Record<TaskMode, string> = { Diy: "DIY", Technician: "Technician", Freeform: "Free-form" };
 const phaseLabel = { Planned: "Plan ready", InProgress: "In progress", Completed: "Done", Abandoned: "Stopped" } as const;
 
 /** Guided tasks across both modes; technician jobs on a site record link to their FieldProof inspection. */
@@ -28,8 +29,8 @@ export function TasksList() {
           <tbody>
             {rows.map((t) => (
               <tr key={t.taskId} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-                <td className="max-w-[280px] truncate px-4 py-2.5"><Link href={`/m/t/${t.taskId}`} className="font-medium hover:text-primary">{t.title ?? t.goal}</Link></td>
-                <td className="px-4 py-2.5 text-xs">{t.mode === "Diy" ? "DIY" : "Technician"}</td>
+                <td className="max-w-[280px] truncate px-4 py-2.5"><Link href={t.mode === "Freeform" ? `/m/t/${t.taskId}/live` : `/m/t/${t.taskId}`} className="font-medium hover:text-primary">{t.mode === "Freeform" ? "Just ask" : t.title ?? t.goal}</Link></td>
+                <td className="px-4 py-2.5 text-xs">{modeLabel[t.mode]}</td>
                 <td className="px-4 py-2.5 text-xs">{t.phase === "Planned" && !t.title ? "No plan yet" : phaseLabel[t.phase]}{t.steps && t.phase !== "Planned" ? ` · ${t.finished}/${t.steps}` : ""}</td>
                 <td className="max-w-[220px] truncate px-4 py-2.5 text-xs text-muted-foreground">{t.currentStepTitle ?? "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{t.site?.assetId ?? "—"}</td>

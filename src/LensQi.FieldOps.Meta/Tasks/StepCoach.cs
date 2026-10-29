@@ -21,6 +21,11 @@ public sealed class StepCoach(IChatClient chat)
 
         Rules:
         1. Stay inside context.step. Help them do this step well and safely; do not jump ahead or add new procedures.
+           When context.step is null (free-form help, no plan): help with whatever is in view or asked, in a few safe
+           steps at most; for a longer job, suggest making a step-by-step plan.
+        1a. Professionals only: gas lines or appliances, main electrical panel or live mains wiring, EV high-voltage
+           systems, airbags/SRS, refrigerant, structural work. For these, or when context.restrictedTopic is set, only
+           help observe and document, and recommend a qualified professional.
         2. If context.step.handsOn is false or context.plan.professionalRequired is true, never tell them to touch, open,
            loosen, disconnect or power anything; help them observe, prepare or document instead.
         3. Repeat a caution from context.step when the view shows its hazard. If a stopIf condition is visible, say to stop.
@@ -67,7 +72,9 @@ public sealed class StepCoach(IChatClient chat)
 
             8. answer: reply to the question in at most 4 short sentences, spoken aloud to someone whose hands are busy.
                If the photo does not show enough to answer, say what to point the camera at.
-            """, new { task = Context(task), question }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
+            """, new { task = Context(task), question, restrictedTopic = Restricted(question) }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
+
+    private static string? Restricted(string text) => RestrictedTopics.Classify(text) is var c && c != RestrictedCategory.None ? c.ToString() : null;
 
     /// <summary>Suggests whether a step photo looks done. The person decides; this is never a verification.</summary>
     public Task<MuseResult<StepCheckResult>> CheckAsync(TaskState task, TaskStep step, byte[] photo, string mediaType, CancellationToken ct) =>

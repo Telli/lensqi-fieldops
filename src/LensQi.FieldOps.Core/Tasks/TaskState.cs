@@ -40,7 +40,9 @@ public sealed record TaskState
         TaskState? state = null;
         foreach (var e in events)
             state = state is null
-                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence }
+                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
+                    // Free-form help has no plan to accept: it is in progress from the start.
+                    Phase = c.Mode == TaskMode.Freeform ? TaskPhase.InProgress : TaskPhase.Planned }
                     : throw new InvalidOperationException("A task log must start with TaskCreated")
                 : state.Apply(e);
         return state ?? throw new InvalidOperationException("A task log cannot be empty");

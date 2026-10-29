@@ -58,6 +58,7 @@ import com.lensqi.fieldops.ui.inspection.ReviewScreen
 import com.lensqi.fieldops.ui.receipt.ReceiptScreen
 import com.lensqi.fieldops.data.api.TaskMode
 import com.lensqi.fieldops.data.api.TaskPhase
+import com.lensqi.fieldops.ui.task.FreeformScreen
 import com.lensqi.fieldops.ui.task.NewTaskScreen
 import com.lensqi.fieldops.ui.task.PlanScreen
 import com.lensqi.fieldops.ui.task.StepScreen
@@ -99,8 +100,9 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("taskHome") {
                     TaskHomeScreen(taskList,
                         onPlan = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") },
+                        onJustAsk = { taskList.justAsk { id -> nav.navigate("task/$id/live") } },
                         onTechnician = { goTab("home") },
-                        onOpen = { t -> nav.navigate(when (t.phase) { TaskPhase.InProgress -> "task/${t.taskId}/step"; TaskPhase.Completed -> "task/${t.taskId}/done"; else -> "task/${t.taskId}" }) },
+                        onOpen = { t -> nav.navigate(if (t.mode == TaskMode.Freeform) "task/${t.taskId}/live" else when (t.phase) { TaskPhase.InProgress -> "task/${t.taskId}/step"; TaskPhase.Completed -> "task/${t.taskId}/done"; else -> "task/${t.taskId}" }) },
                         onProfile = { nav.navigate("profile") })
                 }
                 composable(NEW_TASK, arguments = listOf(
@@ -118,6 +120,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("task/{taskId}/step", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
                     val id = requireNotNull(e.arguments?.getString("taskId"))
                     StepScreen(hiltViewModel(), onClose = { nav.popBackStack() }, onDone = { nav.navigate("task/$id/done") { popUpTo("task/{taskId}/step") { inclusive = true } } })
+                }
+                composable("task/{taskId}/live", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
+                    FreeformScreen(hiltViewModel(), onClose = { taskList.refresh(); nav.popBackStack() },
+                        onPlan = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") })
                 }
                 composable("task/{taskId}/done", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
                     TaskDoneScreen(hiltViewModel(), onHome = { goTab("taskHome") }, onInspection = openInspection)
