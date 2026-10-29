@@ -14,6 +14,8 @@ public sealed class HardeningOptions
     /// <summary>Model-backed requests one inspection may make within <see cref="InspectionWindowHours"/>.</summary>
     public int ModelCallsPerInspection { get; set; } = 30;
     public int InspectionWindowHours { get; set; } = 24;
+    /// <summary>Model-backed requests one guided task may make in the same window: plans, questions and step checks.</summary>
+    public int ModelCallsPerTask { get; set; } = 150;
     public int ModelCallsPerHourPerIp { get; set; } = 120;
     public int MinImageShortSide { get; set; } = 240;
     public int MinImageLongSide { get; set; } = 320;
@@ -58,7 +60,9 @@ public static class ModelCallLimits
                     ? RateLimitPartition.GetFixedWindowLimiter("ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"), _ => Window(o.ModelCallsPerHourPerIp, TimeSpan.FromHours(1)))
                     : RateLimitPartition.GetNoLimiter("other")),
                 PartitionedRateLimiter.Create<HttpContext, string>(ctx => IsModelCall(ctx) && ctx.Request.RouteValues["id"] is string id
-                    ? RateLimitPartition.GetFixedWindowLimiter("inspection:" + id, _ => Window(o.ModelCallsPerInspection, TimeSpan.FromHours(o.InspectionWindowHours)))
+                    ? ctx.Request.Path.StartsWithSegments("/v1/tasks")
+                        ? RateLimitPartition.GetFixedWindowLimiter("task:" + id, _ => Window(o.ModelCallsPerTask, TimeSpan.FromHours(o.InspectionWindowHours)))
+                        : RateLimitPartition.GetFixedWindowLimiter("inspection:" + id, _ => Window(o.ModelCallsPerInspection, TimeSpan.FromHours(o.InspectionWindowHours)))
                     : RateLimitPartition.GetNoLimiter("other")));
         });
         return services;
