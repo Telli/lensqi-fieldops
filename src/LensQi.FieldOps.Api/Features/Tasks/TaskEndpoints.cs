@@ -196,7 +196,9 @@ public static class TaskEndpoints
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Task '{id}' not found");
             if (name.Contains("..") || name.Contains('/') || name.Contains('\\')) return ApiResults.BadRequest("invalid artifact name");
+            // A stored file name, or a photo id (files are saved as "{photoId}-{sha12}.{ext}").
             var path = Path.Combine(files.DataDirectoryPath, "evidence", id, name);
+            if (!File.Exists(path)) path = ArtifactPath(files, id, name) ?? path;
             if (!File.Exists(path)) return ApiResults.NotFound("artifact not found");
             var bytes = File.ReadAllBytes(path);
             return Results.File(bytes, EvidenceFileStore.DetectImageType(bytes) ?? "application/octet-stream");
@@ -207,22 +209,30 @@ public static class TaskEndpoints
     private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId);
     private sealed record PlanError(string Code, string Message);
 
-    /// <summary>Asks the planner and records the plan if the validator accepts it. Returns why not, otherwise null.</summary>
+    /// <summary>
+    /// Asks the planner and records the plan if the validator accepts it. A rejected plan is asked for once more with the
+    /// rejection reason; the second answer faces the same validator. Returns why there is no plan, otherwise null.
+    /// </summary>
     private static async Task<PlanError?> Plan(TaskStore store, TaskPlanner planner, string id, PlanSiteContext? site,
         IReadOnlyList<(byte[] Bytes, string MediaType)> manuals, IReadOnlyList<string> manualIds, TimeProvider clock, CancellationToken ct)
     {
-        var state = store.Find(id)!.State;
-        var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct);
-        if (result.Value is not { } plan)
-            return result.Error?.StartsWith("provider_unavailable") == true
-                ? new PlanError("provider_unavailable", "The planner is unavailable; try again shortly")
-                : new PlanError("invalid_model_output", "The planner's answer was not a usable plan; try again");
-        try
+        PlanError? error = null;
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            store.Execute(id, s => s.ProposePlan("plan:" + result.ResponseDigest, plan, result.ModelId, result.PromptDigest, result.ResponseDigest, manualIds, clock.GetUtcNow()));
-            return null;
+            var state = store.Find(id)!.State;
+            var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct, error?.Message);
+            if (result.Value is not { } plan)
+                return result.Error?.StartsWith("provider_unavailable") == true
+                    ? new PlanError("provider_unavailable", "The planner is unavailable; try again shortly")
+                    : new PlanError("invalid_model_output", "The planner's answer was not a usable plan; try again");
+            try
+            {
+                store.Execute(id, s => s.ProposePlan("plan:" + result.ResponseDigest, plan, result.ModelId, result.PromptDigest, result.ResponseDigest, manualIds, clock.GetUtcNow()));
+                return null;
+            }
+            catch (TaskConflictException ex) when (ex.Code is TaskErrorCodes.InvalidPlan or TaskErrorCodes.UnsafePlan) { error = new PlanError(ex.Code, ex.Message); }
         }
-        catch (TaskConflictException ex) { return new PlanError(ex.Code, ex.Message); }
+        return error;
     }
 
     private static string? ArtifactPath(EvidenceFileStore files, string id, string evidenceId)

@@ -42,7 +42,7 @@ export default function Scan({ id }: { id: string }) {
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
   const [cameraAttempt, setCameraAttempt] = useState(0);
   const processing = useRef(false);
-  const assist = useLiveAssist(video, live === "on" && !preview && !busy, id);
+  const assist = useLiveAssist(video, live === "on" && !preview && !busy, `/v1/inspections/${encodeURIComponent(id)}`);
 
   const afterRepair = !!i?.currentClaimId && (i.stage === "ReadyToVerify" || i.stage === "NeedsEvidence");
   const asked = i?.evidenceRequests?.find((r) => !r.answeredByPhotoId);
