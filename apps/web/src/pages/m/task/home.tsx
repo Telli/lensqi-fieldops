@@ -9,7 +9,7 @@ import { LensQiMark } from "@/components/fo/ai";
 import { useHealth } from "@/lib/hooks";
 import { fmtWhen, greeting } from "@/lib/labels";
 import { taskKeys, tasks, useTasks, type TaskSummary } from "@/lib/tasks";
-import { usePushToTalk } from "@/lib/voice";
+import { speechNotice, usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 export function taskHref(t: Pick<TaskSummary, "taskId" | "phase" | "mode">) {
@@ -44,10 +44,21 @@ export default function ModeHome() {
   const [, nav] = useLocation();
   const [goal, setGoal] = useState("");
   const voice = usePushToTalk((text) => setGoal(text));
-  const go = () => goal.trim().length >= 3 && nav(`/m/new?mode=Diy&goal=${encodeURIComponent(goal.trim())}`);
   const recent = (list.data ?? []).filter((t) => t.phase !== "Abandoned").slice(0, 5);
   const qc = useQueryClient();
   const [opening, setOpening] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  // One step from goal to plan: details and manual photos are optional, on the full form.
+  const go = async () => {
+    if (goal.trim().length < 3 || planning) return;
+    setPlanning(true);
+    try {
+      const r = await tasks.create({ mode: "Diy", goal: goal.trim() });
+      qc.setQueryData(taskKeys.one(r.task.taskId), r.task);
+      qc.invalidateQueries({ queryKey: taskKeys.list });
+      nav(`/m/t/${r.task.taskId}`);
+    } catch (e) { toast.error(friendlyError(e)); setPlanning(false); }
+  };
   // Spontaneous help: straight to the camera, no goal or plan first.
   const justAsk = async () => {
     setOpening(true);
@@ -85,11 +96,14 @@ export default function ModeHome() {
               {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
             </button>
           )}
-          <button type="submit" disabled={goal.trim().length < 3} aria-label="Plan it" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-40">
-            <ArrowRight className="size-5" />
+          <button type="submit" disabled={goal.trim().length < 3 || planning} aria-label="Plan it" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-40">
+            {planning ? <Loader2 className="size-5 animate-spin" /> : <ArrowRight className="size-5" />}
           </button>
         </form>
-        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
+        {planning
+          ? <p className="mt-2 text-xs opacity-70">Writing your plan. This takes up to half a minute; it is checked for safety before you see it.</p>
+          : <Link href={`/m/new?mode=Diy&goal=${encodeURIComponent(goal.trim())}`} className="mt-2 inline-block text-xs text-primary">Add details or a manual photo</Link>}
+        {voice.notice && <p className="mt-1 text-xs opacity-70">{speechNotice}</p>}
         {voice.error && <p className="mt-2 text-xs text-warning">{voice.error}</p>}
       </section>
 

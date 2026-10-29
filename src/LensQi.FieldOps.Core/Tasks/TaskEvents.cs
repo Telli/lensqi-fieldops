@@ -16,7 +16,11 @@ namespace LensQi.FieldOps.Core.Tasks;
 [JsonDerivedType(typeof(TaskCompleted), "TaskCompleted")]
 [JsonDerivedType(typeof(TaskAbandoned), "TaskAbandoned")]
 [JsonDerivedType(typeof(InspectionLinked), "InspectionLinked")]
-public abstract record TaskEvent(long Sequence, string TaskId, DateTimeOffset OccurredAt);
+public abstract record TaskEvent(long Sequence, string TaskId, DateTimeOffset OccurredAt)
+{
+    /// <summary>The request that appended this event, so a retried request replays its outcome after a restart too.</summary>
+    public string? RequestId { get; init; }
+}
 
 public sealed record TaskCreated(long Sequence, string TaskId, DateTimeOffset OccurredAt, TaskMode Mode, string Goal, string? Details, SiteLink? Site)
     : TaskEvent(Sequence, TaskId, OccurredAt);

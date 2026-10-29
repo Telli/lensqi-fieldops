@@ -47,6 +47,11 @@ interface Recognition {
 }
 type RecognitionCtor = new () => Recognition;
 
+/** Shown before the first use of the microphone, then not again on this device. */
+export const speechNotice = "Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.";
+const NOTICE_KEY = "lensqi.speechNoticeSeen";
+const noticeSeen = () => { try { return localStorage.getItem(NOTICE_KEY) === "1"; } catch { return false; } };
+
 /**
  * Push-to-talk speech recognition in the browser (Web Speech API). The browser may use a remote speech provider; only the final text is
  * used. Unsupported browsers report it so the page can offer typing instead.
@@ -61,9 +66,12 @@ export function usePushToTalk(onFinal: (text: string) => void) {
   const final = useRef("");
   const deliver = useRef(onFinal);
   deliver.current = onFinal;
+  const [seen, setSeen] = useState(noticeSeen);
 
   const start = useCallback(() => {
     if (!Ctor || rec.current) return;
+    try { localStorage.setItem(NOTICE_KEY, "1"); } catch { /* shown again next time */ }
+    setSeen(true);
     const r = new Ctor();
     r.lang = navigator.language || "en-US"; r.interimResults = true; r.continuous = false;
     final.current = ""; setHeard(""); setError(null);
@@ -86,5 +94,5 @@ export function usePushToTalk(onFinal: (text: string) => void) {
 
   const stop = useCallback(() => rec.current?.stop(), []);
   useEffect(() => () => rec.current?.abort(), []);
-  return { supported: !!Ctor, listening, heard, error, start, stop };
+  return { supported: !!Ctor, listening, heard, error, start, stop, notice: !!Ctor && !seen };
 }

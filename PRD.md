@@ -41,7 +41,7 @@
 
 ### What exists today (reviewed October 29, 2026)
 
-Status from a code review of the `guided-tasks` branch at `044c906` and a fresh run of the automated suites on October 29: **211 .NET tests** (96 Core, 18 Meta, 97 API), **25 web tests** and **107 Android unit tests** passed. Three defects found in that review (GT-T31–T33) were then fixed, bringing the .NET suite to 214. Nothing on a physical phone or with a real microphone was re-run for this review.
+Status from a code review of the `guided-tasks` branch at `044c906` and a fresh run of the automated suites on October 29: **211 .NET tests** (96 Core, 18 Meta, 97 API), **25 web tests** and **107 Android unit tests** passed. Fixes the same day for the review findings and UX blockers (GT-T31–T37) brought the .NET suite to 220; web and Android counts are unchanged. Nothing on a physical phone or with a real microphone was re-run for this review.
 
 | Capability | State |
 |---|---|
@@ -52,8 +52,8 @@ Status from a code review of the `guided-tasks` branch at `044c906` and a fresh 
 | Meta glasses through the Wearables Device Access Toolkit | Exercised against the Mock Device Kit only; no real glasses tested |
 | Guided-task core: `TaskSession` with append-only JSONL events and replay, `TaskPlanValidator` with the restricted categories, `TaskPlanner` and `StepCoach` (guide, ask, step check), `/v1/tasks` API | **Built** (commits `c722a14`, `180b3f4`) with Core and API tests. Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), typed questions, step checks and live step coaching are recorded in `docs/evidence/tasks/` |
 | Web task flow: three-entry home, goal entry with push-to-talk, plan screen with safety acknowledgement, step runner (live outlines, spoken instruction, questions, voice commands, photo check), done screen, free-form help, ops Guided tasks list | **Built** (`ba64285`, `20d2a85`, `180b3f4`); checked in the browser pane at phone size. Camera and microphone were not available in that pane |
-| Android task flow: home, new task, plan, step runner on `CameraScreen` (CameraX or ARCore), free-form help, Speaker and push-to-talk | **Built** (`3d999b6`, `180b3f4`); checked on the arm64 emulator (2D, no ARCore). Not yet: a typed question box on the step runner, `SpokenFeedbackGate` on task speech, distance coaching aimed at the step's main part, the offline queue for step-check photos, glasses on tasks |
-| Technician task linked to a site-record inspection | **Built**; `TechnicianJourneyTests` drives plan → steps → linked inspection → fake fix denied → `VerifiedCompleteSimulated` → offline receipt verification with fake models and simulated diagnostics (`docs/evidence/tasks/technician-journey.md`). The task screens do not yet show the linked inspection's stage; no user-operated run with genuine models |
+| Android task flow: home, new task, plan, step runner on `CameraScreen` (CameraX or ARCore), free-form help, Speaker and push-to-talk | **Built** (`3d999b6`, `180b3f4`); checked on the arm64 emulator (2D, no ARCore). Not yet: `SpokenFeedbackGate` on task speech, distance coaching aimed at the step's main part, the offline queue for step-check photos, glasses on tasks |
+| Technician task linked to a site-record inspection | **Built**; `TechnicianJourneyTests` drives plan → steps → linked inspection → fake fix denied → `VerifiedCompleteSimulated` → offline receipt verification with fake models and simulated diagnostics (`docs/evidence/tasks/technician-journey.md`). Since Oct 29 the task summary shows the linked inspection's stage and live or simulated label; no user-operated run with genuine models |
 | Free-form help ("Just ask") | **Built** (`180b3f4`); genuine answers on web and the emulator, including a gas-line referral. Its restricted-work safeguard is a phrase match plus an appended referral, not structural rejection |
 | Voice | Spoken guidance and push-to-talk code on both clients with one command grammar; **not yet exercised with a real microphone** or checked by ear on a phone |
 
@@ -84,7 +84,7 @@ People increasingly attempt technical jobs themselves using scattered videos, fo
 5. **The user decides; FieldProof verifies.** A step photo check is a suggestion. Only the FieldProof gate in Technician mode marks anything verified.
 6. **Active perception beats passive classification.** Ask for a better view, outline the part, measure distance only where ARCore measured it.
 7. **Structured, inspectable record.** Each plan, step, question, check and decision is an append-only event with an origin and a server timestamp.
-8. **Only recognised text reaches LensQi.** Android prefers on-device recognition where available on Android 12+; system fallback and browser recognition may send audio to their providers. Web offers a disclosed typed alternative; Android task typing remains unfinished.
+8. **Only recognised text reaches LensQi.** Android prefers on-device recognition where available on Android 12+; system fallback and browser recognition may send audio to their providers. Both clients offer typing next to the mic, and web discloses the browser's speech provider before first use.
 9. **Honest labelling.** Simulated checks are labelled simulated, mock devices are labelled mock, and nothing is described as run, tested or verified until it has been.
 10. **New hackathon work must be obvious.** A clean standalone repository, dated commits, and a demo showing only event-built functionality.
 
@@ -258,7 +258,7 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 
 #### GT-04 — Plan acceptance and step flow (P0)
 
-- A task cannot start a step before `PlanAccepted(safetyAcknowledged: true)`. *(As built: acknowledgement is required when the plan's risk is above Low, a professional is required, or any step has a caution; a Low-risk plan with no cautions can start without it. Accepting starts the first step.)*
+- A task cannot start a step before `PlanAccepted(safetyAcknowledged: true)`. *(As built: acknowledgement is required when the plan's risk is above Low, a professional is required, or any step has a caution; a Low-risk plan with no cautions can start without it. The start button is the acknowledgement, with the safety notes right above it. Accepting starts the first step.)*
 - Steps can be started, completed or skipped; Back returns to a previous step without deleting events. A task ends `Completed` or `Abandoned`.
 - Every command is idempotent by `Idempotency-Key`; an out-of-order command returns a typed conflict.
 
@@ -275,7 +275,7 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 #### GT-06 — Voice (P0)
 
 - **Speak guidance:** the step instruction and new guidance are spoken through text-to-speech, rate-limited by the existing spoken-feedback gate (no repeats of unchanged advice).
-- **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Web offers a typed box. Android task typed fallback is still a requirement, not implemented.
+- **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Both clients always offer a typed box next to the mic.
 - **Voice commands:** a shared grammar on web and Android recognises next, back, repeat, check (including "take a photo"), skip, mute and unmute; the whole utterance must be a command, and anything else is treated as a question. *(As built; "pause" from the original plan is not a command.)*
 - No audio is sent to or stored by LensQi; browser/system recognition providers may process audio.
 
@@ -681,7 +681,7 @@ Keep the workflow stage (`InspectionStage`) distinct from verification provenanc
 |---|---|---|
 | Product shape | **Decided Oct 28: two modes on one guided-task core; FieldProof kept as the technician closer** | — |
 | DIY instruction source | **Decided Oct 28: AI-written plans, clearly labelled, with manual photos as optional grounding** | Licensed manufacturer data becomes available (post-hackathon) |
-| Voice | **Decided Oct 28: speak guidance, push-to-talk questions, voice commands; client-platform speech recognition, on-device where available** | Recognition fails on the demo phone → use web typed questions; Android task typing remains unfinished |
+| Voice | **Decided Oct 28: speak guidance, push-to-talk questions, voice commands; client-platform speech recognition, on-device where available** | Recognition fails on the demo phone → type the question; both clients offer it |
 | Restricted categories | Gas, mains electrical, EV high voltage, airbags/SRS, refrigerant, structural | Add categories when evaluation shows gaps; never remove one for the demo |
 | Indie-track private-code reuse | Fresh implementation, no code copied | Written clarification plus rights approval |
 | Repo visibility | New repo public | Competition rules change |

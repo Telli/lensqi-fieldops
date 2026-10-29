@@ -72,17 +72,49 @@ public class TaskSessionTests
     }
 
     [Fact]
-    public void A_required_photo_check_comes_before_done_but_the_verdict_never_finishes_the_step()
+    public void A_photo_check_verdict_never_finishes_the_step_and_never_blocks_the_user()
     {
-        var s = Started(Plan(steps: [Step("s1", checkRequired: true, cautions: new Caution(CautionKind.Hot, "Hot")), Step("s2")]));
-        Assert.Throws<TaskConflictException>(() => s.CompleteStep("early", "s1", T0));
+        var s = Started(Plan(steps: [Step("s1", checkRequired: true, cautions: new Caution(CautionKind.Hot, "Hot")), Step("s2", checkRequired: true)]));
         s.RecordPhoto("ph", "photo-1", "abc", 800, 600, TaskPhotoPurpose.StepCheck, "s1", T0);
-        s.RecordCheck("chk", "s1", "photo-1", StepCheckVerdict.NotYet, "Still dripping", "muse", T0);
+        s.RecordCheck("chk", "s1", "photo-1", StepCheckVerdict.LooksDone, "Plug is in", "muse", T0);
         Assert.Equal("s1", s.State.CurrentStepId);
         Assert.Empty(s.State.CompletedStepIds);
         s.CompleteStep("done", "s1", T0);
         Assert.Contains("s1", s.State.CompletedStepIds);
+        // The user decides: a step whose check was suggested can be marked done without one.
+        s.CompleteStep("done2", "s2", T0);
+        Assert.Equal(TaskPhase.Completed, s.State.Phase);
     }
+
+    [Fact]
+    public void A_replayed_request_still_replays_after_a_restart()
+    {
+        var s = Started();
+        var first = s.CompleteStep("same", "s1", T0);
+        var json = s.Events.Select(e => JsonSerializer.Serialize(e, KnowledgeJson.Options)).ToList();
+        var back = TaskSession.Rehydrate(json.Select(j => JsonSerializer.Deserialize<TaskEvent>(j, KnowledgeJson.Options)!));
+        var again = back.CompleteStep("same", "s1", T0);
+        Assert.Equal(first.Select(e => e.Sequence), again.Select(e => e.Sequence));
+        Assert.Equal(s.Events.Count, back.Events.Count);
+        Assert.Equal(TaskErrorCodes.InvalidState, Assert.Throws<TaskConflictException>(() => back.CompleteStep("new-key", "s1", T0)).Code);
+    }
+
+    [Fact]
+    public void A_low_risk_plan_without_cautions_starts_without_an_acknowledgement()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Diy, "Reset my router", null, null, T0);
+        s.ProposePlan("plan", Plan(RiskLevel.Low, steps: [Step("s1", handsOn: false), Step("s2", handsOn: false)]), "muse", "p", "r", [], T0);
+        s.AcceptPlan("a", false, T0);
+        Assert.Equal(TaskPhase.InProgress, s.State.Phase);
+    }
+
+    [Theory]
+    [InlineData("Watch https://example.com first", true)]
+    [InlineData("See www.example.com for torque specs", true)]
+    [InlineData("Use the www-style label on the box", false)]
+    [InlineData("Tighten to the torque in your manual", false)]
+    public void Links_are_recognised_with_or_without_a_scheme(string text, bool link) =>
+        Assert.Equal(link, TaskPlanValidator.HasLink(text));
 
     [Fact]
     public void A_check_needs_a_check_photo_of_that_step()

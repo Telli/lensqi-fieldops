@@ -15,7 +15,7 @@ export const qk = {
 export const useHealth = () => useQuery({ queryKey: qk.health, queryFn: api.health, refetchInterval: 30_000 });
 export const useFixtures = () => useQuery({ queryKey: qk.fixtures, queryFn: api.fixtures, staleTime: 60_000 });
 export const useInspections = () => useQuery({ queryKey: qk.inspections, queryFn: api.inspections, refetchInterval: 15_000 });
-export const useInspection = (id: string) => useQuery({ queryKey: qk.inspection(id), queryFn: () => api.inspection(id) });
+export const useInspection = (id: string, opts?: { enabled?: boolean }) => useQuery({ queryKey: qk.inspection(id), queryFn: () => api.inspection(id), enabled: opts?.enabled ?? true });
 export const useEvents = (id: string) => useQuery({ queryKey: qk.events(id), queryFn: () => api.events(id) });
 export const useKnowledge = (id: string) => useQuery({ queryKey: qk.knowledge(id), queryFn: () => api.knowledge(id), staleTime: 60_000 });
 export const useArtifacts = (id: string) => useQuery({ queryKey: qk.artifacts(id), queryFn: () => api.artifacts(id) });

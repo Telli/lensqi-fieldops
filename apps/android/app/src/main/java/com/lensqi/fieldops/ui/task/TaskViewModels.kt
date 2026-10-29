@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.lensqi.fieldops.data.api.AcceptRequest
 import com.lensqi.fieldops.data.api.ApiOutcome
 import com.lensqi.fieldops.data.api.FieldOpsApi
+import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.TaskMode
 import com.lensqi.fieldops.data.api.TaskSummary
 import com.lensqi.fieldops.data.api.TaskView
@@ -67,6 +68,8 @@ data class TaskUi(
     val busy: String? = null,
     val error: String? = null,
     val answer: Pair<String, String>? = null,
+    /** The FieldProof inspection a technician task is linked to, for its stage and live or simulated outcome. */
+    val linked: InspectionView? = null,
 )
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
@@ -81,6 +84,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun refresh() = viewModelScope.launch {
         val r = apiCall { api.task(taskId) }
         _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
+        _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 
     private fun act(label: String, block: suspend () -> TaskView, after: (TaskView) -> Unit = {}) = viewModelScope.launch {

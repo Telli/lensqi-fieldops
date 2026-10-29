@@ -9,7 +9,7 @@ import { cameraError, connectCamera } from "@/lib/camera";
 import { friendlyError } from "@/lib/hooks";
 import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { parseCommand, usePushToTalk, useSpeak } from "@/lib/voice";
+import { parseCommand, speechNotice, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 /** The current camera frame as a JPEG, no larger than `maxSide` on its long edge. */
@@ -148,7 +148,6 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       </div>
 
       <div className="max-h-[58%] space-y-3 overflow-y-auto rounded-t-3xl border-t border-overlay-foreground/10 bg-overlay px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
         <div className="flex gap-1" aria-hidden>{steps.map((s, k) => <span key={s.id} className={cn("h-1 flex-1 rounded-full", s.status === "Done" ? "bg-primary" : k === n ? "bg-primary/50" : s.status === "Skipped" ? "bg-overlay-foreground/30" : "bg-overlay-foreground/15")} />)}</div>
         <div>
           <h1 className="text-lg font-semibold leading-snug">{step.title}</h1>
@@ -183,28 +182,34 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
         {voice.listening && <p className="text-center text-sm text-primary" aria-live="polite">{voice.heard || "Listening…"}</p>}
         {voice.error && <p className="text-center text-xs text-warning">{voice.error}</p>}
 
-        <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 pt-1">
-          <button onClick={() => move("back")} disabled={n === 0 || !!busy} aria-label="Previous step" className="grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-30"><ArrowLeft className="size-5" /></button>
-          {voice.supported ? (
-            <button onClick={voice.listening ? voice.stop : voice.start} disabled={busy === "ask"} aria-label={voice.listening ? "Stop listening" : "Ask or say a command"}
-              className={cn("flex h-12 items-center justify-center gap-2 rounded-2xl border border-overlay-foreground/20 text-sm", voice.listening && "border-primary bg-primary text-primary-foreground")}>
-              {busy === "ask" ? <Loader2 className="size-5 animate-spin" /> : voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}{busy === "ask" ? "Thinking…" : voice.listening ? "Stop" : "Ask"}
+        <form onSubmit={(e) => { e.preventDefault(); ask(typed); }} className="flex items-center gap-2">
+          {voice.supported && (
+            <button type="button" onClick={voice.listening ? voice.stop : voice.start} disabled={busy === "ask"} aria-label={voice.listening ? "Stop listening" : "Ask or say a command"}
+              className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20", voice.listening && "border-primary bg-primary text-primary-foreground")}>
+              {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
             </button>
-          ) : (
-            <form onSubmit={(e) => { e.preventDefault(); ask(typed); }} className="flex">
-              <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Ask LensQi…" aria-label="Ask a question" className="h-12 w-full rounded-2xl border border-overlay-foreground/20 bg-transparent px-3 text-sm outline-none focus:border-primary" />
-            </form>
           )}
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy === "ask"} placeholder={busy === "ask" ? "Thinking…" : "Ask about this step…"} aria-label="Ask a question"
+            className="h-12 min-w-0 flex-1 rounded-2xl border border-overlay-foreground/20 bg-transparent px-3 text-sm outline-none focus:border-primary" />
+          {(typed.trim() || busy === "ask") && (
+            <button type="submit" disabled={busy === "ask"} aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20">
+              {busy === "ask" ? <Loader2 className="size-5 animate-spin" /> : <ChevronRight className="size-5" />}
+            </button>
+          )}
+        </form>
+        {voice.notice && <p className="text-[11px] opacity-60">{speechNotice}</p>}
+        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2">
+          <button onClick={() => move("back")} disabled={n === 0 || !!busy} aria-label="Previous step" className="grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-30"><ArrowLeft className="size-5" /></button>
           <button onClick={() => check()} disabled={!!busy || !open} aria-label="Check this step with a photo" className={cn("grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20", needsCheck && "border-primary text-primary")}>
             {busy === "check" ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
           </button>
-          <button onClick={() => move("complete")} disabled={!!busy || !open || finished || needsCheck} aria-label="Step done"
-            className="flex h-12 items-center gap-1 rounded-2xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-40">
+          <button onClick={() => move("complete")} disabled={!!busy || !open || finished} aria-label="Step done"
+            className="flex h-12 items-center justify-center gap-1 rounded-2xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-40">
             {busy === "move" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}Done
           </button>
         </div>
         <div className="flex items-center justify-between text-xs opacity-70">
-          <span>{needsCheck ? "This step asks for a check photo first." : voice.supported ? "Say “next”, “repeat”, “check this”, or ask a question." : ""}</span>
+          <span>{needsCheck ? "Tip: a quick check photo can confirm this step." : voice.supported ? "Say “next”, “repeat”, “check this”, or ask a question." : ""}</span>
           {!finished && open && <button onClick={() => move("skip")} disabled={!!busy} className="flex min-h-11 items-center gap-0.5 px-1">Skip <ChevronRight className="size-3.5" /></button>}
         </div>
         <input ref={file} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) check(f); e.target.value = ""; }} />

@@ -8,7 +8,7 @@ import { Page, TopBar } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { friendlyError, useFixtures } from "@/lib/hooks";
 import { taskKeys, tasks, type TaskMode } from "@/lib/tasks";
-import { usePushToTalk } from "@/lib/voice";
+import { speechNotice, usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 /** State the goal; LensQi writes the plan. Manual photos and, for technicians, a site asset ground it. */
@@ -54,7 +54,7 @@ export default function NewTask() {
           ))}
         </div>
 
-        <p className="text-xs opacity-70">Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.</p>
+        {voice.notice && <p className="text-xs opacity-70">{speechNotice}</p>}
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">What do you want to do?</span>
           <div className="flex items-start gap-2">
