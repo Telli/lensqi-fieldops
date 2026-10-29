@@ -24,6 +24,7 @@ import Verify from "@/pages/m/verify";
 import ReceiptPage from "@/pages/m/receipt";
 import { Inspections, Assets, Profile } from "@/pages/m/lists";
 import Overview from "@/pages/ops/overview";
+import { TasksList } from "@/pages/ops/tasks";
 import { InspectionsList, InspectionWorkspace } from "@/pages/ops/inspections";
 import { AssetRegistry, AssetDetail, WorkOrders, KnowledgePacks, Reports } from "@/pages/ops/more";
 import "./styles.css";
@@ -70,6 +71,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/i/:id/receipt">{(p) => m(<ReceiptPage id={p.id} />, embedded())}</Route>
         <Route path="/m/i/:id">{(p) => m(<Investigate id={p.id} />)}</Route>
         <Route path="/ops">{() => ops(<Overview />)}</Route>
+        <Route path="/ops/tasks">{() => ops(<TasksList />)}</Route>
         <Route path="/ops/inspections">{() => ops(<InspectionsList />)}</Route>
         <Route path="/ops/inspections/:id">{(p) => ops(<InspectionWorkspace id={p.id} />)}</Route>
         <Route path="/ops/assets">{() => ops(<AssetRegistry />)}</Route>
