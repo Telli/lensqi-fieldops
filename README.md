@@ -45,13 +45,13 @@ a question matches the configured restricted phrases and the answer lacks “pro
 not block every unsafe answer. Only FieldProof marks anything verified.
 
 **Status (October 29, 2026):** guided tasks, free-form help and the technician hand-off to FieldProof are built on
-the `guided-tasks` branch for web and Android. On October 29 the suites passed: 214 .NET tests, 25 web tests and 107
+the `guided-tasks` branch for web and Android. On October 29 the suites passed: 220 .NET tests, 25 web tests and 107
 Android unit tests. Genuine plans, typed questions, step checks and live step coaching are recorded in
 [docs/evidence/tasks/](docs/evidence/tasks/) from the browser and the emulator. A technician task linked to an
 inspection reaches `VerifiedCompleteSimulated` and an offline-verified receipt in an API journey test with fake models
 ([technician-journey.md](docs/evidence/tasks/technician-journey.md)). Not yet: a phone run of the task flow, voice with
 a real microphone, ARCore anchors or distance on a real part (the first S23 Ultra ARCore run produced none,
-[docs/LIVE_AR.md](docs/LIVE_AR.md)), a typed question box and spoken-feedback gating on the Android step runner, the
+[docs/LIVE_AR.md](docs/LIVE_AR.md)), spoken-feedback gating on the Android step runner, the
 offline queue for step-check photos, and glasses on tasks. Plan and status per task: [PRD.md](PRD.md) §1,
 [.kiro/specs/guided-tasks/tasks.md](.kiro/specs/guided-tasks/tasks.md).
 

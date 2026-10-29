@@ -94,7 +94,6 @@ public class TaskApiTests
         var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
         await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
         await c.PostAsync($"/v1/tasks/{id}/steps/s1:complete", null);
-        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/steps/s2:complete", null)).StatusCode);
 
         f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "NotYet", reason = "Oil is still dripping from the plug." });
         var checkedStep = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Image()));
@@ -238,13 +237,22 @@ public class TaskApiTests
             f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
             (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
             await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+            await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1:complete", "complete-s1"));
             dir = f.DataDir;
         }
         using var second = FieldOpsApiFactory.Over(dir); using var c2 = second.CreateClient();
         var task = await Body(await c2.GetAsync($"/v1/tasks/{id}"));
         Assert.Equal("InProgress", task.GetProperty("phase").GetString());
-        Assert.Equal("s1", task.GetProperty("currentStepId").GetString());
+        Assert.Equal("s2", task.GetProperty("currentStepId").GetString());
+
+        // A retry of the same request after the restart replays instead of failing as "already finished".
+        var events = JsonDocument.Parse(await c2.GetStringAsync($"/v1/tasks/{id}/events")).RootElement.GetArrayLength();
+        Assert.Equal(HttpStatusCode.OK, (await c2.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1:complete", "complete-s1"))).StatusCode);
+        Assert.Equal(events, JsonDocument.Parse(await c2.GetStringAsync($"/v1/tasks/{id}/events")).RootElement.GetArrayLength());
     }
+
+    private static HttpRequestMessage Keyed(string path, string key) =>
+        new(HttpMethod.Post, path) { Headers = { { "Idempotency-Key", key } } };
 
     [Fact]
     public async Task Manual_photos_ground_the_plan_and_are_kept()

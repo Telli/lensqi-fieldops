@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, Redirect, useLocation } from "wouter";
 import { AlertTriangle, ArrowRight, Camera, Clock, Hand, Loader2, OctagonX, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,9 +29,9 @@ function StepItem({ step, n }: { step: TaskStep; n: number }) {
 export default function TaskPlanPage({ id }: { id: string }) {
   const { data: t, isLoading } = useTask(id);
   const [, nav] = useLocation();
-  const [ack, setAck] = useState(false);
   const replan = useTaskAct(id, () => tasks.plan(id));
-  const accept = useTaskAct(id, () => tasks.accept(id, ack));
+  // Starting is the acknowledgement: the safety notes sit right above the button that says so.
+  const accept = useTaskAct(id, () => tasks.accept(id, true));
 
   if (t?.mode === "Freeform") return <Redirect to={`/m/t/${id}/live`} replace />;
   if (isLoading || !t) return <><TopBar title="Plan" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
@@ -92,19 +91,14 @@ export default function TaskPlanPage({ id }: { id: string }) {
           </Button>
         ) : (
           <div className="space-y-3">
-            {plan.needsSafetyAck && (
-              <label className="flex gap-3 rounded-2xl border border-warning/40 bg-warning/5 p-3.5 text-sm">
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-1 size-4 accent-[var(--primary)]" />
-                <span>
-                  <span className="flex items-center gap-1.5 font-medium"><AlertTriangle className="size-4 text-warning" />I've read the safety notes</span>
-                  {allCautions.length > 0 && <span className="mt-1 block text-xs text-muted-foreground">{allCautions.slice(0, 4).map((c) => c.text).join(" · ")}{allCautions.length > 4 ? " · …" : ""}</span>}
-                  <span className="mt-1 block text-xs text-muted-foreground">This plan is AI-written. Check specs in your manual, and stop if anything looks different from what LensQi describes.</span>
-                </span>
-              </label>
-            )}
-            <Button size="lg" className="h-12 w-full rounded-2xl" disabled={accept.isPending || (plan.needsSafetyAck && !ack)}
+            <div className={cn("rounded-2xl p-3.5 text-sm", plan.needsSafetyAck ? "border border-warning/40 bg-warning/5" : "border border-border")}>
+              {plan.needsSafetyAck && <p className="flex items-center gap-1.5 font-medium"><AlertTriangle className="size-4 text-warning" />Safety notes</p>}
+              {allCautions.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{allCautions.slice(0, 4).map((c) => c.text).join(" · ")}{allCautions.length > 4 ? " · …" : ""}</p>}
+              <p className="mt-1 text-xs text-muted-foreground">This plan is AI-written, not a safety certification. Check specs in your manual, and stop if anything looks different from what LensQi describes.</p>
+            </div>
+            <Button size="lg" className="h-12 w-full rounded-2xl" disabled={accept.isPending}
               onClick={() => accept.mutate([], { onSuccess: () => nav(`/m/t/${id}/step`) })}>
-              {accept.isPending ? <Loader2 className="animate-spin" /> : <ArrowRight />} Start step 1
+              {accept.isPending ? <Loader2 className="animate-spin" /> : <ArrowRight />} {plan.needsSafetyAck ? "I've read the safety notes · Start" : "Start step 1"}
             </Button>
           </div>
         )}

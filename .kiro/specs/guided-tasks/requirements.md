@@ -73,7 +73,7 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 ### GT-R04 — Plan acceptance and step flow (P0)
 
 1. WHEN the user starts a task, THE CLIENT SHALL require acceptance of the plan's safety notes, and THE API SHALL append `PlanAccepted(safetyAcknowledged: true)`.
-2. IF a step command arrives before `PlanAccepted` with `safetyAcknowledged = true`, THE API SHALL reject it with `safety_not_acknowledged`.
+2. WHERE the plan's risk is above Low, it requires a professional, or any step has a caution, THE API SHALL reject step commands before `PlanAccepted` with `safetyAcknowledged = true` (`safety_not_acknowledged`); a Low-risk plan with none of these can start without it. THE CLIENT SHALL make the start button itself the acknowledgement, with the safety notes directly above it.
 3. WHEN the user starts, completes or skips a step, THE API SHALL append `StepStarted`, `StepCompleted` or `StepSkipped` for a step id in the accepted plan; IF the step id is unknown, THE API SHALL reject it with `unknown_step`.
 4. WHEN the user goes back to an earlier step, THE SYSTEM SHALL keep all prior events and SHALL record a new `StepStarted`.
 5. WHEN the user finishes or stops, THE API SHALL append `TaskCompleted` or `TaskAbandoned`; no further step commands SHALL be accepted.
@@ -115,7 +115,7 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 
 1. WHEN the user takes a step-check photo, THE CLIENT SHALL capture it at full resolution and THE API SHALL store it under the task id with a digest.
 2. THE STEP CHECKER SHALL compare the photo with the step's "what done looks like" using Muse vision and SHALL return `LooksDone`, `NotYet` or `CantTell` with a bounded reason; THE API SHALL append `StepChecked(stepId, photoId, verdict, reason)`.
-3. THE UI SHALL present the verdict as a suggestion; ONLY the user's complete or skip command SHALL change the step.
+3. THE UI SHALL present the verdict as a suggestion; ONLY the user's complete or skip command SHALL change the step. A step whose plan marks the check `required` SHALL get a prompt to take one, never a block: the user can mark it done without a photo.
 4. A step check on a technician task SHALL NOT produce, feed or display a FieldProof decision.
 5. WHILE the Android client is offline, IT SHALL queue step-check photos as `StepCheckPhoto` commands and sync them when the network returns.
 
@@ -166,20 +166,20 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 
 ## 7. Implementation status (code review, October 29, 2026)
 
-Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107 Android unit tests passed. "Met" means implemented and covered by tests or recorded evidence; it does not mean validated on a phone or with a real microphone. Differences from `design.md` are listed in its §0.
+Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107 Android unit tests passed. Updated after the Oct 29 fixes (GT-T31–T37): 220 .NET, 25 web, 107 Android. "Met" means implemented and covered by tests or recorded evidence; it does not mean validated on a phone or with a real microphone. Differences from `design.md` are listed in its §0.
 
 | Requirement | State | Gaps |
 |---|---|---|
 | GT-R01 Modes and creation | Met | Goal limit is 3–300 characters (not 1–200). A third mode, free-form help, was added |
 | GT-R02 AI-written plan | Met | — |
-| GT-R03 Safety policy | Met for plans | GT-R03.1 link check catches `://` only. GT-R03.6 applies length and link checks to guidance, answers and reasons; the "stay inside the step" rule is prompt-only |
-| GT-R04 Plan acceptance and steps | Partly met | GT-R04.2: a Low-risk plan with no cautions and no professional flag can start without acknowledgement. GT-R04.6: idempotency is in memory and lost on restart; clients send a fresh key per request |
+| GT-R03 Safety policy | Met for plans | GT-R03.1 met Oct 29 (bare `www.` addresses too). GT-R03.6 applies length and link checks to guidance, answers and reasons; the "stay inside the step" rule is prompt-only |
+| GT-R04 Plan acceptance and steps | Met | GT-R04.2 rewritten Oct 29 to the built rule. GT-R04.6: request ids are persisted on events since Oct 29; clients still send a fresh key per request, so only server-side retries replay |
 | GT-R05 Live scan with AR | Partly met | Step `lookFor` is sent first. GT-R05.3: Android distance advice is not aimed at the step's main part. No phone run of the task step runner; no ARCore anchor recorded on a real part |
 | GT-R06 Step guidance | Partly met | GT-R06.3: the prompt is not shared with `LiveSceneService`; inspections keep their own |
-| GT-R07 Voice | Partly met | GT-R07.1: Android task speech is not gated by `SpokenFeedbackGate`. GT-R07.3: no typed question box on the Android step runner. GT-R07.4: grammar is next, back, repeat, check, skip, mute, unmute (no pause). Not exercised with a real microphone |
+| GT-R07 Voice | Partly met | GT-R07.1: Android task speech is not gated by `SpokenFeedbackGate`. GT-R07.3 met Oct 29 (typing next to the mic on both clients). GT-R07.4: grammar is next, back, repeat, check, skip, mute, unmute (no pause). Not exercised with a real microphone |
 | GT-R08 Questions | Partly met | GT-R08.3 is not structurally enforced: the server appends a referral only when the question matches a restricted phrase |
-| GT-R09 Step photo check | Partly met | GT-R09.5: the Android offline queue does not carry step-check photos |
-| GT-R10 Technician link | Partly met | Linked journey to `VerifiedCompleteSimulated` passes with fakes (`TechnicianJourneyTests`). GT-R10.4: task screens do not show the linked inspection's outcome |
+| GT-R09 Step photo check | Partly met | GT-R09.3: since Oct 29 a `required` check is a prompt, not a block. GT-R09.5: the Android offline queue does not carry step-check photos |
+| GT-R10 Technician link | Partly met | Linked journey to `VerifiedCompleteSimulated` passes with fakes (`TechnicianJourneyTests`). GT-R10.4 met Oct 29 on the web done screen and Android summary |
 | GT-R11 Task record and storage | Met | No shared JSONL helper with the inspection store (mechanics are duplicated) |
 | GT-R12 Android generalization | Partly met | GT-R12.3 met. GT-R12.1 and GT-R12.2 (queue and glasses `sessionId`) not started |
 | GT-R13 Honest labelling | Met in docs and UI reviewed | GT-R13.3: no genuine spoken question or SAM outline on a real step part recorded yet |

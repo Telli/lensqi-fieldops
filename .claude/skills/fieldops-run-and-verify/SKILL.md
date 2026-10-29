@@ -7,7 +7,7 @@ description: How to build, test, run the FieldOps API and browser UI, drive the 
 
 ## Build and test
 ```bash
-dotnet test --nologo            # 214 tests across Core, Meta, Api (Oct 29)
+dotnet test --nologo            # 220 tests across Core, Meta, Api (Oct 29)
 npm --prefix apps/web test      # 25 web tests
 cd apps/android && ./gradlew :app:testDebugUnitTest   # 107 Android unit tests
 ```
@@ -34,7 +34,7 @@ Use an `Idempotency-Key` header to prove replay on `/verify`. Errors come back a
 1. `POST /v1/tasks {mode:"Diy", goal:"Change the engine oil in my 2025 Honda Civic", details:"1.5L turbo"}` (genuine Muse plan; multipart adds up to 3 `manual` photos) → `task.taskId`, or `planError` with `invalid_plan` / `unsafe_plan` / `provider_unavailable`; retry with `POST /v1/tasks/{id}/plan`
 2. `POST /v1/tasks/{id}/accept {safetyAcknowledged:true}` → first step active
 3. `POST .../steps/{stepId}/check` multipart `image` (suggested verdict only) · `POST .../ask` multipart `question` (+ optional `image`) · `POST .../live/detect|guide` multipart `image`, `frameId`
-4. `POST .../steps/{stepId}:complete` or `:skip`; the last one completes the task. A step whose check is `required` needs a check first
+4. `POST .../steps/{stepId}:complete` or `:skip`; the last one completes the task. A `required` check is only a prompt; Done is never blocked
 5. Technician: create with `mode:"Technician", fixtureId:"LAB-RACK-01", assetId:"LAB-SW-01"`, then `POST .../link-inspection` → `inspectionId`, and run the hero flow above on it. `TechnicianJourneyTests` does this end to end with fakes
 6. Free-form help: `POST /v1/tasks {mode:"Freeform"}` → ask and live at once; `POST .../finish` ends it
 A restricted goal (for example "Replace the breaker panel in my garage") must come back with `restricted` set, `professionalRequired: true` and no `handsOn` step.

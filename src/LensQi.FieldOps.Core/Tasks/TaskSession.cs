@@ -9,11 +9,15 @@ public sealed class TaskSession
 {
     private readonly List<TaskEvent> _events;
     private readonly Dictionary<string, IReadOnlyList<TaskEvent>> _outcomes = new(StringComparer.Ordinal);
+    private string? _requestId;
 
     private TaskSession(List<TaskEvent> events)
     {
         _events = events;
         State = TaskState.Replay(events);
+        // Outcomes come back from the log: each event carries the request that appended it.
+        foreach (var batch in events.Where(e => e.RequestId is not null).GroupBy(e => e.RequestId!, StringComparer.Ordinal))
+            _outcomes[batch.Key] = batch.ToList();
     }
 
     public TaskState State { get; private set; }
@@ -101,15 +105,16 @@ public sealed class TaskSession
             return Commit([new QuestionAnswered(0, State.TaskId, now, stepId, question.Trim(), answer.Trim(), photoId, modelId)]);
         });
 
-    /// <summary>The user marks a step done. A step that asks for a photo check needs one first, whatever the AI suggested.</summary>
+    /// <summary>
+    /// The user marks a step done. A suggested photo check is a prompt in the clients, not a gate: the check is only ever a
+    /// suggestion, so it never stands between the user and the next step.
+    /// </summary>
     public IReadOnlyList<TaskEvent> CompleteStep(string requestId, string stepId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
             RequireInProgress();
-            var step = Step(stepId);
+            Step(stepId);
             Require(!State.IsFinished(stepId), $"Step {stepId} is already finished");
-            if (step.Check is { Required: true } && !State.Checks.Any(c => c.StepId == stepId))
-                throw new TaskConflictException(TaskErrorCodes.InvalidState, $"Step {stepId} asks for a photo check before it is marked done");
             return Commit(Advance(new StepCompleted(0, State.TaskId, now, stepId), stepId, now));
         });
 
@@ -172,7 +177,7 @@ public sealed class TaskSession
     private IReadOnlyList<TaskEvent> Commit(List<TaskEvent> batch)
     {
         var seq = State.LastSequence;
-        var numbered = batch.Select(e => e with { Sequence = ++seq }).ToList();
+        var numbered = batch.Select(e => e with { Sequence = ++seq, RequestId = _requestId }).ToList();
         foreach (var e in numbered)
         {
             _events.Add(e);
@@ -184,8 +189,13 @@ public sealed class TaskSession
     private IReadOnlyList<TaskEvent> Idempotent(string requestId, Func<IReadOnlyList<TaskEvent>> action)
     {
         if (_outcomes.TryGetValue(requestId, out var earlier)) return earlier;
-        var result = action();
-        _outcomes[requestId] = result;
-        return result;
+        _requestId = requestId;
+        try
+        {
+            var result = action();
+            _outcomes[requestId] = result;
+            return result;
+        }
+        finally { _requestId = null; }
     }
 }

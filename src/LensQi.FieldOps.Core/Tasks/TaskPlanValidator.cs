@@ -33,6 +33,10 @@ public static class TaskPlanValidator
 {
     public const int MaxSteps = 25;
     private static readonly Regex Concept = new("^[A-Za-z][A-Za-z0-9 '-]{0,38}[A-Za-z0-9]$", RegexOptions.CultureInvariant);
+    private static readonly Regex Link = new(@"://|(?<![A-Za-z0-9])www\.[A-Za-z0-9-]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>A URL or a bare web address ("www.example.com"). Model text that the user reads or hears never carries one.</summary>
+    public static bool HasLink(string? text) => text is not null && Link.IsMatch(text);
 
     public static bool IsConcept(string phrase) =>
         Concept.IsMatch(phrase) && phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 4;
@@ -47,7 +51,7 @@ public static class TaskPlanValidator
         {
             if (string.IsNullOrWhiteSpace(value)) { if (required) invalid.Add($"{field} is empty"); return; }
             if (value.Length > max) invalid.Add($"{field} is longer than {max} characters");
-            if (value.Contains("://", StringComparison.Ordinal)) invalid.Add($"{field} contains a link");
+            if (HasLink(value)) invalid.Add($"{field} contains a link");
         }
 
         Text(plan.Title, "title", 120);

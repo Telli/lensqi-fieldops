@@ -99,7 +99,9 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
             NavHost(nav, startDestination = "taskHome") {
                 composable("taskHome") {
                     TaskHomeScreen(taskList,
-                        onPlan = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") },
+                        // One step from goal to plan; details and manual photos stay optional on the full form.
+                        onPlan = { goal -> taskList.create(TaskMode.Diy, goal, null, null, null, emptyList()) { id -> nav.navigate("task/$id") } },
+                        onDetails = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") },
                         onJustAsk = { taskList.justAsk { id -> nav.navigate("task/$id/live") } },
                         onTechnician = { goTab("home") },
                         onOpen = { t -> nav.navigate(if (t.mode == TaskMode.Freeform) "task/${t.taskId}/live" else when (t.phase) { TaskPhase.InProgress -> "task/${t.taskId}/step"; TaskPhase.Completed -> "task/${t.taskId}/done"; else -> "task/${t.taskId}" }) },

@@ -169,6 +169,8 @@ public static class LiveVisionEndpoints
     /// <summary>Bounded text, no links, and focus terms that are short plain noun phrases (they become SAM prompts).</summary>
     internal static bool ValidScene(LiveScene s) =>
         s.Seen is { Length: > 0 and <= 400 } && s.Recommendation is { Length: > 0 and <= 400 } && s.ScreenText is null or { Length: <= 600 }
-        && !$"{s.Seen} {s.Recommendation} {s.ScreenText}".Contains("://", StringComparison.Ordinal)
+        && !TaskPlanValidator.HasLink($"{s.Seen} {s.Recommendation}")
+        // Quoted screen text may show a bare address (a router's setup page); a full URL is still refused.
+        && !(s.ScreenText?.Contains("://", StringComparison.Ordinal) ?? false)
         && s.Focus is { Count: <= 2 } && s.Focus.All(f => f is not null && TaskPlanValidator.IsConcept(f.Trim()));
 }

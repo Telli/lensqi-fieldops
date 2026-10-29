@@ -151,7 +151,7 @@ public static class TaskEndpoints
                         .OfType<TaskPhotoRecorded>().Single();
                 }
                 var result = await coach.CheckAsync(store.Find(id)!.State, step, bytes, mediaType, ct);
-                if (result.Value is not { } check || check.Reason is not { Length: > 0 and <= 400 } || check.Reason.Contains("://"))
+                if (result.Value is not { } check || check.Reason is not { Length: > 0 and <= 400 } || TaskPlanValidator.HasLink(check.Reason))
                     return ModelFailure(result.Error, "The step check is unavailable; the photo is saved, try again or decide yourself");
                 var recorded = store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, check.Reason, result.ModelId, clock.GetUtcNow()))
                     .OfType<StepChecked>().Single();
@@ -187,7 +187,7 @@ public static class TaskEndpoints
                 }
                 var state = store.Find(id)!.State;
                 var result = await coach.AskAsync(state, question, frame is { } fr ? (fr.Bytes, fr.MediaType) : null, ct);
-                if (result.Value is not { } a || a.Answer is not { Length: > 0 and <= 1200 } || a.Answer.Contains("://") || a.Focus is not { Count: <= 2 } || !a.Focus.All(TaskPlanValidator.IsConcept))
+                if (result.Value is not { } a || a.Answer is not { Length: > 0 and <= 1200 } || TaskPlanValidator.HasLink(a.Answer) || a.Focus is not { Count: <= 2 } || !a.Focus.All(TaskPlanValidator.IsConcept))
                     return ModelFailure(result.Error, "LensQi couldn't answer that just now; try again");
                 gate.SetFocus(id, a.Focus);
                 // Professionals-only work named in the question always gets the referral, whatever the model wrote.

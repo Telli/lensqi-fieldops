@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Check
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -67,6 +67,9 @@ import com.lensqi.fieldops.ui.common.LensQiMark
 import com.lensqi.fieldops.ui.common.Panel
 import com.lensqi.fieldops.ui.common.PrimaryButton
 import com.lensqi.fieldops.ui.common.SectionTitle
+import com.lensqi.fieldops.ui.common.stageLabel
+import com.lensqi.fieldops.data.api.InspectionStage
+import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.ui.theme.Fo
 import com.lensqi.fieldops.ui.theme.FoDark
 import com.lensqi.fieldops.voice.VoiceCommand
@@ -106,9 +109,11 @@ fun TaskRow(t: TaskSummary, onOpen: () -> Unit) {
 
 /** Two ways in: say what you want to do yourself, or go to technician work. */
 @Composable
-fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
+fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
+    var planning by remember { mutableStateOf(false) }
+    val writing = planning && s.creating
     val voice = rememberVoiceInput { goal = it }
     LaunchedEffect(Unit) { vm.refresh() }
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -136,7 +141,10 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onJustAsk: (
                     if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
                 }
                 voice.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
-                PrimaryButton("Plan it", { onPlan(goal.trim()) }, Modifier.fillMaxWidth(), enabled = goal.trim().length >= 3, icon = Icons.Outlined.AutoAwesome)
+                if (planning) s.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
+                PrimaryButton(if (writing) "Writing your plan…" else "Plan it", { planning = true; onPlan(goal.trim()) }, Modifier.fillMaxWidth(), enabled = goal.trim().length >= 3 && !s.creating, icon = Icons.Outlined.AutoAwesome, busy = writing)
+                if (writing) Text("This takes up to half a minute; the plan is checked for safety before you see it.", color = FoDark.Muted, fontSize = 12.sp)
+                else TextButton(onClick = { onDetails(goal.trim()) }) { Text("Add details or a manual photo", color = FoDark.Primary, fontSize = 12.sp) }
             }
         }
         item {
@@ -259,7 +267,6 @@ private fun StepRow(step: TaskStep, n: Int) {
 fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val t = s.task
-    var ack by remember { mutableStateOf(false) }
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("Back", color = Fo.Muted) }; Text(if (t?.mode == TaskMode.Technician) "Job plan" else "Your plan", style = MaterialTheme.typography.titleLarge) } }
         if (t == null) { item { CircularProgressIndicator() }; return@LazyColumn }
@@ -301,11 +308,14 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
         item {
             if (t.phase != TaskPhase.Planned) PrimaryButton(if (t.phase == TaskPhase.InProgress) "Continue" else "See the summary", { if (t.phase == TaskPhase.InProgress) onStep() else onDone() }, Modifier.fillMaxWidth())
             else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (plan.needsSafetyAck) Row(Modifier.clip(RoundedCornerShape(14.dp)).border(1.dp, Fo.Warning, RoundedCornerShape(14.dp)).clickable { ack = !ack }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(ack, { ack = it })
-                    Text("I've read the safety notes. This plan is AI-written; I'll check specs in my manual and stop if anything looks different.", style = MaterialTheme.typography.bodySmall)
+                val cautions = plan.steps.flatMap { it.cautions }.map { it.text }.distinct()
+                Panel(border = if (plan.needsSafetyAck) Fo.Warning else Fo.Border) {
+                    if (plan.needsSafetyAck) Text("Safety notes", fontWeight = FontWeight.SemiBold, color = Fo.Warning)
+                    if (cautions.isNotEmpty()) Text(cautions.take(4).joinToString(" · ") + if (cautions.size > 4) " · …" else "", style = MaterialTheme.typography.bodySmall)
+                    Text("This plan is AI-written, not a safety certification. Check specs in your manual and stop if anything looks different.", style = MaterialTheme.typography.bodySmall)
                 }
-                PrimaryButton("Start step 1", { vm.accept(ack, onStep) }, Modifier.fillMaxWidth(), enabled = !plan.needsSafetyAck || ack, busy = s.busy == "accept")
+                // Starting is the acknowledgement: the notes sit right above the button that says so.
+                PrimaryButton(if (plan.needsSafetyAck) "I've read the safety notes · Start" else "Start step 1", { vm.accept(true, onStep) }, Modifier.fillMaxWidth(), busy = s.busy == "accept")
             }
         }
         item { Text("Plan by ${plan.modelId ?: "AI"} · AI inference", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 24.dp)) }
@@ -330,6 +340,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         vm.clearAnswer()
         step?.let { vm.speaker.speak("Step ${n + 1}. ${it.title}. ${it.instruction} ${it.cautions.joinToString(". ") { c -> c.text }}", force = true) }
     }
+    var typed by remember { mutableStateOf("") }
     val voice = rememberVoiceInput { said ->
         val current = vm.state.value.task?.currentStep ?: return@rememberVoiceInput
         when (parseCommand(said)) {
@@ -355,19 +366,14 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         details = { StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error) },
         controls = { handle ->
             camera.value = handle
+            QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, "Ask about this step…",
+                onMic = { if (voice.listening) voice.stop() else voice.start() },
+                onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { vm.start(it.id) } }
-                Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (voice.listening) FoDark.Primary else Color.Black.copy(alpha = .4f))
-                    .border(1.dp, FoDark.Border, RoundedCornerShape(16.dp)).clickable(enabled = voice.supported && s.busy != "ask") { if (voice.listening) voice.stop() else voice.start() },
-                    contentAlignment = Alignment.Center) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (s.busy == "ask") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(if (voice.listening) Icons.Outlined.Stop else Icons.Outlined.Mic, null, tint = FoDark.Foreground)
-                        Text(if (s.busy == "ask") "Thinking…" else if (voice.listening) "Stop" else if (voice.supported) "Ask" else "Voice unavailable", color = FoDark.Foreground)
-                    }
-                }
                 StepButton(Icons.Outlined.CameraAlt, "Check this step with a photo", enabled = !handle.capturing && s.busy == null, highlight = needsCheck, busy = handle.capturing || s.busy == "check") { handle.capture() }
-                Box(Modifier.height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (needsCheck || s.busy != null) FoDark.Primary.copy(alpha = .4f) else FoDark.Primary)
-                    .clickable(enabled = !needsCheck && s.busy == null) { vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (s.busy != null) FoDark.Primary.copy(alpha = .4f) else FoDark.Primary)
+                    .clickable(enabled = s.busy == null) { vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (s.busy == "move") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = FoDark.Background) else Icon(Icons.Outlined.Check, null, tint = FoDark.Background)
                         Text("Done", color = FoDark.Background, fontWeight = FontWeight.SemiBold)
@@ -375,7 +381,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (needsCheck) "This step asks for a check photo first." else "Say “next”, “repeat”, “check this”, or ask a question.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Text(if (needsCheck) "Tip: a quick check photo can confirm this step." else if (voice.supported) "Say “next”, “repeat”, “check this”, or ask a question." else "", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },
@@ -383,6 +389,28 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
 }
 
 private class HandleRef { var value: CameraHandle? = null }
+
+/** Ask by voice or by typing: both are always offered, so a missing microphone or a noisy room never blocks a question. */
+@Composable
+private fun QuestionRow(typed: String, onTyped: (String) -> Unit, voiceSupported: Boolean, listening: Boolean, asking: Boolean, enabled: Boolean, hint: String,
+                        onMic: () -> Unit, onSend: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (voiceSupported) Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(if (listening) FoDark.Primary else Color.Black.copy(alpha = .4f))
+            .border(1.dp, FoDark.Border, RoundedCornerShape(16.dp)).clickable(enabled = enabled && !asking, onClick = onMic), contentAlignment = Alignment.Center) {
+            Icon(if (listening) Icons.Outlined.Stop else Icons.Outlined.Mic, if (listening) "Stop listening" else "Ask or say a command", tint = FoDark.Foreground)
+        }
+        OutlinedTextField(typed, onTyped, Modifier.weight(1f), enabled = enabled && !asking, singleLine = true,
+            placeholder = { Text(if (asking) "Thinking…" else hint) },
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = FoDark.Foreground, unfocusedTextColor = FoDark.Foreground, disabledTextColor = FoDark.Muted,
+                focusedPlaceholderColor = FoDark.Muted, unfocusedPlaceholderColor = FoDark.Muted, disabledPlaceholderColor = FoDark.Muted,
+                focusedBorderColor = FoDark.Primary, unfocusedBorderColor = FoDark.Border, disabledBorderColor = FoDark.Border, cursorColor = FoDark.Primary,
+                focusedContainerColor = Color.Black.copy(alpha = .4f), unfocusedContainerColor = Color.Black.copy(alpha = .4f), disabledContainerColor = Color.Black.copy(alpha = .4f)))
+        if (asking || typed.isNotBlank()) Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .4f)).border(1.dp, FoDark.Border, RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled && !asking && typed.isNotBlank(), onClick = onSend), contentAlignment = Alignment.Center) {
+            if (asking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Outlined.Send, "Ask", tint = FoDark.Foreground)
+        }
+    }
+}
 
 @Composable
 private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, highlight: Boolean = false, busy: Boolean = false, onClick: () -> Unit) {
@@ -422,7 +450,12 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                 if (t.mode == TaskMode.Diy) "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." else null,
                 tone = if (skipped > 0) Fo.Warning else Fo.Success) {
                 if (t.site != null) {
-                    if (t.inspectionId != null) PrimaryButton("Open the FieldProof inspection", { onInspection(t.inspectionId) }, Modifier.fillMaxWidth())
+                    s.linked?.let { i ->
+                        val verified = i.stage == InspectionStage.VerifiedComplete
+                        Text("FieldProof: " + if (verified && i.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated) "Verified complete · simulated check" else stageLabel(i.stage),
+                            color = if (verified) Fo.Success else if (i.stage == InspectionStage.VerificationFailed) Fo.Failure else Fo.Muted, fontWeight = FontWeight.Medium)
+                    }
+                    if (t.inspectionId != null) PrimaryButton(if (s.linked?.stage == InspectionStage.VerifiedComplete) "See the FieldProof receipt" else "Open the FieldProof inspection", { onInspection(t.inspectionId) }, Modifier.fillMaxWidth())
                     else PrimaryButton("Verify with FieldProof", { vm.linkInspection(onInspection) }, Modifier.fillMaxWidth(), busy = s.busy == "link")
                 }
             }
@@ -458,6 +491,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     val camera = remember { HandleRef() }
     val open = t?.phase == TaskPhase.InProgress
     val answers = t?.answers.orEmpty().asReversed()
+    var typed by remember { mutableStateOf("") }
     val voice = rememberVoiceInput { said ->
         when (parseCommand(said)) {
             VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) }
@@ -486,13 +520,10 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         controls = { handle ->
             camera.value = handle
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (voice.listening) FoDark.Primary else Color.Black.copy(alpha = .4f))
-                    .border(1.dp, FoDark.Border, RoundedCornerShape(16.dp)).clickable(enabled = open && voice.supported && s.busy != "ask") { if (voice.listening) voice.stop() else voice.start() },
-                    contentAlignment = Alignment.Center) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (s.busy == "ask") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(if (voice.listening) Icons.Outlined.Stop else Icons.Outlined.Mic, null, tint = FoDark.Foreground)
-                        Text(if (s.busy == "ask") "Thinking…" else if (voice.listening) "Stop" else if (voice.supported) "Ask" else "Voice unavailable", color = FoDark.Foreground)
-                    }
+                Box(Modifier.weight(1f)) {
+                    QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",
+                        onMic = { if (voice.listening) voice.stop() else voice.start() },
+                        onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
                 }
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
             }
