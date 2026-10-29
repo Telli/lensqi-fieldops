@@ -19,7 +19,9 @@ import kotlin.math.*
 )
 @Serializable data class LiveFinding(val featureId: String, val status: String, val reason: String)
 @Serializable data class LiveResponse(val frameId: String, val objects: List<LiveObject> = emptyList(), val recommendation: String? = null,
-    val findings: List<LiveFinding> = emptyList(), val refreshAfterMs: Long = 4000, val inferenceMs: Long = 0)
+    val findings: List<LiveFinding> = emptyList(), val refreshAfterMs: Long = 4000, val inferenceMs: Long = 0,
+    /** Error or status text the AI read off a screen in view, word for word. */
+    val screenText: String? = null)
 data class GrayFrame(val id: String, val time: Long, val width: Int, val height: Int, val pixels: IntArray)
 private fun median(values: List<Double>) = values.sorted().getOrElse(values.size / 2) { 0.0 }
 fun difference(a: GrayFrame, b: GrayFrame): Double {

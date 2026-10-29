@@ -53,11 +53,13 @@ public sealed class FakeSegmenter : ISegmenter
     public bool Match { get; set; } = true;
     public Exception? Throw { get; set; }
     public int Calls { get; private set; }
+    public List<string> Concepts { get; } = [];
     /// <summary>When non-empty, each call returns the next queued mask set (empty = honest no-match).</summary>
     public Queue<MaskRecord[]> Queued { get; } = new();
     public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct)
     {
         Calls++;
+        lock (Concepts) Concepts.Add(concept);
         if (Queued.TryDequeue(out var masks))
             return Task.FromResult(new SegmentationOutcome(concept, "sam-3.1", "rq", masks.Length > 0 ? "<queued>" : "", "raw",
                 masks.Select(m => new BoxRecord(m.ObjectId, m.Left, m.Top, m.Right, m.Bottom, m.Confidence)).ToList(), masks, "fake", 0.1));

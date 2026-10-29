@@ -39,6 +39,10 @@ public sealed class LiveVisionGate(IMemoryCache cache)
         }
     }
     public void Exit(string key) { lock (sync) { if (active.Remove(key)) slots.Release(); } }
+
+    /// <summary>What the latest guidance said to outline, so the next detection looks for it. Expires with the view.</summary>
+    public void SetFocus(string inspectionId, IReadOnlyList<string> focus) => cache.Set($"focus:{inspectionId}", focus, TimeSpan.FromSeconds(60));
+    public IReadOnlyList<string> Focus(string inspectionId) => cache.TryGetValue($"focus:{inspectionId}", out IReadOnlyList<string>? f) ? f! : [];
 }
 
 /// <summary>Ephemeral preview inference. Never appends events, persists frames, consumes view requests, or decides a repair.</summary>
@@ -61,7 +65,7 @@ public static class LiveVisionEndpoints
     public static IEndpointRouteBuilder MapLiveVision(this IEndpointRouteBuilder app)
     {
         app.MapPost("/v1/inspections/{id}/live/{kind}", async (string id, string kind, HttpContext context, InspectionStore store,
-            ISegmenter sam, VisualAssessmentService muse, LiveVisionGate gate, LiveVisionOptions options, TimeProvider clock, CancellationToken ct) =>
+            ISegmenter sam, LiveSceneService muse, LiveVisionGate gate, LiveVisionOptions options, TimeProvider clock, CancellationToken ct) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             if (kind is not ("detect" or "guide")) return ApiResults.BadRequest("invalid_live_kind", "Use detect or guide");
@@ -96,33 +100,26 @@ public static class LiveVisionEndpoints
             {
                 if (kind == "detect")
                 {
-                    // Only site-configured concepts; the preview cannot submit arbitrary prompts or probe targets.
-                    var concepts = session.Twin.Twin.VisualRequirements.Where(v => !string.IsNullOrWhiteSpace(v.SegmentationPrompt))
-                        .Select(v => v.SegmentationPrompt!).Distinct().Take(2).ToArray();
+                    // What the latest guidance named first, then the site's configured parts. Prompts never come from the client.
+                    var concepts = gate.Focus(id).Concat(session.Twin.Twin.VisualRequirements.Where(v => !string.IsNullOrWhiteSpace(v.SegmentationPrompt))
+                        .Select(v => v.SegmentationPrompt!)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
                     var outcomes = await Task.WhenAll(concepts.Select(c => sam.SegmentAsync(bytes, mediaType, c, timeout.Token)));
                     var objects = outcomes.SelectMany((o, n) => o.Boxes.Where(b => ValidBox(b, width, height)).OrderByDescending(b => b.Confidence ?? 0).Take(2)
                         .Select(b => new { id = $"{n}-{b.ObjectId}", concept = o.Concept, label = o.Concept,
                             box = new { left = b.Left / width, top = b.Top / height, right = b.Right / width, bottom = b.Bottom / height }, b.Confidence })).ToArray();
                     return Results.Ok(new { frameId, width, height, objects, models = outcomes.Select(o => o.ModelId).Distinct(), inferenceMs = watch.ElapsedMilliseconds, refreshAfterMs = interval, source = "AI inference" });
                 }
-                // A temporary context cites only this frame. It is never inserted into InspectionStore.
-                var preview = session.State with { Photos = [new PhotoEvidence(frameId, EvidenceOrigin.Phone, "preview", clock.GetUtcNow())],
-                    Stage = InspectionStage.InitialScan, ViewRequests = 0 };
-                var outcome = await muse.AssessAsync(preview, session.Twin.Twin, bytes, mediaType, frameId, timeout.Token, livePreview: true);
-                var a = outcome.Assessment;
-                var features = session.Twin.Twin.VisualRequirements.Select(v => v.RequirementId).ToHashSet();
-                if (a is null) return ApiResults.Conflict("provider_unavailable", "Live guidance is unavailable; try again shortly");
-                if (!ValidAssessment(a, session.State.AssetId, frameId, features))
-                    return ApiResults.Conflict("invalid_model_output", "Live guidance did not match this frame and fixture");
-                var recommendation = a.NextAction switch {
-                    ProposedNextAction.RequestView => a.RequestedView!,
-                    ProposedNextAction.RequestHumanReview => "Keep the connection in view and ask a reviewer to check the conflicting details.",
-                    ProposedNextAction.RunApprovedProbe => "Capture this view, then run the approved equipment check.",
-                    ProposedNextAction.StopInconclusive => "Improve the lighting and frame the equipment clearly.",
-                    _ => "Keep the equipment and connection in view. Capture a clear photo when ready."
-                };
-                return Results.Ok(new { frameId, recommendation, findings = a.Hypotheses.Select(h => new { h.FeatureId, h.Status, h.Reason }),
-                    outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, inferenceMs = watch.ElapsedMilliseconds, refreshAfterMs = interval, source = "AI inference" });
+                var outcome = await muse.DescribeAsync(session.State, session.Twin.Twin, bytes, mediaType, timeout.Token);
+                if (outcome.Scene is null)
+                    return outcome.Error?.StartsWith("invalid_model_output") == true || outcome.Error == "empty"
+                        ? ApiResults.Conflict("invalid_model_output", "Live guidance was not in the expected form")
+                        : ApiResults.Conflict("provider_unavailable", "Live guidance is unavailable; try again shortly");
+                var scene = outcome.Scene;
+                if (!ValidScene(scene)) return ApiResults.Conflict("invalid_model_output", "Live guidance did not pass validation");
+                var focus = scene.Focus.Select(f => f.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                gate.SetFocus(id, focus);
+                return Results.Ok(new { frameId, recommendation = scene.Recommendation, seen = scene.Seen, screenText = scene.ScreenText, focus,
+                    scene.ExpectedEquipmentInView, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, inferenceMs = watch.ElapsedMilliseconds, refreshAfterMs = interval, source = "AI inference" });
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return Results.Json(new ApiError("live_timeout", "Live analysis took too long; hold steady for the next update"), statusCode: 504); }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TimeoutException) { return ApiResults.Conflict("provider_unavailable", "Live analysis is unavailable; try again shortly"); }
@@ -136,11 +133,11 @@ public static class LiveVisionEndpoints
         && b.Left >= 0 && b.Top >= 0 && b.Right <= w && b.Bottom <= h && b.Right > b.Left && b.Bottom > b.Top
         && (b.Confidence is null || double.IsFinite(b.Confidence.Value) && b.Confidence >= 0.35 && b.Confidence <= 1);
 
-    private static bool ValidAssessment(VisualAssessment a, string asset, string frame, HashSet<string> features) => a.AssetId == asset
-        && Enum.IsDefined(a.NextAction) && a.NextAction != ProposedNextAction.PrepareWorkOrder && a.Hypotheses is { Count: > 0 } && a.Hypotheses.Count <= features.Count
-        && a.Hypotheses.All(h => h is not null)
-        && a.Hypotheses.Select(h => h.FeatureId).Distinct().Count() == a.Hypotheses.Count
-        && a.Hypotheses.All(h => features.Contains(h.FeatureId) && Enum.IsDefined(h.Status) && h.Reason is { Length: > 0 and <= 1000 }
-            && h.EvidenceIds is { Count: 1 } && h.EvidenceIds[0] == frame)
-        && (a.NextAction != ProposedNextAction.RequestView || a.RequestedView is { Length: > 0 and <= 400 });
+    private static readonly Regex Concept = new("^[A-Za-z][A-Za-z0-9 -]{0,38}[A-Za-z0-9]$");
+
+    /// <summary>Bounded text, no links, and focus terms that are short plain noun phrases (they become SAM prompts).</summary>
+    private static bool ValidScene(LiveScene s) =>
+        s.Seen is { Length: > 0 and <= 400 } && s.Recommendation is { Length: > 0 and <= 400 } && s.ScreenText is null or { Length: <= 600 }
+        && !$"{s.Seen} {s.Recommendation} {s.ScreenText}".Contains("://", StringComparison.Ordinal)
+        && s.Focus is { Count: <= 2 } && s.Focus.All(f => f is not null && Concept.IsMatch(f.Trim()) && f.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 4);
 }
