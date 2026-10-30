@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-30",
+  "device": "Samsung Galaxy S23 Ultra (SM-S918U1), Android 16, ARCore 1.46; API on the Mac over USB (adb reverse).",
+  "task": "T-39dc52767669 'Check and test ceiling smoke detector', a new DIY task planned by genuine Muse (6 steps).",
+  "observed": [
+    "ARCore anchors and distance on a real part: on step 1 the screen showed 'Tracking 3 parts · 3 held in place by ARCore', labels '1. ceiling detector ≈280 cm' and 'ceiling detector ≈320 cm / ≈385 cm', and coaching 'Move about 250 cm closer to the ceiling detector (about 280 cm away)' (1, 2). Live AR · ARCore tracking + depth at 9 updates/s.",
+    "A voice question was recognised and answered from the camera view: 'What's the next step' → 'You're still on step one, Prepare area… Point the camera up at the detector so we can check its label for battery type…' (QuestionAnswered with the frame saved as TaskPhotoRecorded in task-events.json). The words matched a question, not the 'next' command.",
+    "The two-line header shows 'Step 1 of 6 · Prep…' instead of the clipped 'Step 2 of' seen in run 1.",
+    "Steps 1 and 2 were marked done 3 s apart, then steps 3 to 6 were skipped within 3 s (1 s apart) and the task completed (3, 4). Whether these were intended is to be confirmed with the user.",
+    "The status bar shows the phone still on silent, so spoken output could not be heard."
+  ],
+  "notShown": "A full-resolution step photo check from the shutter, 'next step' as a voice command, and audible speech."
+}
