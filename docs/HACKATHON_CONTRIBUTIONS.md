@@ -85,6 +85,7 @@ as implementation commits land.
 | 2026-10-30T00:43:35-07:00 | `e327640` | S23 Ultra run 2 evidence: ARCore anchors and distance on a real smoke detector; voice question answered from the camera view | docs/evidence/tasks/s23-phone-run-2 (screenshots, task events with genuine Muse plan and answer); GT-T25 still partial | None |
 | 2026-10-30T01:15:52-07:00 | `2063639` | One label per part, clear camera view, plans fitted to the person and room (10b16f7, ec58b78) | dotnet test: Core 148, Meta 18, Api 126; Android 127 (TaskWireTest catches the Plan it crash); web 31 + tsc + build; S23 Ultra run 3: one 'Smoke detector' label, panels in lower half and tap-to-hide, plan with no ladder for 188 cm; reach note not exercised | None |
 | 2026-10-30T03:00:04-07:00 | `a789e98` | Verify groundwork (a789e98): readiness in the inspection view, a fresh measurement on every verify, versioned receipt bundles | dotnet test: Core 151, Meta 18, Api 132 pass; LiveVerifyTests fresh-measurement test fails with check reuse restored; secret scan PASS | None |
+| 2026-10-30T03:24:42-07:00 | `f097e32` | Camera-led web verify screen (step B): inline capture and retake, readiness-driven cards, bounded comparison polling, three-part result | dotnet test 301 pass; web vitest 36 pass, tsc and build clean; browser walkthrough at 375x812 against local API with simulated checks; secret scan PASS | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
