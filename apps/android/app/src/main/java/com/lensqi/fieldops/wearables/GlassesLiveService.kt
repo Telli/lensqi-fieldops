@@ -19,9 +19,6 @@ import com.lensqi.fieldops.ui.camera.LiveCameraState
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 /** Explicitly started while visible. Owns live inference and speech even with the phone locked. */
@@ -60,31 +57,28 @@ class GlassesLiveService : Service() {
         if (intent?.action == PAUSE) { keepPreviewOnStop = true; stopSelf(); return START_NOT_STICKY }
         if (intent?.action == STOP) { source.stopStreaming(); stopSelf(); return START_NOT_STICKY }
         if (intent?.action == MUTE) { if (running) toggleMute() else stopSelf(); return START_NOT_STICKY }
-        val id = intent?.getStringExtra(INSPECTION) ?: run { stopSelf(); return START_NOT_STICKY }
+        val live = sessionOf(intent) ?: run { stopSelf(); return START_NOT_STICKY }
         if (running) return START_NOT_STICKY
         // Promotion precedes any model work. The user can stop from the notification without unlocking the app.
         try { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
         catch (_: Exception) { source.reportError("Live assistance could not stay active. Check Bluetooth permission and try again."); stopSelf(); return START_NOT_STICKY }
         if (!source.state.value.streaming) { source.reportError("Start the glasses camera before live assistance."); stopSelf(); return START_NOT_STICKY }
         running = true; lastFrameAt = SystemClock.elapsedRealtime()
-        store.mutable.value = GlassesLiveState(inspectionId = id, enabled = true, audioNote = store.state.value.audioNote)
+        store.mutable.value = GlassesLiveState(session = live, enabled = true, audioNote = store.state.value.audioNote)
         wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LensQi:GlassesLive").apply { acquire(60_000) }
         source.setFrameConsumer { bitmap ->
             if (running && source.state.value.streaming) {
                 lastFrameAt = SystemClock.elapsedRealtime()
-                val live = synchronized(sessionLock) {
+                val tracker = synchronized(sessionLock) {
                     if (!running) return@setFrameConsumer
-                    session ?: LiveCameraSession { kind, bytes, frame ->
-                        api.liveFrame(id, kind, MultipartBody.Part.createFormData("image", "glasses-preview.jpg", bytes.toRequestBody("image/jpeg".toMediaType())),
-                            frame.toRequestBody("text/plain".toMediaType()))
-                    }.also { created ->
+                    session ?: LiveCameraSession(targetConcept = live.targetConcept) { kind, bytes, frame -> live.analyze(api, kind, bytes, frame) }.also { created ->
                         session = created
                         feedbackJob = scope.launch { created.state.collect { value ->
                             if (running && session === created) store.mutable.update { it.copy(feedback = value) }
                         } }
                     }
                 }
-                live.frame(bitmap)
+                tracker.frame(bitmap)
             }
         }
         scope.launch {
@@ -163,12 +157,20 @@ class GlassesLiveService : Service() {
     companion object {
         private const val CHANNEL = "glasses-live"
         private const val NOTIFICATION_ID = 703
-        private const val INSPECTION = "inspection"
+        private const val SESSION = "session"
+        private const val SESSION_KIND = "sessionKind"
+        private const val TARGET = "targetConcept"
         private const val STOP = "com.lensqi.fieldops.STOP_GLASSES"
         private const val PAUSE = "com.lensqi.fieldops.PAUSE_GLASSES"
         private const val MUTE = "com.lensqi.fieldops.MUTE_GLASSES"
-        fun start(context: Context, inspectionId: String) = ContextCompat.startForegroundService(context,
-            Intent(context, GlassesLiveService::class.java).putExtra(INSPECTION, inspectionId))
+        fun start(context: Context, session: LiveSession) = ContextCompat.startForegroundService(context,
+            Intent(context, GlassesLiveService::class.java).putExtra(SESSION, session.id).putExtra(SESSION_KIND, session.kind.name).putExtra(TARGET, session.targetConcept))
+
+        private fun sessionOf(intent: Intent?): LiveSession? {
+            val id = intent?.getStringExtra(SESSION) ?: return null
+            val kind = intent.getStringExtra(SESSION_KIND)?.let { k -> LiveSessionKind.entries.firstOrNull { it.name == k } } ?: return null
+            return LiveSession(id, kind, intent.getStringExtra(TARGET))
+        }
         fun pause(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(PAUSE)) }
         fun mute(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(MUTE)) }
     }

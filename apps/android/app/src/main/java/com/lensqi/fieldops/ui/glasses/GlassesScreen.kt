@@ -94,6 +94,7 @@ import com.lensqi.fieldops.ui.theme.Eyebrow
 import com.lensqi.fieldops.ui.theme.Fo
 import com.lensqi.fieldops.ui.theme.FoDark
 import com.lensqi.fieldops.wearables.GlassesMode
+import com.lensqi.fieldops.wearables.LiveSession
 import com.lensqi.fieldops.wearables.GlassesPhase
 import com.lensqi.fieldops.wearables.GlassesState
 import com.lensqi.fieldops.ui.camera.LiveCameraState
@@ -110,7 +111,7 @@ import java.io.File
  */
 @Composable
 fun GlassesScreen(
-    inspectionId: String,
+    session: LiveSession,
     prompt: String,
     status: String?,
     onClose: () -> Unit,
@@ -130,10 +131,10 @@ fun GlassesScreen(
     }
     val captured by rememberUpdatedState(onCaptured)
     val capture = { vm.capture { photo -> captured(photo.file, photo.origin) } }
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.startLive(inspectionId) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.startLive(session) }
     val startLive = {
         if (Build.VERSION.SDK_INT >= 33 && !granted(context, Manifest.permission.POST_NOTIFICATIONS)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        else vm.startLive(inspectionId)
+        else vm.startLive(session)
     }
 
     var bluetoothDenied by remember { mutableStateOf(false) }

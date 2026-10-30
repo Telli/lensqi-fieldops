@@ -181,6 +181,6 @@ Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107
 | GT-R09 Step photo check | Partly met | GT-R09.3: since Oct 29 a `required` check is a prompt, not a block. GT-R09.5 met Oct 29: offline step-check photos are queued and synced with their key (emulator run in `docs/evidence/tasks/android-offline-step-check/`; not on a phone) |
 | GT-R10 Technician link | Partly met | Linked journey to `VerifiedCompleteSimulated` passes with fakes (`TechnicianJourneyTests`). GT-R10.4 met Oct 29 on the web done screen and Android summary |
 | GT-R11 Task record and storage | Met | No shared JSONL helper with the inspection store (mechanics are duplicated) |
-| GT-R12 Android generalization | Partly met | GT-R12.3 met. GT-R12.1 and GT-R12.2 (queue and glasses `sessionId`) not started |
+| GT-R12 Android generalization | Met (emulator) | GT-R12.1 met Oct 30: queued commands carry a `sessionId` (inspection or task); the queue's 1→2 upgrade is tested on SQLite. GT-R12.2 met Oct 30: glasses live assistance serves a task's current step (mock glasses on the emulator, genuine Muse/SAM coaching). GT-R12.3 met. Not on real glasses or a phone |
 | GT-R13 Honest labelling | Met in docs and UI reviewed | GT-R13.3: no genuine spoken question or SAM outline on a real step part recorded yet |
 

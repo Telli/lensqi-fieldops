@@ -61,6 +61,8 @@ coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit5" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+# JVM SQLite for the queue migration test; the same version Room's compiler already resolves.
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version = "3.41.2.2" }
 mwdat-core = { module = "com.meta.wearable:mwdat-core", version.ref = "mwdat" }
 mwdat-camera = { module = "com.meta.wearable:mwdat-camera", version.ref = "mwdat" }
 mwdat-inputs = { module = "com.meta.wearable:mwdat-inputs", version.ref = "mwdat" }

@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-30",
+  "what": "GT-R12.2: live glasses assistance serving a guided task (GlassesLiveService with a LiveSession of kind Task).",
+  "device": "Android emulator Medium_Phone_API_36.1 (arm64), debug build, Meta Mock Device Kit glasses fed by the emulator's virtual camera (a rendered living room). Not real glasses and not a phone.",
+  "task": "T-4fa5a945c1d1 'Replace smoke detector batteries', step 6 of 7 'Reattach and test'. Opened read-only: live frames do not change a task, and no photo was taken.",
+  "observed": [
+    "The step screen shows the new 'Use the glasses for this step' button (1-step-glasses-button.png).",
+    "Glasses assist opened with the step's instruction and 'Step 6 of 7 · Reattach and test'; mock glasses streamed and live assist ran at up to 5 tracking updates per second.",
+    "Guidance came from the task's step coach (genuine Muse and SAM calls in the API log, all 200): 'Point the camera up at the smoke detector on its ceiling base so it can be seen, then close it and press-hold test. Warn others nearby first as the test sound is loud.' (2-task-glasses-live-coaching.png). A task id sent to the inspection live endpoint would be refused before any model call.",
+    "Screenshot 2 also shows an Android system dialog: the emulator's Google speech engine kept stopping. That is the emulator's text-to-speech app, not LensQi; it was dismissed (3-task-glasses-tracking.png)."
+  ],
+  "notTested": "Real Ray-Ban Meta glasses, a phone, and a glasses photo becoming a step check."
+}

@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class GlassesLiveState(val inspectionId: String? = null, val enabled: Boolean = false, val muted: Boolean = false,
+data class GlassesLiveState(val session: LiveSession? = null, val enabled: Boolean = false, val muted: Boolean = false,
     val feedback: LiveCameraState = LiveCameraState(), val audioNote: String? = null)
 
 /** Service-owned state survives a hidden or recreated screen. No frames are retained here. */

@@ -1,7 +1,7 @@
 package com.lensqi.fieldops.ui.task
 
 import com.lensqi.fieldops.wearables.SpokenFeedbackGate
-import com.lensqi.fieldops.voice.Speaker
+import com.lensqi.fieldops.voice.SpeechOutput
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.DisposableEffect
 import android.os.SystemClock
@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Mic
@@ -357,7 +358,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
  * instruction spoken aloud, push-to-talk questions and commands, a full-resolution photo check, and Done.
  */
 @Composable
-fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
+fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGlasses: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val t = s.task
     val current = t?.currentStep
@@ -424,6 +425,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
                 onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { viewingId = it.id } }
+                StepButton(Icons.Outlined.Visibility, "Use the glasses for this step", enabled = !reviewing && s.busy == null) { onGlasses() }
                 StepButton(Icons.Outlined.CameraAlt, "Check this step with a photo", enabled = !handle.capturing && s.busy == null, highlight = needsCheck, busy = handle.capturing || s.busy == "check") { handle.capture() }
                 Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (s.busy != null) FoDark.Primary.copy(alpha = .4f) else FoDark.Primary)
                     .clickable(enabled = s.busy == null) { if (reviewing) viewingId = null else vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
@@ -462,7 +464,7 @@ private class HandleRef { var value: CameraHandle? = null }
  * Spoken live guidance and the pause command for one camera screen. Guidance goes through [SpokenFeedbackGate], so
  * unchanged advice is not repeated and lines are spaced; "pause" holds speech and live coaching until "resume".
  */
-private class VoicePace(private val speaker: Speaker) {
+private class VoicePace(private val speaker: SpeechOutput) {
     var paused by mutableStateOf(false)
         private set
     private var wasLive = false
@@ -494,7 +496,7 @@ private class VoicePace(private val speaker: Speaker) {
 }
 
 @Composable
-private fun rememberVoicePace(speaker: Speaker, camera: HandleRef, allowed: () -> Boolean): VoicePace {
+private fun rememberVoicePace(speaker: SpeechOutput, camera: HandleRef, allowed: () -> Boolean): VoicePace {
     val pace = remember { VoicePace(speaker) }
     LaunchedEffect(pace) {
         while (true) {

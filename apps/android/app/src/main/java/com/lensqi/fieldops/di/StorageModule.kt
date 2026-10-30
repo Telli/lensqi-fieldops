@@ -3,7 +3,11 @@ package com.lensqi.fieldops.di
 import android.content.Context
 import androidx.room.Room
 import com.lensqi.fieldops.data.SnapshotStore
+import com.lensqi.fieldops.data.queue.CommandQueue
 import com.lensqi.fieldops.data.queue.PendingCommandDao
+import com.lensqi.fieldops.data.queue.StepCheckQueue
+import com.lensqi.fieldops.voice.Speaker
+import com.lensqi.fieldops.voice.SpeechOutput
 import com.lensqi.fieldops.data.queue.QueueDatabase
 import dagger.Module
 import dagger.Provides
@@ -26,4 +30,10 @@ object StorageModule {
 
     @Provides
     fun commands(db: QueueDatabase): PendingCommandDao = db.commands()
+
+    @Provides
+    fun stepChecks(queue: CommandQueue): StepCheckQueue = queue
+
+    @Provides
+    fun speech(speaker: Speaker): SpeechOutput = speaker
 }

@@ -65,6 +65,9 @@ import com.lensqi.fieldops.ui.task.StepScreen
 import com.lensqi.fieldops.ui.task.TaskDoneScreen
 import com.lensqi.fieldops.ui.task.TaskHomeScreen
 import com.lensqi.fieldops.ui.task.TaskListViewModel
+import com.lensqi.fieldops.ui.task.TaskViewModel
+import com.lensqi.fieldops.wearables.LiveSession
+import com.lensqi.fieldops.wearables.LiveSessionKind
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Build
 import com.lensqi.fieldops.ui.theme.Fo
@@ -122,10 +125,26 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("task/{taskId}/step", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
                     val id = requireNotNull(e.arguments?.getString("taskId"))
                     // Close goes to the plan (as on the web), where the task can be stopped, also when the list opened the step directly.
-                    StepScreen(hiltViewModel(), onClose = {
+                    StepScreen(hiltViewModel(), onGlasses = { nav.navigate("task/$id/glasses") }, onClose = {
                         if (nav.previousBackStackEntry?.destination?.route == "task/{taskId}") nav.popBackStack()
                         else nav.navigate("task/$id") { popUpTo("task/{taskId}/step") { inclusive = true } }
                     }, onDone = { nav.navigate("task/$id/done") { popUpTo("task/{taskId}/step") { inclusive = true } } })
+                }
+                composable("task/{taskId}/glasses", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
+                    // GT-R12.2: glasses serve the task's current step. Pinned to the step screen's view model, like "camera";
+                    // a glasses photo becomes that step's check (a suggestion, never evidence).
+                    val parent = remember(e) { nav.previousBackStackEntry } ?: return@composable
+                    val vm: TaskViewModel = hiltViewModel(parent)
+                    val t = vm.state.collectAsStateWithLifecycle().value.task
+                    val step = t?.currentStep ?: return@composable
+                    val n = t.plan?.steps?.indexOfFirst { it.id == step.id } ?: 0
+                    GlassesScreen(
+                        session = LiveSession(vm.taskId, LiveSessionKind.Task, step.lookFor.firstOrNull()),
+                        prompt = step.instruction,
+                        status = "Step ${n + 1} of ${t.plan?.steps?.size ?: 1} · ${step.title}",
+                        onClose = { nav.popBackStack() },
+                        onCaptured = { file, _ -> vm.check(step.id, file); nav.popBackStack() },
+                    )
                 }
                 composable("task/{taskId}/live", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
                     FreeformScreen(hiltViewModel(), onClose = { taskList.refresh(); nav.popBackStack() },
@@ -180,7 +199,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val vm: InspectionViewModel = hiltViewModel(parent)
                     val stage = vm.state.collectAsStateWithLifecycle().value.view?.stage
                     GlassesScreen(
-                        inspectionId = vm.inspectionId,
+                        session = LiveSession(vm.inspectionId, LiveSessionKind.Inspection),
                         prompt = vm.cameraPrompt(),
                         status = stage?.let { stageLabel(it) },
                         onClose = { nav.popBackStack() },
