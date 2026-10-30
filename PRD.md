@@ -324,8 +324,8 @@ FR-01 to FR-10 are the FieldProof inspection loop that Technician mode uses as i
 | FR-05 | Evidence acquisition loop: explicit recapture, decline or clarification; immutable evidence; idempotent retries | Missing mandatory evidence blocks confirmation |
 | FR-06 | Read-only diagnostics: fixture-allowlisted probes with `LiveLocal`, `Simulated` or `RecordedReplay` provenance; no model-supplied targets | Unapproved targets rejected; simulator labelled |
 | FR-07 | Repair claim: a claim is an event, not success; it invalidates earlier post-repair evidence | "Repaired" without fresh checks cannot complete |
-| FR-08 | Dual-proof verification: fresh post-repair photo, reviewed checklist, acknowledgement and fresh passing diagnostic; simulated passes say `VerifiedCompleteSimulated` | Stale, cross-asset, simulated-as-live and contradiction cases rejected |
-| FR-09 | FieldProof receipt: canonical JSON + HTML, per-artifact SHA-256, offline verifier | One-byte change detected |
+| FR-08 | Dual-proof verification: fresh post-repair photo, reviewed checklist, acknowledgement and a passing diagnostic that the verify call measures itself (an earlier check is never reused; a retried key replays the recorded measurement); simulated passes say `VerifiedCompleteSimulated`. The inspection view carries the server's readiness: the next step and every blocking reason | Stale, cross-asset, simulated-as-live and contradiction cases rejected; looks-fixed-but-failing stays failed |
+| FR-09 | FieldProof receipt: canonical JSON + HTML, per-artifact SHA-256, offline verifier; each issued version is kept in its own folder and can still be checked against the events it covered | One-byte change detected, in the current or an earlier version |
 | FR-10 | Wearable/hands-free (P1): labelled glasses or mock source through `IFrameSource` | Phone path works without glasses |
 
 ## 7. State machines and evidence policy

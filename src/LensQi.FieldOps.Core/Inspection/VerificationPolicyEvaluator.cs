@@ -4,6 +4,13 @@ namespace LensQi.FieldOps.Core.Inspection;
 /// Deterministic dual-proof gate (PRD FR-08, §7 pseudocode, §17). Pure function of state, twin and server time.
 /// No model output, confidence score or prediction outcome is consulted. Every denial carries a reason.
 /// </summary>
+/// <summary>A verification prerequisite that is not met, as <see cref="VerificationPolicyEvaluator.Blockers"/> reports it.</summary>
+public enum VerifyBlocker
+{
+    FixtureMismatch, NoClaim, NotAcknowledged, PhotoBeingCompared, PhotoRequired, ReviewCitesRejectedPhoto,
+    ReviewMissing, ReviewConflicting, ReviewUnknown, ReviewNotSatisfied, ReviewInvalid,
+}
+
 public static class VerificationPolicyEvaluator
 {
     public const string PolicyVersion = "fieldproof-policy/1.4";
@@ -15,52 +22,64 @@ public static class VerificationPolicyEvaluator
     /// Everything the gate checks before diagnostics: fixture, claim, acknowledgement, photo and checklist. A non-null
     /// result decides the outcome whatever a probe would measure, so the caller need not run one.
     /// </summary>
-    public static VerificationDecision? Prerequisites(InspectionState state, LoadedExpectedTwin loaded)
+    public static VerificationDecision? Prerequisites(InspectionState state, LoadedExpectedTwin loaded) =>
+        Blockers(state, loaded).Select(b => b.Decision).FirstOrDefault();
+
+    /// <summary>
+    /// Every prerequisite that is not met, in the order the gate checks them; the first one is the decision
+    /// <see cref="Prerequisites"/> returns. A missing fixture match or claim ends the list, since nothing after it applies.
+    /// </summary>
+    public static IEnumerable<(VerifyBlocker Blocker, VerificationDecision Decision)> Blockers(InspectionState state, LoadedExpectedTwin loaded)
     {
         var twin = loaded.Twin;
         var policy = twin.VerificationPolicy;
 
         if (!string.Equals(state.FixtureDigest, loaded.Sha256, StringComparison.Ordinal) || state.FixtureId != twin.FixtureId)
-            return Deny(loaded, "Expected-state version mismatch: inspection is bound to a different fixture digest");
+        {
+            yield return (VerifyBlocker.FixtureMismatch, Deny(loaded, "Expected-state version mismatch: inspection is bound to a different fixture digest"));
+            yield break;
+        }
 
         if (state.RepairClaimedAt is null)
-            return Deny(loaded, "No repair claim has been recorded");
+        {
+            yield return (VerifyBlocker.NoClaim, Deny(loaded, "No repair claim has been recorded"));
+            yield break;
+        }
 
         if (policy.RequireTechnicianAcknowledgement && !state.TechnicianAcknowledged)
-            return Deny(loaded, "Repair has not been acknowledged by the technician");
+            yield return (VerifyBlocker.NotAcknowledged, Deny(loaded, "Repair has not been acknowledged by the technician"));
 
         // 1.4: a post-repair photo still being compared holds the decision when it is newer than the accepted one, even
         // though an older photo was accepted; its verdict may contradict the evidence the review relied on.
         if (state.PhotosBeingCompared.LastOrDefault() is { } waiting)
-            return Review($"The post-repair photo {waiting.EvidenceId} is still being compared with the earlier view");
+            yield return (VerifyBlocker.PhotoBeingCompared, Review($"The post-repair photo {waiting.EvidenceId} is still being compared with the earlier view"));
 
         // 1.3: a post-repair photo counts only once its change analysis is recorded, and only Satisfied meets a requirement.
         if (policy.RequirePostRepairPhoto && state.LatestPostRepairPhoto is null)
-            return Deny(loaded, "A new post-repair image is required");
+            yield return (VerifyBlocker.PhotoRequired, Deny(loaded, "A new post-repair image is required"));
 
         // 1.2: a checklist review that cites a photo change analysis rejected is not post-repair evidence.
         foreach (var entry in state.Checklist.Values)
             if (entry.ReviewedByEvidenceId is { } cited && state.IsRejectedForCurrentClaim(cited))
-                return Deny(loaded, $"Visual requirement '{entry.RequirementId}' was reviewed against {cited}, which change analysis rejected");
+                yield return (VerifyBlocker.ReviewCitesRejectedPhoto, Deny(loaded, $"Visual requirement '{entry.RequirementId}' was reviewed against {cited}, which change analysis rejected"));
 
         if (policy.RequireHumanReviewedVisualChecklist)
         {
             foreach (var req in twin.MandatoryRequirements)
             {
                 if (!state.Checklist.TryGetValue(req.RequirementId, out var entry) || entry.ReviewedAt <= state.RepairClaimedAt)
-                    return Review($"Visual requirement '{req.RequirementId}' has not been reviewed after the repair claim");
-                if (entry.Status == ChecklistStatus.Conflicting)
-                    return Review($"Visual requirement '{req.RequirementId}' is marked conflicting");
-                if (entry.Status == ChecklistStatus.Unknown)
-                    return Review($"Visual requirement '{req.RequirementId}' remains unknown");
-                if (entry.Status == ChecklistStatus.NotSatisfied)
-                    return Deny(loaded, $"Visual requirement '{req.RequirementId}' is not satisfied");
+                    yield return (VerifyBlocker.ReviewMissing, Review($"Visual requirement '{req.RequirementId}' has not been reviewed after the repair claim"));
+                else if (entry.Status == ChecklistStatus.Conflicting)
+                    yield return (VerifyBlocker.ReviewConflicting, Review($"Visual requirement '{req.RequirementId}' is marked conflicting"));
+                else if (entry.Status == ChecklistStatus.Unknown)
+                    yield return (VerifyBlocker.ReviewUnknown, Review($"Visual requirement '{req.RequirementId}' remains unknown"));
+                else if (entry.Status == ChecklistStatus.NotSatisfied)
+                    yield return (VerifyBlocker.ReviewNotSatisfied, Deny(loaded, $"Visual requirement '{req.RequirementId}' is not satisfied"));
                 // Only an explicit Satisfied meets the requirement; any other value, including an undefined one, does not.
-                if (entry.Status != ChecklistStatus.Satisfied)
-                    return Deny(loaded, $"Visual requirement '{req.RequirementId}' has an unrecognised review status");
+                else if (entry.Status != ChecklistStatus.Satisfied)
+                    yield return (VerifyBlocker.ReviewInvalid, Deny(loaded, $"Visual requirement '{req.RequirementId}' has an unrecognised review status"));
             }
         }
-        return null;
 
         VerificationDecision Review(string reason) => new(VerificationResult.NeedsHumanReview, null, [reason], [], PolicyVersion, loaded.Sha256);
     }
