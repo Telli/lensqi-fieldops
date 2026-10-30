@@ -26,7 +26,8 @@ public sealed class TaskSession
     public const string FreeformGoal = "Free-form help";
 
     /// <summary>Starts a task. <paramref name="requestId"/> is the creation request's key, kept on <see cref="TaskCreated"/>.</summary>
-    public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestId = null)
+    public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestId = null,
+        PersonContext? person = null)
     {
         goal = goal?.Trim() ?? "";
         if (mode == TaskMode.Freeform && goal.Length == 0) goal = FreeformGoal;
@@ -34,7 +35,15 @@ public sealed class TaskSession
         if (goal.Length is < 3 or > 300) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Describe the goal in 3 to 300 characters");
         if (details is { Length: > 1000 }) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Details are limited to 1000 characters");
         if (site is not null && mode != TaskMode.Technician) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Only technician tasks attach to a site record");
-        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site) { RequestId = requestId }]);
+        if (person is not null)
+        {
+            if (person.HeightCm is { } h && (h < PersonContext.MinHeightCm || h > PersonContext.MaxHeightCm))
+                throw new TaskConflictException(TaskErrorCodes.InvalidInput, $"Height must be {PersonContext.MinHeightCm} to {PersonContext.MaxHeightCm} cm");
+            if (person.Tools.Count > PersonContext.MaxTools || person.Tools.Any(t => !TaskPlanValidator.IsConcept(t)))
+                throw new TaskConflictException(TaskErrorCodes.InvalidInput, $"Name up to {PersonContext.MaxTools} tools, each in 1 to 4 plain words");
+            if (person.HeightCm is null && person.Tools.Count == 0) person = null;
+        }
+        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site, person) { RequestId = requestId }]);
     }
 
     public static TaskSession Rehydrate(IEnumerable<TaskEvent> events) => new(events.ToList());
@@ -122,13 +131,17 @@ public sealed class TaskSession
             return Commit(Advance(new StepCompleted(0, State.TaskId, now, stepId), stepId, now));
         });
 
-    public IReadOnlyList<TaskEvent> SkipStep(string requestId, string stepId, DateTimeOffset now) =>
+    /// <param name="reason">Why, when the person gave a reason; a measured reason (the part within reach) keeps its numbers.</param>
+    public IReadOnlyList<TaskEvent> SkipStep(string requestId, string stepId, DateTimeOffset now, SkipReason? reason = null) =>
         Idempotent(requestId, () =>
         {
             RequireInProgress();
             Step(stepId);
             Require(!State.IsFinished(stepId), $"Step {stepId} is already finished");
-            return Commit(Advance(new StepSkipped(0, State.TaskId, now, stepId), stepId, now));
+            if (reason is not null && (reason.Text is not { Length: > 0 and <= 200 } || TaskPlanValidator.HasLink(reason.Text)
+                || reason.PartHeightCm is < 0 or > 1000 || reason.ReachCm is < 0 or > 1000))
+                throw new TaskConflictException(TaskErrorCodes.InvalidInput, "A skip reason is 1 to 200 characters without links, with heights of 0 to 1000 cm");
+            return Commit(Advance(new StepSkipped(0, State.TaskId, now, stepId, reason), stepId, now));
         });
 
     /// <summary>Ends a free-form session; planned tasks finish by completing or skipping their steps.</summary>

@@ -69,6 +69,7 @@ public static class TaskPlanValidator
             Text(s.Instruction, at + " instruction", 800);
             if (s.LookFor.Count > 3) invalid.Add($"{at} names more than 3 parts to outline");
             foreach (var c in s.LookFor) if (!IsConcept(c)) invalid.Add($"{at} part '{Short(c)}' is not a 1-4 word noun phrase");
+            if (s.AccessFor is { } reach && !IsConcept(reach)) invalid.Add($"{at} accessFor '{Short(reach)}' is not a 1-4 word noun phrase");
             if (s.Cautions.Count > 5) invalid.Add($"{at} has more than 5 cautions");
             foreach (var c in s.Cautions) Text(c.Text, at + " caution", 300);
             if (s.StopIf.Count > 4) invalid.Add($"{at} has more than 4 stop conditions");

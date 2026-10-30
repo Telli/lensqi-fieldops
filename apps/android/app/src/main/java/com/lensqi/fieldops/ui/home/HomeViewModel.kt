@@ -52,6 +52,13 @@ class HomeViewModel @Inject constructor(
     private val snapshots: SnapshotStore,
 ) : ViewModel() {
     val appearance = settings.appearance
+    val person = settings.person
+    /** Saves height (as typed: 6'2", 188 cm…) and tools; false when the height can't be read. */
+    fun savePerson(heightText: String, tools: Set<String>, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        val height = if (heightText.isBlank()) null else com.lensqi.fieldops.data.settings.parseHeightCm(heightText)
+        if (heightText.isNotBlank() && height == null) { onDone(false); return@launch }
+        settings.setPerson(com.lensqi.fieldops.data.settings.PersonProfile(height, tools)); onDone(true)
+    }
     fun setAppearance(value: Appearance) = viewModelScope.launch { settings.setAppearance(value) }
 
     private val _state = MutableStateFlow(HomeState())

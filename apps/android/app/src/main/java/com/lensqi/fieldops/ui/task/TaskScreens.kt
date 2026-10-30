@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -403,17 +404,24 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     }
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
+    // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
+    var measured by remember { mutableStateOf(emptyList<com.lensqi.fieldops.domain.live.LiveObject>()) }
+    val reach = if (reviewing) null else reachAdvice(step.accessFor, measured, t.person?.standingReachCm)
     CameraScreen(
         prompt = step.instruction,
         analyzeLive = vm::analyzeLiveFrame,
-        targetConcept = step.lookFor.firstOrNull(),
+        targetConcept = step.accessFor ?: step.lookFor.firstOrNull(),
         liveAllowed = !reviewing,
+        detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
+        showDetails = s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || reach?.canSkip == true,
+        onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
         header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,
         onGuidance = pace::guidance,
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
+            reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.queuedChecks > 0) Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp))
             StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
@@ -456,6 +464,16 @@ private fun TaskLoading(error: String?, errorColor: Color, onRetry: () -> Unit) 
             Text(error, color = errorColor, textAlign = TextAlign.Center)
             PrimaryButton("Try again", onRetry, Modifier.fillMaxWidth())
         }
+    }
+}
+
+/** Whether the person needs this ladder or stool step: measured height against estimated reach, with a skip they choose. */
+@Composable
+private fun ReachNote(advice: ReachAdvice, onSkip: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .62f)).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(advice.text, color = FoDark.Foreground, fontSize = 13.sp, lineHeight = 18.sp)
+        if (advice.canSkip) TextButton(onClick = onSkip, contentPadding = PaddingValues(0.dp)) { Text("Skip this step: not needed", color = FoDark.Primary, fontWeight = FontWeight.SemiBold) }
     }
 }
 

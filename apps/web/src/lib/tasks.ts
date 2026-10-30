@@ -15,6 +15,10 @@ export interface StepCheck { stepId: string; photoId: string; verdict: Verdict; 
 export interface TaskStep {
   id: string; title: string; instruction: string; handsOn: boolean; lookFor: string[]; cautions: Caution[]; stopIf: string[];
   check: { required: boolean; whatDoneLooksLike: string } | null; status: StepStatus; lastCheck: StepCheck | null;
+  /** On a ladder or step-stool step: the part it reaches. */
+  accessFor?: string | null;
+  /** Why the step was skipped, with measured numbers when the phone took them. */
+  skipReason?: { text: string; partHeightCm: number | null; reachCm: number | null } | null;
 }
 export interface TaskPlan {
   title: string; summary: string; risk: RiskLevel; estimatedMinutes: number; restricted: string; professionalRequired: boolean;
@@ -26,6 +30,7 @@ export interface Task {
   taskId: string; mode: TaskMode; goal: string; details: string | null; site: { fixtureId: string; assetId: string } | null; phase: TaskPhase;
   currentStepId: string | null; inspectionId: string | null; createdAt: string; updatedAt: string; safetyAcknowledged: boolean; abandonReason: string | null;
   plan: TaskPlan | null; photos: TaskPhoto[]; answers: TaskAnswer[];
+  person?: { heightCm: number | null; standingReachCm: number | null; tools: string[] } | null;
 }
 export interface TaskSummary {
   taskId: string; mode: TaskMode; goal: string; title: string | null; phase: TaskPhase; steps: number; finished: number; currentStepTitle: string | null;
@@ -60,12 +65,15 @@ export async function once<R>(command: string, send: (key: string) => Promise<R>
 export const tasks = {
   list: (mode?: TaskMode) => request<TaskSummary[]>("GET", `/v1/tasks${mode ? `?mode=${mode}` : ""}`),
   get: (id: string) => request<Task>("GET", T(id)),
-  create: (input: { mode: TaskMode; goal: string; details?: string; fixtureId?: string; assetId?: string; manuals?: File[] }) => {
+  create: (input: { mode: TaskMode; goal: string; details?: string; fixtureId?: string; assetId?: string; manuals?: File[]; heightCm?: number | null; tools?: string[] }) => {
     const f = new FormData();
     f.append("mode", input.mode); f.append("goal", input.goal);
     if (input.details) f.append("details", input.details);
     if (input.fixtureId && input.assetId) { f.append("fixtureId", input.fixtureId); f.append("assetId", input.assetId); }
     input.manuals?.forEach((m) => f.append("manual", m));
+    // The person's height and tools, so the plan fits who is doing the job.
+    if (input.heightCm) f.append("heightCm", String(input.heightCm));
+    input.tools?.forEach((t) => f.append("tools", t));
     // A retried create returns the task the first attempt made, not a second one.
     return once(`create:${input.mode}:${input.goal}`, (k) => request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f, k));
   },

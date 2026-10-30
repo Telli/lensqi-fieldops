@@ -26,11 +26,29 @@ public sealed record StepPhotoCheck(bool Required, string WhatDoneLooksLike);
 
 /// <summary>
 /// One step of a plan. <see cref="LookFor"/> are short noun phrases SAM outlines in the live view. A hands-on step asks the
-/// user to touch, loosen, fit or remove something; prepare and observe steps do not.
+/// user to touch, loosen, fit or remove something; prepare and observe steps do not. <see cref="AccessFor"/> is set only on
+/// a step whose purpose is getting up to a part (a ladder or step stool): the part it reaches, so the phone can measure
+/// whether the person can reach it without the step.
 /// </summary>
 public sealed record TaskStep(
     string Id, string Title, string Instruction, bool HandsOn,
-    IReadOnlyList<string> LookFor, IReadOnlyList<Caution> Cautions, IReadOnlyList<string> StopIf, StepPhotoCheck? Check);
+    IReadOnlyList<string> LookFor, IReadOnlyList<Caution> Cautions, IReadOnlyList<string> StopIf, StepPhotoCheck? Check,
+    string? AccessFor = null);
+
+/// <summary>What the person told LensQi about themselves, so plans and coaching fit them: their height and the tools they have.</summary>
+public sealed record PersonContext(int? HeightCm, IReadOnlyList<string> Tools)
+{
+    public const int MinHeightCm = 90, MaxHeightCm = 250, MaxTools = 8;
+
+    /// <summary>Overhead reach standing on the floor, estimated as 1.33 × height. An estimate, never a measurement.</summary>
+    public int? StandingReachCm => HeightCm is { } h ? (int)Math.Round(h * 1.33) : null;
+}
+
+/// <summary>Why a step was skipped, when the person said: their words, and the measurement behind them when the phone took one.</summary>
+public sealed record SkipReason(string Text, int? PartHeightCm = null, int? ReachCm = null);
+
+/// <summary>A part the phone's ARCore measured: camera distance and height above the floor plane. Measured, not inferred.</summary>
+public sealed record MeasuredPart(string Part, int? DistanceCm, int? HeightAboveFloorCm);
 
 /// <summary>An AI-written plan. <see cref="SourceNote"/> is set by the server, never by the model.</summary>
 public sealed record TaskPlan(

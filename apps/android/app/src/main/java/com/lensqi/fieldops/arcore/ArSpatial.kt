@@ -79,6 +79,9 @@ class ArCameraView(
         projection[0] * widthMeters / (2 * forwardMeters) to projection[5] * heightMeters / (2 * forwardMeters)
 
     fun distanceMeters(w: DoubleArray) = dist(w, cameraPosition)
+
+    /** The camera's height in world metres (Y up). */
+    val cameraY: Double get() = cameraPosition[1]
 }
 
 enum class DepthSource(val label: String) { DepthApi("ARCore depth"), HitTest("ARCore hit test") }
@@ -108,45 +111,63 @@ interface WorldAnchor {
 /**
  * Parts SAM detected, held in the world by ARCore anchors. An anchor exists only where ARCore measured depth for the
  * detection. It stays while later detections confirm it, and is removed when a detection frame looks right at it and
- * does not find the part, or after [ttlMs] without confirmation. Two parts with the same concept stay two anchors.
+ * does not find the part, or after [ttlMs] without confirmation.
+ *
+ * One physical part keeps one anchor. A new detection is the same part when the anchor projects inside its box on
+ * screen, or lies within a tolerance that grows with distance (ARCore's depth on a plain ceiling 3 m away is off by tens
+ * of centimetres); under another name it must also overlap the box. Each sighting averages the position, so noise
+ * settles the label rather than splitting it. [preferredConcept] (a task step's own part) names a part seen under two
+ * names. Two separate parts with the same name stay two anchors.
  */
 class SpatialAnchors(private val ttlMs: Long = 20_000L) {
     private class Entry(
         val id: String, val concept: String, val label: String, val anchor: WorldAnchor,
         val widthMeters: Double, val heightMeters: Double, val confidence: Double?, val source: DepthSource, var confirmedAt: Long,
+        val sightings: Int,
     )
 
     private val entries = mutableListOf<Entry>()
     val size get() = entries.size
 
+    /** The step's own part: when one part is seen under two names, it takes this one. */
+    @Volatile var preferredConcept: String? = null
+
     fun clear() { entries.forEach { it.anchor.detach() }; entries.clear() }
+
+    private fun preferred(concept: String) = preferredConcept?.equals(concept, ignoreCase = true) == true
 
     /** Anchors one detection frame. Returns how many detections were anchored in the world. */
     fun seed(view: ArCameraView, depth: DepthSamples, detected: List<LiveObject>, timeMs: Long, create: (DoubleArray) -> WorldAnchor?): Int {
         val replaced = mutableSetOf<Entry>()
         val fresh = mutableListOf<Entry>()
-        val detectedOnScreen = detected.mapNotNull { o -> view.imageToView.box(o.box)?.let { o to it } }
+        val detectedOnScreen = onePerPart(detected.mapNotNull { o -> view.imageToView.box(o.box)?.let { o to it } }, ::preferred)
         for ((o, vb) in detectedOnScreen) {
             val d = depth.forwardIn(o.box) ?: continue
             val cx = (vb.left + vb.right) / 2; val cy = (vb.top + vb.bottom) / 2
             val center = view.unproject(cx, cy, d)
             val width = dist(view.unproject(vb.left, cy, d), view.unproject(vb.right, cy, d))
             val height = dist(view.unproject(cx, vb.top, d), view.unproject(cx, vb.bottom, d))
-            // The same physical part seen again: the nearest anchor of this concept within half the part's size.
-            val previous = entries.filter { it.concept.equals(o.concept, ignoreCase = true) && it !in replaced }
-                .mapNotNull { e -> e.anchor.position()?.let { e to dist(it, center) } }
-                .filter { (e, gap) -> gap <= max(0.05, 0.5 * maxOf(width, height, e.widthMeters, e.heightMeters)) }
-                .minByOrNull { it.second }?.first
-            val anchor = create(center) ?: continue
-            previous?.let { replaced += it; it.anchor.detach() }
-            fresh += Entry(previous?.id ?: "${o.id}@$timeMs", o.concept, o.label, anchor, width, height, o.confidence, depth.source, timeMs)
+            val previous = entries.filter { it !in replaced }
+                .mapNotNull { e -> e.anchor.position()?.let { e to it } }
+                .filter { (e, p) -> samePart(e, p, o.concept, vb, center, view, maxOf(width, height), d) }
+                .minByOrNull { (_, p) -> dist(p, center) }
+            // Average with the earlier position, weighted by how often it was seen (up to four sightings).
+            val at = previous?.let { (e, p) -> val w = min(e.sightings, 4).toDouble(); DoubleArray(3) { i -> (p[i] * w + center[i]) / (w + 1) } } ?: center
+            val anchor = create(at) ?: continue
+            val earlier = previous?.first
+            earlier?.let { replaced += it; it.anchor.detach() }
+            // The step's own name wins; otherwise the part keeps the name it was first anchored under.
+            val named = earlier?.takeUnless { preferred(o.concept) && !preferred(it.concept) }
+            fresh += Entry(earlier?.id ?: "${o.id}@$timeMs", named?.concept ?: o.concept, named?.label ?: o.label, anchor,
+                earlier?.let { (it.widthMeters + width) / 2 } ?: width, earlier?.let { (it.heightMeters + height) / 2 } ?: height,
+                o.confidence ?: earlier?.confidence, depth.source, timeMs, (earlier?.sightings ?: 0) + 1)
         }
-        // An anchor this frame looked straight at must be detected again, or it is gone (moved, removed or never there).
+        // An anchor this frame looked straight at must be detected again (under any name), or it is gone.
         val kept = entries.filter { it !in replaced }.filter { e ->
             val p = e.anchor.position() ?: return@filter true
             val pr = view.project(p) ?: return@filter true
             if (pr.x !in 0.1..0.9 || pr.y !in 0.1..0.9) return@filter true
-            val seen = detectedOnScreen.any { (o, vb) -> o.concept.equals(e.concept, ignoreCase = true) && vb.contains(pr.x, pr.y, 0.15) }
+            val seen = detectedOnScreen.any { (_, vb) -> vb.contains(pr.x, pr.y, 0.15) }
             if (seen) e.confirmedAt = timeMs else e.anchor.detach()
             seen
         }
@@ -154,8 +175,24 @@ class SpatialAnchors(private val ttlMs: Long = 20_000L) {
         return fresh.size
     }
 
-    /** Anchors on screen in [view], with their measured distance from the camera. Expired or lost anchors are dropped. */
-    fun visible(view: ArCameraView, nowMs: Long): List<LiveObject> {
+    private fun samePart(e: Entry, p: DoubleArray, concept: String, vb: LiveBox, center: DoubleArray, view: ArCameraView, sizeMeters: Double, forward: Double): Boolean {
+        val pr = view.project(p)
+        val inside = pr != null && vb.contains(pr.x, pr.y, 0.05)
+        if (!e.concept.equals(concept, ignoreCase = true)) {
+            // Another name for the same part: it must sit inside the new box and overlap it like one object.
+            if (!inside) return false
+            val (w, h) = view.viewExtent(e.widthMeters, e.heightMeters, pr!!.forwardMeters)
+            return iou(LiveBox(pr.x - w / 2, pr.y - h / 2, pr.x + w / 2, pr.y + h / 2), vb) >= 0.4
+        }
+        val tolerance = max(0.05, max(0.5 * maxOf(sizeMeters, e.widthMeters, e.heightMeters), 0.15 * forward))
+        return inside || dist(p, center) <= tolerance
+    }
+
+    /**
+     * Anchors on screen in [view], with their measured distance from the camera and, when ARCore has found the floor
+     * ([floorY], world metres, Y up), their height above it. Expired or lost anchors are dropped.
+     */
+    fun visible(view: ArCameraView, nowMs: Long, floorY: Double? = null): List<LiveObject> {
         expire(nowMs)
         return entries.mapNotNull { e ->
             val p = e.anchor.position() ?: return@mapNotNull null
@@ -164,7 +201,8 @@ class SpatialAnchors(private val ttlMs: Long = 20_000L) {
             val box = LiveBox((pr.x - w / 2).coerceIn(0.0, 1.0), (pr.y - h / 2).coerceIn(0.0, 1.0), (pr.x + w / 2).coerceIn(0.0, 1.0), (pr.y + h / 2).coerceIn(0.0, 1.0))
             if (box.right - box.left < 0.01 || box.bottom - box.top < 0.01) return@mapNotNull null
             LiveObject(e.id, e.concept, e.label, box, e.confidence, distanceCm = (view.distanceMeters(p) * 100).roundToInt().coerceAtLeast(1),
-                spatialAnchored = true, seenSecondsAgo = ((nowMs - e.confirmedAt) / 1000).toInt(), depthSource = e.source.label)
+                spatialAnchored = true, seenSecondsAgo = ((nowMs - e.confirmedAt) / 1000).toInt(), depthSource = e.source.label,
+                heightAboveFloorCm = floorY?.let { ((p[1] - it) * 100).roundToInt() })
         }
     }
 
@@ -177,6 +215,45 @@ class SpatialAnchors(private val ttlMs: Long = 20_000L) {
     private fun expire(nowMs: Long) {
         entries.removeAll { e -> (e.anchor.stopped || nowMs - e.confirmedAt > ttlMs).also { if (it) e.anchor.detach() } }
     }
+}
+
+/**
+ * One detection per physical part in a frame: a box that overlaps a kept one by half (IoU), or lies mostly inside a kept
+ * box of the same name, is that part found again. The preferred name (the step's part) and then confidence decide which
+ * is kept, so a detector found as "smoke detector" and "ceiling detector" is one smoke detector, while a test button
+ * inside it stays its own part.
+ */
+fun onePerPart(found: List<Pair<LiveObject, LiveBox>>, preferred: (String) -> Boolean = { false }): List<Pair<LiveObject, LiveBox>> {
+    val kept = mutableListOf<Pair<LiveObject, LiveBox>>()
+    for (f in found.sortedWith(compareByDescending<Pair<LiveObject, LiveBox>> { preferred(it.first.concept) }.thenByDescending { it.first.confidence ?: 0.0 })) {
+        val (o, vb) = f
+        val same = kept.any { (k, kb) ->
+            iou(kb, vb) >= 0.5 || k.concept.equals(o.concept, ignoreCase = true) && overlapOfSmaller(kb, vb) >= 0.8
+        }
+        if (!same) kept += f
+    }
+    return kept
+}
+
+/**
+ * The parts worth drawing: the step's part first, then the nearest measured, then the most confident, at most [max];
+ * a box that mostly overlaps one already chosen (a 2D track beside its anchor) is the same part. Returns the parts and
+ * how many more were left out, for a "+N more" note instead of a screen full of labels.
+ */
+fun partsToShow(objects: List<LiveObject>, target: String?, max: Int = 2): Pair<List<LiveObject>, Int> {
+    val ordered = objects.sortedWith(
+        compareByDescending<LiveObject> { target != null && it.concept.equals(target, ignoreCase = true) }
+            .thenBy { it.distanceCm ?: Int.MAX_VALUE }.thenByDescending { it.confidence ?: 0.0 })
+    val distinct = mutableListOf<LiveObject>()
+    for (o in ordered) if (distinct.none { iou(it.box, o.box) >= 0.5 }) distinct += o
+    return distinct.take(max) to (distinct.size - max).coerceAtLeast(0)
+}
+
+private fun overlapOfSmaller(a: LiveBox, b: LiveBox): Double {
+    val w = min(a.right, b.right) - max(a.left, b.left); val h = min(a.bottom, b.bottom) - max(a.top, b.top)
+    if (w <= 0 || h <= 0) return 0.0
+    val smaller = minOf((a.right - a.left) * (a.bottom - a.top), (b.right - b.left) * (b.bottom - b.top))
+    return if (smaller <= 0) 0.0 else w * h / smaller
 }
 
 /**

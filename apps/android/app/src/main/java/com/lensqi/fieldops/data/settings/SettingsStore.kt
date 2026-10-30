@@ -3,6 +3,7 @@ package com.lensqi.fieldops.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.lensqi.fieldops.BuildConfig
 import com.lensqi.fieldops.ui.theme.Appearance
@@ -32,6 +33,17 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     private val appearanceKey = stringPreferencesKey("appearance")
     val appearance: Flow<Appearance> = context.dataStore.data.map { p -> Appearance.entries.firstOrNull { it.name == p[appearanceKey] } ?: Appearance.System }
     suspend fun setAppearance(value: Appearance) { context.dataStore.edit { it[appearanceKey] = value.name } }
+
+    private val heightKey = stringPreferencesKey("height_cm")
+    private val toolsKey = stringSetPreferencesKey("tools")
+    /** Height and tools the person gave in Profile; sent with each new task. */
+    val person: Flow<PersonProfile> = context.dataStore.data.map { p -> PersonProfile(p[heightKey]?.toIntOrNull(), p[toolsKey].orEmpty()) }
+    suspend fun setPerson(value: PersonProfile) {
+        context.dataStore.edit { p ->
+            value.heightCm?.let { p[heightKey] = it.toString() } ?: p.remove(heightKey)
+            p[toolsKey] = value.tools
+        }
+    }
 
     init {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

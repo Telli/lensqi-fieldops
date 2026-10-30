@@ -57,6 +57,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,6 +73,7 @@ import com.lensqi.fieldops.ui.common.EvidenceBadge
 import com.lensqi.fieldops.ui.common.Kpi
 import com.lensqi.fieldops.ui.common.Panel
 import com.lensqi.fieldops.ui.common.PrimaryButton
+import com.lensqi.fieldops.ui.common.SecondaryButton
 import com.lensqi.fieldops.ui.common.SectionTitle
 import com.lensqi.fieldops.ui.common.SourceBadge
 import com.lensqi.fieldops.ui.common.stageLabel
@@ -305,6 +307,32 @@ fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
     }
 }
 
+/** Height and tools, so plans and coaching fit the person: someone 6'2" can often reach a ceiling detector standing. */
+@Composable
+private fun AboutYou(vm: HomeViewModel, field: androidx.compose.material3.TextFieldColors) {
+    val person by vm.person.collectAsStateWithLifecycle(com.lensqi.fieldops.data.settings.PersonProfile())
+    var height by rememberSaveable(person.heightCm) { mutableStateOf(person.heightCm?.let { "$it cm" }.orEmpty()) }
+    var tools by remember(person.tools) { mutableStateOf(person.tools) }
+    var note by remember { mutableStateOf<String?>(null) }
+    Panel {
+        Text("About you", fontWeight = FontWeight.SemiBold)
+        Text("Used to fit plans and coaching to you, for example whether you need a ladder. Stays on this phone and goes with each new task.", style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
+        OutlinedTextField(height, { height = it; note = null }, label = { Text("Your height (6'2\" or 188 cm)") }, singleLine = true, colors = field, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.lensqi.fieldops.data.settings.PersonProfile.ToolChoices.forEach { t ->
+                val on = t in tools
+                Box(Modifier.background(if (on) Fo.Elevated else Fo.Surface, RoundedCornerShape(50)).border(1.dp, if (on) Fo.Primary else Fo.Border, RoundedCornerShape(50))
+                    .clickable { tools = if (on) tools - t else tools + t; note = null }.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    Text((if (on) "✓ " else "") + "I have a $t", fontSize = 13.sp, color = if (on) Fo.Foreground else Fo.Muted)
+                }
+            }
+        }
+        person.standingReachCm?.let { Text("Standing reach about $it cm, estimated from your height.", style = MaterialTheme.typography.bodySmall, color = Fo.Muted) }
+        note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (it.startsWith("Saved")) Fo.Success else Fo.Failure) }
+        SecondaryButton("Save", { vm.savePerson(height, tools) { ok -> note = if (ok) "Saved" else "Couldn't read that height. Try 6'2\" or 188 cm." } }, Modifier.fillMaxWidth())
+    }
+}
+
 @Composable
 fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
@@ -325,6 +353,7 @@ fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
             OutlinedTextField(s.apiBase, vm::onBaseChanged, label = { Text("Server address") }, singleLine = true, colors = field, modifier = Modifier.fillMaxWidth())
         }
         item { PrimaryButton("Save and check connection", { vm.saveBase() }, busy = s.loading) }
+        item { AboutYou(vm, field) }
         item { SectionTitle("Appearance") }
         item {
             val current by vm.appearance.collectAsStateWithLifecycle(Appearance.System)

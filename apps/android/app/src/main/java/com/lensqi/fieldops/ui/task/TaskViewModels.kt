@@ -22,6 +22,7 @@ import com.lensqi.fieldops.voice.SpeechOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
@@ -46,7 +47,7 @@ data class TaskListUi(val tasks: List<TaskSummary> = emptyList(), val creating: 
 
 /** The task list and starting a new task: the server writes and checks the plan; the id always comes from the API. */
 @HiltViewModel
-class TaskListViewModel @Inject constructor(private val api: FieldOpsApi) : ViewModel() {
+class TaskListViewModel @Inject constructor(private val api: FieldOpsApi, private val settings: com.lensqi.fieldops.data.settings.SettingsStore) : ViewModel() {
     private val _state = MutableStateFlow(TaskListUi())
     val state: StateFlow<TaskListUi> = _state
 
@@ -69,7 +70,10 @@ class TaskListViewModel @Inject constructor(private val api: FieldOpsApi) : View
         val parts = manuals.take(3).map { MultipartBody.Part.createFormData("manual", it.name, it.asRequestBody("image/jpeg".toMediaType())) }
         val action = "${mode.name}:${goal.trim()}"
         val k = createKeys.getOrPut(action) { key() }
-        val r = apiCall { api.createTask(k, text(mode.name), text(goal.trim()), details?.takeIf { it.isNotBlank() }?.let(::text), fixtureId?.let(::text), assetId?.let(::text), parts) }
+        // The person's height and tools (Profile) go with the goal, so the plan fits who is doing the job.
+        val person = settings.person.first()
+        val r = apiCall { api.createTask(k, text(mode.name), text(goal.trim()), details?.takeIf { it.isNotBlank() }?.let(::text), fixtureId?.let(::text), assetId?.let(::text), parts,
+            person.heightCm?.let { text(it.toString()) }, person.tools.map(::text)) }
         if (!r.retryable) createKeys.remove(action)
         _state.update { it.copy(creating = false, error = r.errorText()) }
         if (r is ApiOutcome.Ok) { refresh(); onCreated(r.value.task.taskId) }
@@ -143,6 +147,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun accept(acknowledged: Boolean, onStarted: () -> Unit) = act("accept", "accept", { k -> api.acceptPlan(taskId, k, AcceptRequest(acknowledged)) }) { onStarted() }
     fun complete(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "complete:$stepId", { k -> api.stepAction(taskId, stepId, "complete", k) }, onMoved)
     fun skip(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "skip:$stepId", { k -> api.stepAction(taskId, stepId, "skip", k) }, onMoved)
+    /** Skips an access step the person can reach without, keeping the measured reason in the task's record. */
+    fun skipNotNeeded(stepId: String, advice: ReachAdvice) = act("move", "skip:$stepId", { k ->
+        api.skipStep(taskId, stepId, k, com.lensqi.fieldops.data.api.SkipRequest(advice.text.take(200), advice.partHeightCm, advice.reachCm)) })
+
+    /** What ARCore measured on the step screen; it goes with live frames and questions so the coach can use real numbers. */
+    @Volatile var measured: List<com.lensqi.fieldops.domain.live.LiveObject> = emptyList()
     fun clearError() = _state.update { it.copy(error = null) }
 
     /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */
@@ -172,7 +182,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         if (question.isBlank()) return@launch
         _state.update { it.copy(busy = "ask", error = null) }
         val action = "ask:${question.trim()}"
-        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }) }
+        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text)) }
         settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
         _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer) }
@@ -202,7 +212,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     }
 
     suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): LiveResponse =
-        api.taskLiveFrame(taskId, kind, jpeg("image", bytes), text(frameId))
+        api.taskLiveFrame(taskId, kind, jpeg("image", bytes), text(frameId), measuredJson(measured)?.let(::text))
 }
 
 /** A JPEG of the photo, upright (EXIF rotation applied) and at most [maxSide] pixels on its long side. */

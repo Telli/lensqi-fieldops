@@ -86,6 +86,8 @@ class ArLiveRenderer(
     private val working = AtomicBoolean(false)
     @Volatile private var closed = false
     private var width = 0; private var height = 0; private var lastSample = 0L
+    /** The lowest floor seen this session; a later, lower plane replaces it. */
+    private var floorY: Double? = null
 
     /** Accepted detections arrive from the network; anchors are created on the GL thread that owns the session. */
     fun onDetection(frameId: String, objects: List<LiveObject>) { detections.add(frameId to objects) }
@@ -110,6 +112,8 @@ class ArLiveRenderer(
         val rotation = frame.imageRotation()
         val map = frame.viewMap(rotation)
         val view = frame.cameraView(map)
+        view?.let { v -> session.floorY(v.cameraY)?.let { f -> floorY = floorY?.let { minOf(it, f) } ?: f } }
+        anchors.preferredConcept = live.targetConcept
         while (true) {
             val (id, objects) = detections.poll() ?: break
             val capture = captures[id] ?: continue
@@ -127,7 +131,7 @@ class ArLiveRenderer(
         }
         val spatial = SpatialFrame(
             toView = map::box,
-            anchored = view?.let { anchors.visible(it, now) }.orEmpty(),
+            anchored = view?.let { anchors.visible(it, now, floorY) }.orEmpty(),
             offscreen = view?.let { anchors.offscreen(it, now) } ?: 0,
             tracking = frame.trackingLabel(depthApi),
         )

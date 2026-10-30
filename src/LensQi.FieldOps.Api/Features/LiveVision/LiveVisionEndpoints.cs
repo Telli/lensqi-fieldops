@@ -80,7 +80,7 @@ public static class LiveVisionEndpoints
             // The site's configured parts follow whatever the latest guidance named.
             var parts = session.Twin.Twin.VisualRequirements.Where(v => !string.IsNullOrWhiteSpace(v.SegmentationPrompt)).Select(v => v.SegmentationPrompt!).ToList();
             return await RunLive(context, id, kind, sam, gate, options, focus => [.. focus, .. parts],
-                async (bytes, mediaType, token) => { var o = await muse.DescribeAsync(session.State, session.Twin.Twin, bytes, mediaType, token); return new Guidance(o.Scene, o.Error, o.ModelId, o.PromptDigest, o.ResponseDigest); }, ct);
+                async (bytes, mediaType, _, token) => { var o = await muse.DescribeAsync(session.State, session.Twin.Twin, bytes, mediaType, token); return new Guidance(o.Scene, o.Error, o.ModelId, o.PromptDigest, o.ResponseDigest); }, ct);
         }).DisableAntiforgery().RequireRateLimiting("live-vision").WithMetadata(FrameLimits);
 
         app.MapPost("/v1/tasks/{id}/live/{kind}", async (string id, string kind, HttpContext context, TaskStore store,
@@ -91,12 +91,15 @@ public static class LiveVisionEndpoints
             // Coaching needs an accepted plan (its safety notes) or free-form help, both of which are in progress.
             if (task.State.Phase != TaskPhase.InProgress)
                 return ApiResults.Conflict("task_not_active", "Live assistance runs on a started task, or free-form help");
-            // The current step's parts lead; what the latest guidance named follows.
-            var stepParts = task.State.CurrentStep?.LookFor ?? [];
+            // The current step's parts lead (with the part an access step reaches, so its height can be measured); what
+            // the latest guidance named follows.
+            var step = task.State.CurrentStep;
+            IReadOnlyList<string> stepParts = step is null ? [] : [.. step.LookFor, .. step.AccessFor is { } reach ? [reach] : Array.Empty<string>()];
             return await RunLive(context, id, kind, sam, gate, options, focus => [.. stepParts, .. focus],
-                async (bytes, mediaType, token) =>
+                async (bytes, mediaType, form, token) =>
                 {
-                    var o = await coach.GuideAsync(task.State, bytes, mediaType, token);
+                    // What the phone measured with ARCore rides along with the frame; malformed, it is ignored rather than trusted.
+                    var o = await coach.GuideAsync(task.State, bytes, mediaType, token, MeasuredParts.Parse(form["measured"]) ?? []);
                     // In professionals-only work a hands-on recommendation is replaced by the referral before anyone hears it.
                     var scene = o.Value is { } v ? v with { Recommendation = TaskSafety.Guard(task.State, v.Recommendation) } : null;
                     return new Guidance(scene, o.Error, o.ModelId, o.PromptDigest, o.ResponseDigest);
@@ -112,7 +115,7 @@ public static class LiveVisionEndpoints
     /// or described by Muse. Never stored, never an event, never a decision.
     /// </summary>
     private static async Task<IResult> RunLive(HttpContext context, string id, string kind, ISegmenter sam, LiveVisionGate gate, LiveVisionOptions options,
-        Func<IReadOnlyList<string>, IReadOnlyList<string>> concepts, Func<byte[], string, CancellationToken, Task<Guidance>> guide, CancellationToken ct)
+        Func<IReadOnlyList<string>, IReadOnlyList<string>> concepts, Func<byte[], string, IFormCollection, CancellationToken, Task<Guidance>> guide, CancellationToken ct)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (kind is not ("detect" or "guide")) return ApiResults.BadRequest("invalid_live_kind", "Use detect or guide");
@@ -146,12 +149,12 @@ public static class LiveVisionEndpoints
                 // Prompts never come from the client: the session's parts and the latest validated guidance only.
                 var prompts = concepts(gate.Focus(id)).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
                 var outcomes = await Task.WhenAll(prompts.Select(c => sam.SegmentAsync(bytes, mediaType, c, timeout.Token)));
-                var objects = outcomes.SelectMany((o, n) => o.Boxes.Where(b => ValidBox(b, width, height)).OrderByDescending(b => b.Confidence ?? 0).Take(2)
-                    .Select(b => new { id = $"{n}-{b.ObjectId}", concept = o.Concept, label = o.Concept,
-                        box = new { left = b.Left / width, top = b.Top / height, right = b.Right / width, bottom = b.Bottom / height }, b.Confidence })).ToArray();
+                var objects = OnePerPart(outcomes.Select(o => (o.Concept, (IReadOnlyList<BoxRecord>)[.. o.Boxes.Where(b => ValidBox(b, width, height))])))
+                    .Select(x => new { id = $"{x.Prompt}-{x.Box.ObjectId}", concept = x.Concept, label = x.Concept,
+                        box = new { left = x.Box.Left / width, top = x.Box.Top / height, right = x.Box.Right / width, bottom = x.Box.Bottom / height }, x.Box.Confidence }).ToArray();
                 return Results.Ok(new { frameId, width, height, objects, models = outcomes.Select(o => o.ModelId).Distinct(), inferenceMs = watch.ElapsedMilliseconds, refreshAfterMs = interval, source = "AI inference" });
             }
-            var outcome = await guide(bytes, mediaType, timeout.Token);
+            var outcome = await guide(bytes, mediaType, form, timeout.Token);
             if (outcome.Scene is null)
                 return outcome.Error?.StartsWith("invalid_model_output") == true || outcome.Error == "empty"
                     ? ApiResults.Conflict("invalid_model_output", "Live guidance was not in the expected form")
@@ -166,6 +169,34 @@ public static class LiveVisionEndpoints
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return Results.Json(new ApiError("live_timeout", "Live analysis took too long; hold steady for the next update"), statusCode: 504); }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TimeoutException) { return ApiResults.Conflict("provider_unavailable", "Live analysis is unavailable; try again shortly"); }
         finally { gate.Exit(key); }
+    }
+
+    /// <summary>
+    /// One box per physical part. Prompts are taken in order (a step's own parts first) and each prompt's boxes by
+    /// confidence, at most two; a box that mostly overlaps one already kept is the same part found again, by the same
+    /// prompt or another ("ceiling detector" for the step's "smoke detector"), and is dropped, so the first name wins.
+    /// </summary>
+    public static List<(string Concept, BoxRecord Box, int Prompt)> OnePerPart(IEnumerable<(string Concept, IReadOnlyList<BoxRecord> Boxes)> perPrompt)
+    {
+        var kept = new List<(string Concept, BoxRecord Box, int Prompt)>();
+        foreach (var (prompt, n) in perPrompt.Select((p, n) => (p, n)))
+            foreach (var b in prompt.Boxes.OrderByDescending(b => b.Confidence ?? 0).Take(2))
+                if (!kept.Any(k => SamePart(k.Box, b, sameName: k.Prompt == n))) kept.Add((prompt.Concept, b, n));
+        return kept;
+    }
+
+    /// <summary>
+    /// Overlap of at least half (IoU). For two boxes from the same prompt, one lying mostly inside the other also counts (SAM
+    /// outlining the body and the whole of one detector); across names it does not, so a test button inside a detector stays.
+    /// </summary>
+    public static bool SamePart(BoxRecord a, BoxRecord b, bool sameName)
+    {
+        var w = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+        var h = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+        if (w <= 0 || h <= 0) return false;
+        var inter = w * h;
+        double Area(BoxRecord r) => (r.Right - r.Left) * (r.Bottom - r.Top);
+        return inter / (Area(a) + Area(b) - inter) >= 0.5 || sameName && inter / Math.Min(Area(a), Area(b)) >= 0.8;
     }
 
     private static bool ValidBox(BoxRecord b, int w, int h) => double.IsFinite(b.Left) && double.IsFinite(b.Top) && double.IsFinite(b.Right) && double.IsFinite(b.Bottom)

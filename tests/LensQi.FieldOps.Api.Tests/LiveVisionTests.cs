@@ -16,7 +16,8 @@ public class LiveVisionTests
         using var response = await c.PostAsync($"/v1/inspections/{id}/live/detect", Frame());
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal("frame-1", result.GetProperty("frameId").GetString());
-        Assert.Equal(2, result.GetProperty("objects").GetArrayLength());
+        // The fake outlines the same box for both of the fixture's prompts: one physical part, so one object.
+        Assert.Equal(1, result.GetProperty("objects").GetArrayLength());
         Assert.Equal(10d / 640, result.GetProperty("objects")[0].GetProperty("box").GetProperty("left").GetDouble());
         Assert.Equal(before, await c.GetStringAsync($"/v1/inspections/{id}/events"));
         Assert.Equal("[]", await c.GetStringAsync($"/v1/inspections/{id}/artifacts"));

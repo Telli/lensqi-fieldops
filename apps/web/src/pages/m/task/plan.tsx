@@ -22,6 +22,10 @@ function StepItem({ step, n }: { step: TaskStep; n: number }) {
           </div>
         )}
         {step.stopIf.length > 0 && <p className="text-[11px] text-failure">Stop if {step.stopIf.join("; ")}.</p>}
+        {step.status === "Skipped" && step.skipReason && (
+          <p className="text-[11px] text-muted-foreground">Skipped: {step.skipReason.text}{step.skipReason.partHeightCm != null && step.skipReason.reachCm != null
+            ? ` (measured ${step.skipReason.partHeightCm} cm up; reach about ${step.skipReason.reachCm} cm, estimated)` : ""}</p>
+        )}
       </div>
     </li>
   );

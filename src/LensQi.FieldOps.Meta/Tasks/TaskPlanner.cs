@@ -28,6 +28,7 @@ public sealed class TaskPlanner(IChatClient chat)
             {
                 ["title"] = Str(), ["instruction"] = Str(), ["handsOn"] = new JsonObject { ["type"] = "boolean" },
                 ["lookFor"] = Strs(),
+                ["accessFor"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
                 ["cautions"] = new JsonObject
                 {
                     ["type"] = "array",
@@ -46,7 +47,7 @@ public sealed class TaskPlanner(IChatClient chat)
                     ["required"] = new JsonArray("required", "whatDoneLooksLike"),
                 },
             },
-            ["required"] = new JsonArray("title", "instruction", "handsOn", "lookFor", "cautions", "stopIf", "check"),
+            ["required"] = new JsonArray("title", "instruction", "handsOn", "lookFor", "accessFor", "cautions", "stopIf", "check"),
         };
         return JsonSerializer.SerializeToElement(new JsonObject
         {
@@ -78,6 +79,12 @@ public sealed class TaskPlanner(IChatClient chat)
         2. lookFor: up to 3 short noun phrases (1 to 4 words, letters and digits only) for physical parts the camera
            should outline in that step, such as "oil drain plug", "oil filter", "mounting bracket", "ethernet port".
            Not documents or abstract things. Empty when nothing specific.
+        2a. accessFor: only on a step whose whole purpose is getting up to a part (setting up a ladder or step stool),
+           the short noun phrase of the part it reaches ("smoke detector"); null on every other step.
+        2b. context.person, when present, is the person doing the job: heightCm, standingReachCm (an estimate) and the
+           tools they have. Fit the plan to them: when a part is usually within standingReachCm (a smoke detector on a
+           standard 240 cm ceiling for someone 180 cm or taller), say to use a step stool or ladder only if they cannot
+           reach it standing, and prefer the tools they listed. Never drop a safety step that the task itself needs.
         3. Safety first. Set risk (Low, Moderate, High). Put cautions on every step with a hazard (Hot, Electrical,
            Lifting, Chemical, Height, Sharp, Pressure, Other). Add stopIf conditions where the person should stop and get
            help (for example "the car is not on level ground", "the plug threads are stripped"). Include safety steps the
@@ -99,12 +106,13 @@ public sealed class TaskPlanner(IChatClient chat)
 
     /// <param name="rejection">Why the previous plan was rejected, when asking again; the new plan is validated the same way.</param>
     public async Task<MuseResult<TaskPlan>> PlanAsync(TaskMode mode, string goal, string? details, PlanSiteContext? site,
-        IReadOnlyList<(byte[] Bytes, string MediaType)> manualPhotos, CancellationToken ct, string? rejection = null)
+        IReadOnlyList<(byte[] Bytes, string MediaType)> manualPhotos, CancellationToken ct, string? rejection = null, PersonContext? person = null)
     {
         var restricted = RestrictedTopics.Classify(goal + " " + details);
         var context = new
         {
             mode = mode.ToString(), goal, details, site,
+            person = person is null ? null : new { person.HeightCm, person.StandingReachCm, person.Tools },
             restrictedTopic = restricted == RestrictedCategory.None ? null : restricted.ToString(),
             manualPhotos = manualPhotos.Count,
         };
@@ -118,14 +126,16 @@ public sealed class TaskPlanner(IChatClient chat)
             return new MuseResult<TaskPlan>(null, result.ModelId, result.PromptDigest, result.ResponseDigest, "invalid_model_output: null item in plan");
         var note = manualPhotos.Count > 0 ? $"{SourceNote} · uses {manualPhotos.Count} manual photo{(manualPhotos.Count == 1 ? "" : "s")} you added" : SourceNote;
         var steps = (w.Steps ?? []).Select((s, i) => new TaskStep($"s{i + 1}", s.Title, s.Instruction, s.HandsOn, s.LookFor ?? [], s.Cautions ?? [], s.StopIf ?? [],
-            s.Check is { } c && (c.Required || !string.IsNullOrWhiteSpace(c.WhatDoneLooksLike)) ? new StepPhotoCheck(c.Required, c.WhatDoneLooksLike) : null)).ToList();
+            s.Check is { } c && (c.Required || !string.IsNullOrWhiteSpace(c.WhatDoneLooksLike)) ? new StepPhotoCheck(c.Required, c.WhatDoneLooksLike) : null,
+            string.IsNullOrWhiteSpace(s.AccessFor) ? null : s.AccessFor.Trim())).ToList();
         var plan = new TaskPlan(w.Title, w.Summary, w.Risk, w.EstimatedMinutes, w.Restricted, w.ProfessionalRequired,
             string.IsNullOrWhiteSpace(w.ProfessionalReason) ? null : w.ProfessionalReason, w.Tools ?? [], w.Parts ?? [], steps, note);
         return new MuseResult<TaskPlan>(plan, result.ModelId, result.PromptDigest, result.ResponseDigest, null);
     }
 
     private sealed record WireCheck(bool Required, string WhatDoneLooksLike);
-    private sealed record WireStep(string Title, string Instruction, bool HandsOn, IReadOnlyList<string>? LookFor, IReadOnlyList<Caution>? Cautions, IReadOnlyList<string>? StopIf, WireCheck? Check);
+    private sealed record WireStep(string Title, string Instruction, bool HandsOn, IReadOnlyList<string>? LookFor, IReadOnlyList<Caution>? Cautions, IReadOnlyList<string>? StopIf, WireCheck? Check,
+        string? AccessFor = null);
     private sealed record WirePlan(string Title, string Summary, RiskLevel Risk, int EstimatedMinutes, RestrictedCategory Restricted, bool ProfessionalRequired,
         string? ProfessionalReason, IReadOnlyList<string>? Tools, IReadOnlyList<string>? Parts, IReadOnlyList<WireStep>? Steps);
 }

@@ -17,7 +17,14 @@ data class TaskStep(
     val id: String, val title: String, val instruction: String, val handsOn: Boolean,
     val lookFor: List<String> = emptyList(), val cautions: List<TaskCaution> = emptyList(), val stopIf: List<String> = emptyList(),
     val check: TaskStepCheckSpec? = null, val status: StepStatus = StepStatus.Todo, val lastCheck: TaskStepCheck? = null,
+    /** On a ladder or step-stool step: the part it reaches, so the phone can check whether it is needed. */
+    val accessFor: String? = null, val skipReason: SkipReason? = null,
 )
+
+/** Why a step was skipped, with the measured numbers when the phone took them. */
+@Serializable data class SkipReason(val text: String? = null, val reason: String? = null, val partHeightCm: Int? = null, val reachCm: Int? = null)
+@Serializable data class SkipRequest(val reason: String, val partHeightCm: Int? = null, val reachCm: Int? = null)
+@Serializable data class TaskPerson(val heightCm: Int? = null, val standingReachCm: Int? = null, val tools: List<String> = emptyList())
 
 @Serializable
 data class TaskPlan(
@@ -36,6 +43,7 @@ data class TaskView(
     val taskId: String, val mode: TaskMode, val goal: String, val details: String? = null, val site: TaskSite? = null, val phase: TaskPhase,
     val currentStepId: String? = null, val inspectionId: String? = null, val updatedAt: String, val safetyAcknowledged: Boolean = false,
     val plan: TaskPlan? = null, val photos: List<TaskPhoto> = emptyList(), val answers: List<TaskAnswer> = emptyList(),
+    val person: TaskPerson? = null,
 ) {
     val currentStep: TaskStep? get() = plan?.steps?.firstOrNull { it.id == currentStepId }
 }
