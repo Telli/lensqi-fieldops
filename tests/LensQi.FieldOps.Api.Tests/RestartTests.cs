@@ -109,4 +109,34 @@ public class RestartTests
         var view = await Json(await c2.GetAsync($"/v1/inspections/{id}"));
         Assert.Single(view.GetProperty("photos").EnumerateArray());
     }
+
+    [Fact]
+    public async Task A_retried_task_creation_returns_the_same_task_and_plans_once_before_and_after_a_restart()
+    {
+        string dir, id;
+        static HttpRequestMessage Create()
+        {
+            var m = new HttpRequestMessage(HttpMethod.Post, "/v1/tasks") { Content = JsonContent.Create(new { mode = "Diy", goal = "Change the oil in my car" }) };
+            m.Headers.Add("Idempotency-Key", "create-1");
+            return m;
+        }
+        using (var first = new FieldOpsApiFactory())
+        {
+            first.FakeChat.CannedResponse = TaskApiTests.PlanJson();
+            using var c = first.CreateClient();
+            var made = await c.SendAsync(Create());
+            Assert.Equal(HttpStatusCode.Created, made.StatusCode);
+            id = (await Json(made)).GetProperty("task").GetProperty("taskId").GetString()!;
+            var again = await Json(await c.SendAsync(Create()));
+            Assert.Equal(id, again.GetProperty("task").GetProperty("taskId").GetString());
+            Assert.True(again.GetProperty("replayed").GetBoolean());
+            Assert.Equal(1, first.FakeChat.Calls);
+            dir = first.DataDir;
+        }
+        using var second = FieldOpsApiFactory.Over(dir);
+        using var c2 = second.CreateClient();
+        Assert.Equal(id, (await Json(await c2.SendAsync(Create()))).GetProperty("task").GetProperty("taskId").GetString());
+        Assert.Single((await Json(await c2.GetAsync("/v1/tasks"))).EnumerateArray());
+        Assert.Equal(0, second.FakeChat.Calls);
+    }
 }

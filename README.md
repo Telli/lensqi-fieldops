@@ -152,7 +152,7 @@ cd apps/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
 | Task planner and step coach (guidance, questions, step checks) on Muse Spark | `src/LensQi.FieldOps.Meta/Tasks/` |
 | `/v1/tasks` API and its JSONL task store | `src/LensQi.FieldOps.Api/Features/Tasks/`, `Api/Infrastructure/Tasks/` |
 | Task screens: web `apps/web/src/pages/m/task/`, `lib/tasks.ts`, `lib/voice.ts`; Android `ui/task/`, `voice/Voice.kt` | `apps/web/`, `apps/android/` |
-| Inspection state machine, append-only events, dual-proof policy (`fieldproof-policy/1.2`) | `src/LensQi.FieldOps.Core/Inspection/` |
+| Inspection state machine, append-only events, dual-proof policy (`fieldproof-policy/1.3`) | `src/LensQi.FieldOps.Core/Inspection/` |
 | Change evidence: dHash duplicates, SAM mask IoU and shift, versioned thresholds | `Core/Inspection/VisualChange.cs`, `Api/Infrastructure/Evidence/ChangeEvidenceService.cs` |
 | Muse Spark client (strict JSON schema), visual assessment, grounded proposals | `src/LensQi.FieldOps.Meta/Muse`, `Vision`, `Knowledge` |
 | SAM 3.1 client (Responses API) and the Python sidecar (parser, crop, image measurements) | `src/LensQi.FieldOps.Meta/Segmentation`, `tools/sam-parser/` |

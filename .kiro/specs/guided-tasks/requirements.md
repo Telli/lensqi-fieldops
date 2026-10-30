@@ -170,10 +170,10 @@ Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107
 
 | Requirement | State | Gaps |
 |---|---|---|
-| GT-R01 Modes and creation | Met | Goal limit is 3–300 characters (not 1–200). A third mode, free-form help, was added |
+| GT-R01 Modes and creation | Met | Goal limit is 3–300 characters (not 1–200). A third mode, free-form help, was added. GT-R01.5 met Oct 29: a repeated creation key returns the original task, also after a restart |
 | GT-R02 AI-written plan | Met | — |
 | GT-R03 Safety policy | Met for plans | GT-R03.1 met Oct 29 (bare `www.` addresses too). GT-R03.6 applies length and link checks to guidance, answers and reasons; the "stay inside the step" rule is prompt-only |
-| GT-R04 Plan acceptance and steps | Met | GT-R04.2 rewritten Oct 29 to the built rule. GT-R04.6: request ids are persisted on events since Oct 29; clients still send a fresh key per request, so only server-side retries replay |
+| GT-R04 Plan acceptance and steps | Met | GT-R04.2 rewritten Oct 29 to the built rule. GT-R04.6: request ids are persisted on events since Oct 29, and web and Android reuse a command's key until the server answers |
 | GT-R05 Live scan with AR | Partly met | Step `lookFor` is sent first. GT-R05.3: Android distance advice is not aimed at the step's main part. No phone run of the task step runner; no ARCore anchor recorded on a real part |
 | GT-R06 Step guidance | Partly met | GT-R06.3: the prompt is not shared with `LiveSceneService`; inspections keep their own |
 | GT-R07 Voice | Partly met | GT-R07.1: Android task speech is not gated by `SpokenFeedbackGate`. GT-R07.3 met Oct 29 (typing next to the mic on both clients). GT-R07.4: grammar is next, back, repeat, check, skip, mute, unmute (no pause). Not exercised with a real microphone |

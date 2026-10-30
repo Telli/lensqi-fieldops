@@ -34,11 +34,21 @@ public sealed class InspectionTestKit
     private string Id(string prefix) => $"{prefix}-{++_n:000}";
     private static string Digest(string s) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
+    /// <summary>Records a photo; a post-claim photo also gets its change analysis, as the upload endpoint does.</summary>
     public string Photo(EvidenceOrigin origin = EvidenceOrigin.Phone)
     {
         var id = Id("photo");
         Session.RecordPhoto(Id("req"), id, origin, Digest(id), Now, 1600, 1000, Now);
+        Analyse(id);
         return id;
+    }
+
+    /// <summary>Records an Unscorable change analysis (no reference view), which neither accepts nor rejects on its own.</summary>
+    public void Analyse(string photoId)
+    {
+        var photo = Session.State.Photos.Single(p => p.EvidenceId == photoId);
+        if (Session.State.CurrentClaimId is { } claim && Session.State.IsPostClaim(photo))
+            Session.RecordVisualChange(Id("req"), VisualChangeAnalyzer.Unscorable(claim, photo, null, null, "no reference view in this test", VisualChangeThresholds.Default), Now);
     }
 
     public VisualAssessment Assessment(ProposedNextAction action, ObservationStatus status, string photoId, string? view = "Show the switch faceplate and the yellow cable connector") =>

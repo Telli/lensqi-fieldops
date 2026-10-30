@@ -25,7 +25,8 @@ public sealed class TaskSession
 
     public const string FreeformGoal = "Free-form help";
 
-    public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now)
+    /// <summary>Starts a task. <paramref name="requestId"/> is the creation request's key, kept on <see cref="TaskCreated"/>.</summary>
+    public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestId = null)
     {
         goal = goal?.Trim() ?? "";
         if (mode == TaskMode.Freeform && goal.Length == 0) goal = FreeformGoal;
@@ -33,7 +34,7 @@ public sealed class TaskSession
         if (goal.Length is < 3 or > 300) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Describe the goal in 3 to 300 characters");
         if (details is { Length: > 1000 }) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Details are limited to 1000 characters");
         if (site is not null && mode != TaskMode.Technician) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Only technician tasks attach to a site record");
-        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site)]);
+        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site) { RequestId = requestId }]);
     }
 
     public static TaskSession Rehydrate(IEnumerable<TaskEvent> events) => new(events.ToList());

@@ -66,7 +66,8 @@ export const tasks = {
     if (input.details) f.append("details", input.details);
     if (input.fixtureId && input.assetId) { f.append("fixtureId", input.fixtureId); f.append("assetId", input.assetId); }
     input.manuals?.forEach((m) => f.append("manual", m));
-    return request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f);
+    // A retried create returns the task the first attempt made, not a second one.
+    return once(`create:${input.mode}:${input.goal}`, (k) => request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f, k));
   },
   plan: (id: string) => request<Task>("POST", `${T(id)}/plan`),
   accept: (id: string, safetyAcknowledged: boolean) => once(`${id}:accept`, (k) => request<Task>("POST", `${T(id)}/accept`, { safetyAcknowledged }, undefined, k)),
