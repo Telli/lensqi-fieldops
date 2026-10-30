@@ -114,11 +114,12 @@ KIND="$(echo "$V" | json "d['decision']['outcomeKind']")"
 step "receipts"
 RV="$(curl -s "$BASE/v1/inspections/$ID/receipt/verify")"
 [ "$(echo "$RV" | json "d['isValid']")" = "True" ] && ok "API re-verifies the bundle ($(echo "$RV" | json "len(d['checks'])") checks)" || bad "API receipt verify"
+BUNDLE="$(echo "$RV" | json "d['bundle']")"
 dotnet build tools/LensQi.FieldOps.VerifyReceipt --nologo -v q >>"$LOG/build.txt" 2>&1
-for b in "$DATA/receipts/$ID" docs/evidence/receipt-sample docs/evidence/receipt-loopback; do
+for b in "$BUNDLE" docs/evidence/receipt-sample docs/evidence/receipt-loopback; do
   if dotnet run --project tools/LensQi.FieldOps.VerifyReceipt --no-build -- "$b" >"$LOG/verify.txt" 2>&1 && grep -q "RECEIPT INTEGRITY: PASS" "$LOG/verify.txt"; then ok "verify-receipt $(basename "$b")"; else bad "verify-receipt $b"; tail -5 "$LOG/verify.txt"; fi
 done
-TAMPER="$WORK/tampered"; cp -R "$DATA/receipts/$ID" "$TAMPER"
+TAMPER="$WORK/tampered"; cp -R "$BUNDLE" "$TAMPER"
 F="$(ls "$TAMPER"/artifacts/* | head -1)"; printf '\x00' | dd of="$F" bs=1 seek=100 count=1 conv=notrunc 2>/dev/null
 if dotnet run --project tools/LensQi.FieldOps.VerifyReceipt --no-build -- "$TAMPER" >"$LOG/tamper.txt" 2>&1; then bad "a tampered bundle verified"; else ok "a one-byte flip in an artifact fails verification"; fi
 
