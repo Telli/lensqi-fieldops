@@ -40,12 +40,15 @@ public static class TaskEndpoints
                 {
                     var image = await ReadImage(f, limits, ct);
                     if (image.Error is { } bad) return bad;
-                    manuals.Add(image.Value!.Value);
+                    // The same page attached twice is one manual photo.
+                    if (!manuals.Any(m => m.Bytes.AsSpan().SequenceEqual(image.Value!.Value.Bytes))) manuals.Add(image.Value!.Value);
                 }
             }
             else
             {
-                var body = await http.ReadFromJsonAsync<CreateBody>(ct);
+                CreateBody? body;
+                try { body = http.HasJsonContentType() ? await http.ReadFromJsonAsync<CreateBody>(ct) : null; }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or BadHttpRequestException) { body = null; }
                 if (body is null) return ApiResults.BadRequest("A JSON body or multipart form is required");
                 (mode, goal, details, fixtureId, assetId) = (body.Mode, body.Goal, body.Details, body.FixtureId, body.AssetId);
             }
@@ -58,9 +61,7 @@ public static class TaskEndpoints
                 var asset = twin?.Twin.FindAsset(assetId ?? "");
                 if (twin is null || asset is null) return ApiResults.NotFound($"Asset '{assetId}' is not on site record '{fixtureId}'");
                 site = new SiteLink(twin.Twin.FixtureId, asset.AssetId);
-                siteContext = new PlanSiteContext(asset.AssetId, asset.DisplayName, asset.Kind,
-                    twin.Twin.Connections.Where(c => c.FromAssetId == asset.AssetId || c.ToAssetId == asset.AssetId)
-                        .Select(c => $"{c.FromAssetId} port {c.FromPortLabel} to {c.ToAssetId}, cable {c.CableLabel}, {c.ExpectedState}").ToList());
+                siteContext = SiteContext(twins, site);
             }
             return await GuardAsync(async () =>
             {
@@ -86,17 +87,20 @@ public static class TaskEndpoints
 
         g.MapGet("/{id}", (string id, TaskStore store) => store.Find(id) is { } t ? Results.Ok(View(t)) : ApiResults.NotFound($"Task '{id}' not found"));
 
-        g.MapGet("/{id}/events", (string id, TaskStore store) => store.Find(id) is { } t ? Results.Ok(t.Events) : ApiResults.NotFound($"Task '{id}' not found"));
+        // A copy taken under the task's lock, so a concurrent command never changes the list while it is written out.
+        g.MapGet("/{id}/events", (string id, TaskStore store) => store.Find(id) is null ? ApiResults.NotFound($"Task '{id}' not found") : Results.Ok(store.Execute(id, s => s.Events.ToList())));
 
         // Retry the plan when the first attempt failed or was rejected; a task keeps at most one plan.
         g.MapPost("/{id}/plan", async (string id, TaskStore store, ExpectedTwinStore twins, EvidenceFileStore files, TaskPlanner planner, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
-            if (task.State.Plan is not null) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "This task already has a plan");
+            // State first, so a request that cannot be recorded never spends a model call.
+            if (task.State.Mode == TaskMode.Freeform) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Free-form help has no plan; start a planned task instead");
+            if (task.State.Plan is not null || task.State.Phase != TaskPhase.Planned) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "This task already has a plan or is closed");
             var manuals = task.State.Photos.Where(p => p.Purpose == TaskPhotoPurpose.Manual).ToList();
             var images = manuals.Select(p => ArtifactPath(files, id, p.EvidenceId)).Where(p => p is not null)
                 .Select(p => { var b = File.ReadAllBytes(p!); return (b, EvidenceFileStore.DetectImageType(b)!); }).ToList();
-            PlanSiteContext? site = task.State.Site is { } s && twins.Find(s.FixtureId)?.Twin.FindAsset(s.AssetId) is { } a ? new PlanSiteContext(a.AssetId, a.DisplayName, a.Kind, []) : null;
+            var site = task.State.Site is { } link ? SiteContext(twins, link) : null;
             return await GuardAsync(async () =>
             {
                 var planError = await Plan(store, planner, id, site, images, [.. manuals.Select(m => m.EvidenceId)], clock, ct);
@@ -127,6 +131,7 @@ public static class TaskEndpoints
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
             if (task.State.Plan?.Steps.FirstOrDefault(s => s.Id == stepId) is not { } step) return ApiResults.NotFound($"Step '{stepId}' not found");
+            if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Start the plan before checking a step");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
             var image = await ReadImage((await http.ReadFormAsync(ct)).Files.GetFile("image"), limits, ct);
             if (image.Error is { } bad) return bad;
@@ -175,6 +180,10 @@ public static class TaskEndpoints
                 frame = image.Value;
             }
             var requestId = RequestId(http, "ask");
+            // A retried request returns the recorded answer: no new frame, no new model call.
+            if (store.Execute(id, s => s.Replayed(requestId))?.OfType<QuestionAnswered>().FirstOrDefault() is { } earlier)
+                return Results.Ok(new { answer = earlier.Answer, focus = Array.Empty<string>(), stepId = earlier.StepId, photoId = earlier.PhotoId, earlier.ModelId, source = "AI inference" });
+            if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Questions need a started task, or free-form help");
             return await GuardAsync(async () =>
             {
                 string? photoId = null;
@@ -190,9 +199,9 @@ public static class TaskEndpoints
                 if (result.Value is not { } a || a.Answer is not { Length: > 0 and <= 1200 } || TaskPlanValidator.HasLink(a.Answer) || a.Focus is not { Count: <= 2 } || !a.Focus.All(TaskPlanValidator.IsConcept))
                     return ModelFailure(result.Error, "LensQi couldn't answer that just now; try again");
                 gate.SetFocus(id, a.Focus);
-                // Professionals-only work named in the question always gets the referral, whatever the model wrote.
-                var answer = RestrictedTopics.Classify(question) != RestrictedCategory.None && !a.Answer.Contains("professional", StringComparison.OrdinalIgnoreCase)
-                    ? a.Answer + " " + Referral : a.Answer;
+                // Professionals-only work (the plan's, the goal's or the question's) gets the referral, and any hands-on
+                // instruction in the answer is replaced by it, whatever the model wrote.
+                var answer = TaskSafety.Guard(state, a.Answer, question);
                 store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow()));
                 return Results.Ok(new { answer, focus = a.Focus, stepId = state.CurrentStepId, photoId, result.ModelId, source = "AI inference" });
             });
@@ -202,6 +211,7 @@ public static class TaskEndpoints
         g.MapPost("/{id}/link-inspection", (string id, HttpRequest http, TaskStore store, ExpectedTwinStore twins, InspectionStore inspections, TimeProvider clock) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
+            if (task.State.Phase == TaskPhase.Abandoned) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "A stopped task cannot be verified");
             if (task.State.Site is not { } site || twins.Find(site.FixtureId) is not { } twin)
                 return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Only a technician task on an installed site record can be verified with FieldProof");
             return Guard(() =>
@@ -232,7 +242,16 @@ public static class TaskEndpoints
         return app;
     }
 
-    public const string Referral = "This is work for a qualified professional; LensQi can help you look and document, not do it.";
+    public const string Referral = TaskSafety.Referral;
+
+    private static PlanSiteContext? SiteContext(ExpectedTwinStore twins, SiteLink link)
+    {
+        var twin = twins.Find(link.FixtureId);
+        if (twin?.Twin.FindAsset(link.AssetId) is not { } asset) return null;
+        return new PlanSiteContext(asset.AssetId, asset.DisplayName, asset.Kind,
+            twin.Twin.Connections.Where(c => c.FromAssetId == asset.AssetId || c.ToAssetId == asset.AssetId)
+                .Select(c => $"{c.FromAssetId} port {c.FromPortLabel} to {c.ToAssetId}, cable {c.CableLabel}, {c.ExpectedState}").ToList());
+    }
 
     private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId);
     private sealed record PlanError(string Code, string Message);
@@ -259,6 +278,7 @@ public static class TaskEndpoints
                 return null;
             }
             catch (TaskConflictException ex) when (ex.Code is TaskErrorCodes.InvalidPlan or TaskErrorCodes.UnsafePlan) { error = new PlanError(ex.Code, ex.Message); }
+            catch (TaskConflictException ex) { return new PlanError(ex.Code, ex.Message); }
         }
         return error;
     }

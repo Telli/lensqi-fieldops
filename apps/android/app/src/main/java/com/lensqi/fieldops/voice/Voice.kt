@@ -78,9 +78,12 @@ fun rememberVoiceInput(onFinal: (String) -> Unit): VoiceInputState {
     var heard by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val supported = remember { SpeechRecognizer.isRecognitionAvailable(context) }
-    val recognizer = remember {
+    val canOnDevice = remember { supported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
+    var onDevice by remember { mutableStateOf(canOnDevice) }
+    // The on-device recognizer is preferred; without its language pack the phone's standard recognizer takes over.
+    val recognizer = remember(onDevice) {
         if (!supported) null
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        else if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         else SpeechRecognizer.createSpeechRecognizer(context)
     }
     DisposableEffect(recognizer) { onDispose { recognizer?.destroy() } }
@@ -94,6 +97,8 @@ fun rememberVoiceInput(onFinal: (String) -> Unit): VoiceInputState {
             }
             override fun onError(code: Int) {
                 listening = false
+                // 12/13: ERROR_LANGUAGE_NOT_SUPPORTED / ERROR_LANGUAGE_UNAVAILABLE (Android 12+), the on-device pack is missing.
+                if (onDevice && (code == 12 || code == 13)) { onDevice = false; error = "Switched to the phone's standard speech service. Tap the mic again."; return }
                 error = when (code) { SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "I didn't catch that."; SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."; else -> "Voice input stopped." }
             }
             override fun onReadyForSpeech(params: Bundle?) = Unit

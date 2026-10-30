@@ -10,16 +10,16 @@ public static class RestrictedTopics
 {
     private static readonly (RestrictedCategory Category, Regex Pattern)[] Rules =
     [
-        (RestrictedCategory.GasLinesOrAppliances, Words("gas line", "gas lines", "gas pipe", "gas pipes", "gas valve", "gas meter", "gas leak", "gas stove", "gas range", "gas furnace", "gas water heater", "gas dryer", "propane line", "natural gas")),
-        (RestrictedCategory.MainsElectrical, Words("breaker panel", "electrical panel", "main panel", "service panel", "fuse box", "subpanel", "sub-panel", "panel upgrade", "service entrance", "meter base", "live wire", "live wires", "while live", "240v", "240 volt")),
+        (RestrictedCategory.GasLinesOrAppliances, Words("gas line", "gas lines", "gas pipe", "gas pipes", "gas valve", "gas meter", "gas leak", "gas stove", "gas range", "gas furnace", "gas water heater", "gas dryer", "gas fireplace", "gas heater", "gas grill line", "propane line", "propane tank valve", "natural gas")),
+        (RestrictedCategory.MainsElectrical, Words("breaker panel", "electrical panel", "main panel", "service panel", "fuse box", "subpanel", "sub-panel", "panel upgrade", "service entrance", "meter base", "circuit breaker", "breaker box", "live wire", "live wires", "while live", "240v", "240 volt")),
         (RestrictedCategory.EvHighVoltage, Words("high voltage battery", "high-voltage battery", "hv battery", "traction battery", "hybrid battery", "ev battery", "orange cable", "orange cables")),
         (RestrictedCategory.AirbagsSrs, Words("airbag", "airbags", "air bag", "srs", "seatbelt pretensioner", "clock spring")),
-        (RestrictedCategory.Refrigerant, Words("refrigerant", "freon", "r134a", "r-134a", "r1234yf", "r-1234yf", "ac recharge", "a/c recharge", "recharge ac", "recharge the ac")),
+        (RestrictedCategory.Refrigerant, Words("refrigerant", "freon", "r134a", "r-134a", "r1234yf", "r-1234yf", "ac recharge", "a/c recharge", "recharge ac", "recharge the ac", "recharge my ac", "recharge my car's ac", "recharge the a/c", "car ac recharge", "ac refrigerant")),
         (RestrictedCategory.Structural, Words("load-bearing", "load bearing", "structural beam", "joist", "joists", "foundation crack", "remove a wall", "remove the wall")),
     ];
 
-    public static RestrictedCategory Classify(string text) =>
-        Rules.FirstOrDefault(r => r.Pattern.IsMatch(text)).Category;
+    public static RestrictedCategory Classify(string? text) =>
+        string.IsNullOrEmpty(text) ? RestrictedCategory.None : Rules.FirstOrDefault(r => r.Pattern.IsMatch(text.Replace('’', '\''))).Category;
 
     private static Regex Words(params string[] phrases) =>
         new(@"(?<![a-z0-9])(" + string.Join("|", phrases.Select(Regex.Escape)) + @")(?![a-z0-9])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -38,7 +38,7 @@ public static class TaskPlanValidator
     /// <summary>A URL or a bare web address ("www.example.com"). Model text that the user reads or hears never carries one.</summary>
     public static bool HasLink(string? text) => text is not null && Link.IsMatch(text);
 
-    public static bool IsConcept(string phrase) =>
+    public static bool IsConcept(string? phrase) => phrase is not null &&
         Concept.IsMatch(phrase) && phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 4;
 
     /// <summary>Throws <see cref="TaskConflictException"/> (unsafe_plan or invalid_plan) listing every violation.</summary>
@@ -82,10 +82,15 @@ public static class TaskPlanValidator
         var restricted = plan.Restricted != RestrictedCategory.None ? plan.Restricted : fromWords;
         if (fromWords != RestrictedCategory.None && plan.Restricted == RestrictedCategory.None)
             unsafeRules.Add($"the goal concerns {fromWords} work but the plan is not marked restricted");
-        if (restricted != RestrictedCategory.None)
+        if (restricted != RestrictedCategory.None && !plan.ProfessionalRequired) unsafeRules.Add($"{restricted} work must require a professional");
+        // A plan that needs a professional never guides hands-on work, whatever the model labelled each step: the step's
+        // own words are checked too.
+        if (restricted != RestrictedCategory.None || plan.ProfessionalRequired)
         {
-            if (!plan.ProfessionalRequired) unsafeRules.Add($"{restricted} work must require a professional");
-            foreach (var s in plan.Steps.Where(s => s.HandsOn)) unsafeRules.Add($"step {s.Id} is hands-on in {restricted} work");
+            var why = restricted != RestrictedCategory.None ? restricted.ToString() : "professional-only";
+            foreach (var s in plan.Steps.Where(s => s.HandsOn)) unsafeRules.Add($"step {s.Id} is hands-on in {why} work");
+            foreach (var s in plan.Steps.Where(s => !s.HandsOn && (TaskSafety.InstructsHandsOn(s.Instruction) || TaskSafety.InstructsHandsOn(s.Title))))
+                unsafeRules.Add($"step {s.Id} instructs hands-on work in {why} work");
         }
         if (plan.ProfessionalRequired) Text(plan.ProfessionalReason, "professionalReason", 400);
 
@@ -94,4 +99,42 @@ public static class TaskPlanValidator
     }
 
     private static string Short(string s) => s.Length > 40 ? s[..40] + "…" : s;
+}
+
+/// <summary>
+/// Safety checks on free text the model writes (step instructions, answers, live guidance) for professionals-only work.
+/// The model's own labels are not trusted alone: a sentence that tells the person to act on the hazard counts as hands-on,
+/// unless it is negated ("do not open the panel") or delegated ("have a licensed electrician replace it").
+/// </summary>
+public static class TaskSafety
+{
+    public const string Referral = "This is work for a qualified professional; LensQi can help you look and document, not do it.";
+
+    private static readonly Regex Action = new(@"(?<![a-z])(disconnect|reconnect|unscrew|unbolt|loosen|tighten|pry|cut|splice|strip|crimp|solder|rewire|wire|unplug|plug in|bleed|discharge|depressuri[sz]e|vent|purge|recharge|refill|remove|replace|install|detach|reattach|open the (panel|cover|valve|line|housing)|close the valve|turn the (valve|fitting|nut)|take (off|out|apart))(?![a-z])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private const string Pro = @"(licensed |qualified |certified |a |an |the |your )*(electrician|plumber|professional|pro|technician|installer|contractor|engineer|dealer|mechanic|gas company|utility)";
+    // "Do not open the panel", "never disconnect…": a negation within three words before the action.
+    private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+(\S+\s+){0,2}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // "Have a licensed electrician replace…", "a plumber should disconnect…": the action belongs to someone else.
+    private static readonly Regex Delegated = new($@"((have|let|ask|call|get|hire|book)\s+{Pro}|{Pro}\s+(should|will|can|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>True when any sentence tells the person to do hands-on work themselves.</summary>
+    public static bool InstructsHandsOn(string? text) =>
+        !string.IsNullOrWhiteSpace(text) && Regex.Split(text.Replace('’', '\''), @"(?<=[.!?;:])\s+|\n+").Any(sentence =>
+            !Delegated.IsMatch(sentence) && Action.Matches(sentence).Any(m => !NegatedBefore.IsMatch(sentence[..m.Index])));
+
+    /// <summary>Whether this task, or the words of a question about it, concerns professionals-only work.</summary>
+    public static bool IsRestricted(TaskState task, string? text = null) =>
+        task.Plan is { } plan && (plan.Restricted != RestrictedCategory.None || plan.ProfessionalRequired)
+        || RestrictedTopics.Classify(task.Goal + " " + task.Details) != RestrictedCategory.None
+        || RestrictedTopics.Classify(text) != RestrictedCategory.None;
+
+    /// <summary>
+    /// What may be shown for model text in restricted work: hands-on instructions are replaced by the referral, anything
+    /// else keeps the referral attached. Outside restricted work the text is returned as is.
+    /// </summary>
+    public static string Guard(TaskState task, string modelText, string? question = null) =>
+        !IsRestricted(task, question) ? modelText
+        : InstructsHandsOn(modelText) ? Referral
+        : modelText.Contains(Referral, StringComparison.Ordinal) ? modelText : modelText + " " + Referral;
 }

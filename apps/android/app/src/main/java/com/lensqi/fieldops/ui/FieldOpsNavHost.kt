@@ -132,7 +132,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 }
                 composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
-                composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("home") } ; nav.navigate("camera") } }
+                composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("start") { inclusive = true } } ; nav.navigate("camera") } }
                 composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }
                 composable("asset/{assetId}", arguments = listOf(navArgument("assetId") { type = NavType.StringType })) { e ->
                     AssetDetailScreen(

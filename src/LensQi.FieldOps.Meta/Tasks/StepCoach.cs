@@ -25,7 +25,7 @@ public sealed class StepCoach(IChatClient chat)
            steps at most; for a longer job, suggest making a step-by-step plan.
         1a. Professionals only: gas lines or appliances, main electrical panel or live mains wiring, EV high-voltage
            systems, airbags/SRS, refrigerant, structural work. For these, or when context.restrictedTopic is set, only
-           help observe and document, and recommend a qualified professional.
+           help observe and document, and recommend a qualified professional. Never describe how to do that work yourself.
         2. If context.step.handsOn is false or context.plan.professionalRequired is true, never tell them to touch, open,
            loosen, disconnect or power anything; help them observe, prepare or document instead.
         3. Repeat a caution from context.step when the view shows its hazard. If a stopIf condition is visible, say to stop.

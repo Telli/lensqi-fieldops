@@ -16,6 +16,7 @@ export default function TaskDone({ id }: { id: string }) {
   const [, nav] = useLocation();
   const linked = useInspection(t?.inspectionId ?? "", { enabled: !!t?.inspectionId });
   const link = useMutation({ mutationFn: () => tasks.linkInspection(id), onSuccess: (r) => nav(`/m/i/${r.inspectionId}/scan`), onError: (e) => toast.error(friendlyError(e)) });
+  if (t && !t.plan) return <><TopBar title="Summary" back="/m" /><Page><p className="text-sm text-muted-foreground">{t.phase === "Abandoned" ? "This task was stopped before it had a plan." : "This task has no plan yet."}</p></Page></>;
   if (!t?.plan) return <><TopBar title="Summary" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
   const steps = t.plan.steps;
   const done = steps.filter((s) => s.status === "Done").length;

@@ -83,9 +83,11 @@ export function usePushToTalk(onFinal: (text: string) => void) {
     };
     r.onerror = (e) => setError(e.error === "not-allowed" ? "Microphone access is blocked for this site." : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
     r.onend = () => {
+      const aborted = rec.current !== r;
       rec.current = null; setListening(false);
       const text = final.current.trim();
-      if (text) deliver.current(text);
+      // Nothing is delivered after the page let go of the recognizer (unmount aborts it).
+      if (text && !aborted) deliver.current(text);
     };
     rec.current = r;
     setListening(true);
@@ -93,6 +95,6 @@ export function usePushToTalk(onFinal: (text: string) => void) {
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
-  useEffect(() => () => rec.current?.abort(), []);
+  useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
   return { supported: !!Ctor, listening, heard, error, start, stop, notice: !!Ctor && !seen };
 }

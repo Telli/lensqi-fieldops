@@ -86,7 +86,9 @@ public sealed class TaskPlanner(IChatClient chat)
         4. Professionals only: gas lines or gas appliances, main electrical panel or live mains wiring, EV high-voltage
            systems, airbags/SRS, refrigerant, structural or load-bearing work. If the goal involves one, or
            context.restrictedTopic names one, set restricted to that category, professionalRequired true with the reason,
-           and write only steps with handsOn false (prepare, observe, document, contact a professional).
+           and write only steps with handsOn false (prepare, observe, document, contact a professional). In those steps never tell the
+           person to disconnect, remove, open, replace or otherwise act on the hazard; say what the professional will do instead
+           ("have a licensed electrician replace the breaker").
         5. Do not invent exact specifications. If an oil grade, capacity, torque, part number or wire gauge is not in an
            attached manual photo, tell the person to confirm it in their owner's manual or on the product label.
         6. check: set required true when a photo proves the step was done (plug reinstalled, camera level on its
@@ -110,6 +112,10 @@ public sealed class TaskPlanner(IChatClient chat)
         if (rejection is not null) ask += $" Your previous plan was rejected by the safety and format checks: {rejection}. Write a corrected plan.";
         var result = await MuseStructured.CallAsync<WirePlan>(chat, SystemPrompt, context, manualPhotos, ask, Schema.Value, "TaskPlan", "low", 6000, ct).ConfigureAwait(false);
         if (result.Value is not { } w) return new MuseResult<TaskPlan>(null, result.ModelId, result.PromptDigest, result.ResponseDigest, result.Error);
+        // Strict schema or not, a null item is malformed output: rejected, never patched.
+        if (w.Steps is null || w.Steps.Any(st => st is null || st.LookFor?.Any(x => x is null) == true || st.Cautions?.Any(x => x is null) == true || st.StopIf?.Any(x => x is null) == true)
+            || w.Tools?.Any(x => x is null) == true || w.Parts?.Any(x => x is null) == true)
+            return new MuseResult<TaskPlan>(null, result.ModelId, result.PromptDigest, result.ResponseDigest, "invalid_model_output: null item in plan");
         var note = manualPhotos.Count > 0 ? $"{SourceNote} · uses {manualPhotos.Count} manual photo{(manualPhotos.Count == 1 ? "" : "s")} you added" : SourceNote;
         var steps = (w.Steps ?? []).Select((s, i) => new TaskStep($"s{i + 1}", s.Title, s.Instruction, s.HandsOn, s.LookFor ?? [], s.Cautions ?? [], s.StopIf ?? [],
             s.Check is { } c && (c.Required || !string.IsNullOrWhiteSpace(c.WhatDoneLooksLike)) ? new StepPhotoCheck(c.Required, c.WhatDoneLooksLike) : null)).ToList();
