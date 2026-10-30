@@ -15,8 +15,12 @@ public sealed record GroundedProposalResult(
     string PromptDigest,
     string ResponseDigest,
     UsageDetails? Usage,
-    string? ParseError)
+    string? ParseError,
+    VendorGroundedProposal? Parsed = null)
 {
+    /// <summary>The action the model asked for, valid or not; for the rejection record only, never acted on.</summary>
+    public string? AttemptedAction => Parsed?.NextAction.ToString();
+
     public bool Accepted => Proposal is not null && Validation.IsValid;
 }
 
@@ -66,6 +70,6 @@ public sealed class GroundedProposalService
                 raw, modelId, request.PromptDigest, responseDigest, response.Usage, "empty");
 
         var validation = KnowledgeActionValidator.Validate(proposal, resolution, binding, _registry);
-        return new GroundedProposalResult(validation.IsValid ? proposal : null, validation, raw, modelId, request.PromptDigest, responseDigest, response.Usage, null);
+        return new GroundedProposalResult(validation.IsValid ? proposal : null, validation, raw, modelId, request.PromptDigest, responseDigest, response.Usage, null, proposal);
     }
 }

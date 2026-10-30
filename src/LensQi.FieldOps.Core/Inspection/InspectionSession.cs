@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using LensQi.FieldOps.Core.Diagnostics;
 using LensQi.FieldOps.Core.Knowledge;
 
@@ -151,7 +154,43 @@ public sealed class InspectionSession
         Idempotent(requestId, () =>
         {
             AllowlistedDiagnostic(diagnosticId);
-            return Commit([new PredictionRegistered(Next(), State.InspectionId, now, State.FixtureDigest, predictionId, diagnosticId, predictedValue, basedOnFactIds)]);
+            if (PredictionIsLate(diagnosticId))
+                throw new InspectionConflictException(InspectionErrorCodes.PredictionLate, $"Diagnostic {diagnosticId} already reported since the current claim; a prediction now would not be falsifiable");
+            return Commit([NewPrediction(predictionId, diagnosticId, predictedValue, basedOnFactIds, null, now)]);
+        });
+
+    /// <summary>Knowledge proposals are refused once the inspection is closed; lets a caller refuse before paying for a model call.</summary>
+    public bool AcceptsKnowledgeProposal => State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive);
+
+    /// <summary>
+    /// VK-T06/T25: records one grounded proposal call. <paramref name="proposal"/> is the validator-accepted proposal, or null
+    /// with <paramref name="rejections"/> saying why. An accepted RunApprovedProbe registers its prediction in the same batch,
+    /// so it is on the log before any probe for it can run; a late prediction turns the proposal into a rejection. Neither
+    /// outcome changes the stage: the model never moves the inspection, evidence does.
+    /// </summary>
+    public IReadOnlyList<InspectionEvent> RecordKnowledgeProposal(string requestId, string proposalId, string modelId, string promptDigest, string responseDigest,
+        VendorGroundedProposal? proposal, string? attemptedAction, IReadOnlyList<ProposalRejection> rejections, string predictionId, DateTimeOffset now) =>
+        Idempotent(requestId, () =>
+        {
+            Require(AcceptsKnowledgeProposal, "Knowledge proposals are not accepted in the current stage");
+            var refused = proposal is null ? rejections.ToList() : [];
+            if (proposal is null && refused.Count == 0)
+                refused.Add(new(ProposalErrorCodes.ActionNotAllowed, "No validated proposal was supplied.", []));
+            var prediction = proposal?.NextAction == ProposedNextAction.RunApprovedProbe ? proposal.Prediction : null;
+            if (prediction is not null)
+            {
+                if (_twin.Twin.FindDiagnostic(prediction.DiagnosticId) is null)
+                    refused.Add(new(ProposalErrorCodes.ProbeNotAllowlisted, $"Diagnostic '{prediction.DiagnosticId}' is not approved by fixture {State.FixtureId}.", [prediction.DiagnosticId]));
+                else if (PredictionIsLate(prediction.DiagnosticId))
+                    refused.Add(new(InspectionErrorCodes.PredictionLate, $"Diagnostic {prediction.DiagnosticId} already reported since the current claim; the prediction would not be falsifiable.", [prediction.DiagnosticId]));
+            }
+            if (refused.Count > 0)
+                return Commit([new KnowledgeProposalRejected(Next(), State.InspectionId, now, State.FixtureDigest, proposalId, modelId, promptDigest, responseDigest,
+                    Clip(proposal?.NextAction.ToString() ?? attemptedAction, 40), refused.Take(10).Select(Bounded).ToList())]);
+            var batch = new List<InspectionEvent> { new KnowledgeProposalAccepted(Next(), State.InspectionId, now, State.FixtureDigest, proposalId, modelId, promptDigest, responseDigest, proposal!) };
+            if (prediction is not null)
+                batch.Add(NewPrediction(predictionId, prediction.DiagnosticId, prediction.PredictedValue, prediction.BasedOnFactIds, proposalId, now));
+            return Commit(batch);
         });
 
     /// <summary>Records a probe result produced by the Diagnostics layer. The caller resolved the alias; the model never chose it.</summary>
@@ -169,11 +208,7 @@ public sealed class InspectionSession
 
             var batch = new List<InspectionEvent> { new DiagnosticCompleted(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, result) };
             foreach (var p in State.PendingPredictions.Where(p => p.DiagnosticId == result.DiagnosticId))
-            {
-                var outcome = result.Passed is null || result.NormalizedValue is null ? PredictionOutcome.Unscorable
-                    : string.Equals(result.NormalizedValue, p.PredictedValue, StringComparison.Ordinal) ? PredictionOutcome.Confirmed : PredictionOutcome.Falsified;
-                batch.Add(new PredictionScored(Next() + batch.Count - 1, State.InspectionId, now, State.FixtureDigest, p.PredictionId, evidenceId, result.NormalizedValue, outcome));
-            }
+                batch.Add(new PredictionScored(Next() + batch.Count - 1, State.InspectionId, now, State.FixtureDigest, p.PredictionId, evidenceId, result.NormalizedValue, PredictionScorer.Score(p.PredictedValue, result)));
             // A failed probe before any repair claim confirms the fault; verification itself is a separate command.
             if (result.Passed == false && State.Stage is InspectionStage.InitialScan or InspectionStage.FaultSuspected or InspectionStage.NeedsEvidence && State.RepairClaimedAt is null)
                 batch.Add(Stage(InspectionStage.FaultConfirmed, $"diagnostic {result.DiagnosticId} failed", now, batch.Count));
@@ -280,6 +315,23 @@ public sealed class InspectionSession
     private TwinDiagnostic AllowlistedDiagnostic(string diagnosticId) =>
         _twin.Twin.FindDiagnostic(diagnosticId)
         ?? throw new InspectionConflictException(InspectionErrorCodes.ProbeNotAllowlisted, $"Diagnostic '{diagnosticId}' is not approved by fixture {State.FixtureId}; no probe was run");
+
+    /// <summary>Late once the probe has reported in the current claim period (or at all, before any claim): its outcome is already known.</summary>
+    private bool PredictionIsLate(string diagnosticId) =>
+        State.Diagnostics.Any(d => d.Result.DiagnosticId == diagnosticId && (State.RepairClaimedAt is not { } claimed || d.RecordedAt >= claimed));
+
+    private PredictionRegistered NewPrediction(string predictionId, string diagnosticId, string predictedValue, IReadOnlyList<string> basedOnFactIds, string? proposalId, DateTimeOffset now)
+    {
+        var canonical = JsonSerializer.Serialize(new { diagnosticId, predictedValue, basedOnFactIds }, KnowledgeJson.Options);
+        var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+        return new PredictionRegistered(Next(), State.InspectionId, now, State.FixtureDigest, predictionId, diagnosticId, predictedValue, basedOnFactIds, digest, proposalId);
+    }
+
+    /// <summary>Model text kept in a rejection is bounded: it is a record of what was refused, not a place to store output.</summary>
+    private static ProposalRejection Bounded(ProposalRejection r) =>
+        new(r.Code, Clip(r.Message, 300)!, r.OffendingIds.Take(10).Select(id => Clip(id, 120)!).ToList());
+
+    private static string? Clip(string? s, int max) => s is null || s.Length <= max ? s : s[..max];
 
     private void Require(bool condition, string message)
     {
