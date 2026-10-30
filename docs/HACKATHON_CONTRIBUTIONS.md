@@ -88,6 +88,7 @@ as implementation commits land.
 | 2026-10-30T03:24:42-07:00 | `f097e32` | Camera-led web verify screen (step B): inline capture and retake, readiness-driven cards, bounded comparison polling, three-part result | dotnet test 301 pass; web vitest 36 pass, tsc and build clean; browser walkthrough at 375x812 against local API with simulated checks; secret scan PASS | None |
 | 2026-10-30T15:13:38-07:00 | `f5609e6` | Receipt versions after a legacy bundle: a single version 0 (the last legacy issue), next issue numbered 1; findLastIndex in currentAttempt (PR 4 review) | dotnet test: Core 151, Meta 18, Api 133 (new legacy-receipt test fails on the old code); web 36 tests, tsc and build clean; secret scan PASS | None |
 | 2026-10-30T15:34:57-07:00 | `d20a1d2` | Live verify on a phone camera: fake fix denied on a fresh LiveLocal 404, real fix VerifiedCompleteLive on a fresh 200, receipt valid, measured timings (step C) | docs/evidence/live-phone: event log I-6fc49ada4523, receipt-verify.json isValid true, timings.json; dotnet test Core 151, Meta 18, Api 133; secret scan PASS | None |
+| 2026-10-30T15:44:31-07:00 | `151f88b` | Live check keeps the HTTP status a server answered (decision and screens say HTTP 404, not Unreachable); verify screen scrolls to the next step (PR 5 review) | dotnet test Core 152, Meta 18, Api 133; web 37 tests, build clean; browser 375x812 live-local: auto-scroll to review card, HTTP 404 shown; secret scan PASS | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
