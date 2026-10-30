@@ -116,6 +116,8 @@ data class DiagnosticResult(
     val traceId: String,
     val normalizedValue: String? = null,
     val rawDigest: String? = null,
+    /** The status a live server answered with; absent when nothing answered. */
+    val httpStatus: Int? = null,
 )
 
 @Serializable
@@ -161,6 +163,26 @@ data class InspectionView(
     /** Newer post-repair photos still being compared with the earlier view; while any remain, verification waits. */
     val awaitingAnalysis: List<String> = emptyList(),
     val evidenceRequests: List<EvidenceRequest> = emptyList(),
+    /** The server's next verify step and everything still blocking it; absent from an older server. */
+    val readiness: Readiness? = null,
+)
+
+/**
+ * What verify needs next, from the same policy the decision uses. next is kept as the server's string (ClaimRepair,
+ * CapturePhoto, WaitForAnalysis, ReviewChecklist, Acknowledge, Verify, None) so a step added later cannot break parsing.
+ * Ready never means verified: verify measures every fixture check again and decides on that.
+ */
+@Serializable
+data class Readiness(val ready: Boolean, val next: String, val blocking: List<String>, val checks: List<ReadinessCheck> = emptyList(), val measuresOnVerify: Boolean = true)
+
+@Serializable
+data class ReadinessCheck(
+    val diagnosticId: String,
+    val lastRunAt: String? = null,
+    val source: DiagnosticSource? = null,
+    val passed: Boolean? = null,
+    val value: String? = null,
+    val afterClaim: Boolean = false,
 )
 
 @Serializable

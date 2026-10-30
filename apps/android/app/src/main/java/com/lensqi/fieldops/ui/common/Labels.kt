@@ -69,7 +69,9 @@ fun plainReason(reason: String) = when {
     reason.contains("acknowledged") -> "Confirm that you reviewed the evidence."
     reason.contains("has not been reviewed") -> "Review every checklist item against the new photo."
     reason.contains("not satisfied") -> "A checklist item is marked not right."
+    reason.contains("remains unknown") || reason.contains("conflicting") -> "A checklist item needs a person to decide."
     reason.contains("unavailable") -> "The equipment check could not reach the endpoint."
+    reason.contains("change analysis rejected") -> "The reviewed photo was not accepted. Review against the new photo."
     else -> reason
 }
 

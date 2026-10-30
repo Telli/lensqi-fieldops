@@ -32,6 +32,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +73,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.lensqi.fieldops.data.api.PhotoEvidence
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
+import com.lensqi.fieldops.domain.Attempt
+import com.lensqi.fieldops.domain.VerifyCard
+import com.lensqi.fieldops.domain.measuredValue
+import com.lensqi.fieldops.domain.verifyCard
+import androidx.compose.material.icons.outlined.Speed
 import com.lensqi.fieldops.ui.common.verifySteps
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -96,7 +107,6 @@ import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.queue.CommandState
-import com.lensqi.fieldops.ui.common.CheckRow
 import com.lensqi.fieldops.ui.common.Dot
 import com.lensqi.fieldops.ui.common.EvidenceBadge
 import com.lensqi.fieldops.ui.common.Expandable
@@ -124,8 +134,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-
-private const val DIAG_FAILED = "Diagnostic failed after the repair claim"
 
 /**
  * One inspection in the design's two modes: "Investigation" until a repair is claimed, then "Repair verification".
@@ -156,7 +164,9 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
             Spacer(Modifier.width(12.dp))
         }
         HorizontalDivider(color = Fo.Border)
-        LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        val list = rememberLazyListState()
+        BringNextStepIntoView(list, view?.takeIf { verifying }?.let { verifyCard(it) to s.attempt?.sequence })
+        LazyColumn(Modifier.padding(horizontal = 16.dp), state = list, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { Spacer(Modifier.height(2.dp)) }
             s.viewCachedAt?.let { at ->
                 item {
@@ -276,45 +286,59 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     val claimedAt = view.repairClaimedAt?.let(::instant)
     val before = claimedAt?.let { at -> view.photos.lastOrNull { p -> instant(p.observedAt)?.let { it <= at } == true } } ?: view.photos.firstOrNull()
     val required = s.fixture?.visualRequirements?.filter { it.mandatory }.orEmpty()
-    fun reviewed(req: String) = view.checklist.firstOrNull { it.requirementId == req && (it.reviewedByEvidenceId == null || it.reviewedByEvidenceId == accepted?.evidenceId) }
-    val allReviewed = required.all { reviewed(it.requirementId) != null }
-    val decided = view.stage == InspectionStage.VerificationFailed || view.stage == InspectionStage.VerifiedComplete
-    val d = if (decided) view.lastDecision else null
-    val diag = view.diagnostics.lastOrNull()
-    val asked = view.evidenceRequests.firstOrNull { it.answeredByPhotoId == null }
-    // The gate you are at: photo, review, confirm, run. The server enforces each one.
-    val gate = when { accepted == null -> 0; !allReviewed -> 1; !view.technicianAcknowledged -> 2; else -> 3 }
+    // The server's own answer for each item under this claim; the policy counts it whichever post-repair photo it cited.
+    fun reviewed(req: String) = view.checklist.firstOrNull { it.requirementId == req }
     val running = s.busy?.startsWith("Server is verifying") == true
+    // The server's next step picks the card; nothing here works out the order itself.
+    val card = verifyCard(view)
+    val attempt = if (running) null else s.attempt
+    val blocking = view.readiness?.blocking.orEmpty()
+    // The server lists every unreviewed item on its own; in plain words they read the same, so each line shows once.
+    val waitingOn = blocking.map(::plainReason).distinct()
+    val check = view.readiness?.checks?.firstOrNull()
+    val target = s.fixture?.diagnostics?.firstOrNull()?.targetAlias
+    val asked = view.evidenceRequests.firstOrNull { it.answeredByPhotoId == null }
     val reviewRows: @Composable () -> Unit = {
-        ReviewRows(required.map { it.requirementId }, { reviewed(it)?.status }, enabled = accepted != null && s.busy == null && !view.technicianAcknowledged) { req, st ->
-            accepted?.let { vm.review(req, st, it.evidenceId) }
-        }
+        ReviewRows(
+            required.map { it.requirementId }, { reviewed(it)?.status },
+            earlier = { req -> reviewed(req)?.reviewedByEvidenceId?.let { it != accepted?.evidenceId } == true },
+            enabled = accepted != null && s.busy == null && (card == VerifyCard.Review || card == VerifyCard.Confirm),
+        ) { req, st -> accepted?.let { vm.review(req, st, it.evidenceId) } }
+    }
+    val claimAgain: @Composable () -> Unit = {
+        Field(s.claimText, vm::onClaimChanged, "What did you do this time?")
+        PrimaryButton("Fixed it again", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
     }
 
-    item { VerifyHero(s, vm, before, after, camera = d?.result != VerificationResult.Verified, onCapture) }
-    item {
+    item(key = HERO_KEY) { VerifyHero(s, vm, before, after, camera = card != VerifyCard.Closed, onCapture) }
+    if (attempt != null) attemptItems(s, vm, view, attempt, card, onCapture, onOpenReceipt, claimAgain)
+    else item(key = NEXT_STEP_KEY) {
         when {
-            running -> AiCard("I'm checking the new photo and your review, then the equipment gets a fresh check.", "Verifying…", null)
-            d?.result == VerificationResult.Verified -> AiCard(aiSummary(view, null), "Verified complete", "Every required check passed.", tone = Fo.Success) {
-                if (d.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { SimBadge(); Muted("The equipment check was simulated, not a live measurement.") }
-                PrimaryButton("View FieldProof receipt", { onOpenReceipt(vm.receiptUrl()) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Receipt)
-                SecondaryButton("Check receipt integrity", vm::checkReceipt, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Fingerprint)
-                s.receiptCheck?.let { r ->
-                    Text(if (r.isValid) "Intact · ${r.checks.size} checks passed" else "Tampered: ${r.failures.joinToString()}", color = if (r.isValid) Fo.Success else Fo.Failure, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            d?.result == VerificationResult.NeedsHumanReview -> AiCard(plainReason(d.reasons.firstOrNull().orEmpty()), "Needs a decision", "A supervisor decides this one; I can't.", tone = Fo.Warning)
-            d != null -> AiCard(plainReason(d.reasons.firstOrNull().orEmpty()), "Verification failed", "This work can't be marked verified. Every attempt stays in the record.", tone = Fo.Failure) {
-                Field(s.claimText, vm::onClaimChanged, "What did you do this time?")
-                PrimaryButton("Fixed it again — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
-            }
-            view.awaitingAnalysis.isNotEmpty() -> AiCard("I'm comparing the new photo with the earlier view.", "Comparing the new photo…",
+            running -> AiCard("Your photo, review and confirmation are in.", "Verifying…", "Measuring ${target ?: "the equipment"} now. The photo and the measurement both have to pass.")
+            card == VerifyCard.Comparing -> AiCard("I'm comparing the new photo with the earlier view.", "Comparing the new photo…",
                 "Verification waits for this. If it doesn't finish, take the photo again.") {
                 SecondaryButton("Take it again", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
                 SecondaryButton("Refresh", { vm.refresh() }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Refresh)
             }
-            gate == 0 -> AiCard(
+            card == VerifyCard.Review -> AiCard(aiSummary(view, null), "Review the new photo", "Mark what you can see yourself. My outline is a suggestion.") {
+                val answers = required.mapNotNull { reviewed(it.requirementId)?.status }
+                when {
+                    ChecklistStatus.NotSatisfied in answers -> Muted("“Not right” means the repair isn't finished. Fix it, then retake the photo.")
+                    ChecklistStatus.Unknown in answers || ChecklistStatus.Conflicting in answers -> Muted("“Can't tell” holds verification. Retake a clearer photo, or change the answer if you can see it.")
+                }
+                reviewRows()
+                SecondaryButton("Retake the photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+            }
+            card == VerifyCard.Confirm -> AiCard("Your review is in.", "Confirm it's your review", "The receipt records that you checked this evidence yourself. A new photo or review needs confirming again.") {
+                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.HowToReg)
+            }
+            card == VerifyCard.Run -> AiCard("Photo accepted, reviewed and confirmed.", "Ready to verify",
+                "Verify takes a fresh measurement of ${target ?: "the equipment"} now${if (check?.afterClaim == true && check.lastRunAt != null) "; the one from ${whenText(check.lastRunAt)} isn't reused" else ""}. Both proofs have to pass.") {
+                PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null, busy = running, icon = Icons.Outlined.Build)
+            }
+            card == VerifyCard.Claim -> AiCard("This repair attempt didn't pass.", "Fix it, then claim again", "Every attempt stays in the record.", tone = Fo.Failure) { claimAgain() }
+            card == VerifyCard.Closed -> AiCard(plainReason(blocking.firstOrNull().orEmpty()), "Inspection closed", null)
+            else -> AiCard(
                 aiSummary(view, null), asked?.note ?: "Photograph the repair",
                 asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",
             ) {
@@ -325,37 +349,13 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                     SecondaryButton("Glasses", onGlasses, Modifier.weight(1f), icon = Icons.Outlined.Visibility)
                 }
             }
-            gate == 1 -> AiCard(aiSummary(view, null), "Review the new photo", "Mark what you can see yourself. My outline is a suggestion.") { reviewRows() }
-            gate == 2 -> AiCard("Your review is in.", "Confirm it's your review", "The receipt records that you checked this evidence yourself.") {
-                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.HowToReg)
-            }
-            else -> AiCard("Photo accepted, reviewed and confirmed.", "Ready to verify", "I'll check the photo and run a fresh equipment check. Both have to pass.") {
-                val ready = view.stage == InspectionStage.ReadyToVerify
-                PrimaryButton("Run verification", vm::verify, Modifier.fillMaxWidth(), enabled = ready && s.busy == null, busy = running, icon = Icons.Outlined.Build)
-                if (!ready) Muted("Waiting for the server to accept the evidence.")
-            }
         }
     }
-    item { ProgressSegments(if (d?.result == VerificationResult.Verified) 4 else gate, verifySteps) }
-
-    if (d != null) {
-        val reason = d.reasons.firstOrNull().orEmpty()
-        val visual = d.result == VerificationResult.Verified || reason.startsWith(DIAG_FAILED) || reason.contains("unavailable")
-        val equipment = if (d.result == VerificationResult.Verified) true else if (visual) false else null
-        item { CheckRow("Visual verification", if (visual) "New photo accepted and every item reviewed." else plainReason(reason), visual) }
-        item {
-            CheckRow(
-                "Equipment check",
-                when (equipment) {
-                    null -> "Not run: the visual check has to pass first."
-                    true -> "Endpoint reachable · ${whenText(diag?.result?.completedAt)}"
-                    false -> "Endpoint still failing · ${whenText(diag?.result?.completedAt)}"
-                },
-                equipment,
-            )
-        }
+    if (attempt == null && !running && waitingOn.size > 1 && card != VerifyCard.Closed) item {
+        Expandable("Why verify can't run yet · ${waitingOn.size}") { waitingOn.forEach { Muted("· $it") } }
     }
-    if (!decided && gate >= 2) item { Expandable("Your review · ${required.size} items") { reviewRows() } }
+    item { ProgressSegments(if (attempt?.decision?.result == VerificationResult.Verified) 4 else card.step, verifySteps) }
+    if (attempt == null && accepted != null && (card == VerifyCard.Confirm || card == VerifyCard.Run)) item { Expandable("Your review · ${required.size} items") { reviewRows() } }
     if (s.attempts.isNotEmpty()) item {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
             Muted("Attempts")
@@ -365,6 +365,129 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
         }
     }
     if (view.stage != InspectionStage.VerifiedComplete) item { Expandable("Equipment check") { EquipmentCheck(s, vm, view) } }
+}
+
+/**
+ * One decision, kept in three separate parts: what the photo showed (the server's change check), what the technician
+ * confirmed, and what the equipment check measured for this attempt, then the decision with every reason.
+ */
+private fun LazyListScope.attemptItems(
+    s: InspectionUi, vm: InspectionViewModel, view: InspectionView, a: Attempt, card: VerifyCard,
+    onCapture: () -> Unit, onOpenReceipt: (String) -> Unit, claimAgain: @Composable () -> Unit,
+) {
+    val d = a.decision
+    val verified = d.result == VerificationResult.Verified
+    val simulated = d.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated || a.measured.any { it.source != DiagnosticSource.LiveLocal }
+    val photoId = a.review.firstOrNull()?.photoEvidenceId ?: view.acceptedPostRepairPhotoId
+    val change = photoId?.let { id -> view.changeAnalyses.lastOrNull { it.photoEvidenceId == id } }
+    val tone = when (d.result) { VerificationResult.Verified -> Fo.Success; VerificationResult.NeedsHumanReview -> Fo.Warning; else -> Fo.Failure }
+    val title = when (d.result) {
+        VerificationResult.Verified -> if (d.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated) "Verified complete · simulated check" else "Verified complete"
+        VerificationResult.NeedsHumanReview -> "Held: needs new evidence"
+        VerificationResult.Denied -> "Not verified"
+    }
+    fun target(diagnosticId: String) = s.fixture?.diagnostics?.firstOrNull { it.diagnosticId == diagnosticId }?.targetAlias
+
+    item(key = NEXT_STEP_KEY) {
+        AiCard(
+            if (verified) aiSummary(view, null) else plainReason(d.reasons.firstOrNull().orEmpty()), title,
+            when { verified -> "Every required check passed."; card == VerifyCard.Photo -> "Take a new photo to try again. This attempt stays in the record."; else -> "This attempt stays in the record." },
+            tone = tone,
+        ) {
+            if (simulated && a.measured.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SourceBadge(a.measured.first().source); Muted("The equipment check was simulated, not a live measurement.")
+            }
+            if (verified) {
+                PrimaryButton("View FieldProof receipt", { onOpenReceipt(vm.receiptUrl()) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Receipt)
+                SecondaryButton("Check receipt integrity", vm::checkReceipt, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Fingerprint)
+                s.receiptCheck?.let { r ->
+                    Text(if (r.isValid) "Intact · ${r.checks.size} checks passed" else "Tampered: ${r.failures.joinToString()}", color = if (r.isValid) Fo.Success else Fo.Failure, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (card == VerifyCard.Photo) PrimaryButton("Take a new photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+            if (card == VerifyCard.Claim) claimAgain()
+        }
+    }
+    item {
+        Part(Icons.Outlined.Visibility, "What the photo showed", "Change check · inferred",
+            pass = when (change?.verdict) { null, VisualChangeVerdict.Unscorable -> null; VisualChangeVerdict.Changed -> true; else -> false }) {
+            if (change != null) {
+                val c = changeText(change.verdict)
+                EvidenceBadge(c.state, c.label)
+                Muted(if (change.verdict == VisualChangeVerdict.Unscorable) "No visual change could be established; the visual part rests on your review." else change.reason)
+            } else Muted("No accepted photo for this claim.")
+        }
+    }
+    item {
+        Part(Icons.Outlined.HowToReg, "What you confirmed", "Your review",
+            pass = if (a.review.isEmpty() || a.acknowledgedAt == null) false else if (a.review.all { it.status == ChecklistStatus.Satisfied }) true else null) {
+            if (a.review.isEmpty()) Muted("Nothing reviewed for this claim.")
+            a.review.forEach { r -> Muted("${featureName(r.requirementId)}: ${checklistLabel(r.status)}") }
+            Muted(a.acknowledgedAt?.let { "Confirmed by you · ${whenText(it)}" } ?: "Not confirmed by you.")
+        }
+    }
+    item {
+        Part(Icons.Outlined.Speed, "What was measured", "Equipment check · measured",
+            pass = if (a.measured.isEmpty()) null else a.measured.all { it.passed == true }) {
+            if (a.measured.isEmpty()) Muted("No check ran: the photo, review or confirmation decided first.")
+            a.measured.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(target(m.diagnosticId) ?: m.targetAlias, fontWeight = FontWeight.Medium, fontSize = 13.sp); SourceBadge(m.source)
+                }
+                Muted("${if (m.passed == null) "Unavailable: no measurement" else "${measuredValue(m)} · ${if (m.passed) "passed" else "failed"}"} · ${whenText(m.completedAt)}")
+            }
+        }
+    }
+    item {
+        Panel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("DECISION · ${d.policyVersion}", style = Eyebrow, color = Fo.Muted, modifier = Modifier.weight(1f))
+                Text(if (d.result == VerificationResult.NeedsHumanReview) "Held" else d.result.name, color = tone, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            }
+            d.reasons.forEach { Muted("· $it") }
+        }
+    }
+}
+
+/** Where the photo and the next step's card sit in the list, so the screen can bring the card into view when the step changes. */
+private const val HERO_KEY = "verify-hero"
+private const val NEXT_STEP_KEY = "verify-next-step"
+
+/**
+ * When the step changes (a photo accepted, a review finished, a decision made), scroll just far enough to show the new
+ * step's card: on a phone it can sit below the photo and look like the end of the round. Nothing moves on first show,
+ * and a card already in view stays put so the photo being reviewed stays on screen.
+ */
+@Composable
+private fun BringNextStepIntoView(list: LazyListState, step: Any?) {
+    var shown by remember { mutableStateOf<Any?>(null) }
+    LaunchedEffect(step) {
+        val before = shown
+        shown = step
+        if (before == null || step == null || before == step) return@LaunchedEffect
+        delay(150) // let the new card lay out first
+        val info = list.layoutInfo
+        val card = info.visibleItemsInfo.firstOrNull { it.key == NEXT_STEP_KEY }
+        if (card == null) {
+            info.visibleItemsInfo.firstOrNull { it.key == HERO_KEY }?.let { list.animateScrollToItem(it.index + 1) }
+            return@LaunchedEffect
+        }
+        val hidden = card.offset + card.size - info.viewportEndOffset
+        if (hidden > 0) list.animateScrollBy(minOf(hidden, card.offset - info.viewportStartOffset).toFloat())
+    }
+}
+
+/** One of the three kinds of proof, labelled with where it came from. */
+@Composable
+private fun Part(icon: ImageVector, title: String, kind: String, pass: Boolean?, content: @Composable () -> Unit) {
+    val color = when (pass) { true -> Fo.Success; false -> Fo.Failure; null -> Fo.Border }
+    Panel(border = if (pass == null) Fo.Border else color.copy(alpha = 0.45f), background = if (pass == null) Fo.Surface else color.copy(alpha = 0.06f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(icon, null, modifier = Modifier.size(18.dp)); Text(title, fontWeight = FontWeight.Medium)
+        }
+        Text(kind.uppercase(), style = Eyebrow, color = Fo.Muted)
+        content()
+    }
 }
 
 private fun instant(s: String): Instant? = runCatching { OffsetDateTime.parse(s).toInstant() }.getOrNull()
@@ -408,13 +531,16 @@ private fun VerifyHero(s: InspectionUi, vm: InspectionViewModel, before: PhotoEv
     }
 }
 
-/** One row per required item: your own call against the new photo. */
+/** One row per required item: your own call against the new photo. An answer given on an earlier photo of this claim says so. */
 @Composable
-private fun ReviewRows(requirements: List<String>, current: (String) -> ChecklistStatus?, enabled: Boolean, onPick: (String, ChecklistStatus) -> Unit) {
+private fun ReviewRows(requirements: List<String>, current: (String) -> ChecklistStatus?, earlier: (String) -> Boolean, enabled: Boolean, onPick: (String, ChecklistStatus) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         requirements.forEachIndexed { i, req ->
             if (i > 0) HorizontalDivider(color = Fo.Border)
-            Text(featureName(req))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(featureName(req), modifier = Modifier.weight(1f))
+                if (earlier(req)) Muted("answered on an earlier photo")
+            }
             val cur = current(req)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(ChecklistStatus.Satisfied, ChecklistStatus.NotSatisfied, ChecklistStatus.Unknown).forEach { st ->
@@ -484,7 +610,7 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
     if (r != null) {
         val (color, icon, text) = when (r.passed) {
             true -> Triple(Fo.Success, Icons.Outlined.CheckCircle, "Pass — endpoint reachable")
-            false -> Triple(Fo.Failure, Icons.Outlined.HighlightOff, "Fail — endpoint unreachable")
+            false -> Triple(Fo.Failure, Icons.Outlined.HighlightOff, "Fail — ${r.httpStatus?.let { "answered HTTP $it" } ?: "endpoint unreachable"}")
             null -> Triple(Fo.Warning, Icons.Outlined.RadioButtonUnchecked, "No answer — check unavailable")
         }
         Panel(border = color.copy(alpha = 0.4f)) {
@@ -493,7 +619,7 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
                 Text(text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 SourceBadge(r.source)
             }
-            Muted("${whenText(r.completedAt)}${r.normalizedValue?.let { " · $it" } ?: ""}")
+            Muted("${whenText(r.completedAt)} · ${measuredValue(r)}")
             check?.claimVerified?.let { Muted("What a pass proves: $it") }
         }
     } else Muted("Run the approved check to confirm the fault.")
