@@ -141,6 +141,13 @@ public static class InspectionEndpoints
         {
             var session = store.Find(id);
             if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
+            // A retried key returns what was recorded, and a stage that would refuse the assessment is refused before the paid call.
+            if (Key(http) is { } key && session.Recorded(key) is { } done)
+                return done.OfType<AssessmentRecorded>().FirstOrDefault() is { } a
+                    ? Results.Ok(new { a.EvidenceId, a.Assessment.ModelId, promptDigest = a.PromptDigest ?? "", responseDigest = a.ResponseDigest ?? "", usage = (object?)null, assessment = a.Assessment, events = done.Count, state = View(session), replayed = true })
+                    : ApiResults.Conflict(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
+            if (!session.AcceptsAssessment)
+                return ApiResults.Conflict(InspectionErrorCodes.InvalidState, $"Assessment is not accepted in the current stage (stage {session.State.Stage})");
             var photo = session.State.Photos.LastOrDefault();
             if (photo is null) return ApiResults.Conflict(InspectionErrorCodes.InvalidState, "No photo to assess");
             var twin = session.Twin;
@@ -156,8 +163,8 @@ public static class InspectionEndpoints
             return await GuardAsync(() => store.ExecuteAsync(id, s =>
             {
                 var evidenceId = "assess-" + outcome.ResponseDigest[..10];
-                var events = s.RecordAssessment(requestId, evidenceId, outcome.Assessment, clock.GetUtcNow());
-                return Task.FromResult(Results.Ok(new { evidenceId, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, usage = outcome.Usage, assessment = outcome.Assessment, events = events.Count, state = View(s) }));
+                var events = s.RecordAssessment(requestId, evidenceId, outcome.Assessment, clock.GetUtcNow(), outcome.PromptDigest, outcome.ResponseDigest);
+                return Task.FromResult(Results.Ok(new { evidenceId, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, usage = outcome.Usage, assessment = outcome.Assessment, events = events.Count, state = View(s), replayed = false }));
             }, ct));
         }).AsModelCall();
 
@@ -229,36 +236,34 @@ public static class InspectionEndpoints
         g.MapPost("/inspections/{id}/acknowledge", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.Acknowledge(RequestId(http, "ack:" + s.State.CurrentClaimId), clock.GetUtcNow()); return Results.Ok(View(s)); })));
 
-        // FR-08: server-owned gate. Runs the fixture's diagnostics first unless a fresh post-claim result exists.
+        // FR-08: server-owned gate. Runs the fixture's diagnostics first unless a fresh post-claim result exists. The stage
+        // check, the probes and the decision run under one lock, so a concurrent or retried verify waits and then replays
+        // or is refused instead of running the probes a second time.
         g.MapPost("/inspections/{id}/verify", async (string id, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, TimeProvider clock, CancellationToken ct) =>
         {
-            var session = store.Find(id);
-            if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
+            if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             var requestId = RequestId(http, "verify:" + Guid.NewGuid().ToString("N"));
-            return await GuardAsync(async () =>
+            return await GuardAsync(() => store.ExecuteAsync(id, async s =>
             {
-                if (session.State.DecisionsByRequest.ContainsKey(requestId))
-                    return Results.Ok(new { decision = session.State.DecisionsByRequest[requestId], state = View(session), replayed = true });
-                if (session.State.Stage != InspectionStage.ReadyToVerify)
-                    throw new InspectionConflictException(InspectionErrorCodes.InvalidState, $"Verification requires a pending repair claim (stage {session.State.Stage})");
-                var twin = session.Twin.Twin;
+                if (s.State.DecisionsByRequest.TryGetValue(requestId, out var earlier))
+                    return Results.Ok(new { decision = earlier, state = View(s), replayed = true });
+                if (s.State.Stage != InspectionStage.ReadyToVerify)
+                    throw new InspectionConflictException(InspectionErrorCodes.InvalidState, $"Verification requires a pending repair claim (stage {s.State.Stage})");
+                var twin = s.Twin.Twin;
                 var now = clock.GetUtcNow();
                 foreach (var d in twin.Diagnostics)
                 {
-                    var latest = session.State.LatestDiagnosticFor(d.DiagnosticId);
-                    var fresh = latest is not null && latest.Result.CompletedAt > session.State.RepairClaimedAt
+                    var latest = s.State.LatestDiagnosticFor(d.DiagnosticId);
+                    var fresh = latest is not null && latest.Result.CompletedAt > s.State.RepairClaimedAt
                                 && (now - latest.Result.CompletedAt).TotalSeconds <= twin.VerificationPolicy.DiagnosticMaxAgeSeconds;
                     if (fresh) continue;
                     var traceId = Guid.NewGuid().ToString("N");
                     var result = await dispatcher.RunAsync(twin, d.DiagnosticId, traceId, ct);
-                    await store.ExecuteAsync(id, s => { s.RecordDiagnostic("verify-diag:" + traceId, "diag-" + traceId[..10], result, clock.GetUtcNow()); return Task.FromResult(0); }, ct);
+                    s.RecordDiagnostic("verify-diag:" + traceId, "diag-" + traceId[..10], result, clock.GetUtcNow());
                 }
-                return await store.ExecuteAsync(id, s =>
-                {
-                    var decision = s.Verify(requestId, clock.GetUtcNow());
-                    return Task.FromResult(Results.Ok(new { decision, state = View(s), replayed = false }));
-                }, ct);
-            });
+                var decision = s.Verify(requestId, clock.GetUtcNow());
+                return Results.Ok(new { decision, state = View(s), replayed = false });
+            }, ct));
         });
 
         return app;
@@ -295,6 +300,10 @@ public static class InspectionEndpoints
 
     /// <summary>Idempotency is keyed only by a client-supplied Idempotency-Key (PRD FR-05). Without one, every request is
     /// distinct; content-derived keys would silently swallow legitimate repeats such as two identical test photos.</summary>
+    /// <summary>The client's Idempotency-Key, or null when the request did not send one.</summary>
+    internal static string? Key(HttpRequest http) =>
+        http.Headers.TryGetValue("Idempotency-Key", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : null;
+
     private static string RequestId(HttpRequest http, string purpose) =>
         http.Headers.TryGetValue("Idempotency-Key", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : purpose + ":" + Guid.NewGuid().ToString("N");
 
