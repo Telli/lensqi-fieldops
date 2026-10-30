@@ -75,6 +75,13 @@ export interface KnowledgeFact {
 }
 export interface Knowledge { inspectionId: string; status: string; packId?: string | null; packSha256?: string | null; packRevision?: number | null; facts: KnowledgeFact[]; warnings: string[] }
 export interface EventRecord { kind: string; sequence: number; occurredAt: string; [k: string]: unknown }
+export interface ProposalRejection { code: string; message: string; offendingIds: string[] }
+export interface ReasonResponse {
+  accepted: boolean; proposalId: string; modelId: string; replayed: boolean; rejections: ProposalRejection[];
+  proposal?: { nextAction: NextAction; hypothesis?: string | null; requestedVisualEvidence?: string | null } | null;
+  prediction?: { predictionId: string; diagnosticId: string; predictedValue: string; basedOnFactIds: string[] } | null;
+  state: Inspection;
+}
 export interface ReceiptCheck { bundle: string; isValid: boolean; checks: string[]; failures: string[] }
 export interface PackDocument { documentId: string; publisher: string; title: string; url?: string | null; documentVersion?: string | null; accessedOn: string; rightsMode: string; factCount: number }
 export interface KnowledgePack {
@@ -127,6 +134,7 @@ export const api = {
   investigate: (id: string) => request<InvestigateResponse>("POST", `${I(id)}/investigate`),
   segment: (id: string, concept?: string, photoEvidenceId?: string) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, { concept, photoEvidenceId }),
   knowledge: (id: string) => request<Knowledge>("GET", `${I(id)}/knowledge`),
+  reason: (id: string, observation: string) => request<ReasonResponse>("POST", `${I(id)}/knowledge/reason`, { observation }),
   runDiagnostic: (id: string, diagnosticId: string) => request<{ result: DiagnosticResult; state: Inspection }>("POST", `${I(id)}/diagnostics/${encodeURIComponent(diagnosticId)}:run`),
   workOrder: (id: string, summary: string) => request<Inspection>("POST", `${I(id)}/work-order`, { summary }),
   claim: (id: string, description: string) => request<{ claimId: string; state: Inspection }>("POST", `${I(id)}/repair-claims`, { description }),

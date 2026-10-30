@@ -89,4 +89,44 @@ public class ReceiptTests
         Assert.False(v2.IsValid);
         Assert.Contains(v2.Failures, f => f.Contains("sequence gap"));
     }
+
+    [Fact]
+    public void Receipt_shows_predictions_with_a_tally_a_change_verdict_per_claim_and_refused_proposals()
+    {
+        static VendorGroundedProposal Probe() => new("LAB-SW-01", ["LAB-HEALTH-CHECK-01"], null, null, "NODE-A-HEALTH",
+            ProposedNextAction.RunApprovedProbe, new Prediction("NODE-A-HEALTH", "Reachable", ["LAB-HEALTH-CHECK-01"], null));
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim(); k.PostRepairEvidence();
+        k.Session.RecordKnowledgeProposal("kp1", "prop-1", "fake-muse", "p", "r", Probe(), null, [], "pred-1", k.Now);
+        k.Session.RecordKnowledgeProposal("kp2", "prop-2", "fake-muse", "p", "r", null, "RunApprovedProbe",
+            [new(ProposalErrorCodes.ProbeNotAllowlisted, "reboot is not approved", ["POST /rest/system/reboot"])], "pred-2", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(false)); k.Verify();
+        k.Tick(); k.Session.ClaimRepair("c2", "claim-2", "Moved the cable to P2", k.Now);
+        k.Session.RecordKnowledgeProposal("kp3", "prop-3", "fake-muse", "p", "r", Probe(), null, [], "pred-3", k.Now);
+        k.PostRepairEvidence();
+        k.Tick(); k.RecordProbe(k.Probe(true)); k.Verify();
+
+        var receipt = ReceiptBuilder.Build(k.Session, [], null, k.Now, "visual-assessment/1.1");
+        Assert.Equal("fieldproof-receipt/1.2", receipt.ReceiptVersion);
+        Assert.Equal(new ReceiptPredictionTally(1, 1, 0, 0), receipt.Predictions.Tally);
+        Assert.Equal(["Falsified", "Confirmed"], receipt.Predictions.Items.Select(p => p.Outcome));
+        Assert.Equal(["Reachable", "Reachable"], receipt.Predictions.Items.Select(p => p.PredictedValue));
+        Assert.Equal(["Unreachable", "Reachable"], receipt.Predictions.Items.Select(p => p.MeasuredValue));
+        Assert.Equal("prop-1", receipt.Predictions.Items[0].ProposalId);
+
+        Assert.Equal(2, receipt.VisualChange.Claims.Count);                // one verdict per repair claim
+        Assert.All(receipt.VisualChange.Claims, c => Assert.Equal("Unscorable", c.Verdict));
+        Assert.Equal("Moved the cable to P2", receipt.VisualChange.Claims[1].Description);
+        Assert.Equal(2, receipt.VisualChange.Tally["Unscorable"]);
+
+        Assert.Equal(2, receipt.Proposals.Accepted);
+        var refused = Assert.Single(receipt.Proposals.Rejected);
+        Assert.Equal((ProposalErrorCodes.ProbeNotAllowlisted, "RunApprovedProbe"), (Assert.Single(refused.Codes), refused.NextAction));
+
+        var html = ReceiptHtml.Render(receipt);
+        Assert.Contains("1 confirmed · 1 falsified", html);
+        Assert.Contains("1 rejected", html);
+        Assert.Contains("Moved the cable to P2", html);
+        Assert.Equal(receipt.ManifestSha256, receipt.WithManifest().ManifestSha256);
+    }
 }

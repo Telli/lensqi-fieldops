@@ -10,7 +10,7 @@ import { useAct } from "@/lib/hooks";
 import { FieldProofReceipt } from "@/pages/m/receipt";
 import { useFixtures, useInspections } from "@/lib/hooks";
 import { lastPhoto, latestDiagnostic, useInspectionBundle, verifications } from "@/lib/inspection";
-import { changeLabel, checklistLabel, featureName, fmtWhen, isPostRepairItem, observationState, stageLabel, stageState } from "@/lib/labels";
+import { changeLabel, checklistLabel, featureName, fmtWhen, isPostRepairItem, observationState, predictionOutcome, probeValue, stageLabel, stageState } from "@/lib/labels";
 import type { Decision, Stage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -77,7 +77,7 @@ export function InspectionWorkspace({ id }: { id: string }) {
   const tags = arTags(fixture, preClaim ? assessment : undefined, outlines, change);
   const open = i.evidenceRequests?.filter((r) => !r.answeredByPhotoId) ?? [];
   const closed = i.stage === "VerifiedComplete" || i.stage === "Inconclusive";
-  const timeline = ev.filter((e) => ["PhotoRecorded", "AssessmentRecorded", "SegmentationRecorded", "DiagnosticCompleted", "WorkOrderDrafted", "RepairClaimed", "VisualChangeAnalyzed", "VerificationEvaluated", "EvidenceRequested"].includes(e.kind));
+  const timeline = ev.filter((e) => ["PhotoRecorded", "AssessmentRecorded", "SegmentationRecorded", "DiagnosticCompleted", "WorkOrderDrafted", "RepairClaimed", "VisualChangeAnalyzed", "VerificationEvaluated", "EvidenceRequested", "KnowledgeProposalAccepted", "KnowledgeProposalRejected", "PredictionRegistered", "PredictionScored"].includes(e.kind));
   const describe = (e: (typeof ev)[number]): string => {
     switch (e.kind) {
       case "PhotoRecorded": return `Photo · ${({ Phone: "camera", Glasses: "glasses", MockWearables: "mock glasses (simulated)" } as Record<string, string>)[String(e["origin"])] ?? "imported"}`;
@@ -89,6 +89,10 @@ export function InspectionWorkspace({ id }: { id: string }) {
       case "VisualChangeAnalyzed": return `Change evidence: ${changeLabel[(e["analysis"] as { verdict: keyof typeof changeLabel }).verdict].label}`;
       case "VerificationEvaluated": return (e["decision"] as Decision).result === "Verified" ? "Verification accepted" : "Verification rejected";
       case "EvidenceRequested": return `Evidence requested: ${e["note"]}`;
+      case "KnowledgeProposalAccepted": return `AI suggestion accepted: ${(e["proposal"] as { nextAction: string }).nextAction}`;
+      case "KnowledgeProposalRejected": return `AI suggestion refused: ${(e["rejections"] as { code: string }[]).map((x) => x.code).join(", ")}`;
+      case "PredictionRegistered": return `AI predicted ${probeValue(String(e["predictedValue"]))} for ${e["diagnosticId"]}`;
+      case "PredictionScored": return `${predictionOutcome[String(e["outcome"])]?.label ?? "Prediction scored"} · measured ${probeValue(e["measuredValue"] as string | null)}`;
       default: return e.kind;
     }
   };

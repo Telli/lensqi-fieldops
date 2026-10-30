@@ -1,0 +1,374 @@
+{
+  "note": "Web run on 2026-10-29 (local time) against the local API. The two /knowledge/reason calls were genuine Meta Muse Spark calls (modelId muse-spark-1.3). The equipment checks were the Simulated probe, set to fail for the first repair claim and pass for the second. Change analysis was Unscorable (no reference segmentation), so no SAM call ran. Screenshots are 0.6-scale captures at a 375x812 mobile viewport in the desktop app's browser pane, not a phone.",
+  "inspectionId": "I-6a633f38aeb1",
+  "events": [
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-c3f727d36a",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-30T06:10:59.088763+00:00",
+        "source": "Simulated",
+        "traceId": "c3f727d36acd45dc86ae73cfb6ce561d",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "sequence": 4,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:10:59.088902+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "diag:c3f727d36acd45dc86ae73cfb6ce561d:ee38643254124e3d835be1530ab530fc"
+    },
+    {
+      "kind": "RepairClaimed",
+      "claimId": "claim-09cab87faf",
+      "description": "Reseated the yellow cable at P2",
+      "sequence": 8,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:10:59.109206+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "claim:claim-09cab87faf:927bdfe895ce41caa688c9348708c0fa"
+    },
+    {
+      "kind": "KnowledgeProposalAccepted",
+      "proposalId": "prop-32c0e9a314",
+      "modelId": "muse-spark-1.3",
+      "promptDigest": "af941024286a4d16d969034fe051ecf299748557349399a250f2922e4877c470",
+      "responseDigest": "4f41b1b33d0c9006c5363805b1216cdb5bb5dee0a702831e4313a226f8d4afc7",
+      "proposal": {
+        "assetId": "LAB-SW-01",
+        "usedFactIds": [
+          "LAB-PORT-MAP-01",
+          "LAB-HEALTH-CHECK-01",
+          "LAB-CLAIM-BOUNDARY-01"
+        ],
+        "hypothesis": "Technician claims yellow cable reseated at P2 matching the expected wiring plan; the approved health check will test Node A reachability.",
+        "requestedVisualEvidence": null,
+        "proposedDiagnosticId": "NODE-A-HEALTH",
+        "nextAction": "RunApprovedProbe",
+        "prediction": {
+          "diagnosticId": "NODE-A-HEALTH",
+          "predictedValue": "Reachable",
+          "basedOnFactIds": [
+            "LAB-PORT-MAP-01",
+            "LAB-HEALTH-CHECK-01"
+          ],
+          "rationale": "Wiring plan expects cable at P2 and acceptance checklist requires health check after repair claim."
+        }
+      },
+      "sequence": 16,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:15.459044+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "7fa76be5-25ac-45d4-b05b-cc9b4aab6f3c"
+    },
+    {
+      "kind": "PredictionRegistered",
+      "predictionId": "pred-7e128d8449",
+      "diagnosticId": "NODE-A-HEALTH",
+      "predictedValue": "Reachable",
+      "basedOnFactIds": [
+        "LAB-PORT-MAP-01",
+        "LAB-HEALTH-CHECK-01"
+      ],
+      "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+      "proposalId": "prop-32c0e9a314",
+      "sequence": 17,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:15.459044+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "7fa76be5-25ac-45d4-b05b-cc9b4aab6f3c"
+    },
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-c857253d57",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": false,
+        "completedAt": "2026-10-30T06:11:38.85436+00:00",
+        "source": "Simulated",
+        "traceId": "c857253d57fb48adb7b30f5c5a43c097",
+        "normalizedValue": "Unreachable",
+        "rawDigest": null
+      },
+      "sequence": 18,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:38.854365+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "verify-diag:c857253d57fb48adb7b30f5c5a43c097"
+    },
+    {
+      "kind": "PredictionScored",
+      "predictionId": "pred-7e128d8449",
+      "diagnosticEvidenceId": "diag-c857253d57",
+      "measuredValue": "Unreachable",
+      "outcome": "Falsified",
+      "sequence": 19,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:38.854365+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "verify-diag:c857253d57fb48adb7b30f5c5a43c097"
+    },
+    {
+      "kind": "VerificationEvaluated",
+      "requestId": "9cf1ab9f-6978-4291-964b-602da4b9a927",
+      "decision": {
+        "result": "Denied",
+        "outcomeKind": null,
+        "reasons": [
+          "Diagnostic failed after the repair claim: NODE-A-HEALTH measured Unreachable (Simulated probe). Still required: \u201cThe approved lab endpoint returned HTTP 200 at test time (not physical port identity).\u201d"
+        ],
+        "verifiedClaims": [],
+        "policyVersion": "fieldproof-policy/1.3",
+        "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+        "isVerified": false
+      },
+      "sequence": 20,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:38.854596+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": null
+    },
+    {
+      "kind": "RepairClaimed",
+      "claimId": "claim-4d9a085b85",
+      "description": "Moved the yellow cable from P3 to P2",
+      "sequence": 22,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:11:51.364248+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "claim:claim-4d9a085b85:1526d1d7cf2c42f7b10fad5e3ddf83d5"
+    },
+    {
+      "kind": "KnowledgeProposalAccepted",
+      "proposalId": "prop-8eb42c8ab2",
+      "modelId": "muse-spark-1.3",
+      "promptDigest": "ce50fdee0a429e03f03a8bcbccce0135120fbff0f7be0946d9a39e053e8e54c1",
+      "responseDigest": "73943d8fe3b890a40d24902f9345c5b2e927ca414548fdc7a07fecfda9780d0b",
+      "proposal": {
+        "assetId": "LAB-SW-01",
+        "usedFactIds": [
+          "LAB-PORT-MAP-01",
+          "LAB-HEALTH-CHECK-01",
+          "LAB-CLAIM-BOUNDARY-01"
+        ],
+        "hypothesis": "Technician claims yellow cable moved to expected P2; approved health check should confirm Node A reachability.",
+        "requestedVisualEvidence": null,
+        "proposedDiagnosticId": "NODE-A-HEALTH",
+        "nextAction": "RunApprovedProbe",
+        "prediction": {
+          "diagnosticId": "NODE-A-HEALTH",
+          "predictedValue": "Reachable",
+          "basedOnFactIds": [
+            "LAB-PORT-MAP-01",
+            "LAB-HEALTH-CHECK-01"
+          ],
+          "rationale": "Wiring plan expects P2 and claim states cable now in P2, so endpoint is expected reachable; health result indicates reachability only per limitation note."
+        }
+      },
+      "sequence": 30,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:12:08.603737+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "24dd83a1-e4c6-4866-b726-c7b85bd7a027"
+    },
+    {
+      "kind": "PredictionRegistered",
+      "predictionId": "pred-12da947293",
+      "diagnosticId": "NODE-A-HEALTH",
+      "predictedValue": "Reachable",
+      "basedOnFactIds": [
+        "LAB-PORT-MAP-01",
+        "LAB-HEALTH-CHECK-01"
+      ],
+      "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+      "proposalId": "prop-8eb42c8ab2",
+      "sequence": 31,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:12:08.603737+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "24dd83a1-e4c6-4866-b726-c7b85bd7a027"
+    },
+    {
+      "kind": "DiagnosticCompleted",
+      "evidenceId": "diag-d195d22917",
+      "result": {
+        "fixtureId": "LAB-RACK-01",
+        "diagnosticId": "NODE-A-HEALTH",
+        "targetAlias": "lab-node-a",
+        "passed": true,
+        "completedAt": "2026-10-30T06:12:23.172862+00:00",
+        "source": "Simulated",
+        "traceId": "d195d229176a4d8ca23ce7f25f3b1332",
+        "normalizedValue": "Reachable",
+        "rawDigest": null
+      },
+      "sequence": 32,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:12:23.172868+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "verify-diag:d195d229176a4d8ca23ce7f25f3b1332"
+    },
+    {
+      "kind": "PredictionScored",
+      "predictionId": "pred-12da947293",
+      "diagnosticEvidenceId": "diag-d195d22917",
+      "measuredValue": "Reachable",
+      "outcome": "Confirmed",
+      "sequence": 33,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:12:23.172868+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": "verify-diag:d195d229176a4d8ca23ce7f25f3b1332"
+    },
+    {
+      "kind": "VerificationEvaluated",
+      "requestId": "daa4a79e-2a0e-451a-900c-cc3fb28622c5",
+      "decision": {
+        "result": "Verified",
+        "outcomeKind": "VerifiedCompleteSimulated",
+        "reasons": [
+          "Qualifying Simulated fixture checks passed; this is not a live measurement"
+        ],
+        "verifiedClaims": [
+          "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
+        ],
+        "policyVersion": "fieldproof-policy/1.3",
+        "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+        "isVerified": true
+      },
+      "sequence": 34,
+      "inspectionId": "I-6a633f38aeb1",
+      "occurredAt": "2026-10-30T06:12:23.172926+00:00",
+      "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
+      "commandId": null
+    }
+  ],
+  "predictions": {
+    "inspectionId": "I-6a633f38aeb1",
+    "predictions": [
+      {
+        "predictionId": "pred-7e128d8449",
+        "diagnosticId": "NODE-A-HEALTH",
+        "predictedValue": "Reachable",
+        "basedOnFactIds": [
+          "LAB-PORT-MAP-01",
+          "LAB-HEALTH-CHECK-01"
+        ],
+        "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+        "proposalId": "prop-32c0e9a314",
+        "registeredAt": "2026-10-30T06:11:15.459044+00:00",
+        "measuredValue": "Unreachable",
+        "outcome": "Falsified",
+        "diagnosticEvidenceId": "diag-c857253d57",
+        "scoredAt": "2026-10-30T06:11:38.854365+00:00"
+      },
+      {
+        "predictionId": "pred-12da947293",
+        "diagnosticId": "NODE-A-HEALTH",
+        "predictedValue": "Reachable",
+        "basedOnFactIds": [
+          "LAB-PORT-MAP-01",
+          "LAB-HEALTH-CHECK-01"
+        ],
+        "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+        "proposalId": "prop-8eb42c8ab2",
+        "registeredAt": "2026-10-30T06:12:08.603737+00:00",
+        "measuredValue": "Reachable",
+        "outcome": "Confirmed",
+        "diagnosticEvidenceId": "diag-d195d22917",
+        "scoredAt": "2026-10-30T06:12:23.172868+00:00"
+      }
+    ],
+    "tally": {
+      "confirmed": 1,
+      "falsified": 1,
+      "unscorable": 0,
+      "pending": 0
+    },
+    "note": "Model calibration. The probe measurement decides verification; a prediction never does."
+  },
+  "receiptBlocks": {
+    "receiptVersion": "fieldproof-receipt/1.2",
+    "predictions": {
+      "label": "Model calibration: what the model predicted before the probe ran, scored by code. Never a verification input.",
+      "tally": {
+        "confirmed": 1,
+        "falsified": 1,
+        "unscorable": 0,
+        "pending": 0
+      },
+      "items": [
+        {
+          "predictionId": "pred-7e128d8449",
+          "proposalId": "prop-32c0e9a314",
+          "diagnosticId": "NODE-A-HEALTH",
+          "predictedValue": "Reachable",
+          "basedOnFactIds": [
+            "LAB-PORT-MAP-01",
+            "LAB-HEALTH-CHECK-01"
+          ],
+          "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+          "registeredAt": "2026-10-30T06:11:15.459044+00:00",
+          "measuredValue": "Unreachable",
+          "outcome": "Falsified",
+          "diagnosticEvidenceId": "diag-c857253d57",
+          "scoredAt": "2026-10-30T06:11:38.854365+00:00"
+        },
+        {
+          "predictionId": "pred-12da947293",
+          "proposalId": "prop-8eb42c8ab2",
+          "diagnosticId": "NODE-A-HEALTH",
+          "predictedValue": "Reachable",
+          "basedOnFactIds": [
+            "LAB-PORT-MAP-01",
+            "LAB-HEALTH-CHECK-01"
+          ],
+          "predictionDigest": "f235c8d5696f1a5bd4165778fc2841bd5f78c5b7081dcb07d83b31e604c9319f",
+          "registeredAt": "2026-10-30T06:12:08.603737+00:00",
+          "measuredValue": "Reachable",
+          "outcome": "Confirmed",
+          "diagnosticEvidenceId": "diag-d195d22917",
+          "scoredAt": "2026-10-30T06:12:23.172868+00:00"
+        }
+      ]
+    },
+    "proposals": {
+      "label": "Model proposals checked by the server before anything was acted on. Rejected proposals ran nothing.",
+      "accepted": 2,
+      "rejected": []
+    },
+    "visualChange": {
+      "claims": [
+        {
+          "claimId": "claim-09cab87faf",
+          "description": "Reseated the yellow cable at P2",
+          "claimedAt": "2026-10-30T06:10:59.109206+00:00",
+          "verdict": "Unscorable",
+          "photoEvidenceId": "photo-7b9bf6d997",
+          "analyses": 1
+        },
+        {
+          "claimId": "claim-4d9a085b85",
+          "description": "Moved the yellow cable from P3 to P2",
+          "claimedAt": "2026-10-30T06:11:51.364248+00:00",
+          "verdict": "Unscorable",
+          "photoEvidenceId": "photo-a251a620a1",
+          "analyses": 1
+        }
+      ],
+      "tally": {
+        "Unscorable": 2
+      }
+    }
+  },
+  "receiptVerify": {
+    "isValid": true,
+    "failures": []
+  }
+}
