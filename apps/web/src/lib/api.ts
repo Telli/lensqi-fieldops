@@ -48,7 +48,16 @@ export interface Inspection {
   /** Newer post-repair photos still being compared with the earlier view; verification waits while any remain. */
   awaitingAnalysis?: string[];
   lastDecision?: Decision | null; outcomeKind?: OutcomeKind | null; evidenceRequests?: EvidenceRequest[];
+  /** The server's verification gate: the next step and every reason verify cannot run yet. */
+  readiness?: Readiness;
 }
+export type NextVerifyAction = "None" | "ClaimRepair" | "CapturePhoto" | "WaitForAnalysis" | "ReviewChecklist" | "Acknowledge" | "Verify";
+export interface ReadinessCheck {
+  diagnosticId: string; lastRunAt?: string | null; source?: DiagnosticSource | null; passed?: boolean | null; value?: string | null; afterClaim: boolean;
+}
+/** Ready never means verified: verify measures every fixture check again and decides on that measurement. */
+export interface Readiness { ready: boolean; next: NextVerifyAction; blocking: string[]; checks: ReadinessCheck[]; measuresOnVerify: boolean }
+export interface ReceiptIssue { manifestSha256: string; eventCount: number; issuedAt: string; receiptVersion: string; number: number }
 export interface InspectionSummary {
   inspectionId: string; fixtureId: string; assetId: string; stage: Stage; outcomeKind?: OutcomeKind | null;
   createdAt: string; updatedAt: string; photos: number; diagnostics: number; lastDecision?: Decision["result"] | null;
@@ -84,7 +93,7 @@ export interface ReasonResponse {
   prediction?: { predictionId: string; diagnosticId: string; predictedValue: string; basedOnFactIds: string[] } | null;
   state: Inspection;
 }
-export interface ReceiptCheck { bundle: string; isValid: boolean; checks: string[]; failures: string[] }
+export interface ReceiptCheck { bundle: string; isValid: boolean; checks: string[]; failures: string[]; issued?: ReceiptIssue }
 export interface PackDocument { documentId: string; publisher: string; title: string; url?: string | null; documentVersion?: string | null; accessedOn: string; rightsMode: string; factCount: number }
 export interface KnowledgePack {
   packId: string; packRevision: number; originKind: string; sha256: string; manufacturerId: string; productCode: string;
@@ -126,12 +135,13 @@ export const api = {
   events: (id: string) => request<EventRecord[]>("GET", `${I(id)}/events`),
   artifacts: (id: string) => request<string[]>("GET", `${I(id)}/artifacts`),
   geometry: (id: string, segmentationId: string) => request<SegmentationGeometry>("GET", `${I(id)}/artifacts/${segmentationId}.json`),
-  upload: (id: string, file: Blob, name: string, source: Origin) => {
+  /** With a key, a retry of the same capture is recognised by the server instead of recording a second photo. */
+  upload: (id: string, file: Blob, name: string, source: Origin, key?: string, observedAt?: string) => {
     const f = new FormData();
     f.append("image", file, name);
     f.append("source", source);
-    f.append("observedAt", new Date().toISOString());
-    return request<ObservationResponse>("POST", `${I(id)}/observations`, undefined, f);
+    f.append("observedAt", observedAt ?? new Date().toISOString());
+    return request<ObservationResponse>("POST", `${I(id)}/observations`, undefined, f, key);
   },
   investigate: (id: string) => request<InvestigateResponse>("POST", `${I(id)}/investigate`),
   segment: (id: string, concept?: string, photoEvidenceId?: string) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, { concept, photoEvidenceId }),

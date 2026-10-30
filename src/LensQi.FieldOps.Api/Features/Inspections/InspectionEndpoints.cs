@@ -243,10 +243,11 @@ public static class InspectionEndpoints
         g.MapPost("/inspections/{id}/acknowledge", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.Acknowledge(RequestId(http, "ack:" + s.State.CurrentClaimId), clock.GetUtcNow()); return Results.Ok(View(s)); })));
 
-        // FR-08: server-owned gate. Runs the fixture's diagnostics first unless a fresh post-claim result exists or the
-        // visual and human prerequisites already decide the outcome. The stage
-        // check, the probes and the decision run under one lock, so a concurrent or retried verify waits and then replays
-        // or is refused instead of running the probes a second time.
+        // FR-08: server-owned gate. Every verify that passes the visual and human prerequisites runs the fixture's
+        // diagnostics again, so the decision always rests on a measurement taken for this attempt; when the prerequisites
+        // already decide the outcome no probe is spent. The stage check, the probes and the decision run under one lock,
+        // so a concurrent or retried verify waits and then replays its recorded decision or is refused, instead of
+        // running the probes a second time. The probes are read-only health checks, so one cut off mid-call is safe to run again.
         g.MapPost("/inspections/{id}/verify", async (string id, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
@@ -258,19 +259,15 @@ public static class InspectionEndpoints
                 if (s.State.Stage != InspectionStage.ReadyToVerify)
                     throw new InspectionConflictException(InspectionErrorCodes.InvalidState, $"Verification requires a pending repair claim (stage {s.State.Stage})");
                 var twin = s.Twin.Twin;
-                var now = clock.GetUtcNow();
                 // Photo, checklist and acknowledgement are checked first and decide first; when they already decide, no
                 // probe is spent and the recorded decision says what is missing.
                 var ready = VerificationPolicyEvaluator.Prerequisites(s.State, s.Twin) is null;
                 foreach (var d in ready ? twin.Diagnostics : [])
                 {
-                    var latest = s.State.LatestDiagnosticFor(d.DiagnosticId);
-                    var fresh = latest is not null && latest.Result.CompletedAt > s.State.RepairClaimedAt
-                                && (now - latest.Result.CompletedAt).TotalSeconds <= twin.VerificationPolicy.DiagnosticMaxAgeSeconds;
-                    if (fresh) continue;
                     var traceId = Guid.NewGuid().ToString("N");
                     var result = await dispatcher.RunAsync(twin, d.DiagnosticId, traceId, ct);
-                    s.RecordDiagnostic("verify-diag:" + traceId, "diag-" + traceId[..10], result, clock.GetUtcNow());
+                    // The evidence id marks a measurement taken by verify, so clients can show which checks a decision used.
+                    s.RecordDiagnostic("verify-diag:" + traceId, VerifyDiagnosticPrefix + traceId[..10], result, clock.GetUtcNow());
                 }
                 var decision = s.Verify(requestId, clock.GetUtcNow());
                 return Results.Ok(new { decision, state = View(s), replayed = false });
@@ -279,6 +276,9 @@ public static class InspectionEndpoints
 
         return app;
     }
+
+    /// <summary>Evidence ids of diagnostics the verify call ran itself start with this; a manual run's start with "diag-".</summary>
+    public const string VerifyDiagnosticPrefix = "verify-diag-";
 
     public sealed record InspectionSummary(string InspectionId, string FixtureId, string AssetId, string Stage, string? OutcomeKind,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, int Photos, int Diagnostics, string? LastDecision, string? LatestChange,
@@ -306,6 +306,29 @@ public static class InspectionEndpoints
             acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, awaitingAnalysis = st.PhotosBeingCompared.Select(p => p.EvidenceId), pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
             lastDecision = st.LastDecision, evidenceRequests = st.EvidenceRequests,
             outcomeKind = st.LastDecision?.OutcomeKind?.ToString(),
+            readiness = Readiness(s),
+        };
+    }
+
+    /// <summary>The server's verification gate for clients: whether verify can run, the next step and every blocking
+    /// reason, plus the latest result of each fixture diagnostic. Verify always measures again; these are for display.</summary>
+    public static object Readiness(InspectionSession s)
+    {
+        var st = s.State;
+        var r = VerificationReadiness.Of(st, s.Twin);
+        return new
+        {
+            r.Ready, next = r.Next.ToString(), r.Blocking,
+            checks = s.Twin.Twin.Diagnostics.Select(d =>
+            {
+                var last = st.LatestDiagnosticFor(d.DiagnosticId)?.Result;
+                return new
+                {
+                    d.DiagnosticId, lastRunAt = last?.CompletedAt, source = last?.Source.ToString(), passed = last?.Passed, value = last?.NormalizedValue,
+                    afterClaim = last is not null && st.RepairClaimedAt is { } at && last.CompletedAt > at,
+                };
+            }),
+            measuresOnVerify = true,
         };
     }
 

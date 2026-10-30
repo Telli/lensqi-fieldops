@@ -12,10 +12,16 @@ export function aiSummary(i?: Inspection | null, assessment?: Assessment | null)
   if (!i) return "";
   // After a repair claim the story is the verification, told from the server's decision and change check.
   if (i.currentClaimId) {
-    if (i.stage === "VerifiedComplete") return "The new photo and a fresh equipment check both passed.";
+    const own = [...i.changeAnalyses].reverse().find((c) => c.claimId === i.currentClaimId && c.photoEvidenceId === i.acceptedPostRepairPhotoId);
+    if (i.stage === "VerifiedComplete")
+      return own?.verdict === "Unscorable" ? "Your review of the new photo and a fresh equipment check both passed." : "The new photo and a fresh equipment check both passed.";
     if (i.stage === "VerificationFailed" && i.lastDecision) return plainReason(i.lastDecision.reasons[0] ?? "");
     const change = [...i.changeAnalyses].reverse().find((c) => c.claimId === i.currentClaimId);
-    if (i.acceptedPostRepairPhotoId) return "I've compared your repair photo with the earlier one and accepted it.";
+    if (i.acceptedPostRepairPhotoId) {
+      return own?.verdict === "Unscorable"
+        ? "I couldn't compare your repair photo with the earlier one, so the visual part rests on your review."
+        : "I've compared your repair photo with the earlier one and accepted it.";
+    }
     if (change) return changeLabel[change.verdict].detail;
     return "Show me the repaired connection so I can compare it with before.";
   }
