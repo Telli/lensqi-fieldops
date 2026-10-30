@@ -99,3 +99,13 @@ export const isPostRepairItem = (featureId: string) => /post_?repair/i.test(feat
 
 /** First letter up; model sentences sometimes start lower-case. */
 export const sentence = (t?: string | null) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : "");
+
+/** A probe value from the closed prediction sets, in words: "Reachable" → "reachable", "LinkReportedUp" → "link reported up". */
+export const probeValue = (v?: string | null) => (v ? v.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase() : "—");
+
+export const predictionOutcome: Record<string, { label: string; state: EvidenceState }> = {
+  Confirmed: { label: "Prediction confirmed", state: "verified" },
+  Falsified: { label: "Prediction falsified", state: "failed" },
+  Unscorable: { label: "Couldn't be scored", state: "unknown" },
+  Pending: { label: "Waiting for the check", state: "hypothesis" },
+};

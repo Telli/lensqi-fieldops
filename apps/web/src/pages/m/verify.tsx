@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, Lock, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, Lock, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { AiCard, Progress } from "@/components/fo/ai";
 import { ArFrame } from "@/components/fo/ar-frame";
 import { EvidenceBadge, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
-import { api, type ChecklistStatus, type Decision, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
+import { api, type ChecklistStatus, type Decision, type EventRecord, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
 import { aiSummary, verifyGateIndex, verifySteps, type VerifyGate } from "@/lib/ai";
 import { arTags, usePhotoOutlines } from "@/lib/ar";
 import { useAct } from "@/lib/hooks";
 import { beforePhoto, latestDiagnostic, useInspectionBundle, verifications } from "@/lib/inspection";
-import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason } from "@/lib/labels";
+import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason, predictionOutcome, probeValue } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 const DIAG_FAILED = "Diagnostic failed after the repair claim";
@@ -156,6 +156,7 @@ export default function Verify({ id }: { id: string }) {
       <Page className="space-y-4">
         <VerifyHero id={id} i={i} fixture={fixture} assessment={assessment} photoUrl={photoUrl} camera={!decided || decision?.result !== "Verified"} />
         {card}
+        {!running && <PredictionCard id={id} i={i} ev={ev} canAsk={!decided && ready} />}
         <Progress step={decided && decision?.result === "Verified" ? 4 : verifyGateIndex[gate]} steps={verifySteps} />
 
         {(running || decided) && (
@@ -279,3 +280,55 @@ function ProofKey({ title, detail, pass, badge }: { title: string; detail: strin
     </div>
   );
 }
+
+/**
+ * VK-T27: the model says what the equipment check will report before it runs (inferred), then the check measures it.
+ * Core scores the prediction; it never decides verification. Everything here is read from the event log.
+ */
+function PredictionCard({ id, i, ev, canAsk }: { id: string; i: Inspection; ev: EventRecord[]; canAsk: boolean }) {
+  const since = (e: EventRecord) => !!i.repairClaimedAt && new Date(e.occurredAt) >= new Date(i.repairClaimedAt);
+  const claim = [...ev].reverse().find((e) => e.kind === "RepairClaimed");
+  const registered = [...ev].reverse().find((e) => e.kind === "PredictionRegistered" && since(e));
+  const scored = registered && ev.find((e) => e.kind === "PredictionScored" && e["predictionId"] === registered["predictionId"]);
+  const refused = [...ev].reverse().find((e) => (e.kind === "KnowledgeProposalRejected" || e.kind === "KnowledgeProposalAccepted") && since(e));
+  const ask = useAct(id, () => api.reason(id, `Technician's repair claim: ${String(claim?.["description"] ?? "")}. Predict what the approved equipment check will report.`), {
+    success: (r) => r.accepted ? (r.prediction ? "Prediction recorded before the check" : "LensQi didn't propose a check to predict") : "The server refused LensQi's suggestion and recorded why",
+  });
+  if (!registered && !canAsk) return null;
+
+  const outcome = scored ? String(scored["outcome"]) : "Pending";
+  const label = predictionOutcome[outcome] ?? predictionOutcome.Pending!;
+  return (
+    <div className="panel space-y-2 p-3" data-prediction-card>
+      <div className="flex items-center justify-between gap-2">
+        <span className="eyebrow flex items-center gap-1.5"><Sparkles className="size-3.5 text-primary" /> Prediction before the check</span>
+        {registered && <EvidenceBadge state={label.state} label={label.label} />}
+      </div>
+      {registered ? (
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+            <div className="text-[11px] text-muted-foreground">LensQi predicted · inferred</div>
+            <div className="font-medium">{probeValue(String(registered["predictedValue"]))}</div>
+          </div>
+          <div className={cn("rounded-xl border p-2.5", !scored ? "border-dashed border-border" : outcome === "Confirmed" ? "border-success/40 bg-success/5" : outcome === "Falsified" ? "border-failure/40 bg-failure/10" : "border-border")}>
+            <div className="text-[11px] text-muted-foreground">Check measured · measured</div>
+            <div className="font-medium">{scored ? probeValue(scored["measuredValue"] as string | null) : "not run yet"}</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {refused?.kind === "KnowledgeProposalRejected"
+              ? `The server refused LensQi's last suggestion (${(refused["rejections"] as { code: string }[]).map((x) => x.code).join(", ")}). It ran nothing and the refusal is in the record.`
+              : "Ask LensQi to say what the equipment check will report, before it runs. It's recorded first, then scored against the measurement."}
+          </p>
+          <Button variant="outline" className="h-10 w-full rounded-xl" disabled={ask.isPending} onClick={() => ask.mutate([])}>
+            {ask.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />} {ask.isPending ? "Asking…" : "Ask LensQi to predict the check"}
+          </Button>
+        </>
+      )}
+      <p className="text-[11px] text-muted-foreground">A prediction is model calibration. The measurement decides verification, never the prediction.</p>
+    </div>
+  );
+}
+

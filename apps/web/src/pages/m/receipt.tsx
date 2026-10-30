@@ -8,7 +8,8 @@ import { Logo, Citation, SourceBadge, TechDetails } from "@/components/fo/primit
 import { EvidencePhoto } from "@/components/fo/evidence-photo";
 import { api, receiptHtmlUrl, receiptJsonUrl, type Decision, type DiagnosticResult, type EventRecord } from "@/lib/api";
 import { beforePhoto, useGeometry, useInspectionBundle } from "@/lib/inspection";
-import { featureName, fmtWhen, isPostRepairItem, plainReason } from "@/lib/labels";
+import { changeLabel, featureName, fmtWhen, isPostRepairItem, plainReason, predictionOutcome, probeValue, type EvidenceState } from "@/lib/labels";
+import type { ChangeVerdict } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Receipt {
@@ -17,6 +18,9 @@ interface Receipt {
   diagnostics: { evidenceId: string; result: DiagnosticResult }[];
   decision?: Decision | null;
   knowledge?: { packId: string; citations: { factId: string; documentTitle: string; sourceLocator: string; sourceUrl?: string | null }[] } | null;
+  predictions?: { tally: { confirmed: number; falsified: number; unscorable: number; pending: number }; items: { predictionId: string; diagnosticId: string; predictedValue: string; measuredValue?: string | null; outcome: string }[] };
+  visualChange?: { claims: { claimId: string; description: string; verdict: string }[] };
+  proposals?: { accepted: number; rejected: { proposalId: string; nextAction?: string | null; codes: string[] }[] };
   events: EventRecord[];
   artifacts: { evidenceId: string; sha256: string }[];
   manifestSha256: string;
@@ -119,6 +123,47 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
             </ul>
             {simulated && <p className="mt-1.5 text-[11px] text-muted-foreground">Simulated checks stand in for the lab endpoint and are never a live measurement.</p>}
           </div>
+          {r.visualChange?.claims.length ? (
+            <div>
+              <div className="eyebrow">Change evidence per repair</div>
+              <ul className="mt-1.5 space-y-1.5 text-xs">
+                {r.visualChange.claims.map((c, k) => (
+                  <li key={c.claimId} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate">#{k + 1} {c.description}</span>
+                    <Tag state={changeLabel[c.verdict as ChangeVerdict]?.state ?? "unknown"}>{changeLabel[c.verdict as ChangeVerdict]?.label ?? "Not analysed"}</Tag>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">Shows that something changed in the photo, never that the repair worked.</p>
+            </div>
+          ) : null}
+          {r.predictions?.items.length ? (
+            <div>
+              <div className="eyebrow">Predictions before each check</div>
+              <ul className="mt-1.5 space-y-1.5 text-xs">
+                {r.predictions.items.map((p) => (
+                  <li key={p.predictionId} className="flex items-center justify-between gap-2">
+                    <span>Predicted {probeValue(p.predictedValue)} · measured {probeValue(p.measuredValue)}</span>
+                    <Tag state={predictionOutcome[p.outcome]?.state ?? "unknown"}>{p.outcome}</Tag>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {r.predictions.tally.confirmed} confirmed · {r.predictions.tally.falsified} falsified{r.predictions.tally.pending ? ` · ${r.predictions.tally.pending} waiting` : ""}. Model calibration, scored by code; never a verification input.
+              </p>
+            </div>
+          ) : null}
+          {r.proposals && r.proposals.accepted + r.proposals.rejected.length > 0 ? (
+            <div>
+              <div className="eyebrow">AI suggestions checked by the server</div>
+              <p className="mt-1 text-xs">{r.proposals.accepted} accepted · {r.proposals.rejected.length} refused</p>
+              {r.proposals.rejected.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                  {r.proposals.rejected.map((x) => <li key={x.proposalId}>{x.nextAction ?? "Unreadable output"}: {x.codes.join(", ")}. Nothing was run.</li>)}
+                </ul>
+              )}
+            </div>
+          ) : null}
           {r.knowledge?.citations?.length ? (
             <div className="space-y-1.5"><div className="eyebrow">Documentation references</div>
               {r.knowledge.citations.slice(0, 3).map((c) => <Citation key={c.factId} title={c.documentTitle} section={c.sourceLocator} href={c.sourceUrl} />)}
@@ -147,6 +192,15 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
       </div>
     </article>
   );
+}
+
+const tagTone: Record<EvidenceState, string> = {
+  verified: "border-success/40 text-success", failed: "border-failure/40 text-failure", hypothesis: "border-primary/40 text-primary",
+  "evidence-required": "border-warning/40 text-warning", "human-confirmed": "border-border text-foreground", unknown: "border-border text-muted-foreground",
+};
+
+function Tag({ state, children }: { state: EvidenceState; children: React.ReactNode }) {
+  return <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium", tagTone[state])}>{children}</span>;
 }
 
 export default function ReceiptPage({ id }: { id: string }) {

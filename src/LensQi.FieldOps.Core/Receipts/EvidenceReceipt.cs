@@ -12,6 +12,26 @@ public sealed record ReceiptCitation(string FactId, string ClaimKind, string Pro
 
 public sealed record ReceiptModelCall(string EvidenceId, string ModelId, string SchemaVersion, DateTimeOffset At);
 
+/// <summary>One pre-registered prediction and, once its probe ran, the measurement Core scored it against.</summary>
+public sealed record ReceiptPrediction(string PredictionId, string? ProposalId, string DiagnosticId, string PredictedValue, IReadOnlyList<string> BasedOnFactIds,
+    string? PredictionDigest, DateTimeOffset RegisteredAt, string? MeasuredValue, string Outcome, string? DiagnosticEvidenceId, DateTimeOffset? ScoredAt);
+
+public sealed record ReceiptPredictionTally(int Confirmed, int Falsified, int Unscorable, int Pending);
+
+/// <summary>VK-R11.5: model calibration, labelled as such. The verification decision never reads it.</summary>
+public sealed record ReceiptPredictions(string Label, ReceiptPredictionTally Tally, IReadOnlyList<ReceiptPrediction> Items);
+
+/// <summary>The change verdict that counted for one repair claim: the latest analysis of that claim's photos, or none.</summary>
+public sealed record ReceiptClaimChange(string ClaimId, string Description, DateTimeOffset ClaimedAt, string Verdict, string? PhotoEvidenceId, int Analyses);
+
+/// <summary>VK-R12: one verdict per repair claim, every analysis behind them, and a tally by verdict.</summary>
+public sealed record ReceiptVisualChange(string Label, IReadOnlyDictionary<string, int> Tally, IReadOnlyList<ReceiptClaimChange> Claims, IReadOnlyList<VisualChangeAnalysis> Analyses);
+
+public sealed record ReceiptRejectedProposal(string ProposalId, string ModelId, string? NextAction, IReadOnlyList<string> Codes, DateTimeOffset At);
+
+/// <summary>VK-R04.2: how many model proposals the server accepted and which it refused, so the boundary is visible per inspection.</summary>
+public sealed record ReceiptProposals(string Label, int Accepted, IReadOnlyList<ReceiptRejectedProposal> Rejected);
+
 /// <summary>
 /// The FieldProof receipt (PRD FR-09, child VK-R09.2, VK-R11.5, VK-R12). Everything except <see cref="ManifestSha256"/> is
 /// covered by the manifest digest, which is the SHA-256 of the canonical JSON of the receipt with that field null.
@@ -24,7 +44,9 @@ public sealed record EvidenceReceipt(
     IReadOnlyList<ReceiptArtifact> Artifacts,
     IReadOnlyList<ReceiptModelCall> ModelCalls,
     IReadOnlyList<DiagnosticEvidence> Diagnostics,
-    IReadOnlyList<PredictionScored> Predictions,
+    ReceiptPredictions Predictions,
+    ReceiptVisualChange VisualChange,
+    ReceiptProposals Proposals,
     IReadOnlyList<ChecklistEntry> Checklist,
     VerificationDecision? Decision,
     ReceiptKnowledge? Knowledge,
@@ -32,7 +54,7 @@ public sealed record EvidenceReceipt(
     IReadOnlyList<string> Disclaimers,
     string? ManifestSha256)
 {
-    public const string Version = "fieldproof-receipt/1.1";
+    public const string Version = "fieldproof-receipt/1.2";
 
     public static readonly IReadOnlyList<string> StandardDisclaimers =
     [
@@ -67,10 +89,41 @@ public static class ReceiptBuilder
             new ReceiptInspection(st.InspectionId, st.FixtureId, st.FixtureRevision, st.FixtureDigest, st.AssetId, st.Stage.ToString(),
                 st.LastDecision?.OutcomeKind?.ToString(), st.CurrentClaimId, st.RepairClaimedAt, st.TechnicianAcknowledged),
             new ReceiptVersions(VerificationPolicyEvaluator.PolicyVersion, EvidenceReceipt.Version, "vendor-grounded-proposal/1.2", assessmentSchemaVersion),
-            artifacts, modelCalls, st.Diagnostics, st.PredictionScores, st.Checklist.Values.OrderBy(c => c.RequirementId, StringComparer.Ordinal).ToList(),
+            artifacts, modelCalls, st.Diagnostics, Predictions(session), VisualChange(session), Proposals(session), st.Checklist.Values.OrderBy(c => c.RequirementId, StringComparer.Ordinal).ToList(),
             st.LastDecision, knowledge, session.Events, EvidenceReceipt.StandardDisclaimers, null);
         return receipt.WithManifest();
     }
+
+    private static ReceiptPredictions Predictions(InspectionSession session)
+    {
+        var scores = session.State.PredictionScores.ToDictionary(p => p.PredictionId, StringComparer.Ordinal);
+        var items = session.Events.OfType<PredictionRegistered>().Select(p =>
+        {
+            var score = scores.GetValueOrDefault(p.PredictionId);
+            return new ReceiptPrediction(p.PredictionId, p.ProposalId, p.DiagnosticId, p.PredictedValue, p.BasedOnFactIds, p.PredictionDigest, p.OccurredAt,
+                score?.MeasuredValue, score?.Outcome.ToString() ?? "Pending", score?.DiagnosticEvidenceId, score?.OccurredAt);
+        }).ToList();
+        int Count(string outcome) => items.Count(i => i.Outcome == outcome);
+        return new("Model calibration: what the model predicted before the probe ran, scored by code. Never a verification input.",
+            new(Count("Confirmed"), Count("Falsified"), Count("Unscorable"), Count("Pending")), items);
+    }
+
+    private static ReceiptVisualChange VisualChange(InspectionSession session)
+    {
+        var analyses = session.Events.OfType<VisualChangeAnalyzed>().Select(e => e.Analysis).ToList();
+        var claims = session.Events.OfType<RepairClaimed>().Select(c =>
+        {
+            var mine = analyses.Where(a => a.ClaimId == c.ClaimId).ToList();
+            return new ReceiptClaimChange(c.ClaimId, c.Description, c.OccurredAt, mine.LastOrDefault()?.Verdict.ToString() ?? "NotAnalysed", mine.LastOrDefault()?.PhotoEvidenceId, mine.Count);
+        }).ToList();
+        var tally = analyses.GroupBy(a => a.Verdict.ToString()).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count());
+        return new("Measured visual change between the pre-repair and post-repair photos. Evidence that something changed, never that the repair worked.", tally, claims, analyses);
+    }
+
+    private static ReceiptProposals Proposals(InspectionSession session) => new(
+        "Model proposals checked by the server before anything was acted on. Rejected proposals ran nothing.",
+        session.Events.OfType<KnowledgeProposalAccepted>().Count(),
+        session.Events.OfType<KnowledgeProposalRejected>().Select(r => new ReceiptRejectedProposal(r.ProposalId, r.ModelId, r.NextAction, r.Rejections.Select(x => x.Code).Distinct().ToList(), r.OccurredAt)).ToList());
 
     public static ReceiptKnowledge FromResolution(KnowledgeResolution r) => new(
         r.PackId ?? "", r.PackSha256 ?? "", r.PackRevision ?? 0, r.Status.ToString(),
@@ -110,25 +163,47 @@ public static class ReceiptHtml
             sb.Append("<tr><td>").Append(E(a.EvidenceId)).Append("</td><td>").Append(E(a.Origin)).Append("</td><td>").Append(a.ObservedAt.ToString("u")).Append("</td><td><code>").Append(E(a.Sha256)).Append("</code></td><td>").Append(E(a.Path)).Append("</td></tr>");
         sb.Append("</table>");
         if (r.Checklist.Count > 0) { sb.Append("<ul>"); foreach (var c in r.Checklist) sb.Append("<li>").Append(E(c.RequirementId)).Append(": <b>").Append(E(c.Status.ToString())).Append("</b> at ").Append(c.ReviewedAt.ToString("u")).Append("</li>"); sb.Append("</ul>"); }
-        var changes = r.Events.OfType<VisualChangeAnalyzed>().Select(e => e.Analysis).ToList();
-        if (changes.Count > 0)
+        if (r.VisualChange.Claims.Count > 0)
         {
-            sb.Append("<h2>Change evidence (measured, visual; never a verification)</h2><table><tr><th>Claim</th><th>Photo</th><th>Verdict</th><th>Compared with</th><th>dHash distance</th><th>IoU</th><th>Shift</th><th>Reason</th><th>Thresholds</th></tr>");
-            foreach (var c in changes)
-                sb.Append("<tr><td>").Append(E(c.ClaimId)).Append("</td><td>").Append(E(c.PhotoEvidenceId)).Append("</td><td><b>").Append(E(c.Verdict.ToString())).Append("</b></td><td>").Append(E(c.DuplicateOfEvidenceId ?? c.ReferencePhotoEvidenceId))
-                  .Append("</td><td>").Append(c.PerceptualHashDistance?.ToString() ?? "").Append("</td><td>").Append(c.TargetRegionIoU?.ToString("0.000") ?? "").Append("</td><td>").Append(c.ComponentShiftNormalized?.ToString("0.000") ?? "")
-                  .Append("</td><td>").Append(E(c.Reason)).Append("</td><td>").Append(E(c.ThresholdsVersion)).Append("</td></tr>");
+            sb.Append("<h2>Change evidence (measured, visual; never a verification)</h2><p class=\"muted\">").Append(E(r.VisualChange.Label)).Append("</p>");
+            sb.Append("<table><tr><th>Repair claim</th><th>Verdict</th><th>Photo</th><th>Analyses</th></tr>");
+            foreach (var c in r.VisualChange.Claims)
+                sb.Append("<tr><td>").Append(E(c.Description)).Append(" <span class=\"muted\">(").Append(E(c.ClaimId)).Append(")</span></td><td><b>").Append(E(c.Verdict)).Append("</b></td><td>").Append(E(c.PhotoEvidenceId)).Append("</td><td>").Append(c.Analyses).Append("</td></tr>");
             sb.Append("</table>");
+            if (r.VisualChange.Analyses.Count > 0)
+            {
+                sb.Append("<table><tr><th>Claim</th><th>Photo</th><th>Verdict</th><th>Compared with</th><th>dHash distance</th><th>IoU</th><th>Shift</th><th>Reason</th><th>Thresholds</th></tr>");
+                foreach (var c in r.VisualChange.Analyses)
+                    sb.Append("<tr><td>").Append(E(c.ClaimId)).Append("</td><td>").Append(E(c.PhotoEvidenceId)).Append("</td><td><b>").Append(E(c.Verdict.ToString())).Append("</b></td><td>").Append(E(c.DuplicateOfEvidenceId ?? c.ReferencePhotoEvidenceId))
+                      .Append("</td><td>").Append(c.PerceptualHashDistance?.ToString() ?? "").Append("</td><td>").Append(c.TargetRegionIoU?.ToString("0.000") ?? "").Append("</td><td>").Append(c.ComponentShiftNormalized?.ToString("0.000") ?? "")
+                      .Append("</td><td>").Append(E(c.Reason)).Append("</td><td>").Append(E(c.ThresholdsVersion)).Append("</td></tr>");
+                sb.Append("</table>");
+            }
         }
         sb.Append("<h2>Model calls (inferred, annotations only)</h2><table><tr><th>Evidence</th><th>Model</th><th>Schema</th><th>At</th></tr>");
         foreach (var m in r.ModelCalls) sb.Append("<tr><td>").Append(E(m.EvidenceId)).Append("</td><td>").Append(E(m.ModelId)).Append("</td><td>").Append(E(m.SchemaVersion)).Append("</td><td>").Append(m.At.ToString("u")).Append("</td></tr>");
         sb.Append("</table>");
-        if (r.Predictions.Count > 0)
+        if (r.Predictions.Items.Count > 0)
         {
-            var confirmed = r.Predictions.Count(p => p.Outcome == PredictionOutcome.Confirmed);
-            sb.Append("<h2>Pre-registered predictions (model calibration, not evidence)</h2><p class=\"muted\">").Append(confirmed).Append(" of ").Append(r.Predictions.Count).Append(" confirmed by measurement.</p><ul>");
-            foreach (var p in r.Predictions) sb.Append("<li>").Append(E(p.PredictionId)).Append(": measured <b>").Append(E(p.MeasuredValue ?? "n/a")).Append("</b> → ").Append(E(p.Outcome.ToString())).Append("</li>");
-            sb.Append("</ul>");
+            var t = r.Predictions.Tally;
+            sb.Append("<h2>Pre-registered predictions (model calibration, not evidence)</h2><p class=\"muted\">").Append(E(r.Predictions.Label)).Append("</p><p><b>")
+              .Append(t.Confirmed).Append(" confirmed · ").Append(t.Falsified).Append(" falsified · ").Append(t.Unscorable).Append(" unscorable · ").Append(t.Pending).Append(" pending</b></p>");
+            sb.Append("<table><tr><th>Prediction</th><th>Diagnostic</th><th>Predicted (inferred)</th><th>Measured</th><th>Outcome</th><th>Cited facts</th><th>Registered</th></tr>");
+            foreach (var p in r.Predictions.Items)
+                sb.Append("<tr><td>").Append(E(p.PredictionId)).Append("</td><td>").Append(E(p.DiagnosticId)).Append("</td><td>").Append(E(p.PredictedValue)).Append("</td><td>").Append(E(p.MeasuredValue ?? "—"))
+                  .Append("</td><td><b>").Append(E(p.Outcome)).Append("</b></td><td>").Append(E(string.Join(", ", p.BasedOnFactIds))).Append("</td><td>").Append(p.RegisteredAt.ToString("u")).Append("</td></tr>");
+            sb.Append("</table>");
+        }
+        if (r.Proposals.Accepted + r.Proposals.Rejected.Count > 0)
+        {
+            sb.Append("<h2>Model proposals (checked by the server)</h2><p class=\"muted\">").Append(E(r.Proposals.Label)).Append("</p><p><b>").Append(r.Proposals.Accepted).Append(" accepted · ").Append(r.Proposals.Rejected.Count).Append(" rejected</b></p>");
+            if (r.Proposals.Rejected.Count > 0)
+            {
+                sb.Append("<table><tr><th>Proposal</th><th>Asked for</th><th>Refused because</th><th>Model</th><th>At</th></tr>");
+                foreach (var x in r.Proposals.Rejected)
+                    sb.Append("<tr><td>").Append(E(x.ProposalId)).Append("</td><td>").Append(E(x.NextAction ?? "unreadable output")).Append("</td><td>").Append(E(string.Join(", ", x.Codes))).Append("</td><td>").Append(E(x.ModelId)).Append("</td><td>").Append(x.At.ToString("u")).Append("</td></tr>");
+                sb.Append("</table>");
+            }
         }
         if (r.Knowledge is { } k)
         {
