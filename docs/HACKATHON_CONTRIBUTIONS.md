@@ -78,6 +78,7 @@ as implementation commits land.
 | 2026-10-29T22:19:55-07:00 | `69df194` | Retry guards: verify under one lock, investigate stage/replay check, segment replay | dotnet test: Core 129, Meta 18, Api 112 pass; RetryGuardTests 3/3 fail on old code, pass on new; secret scan PASS | None |
 | 2026-10-29T22:28:58-07:00 | `59113b8` | Knowledge proposals on the event log; predictions registered before the probe and scored in Core (VK-T06/T24/T25) | dotnet test: Core 133, Meta 18, Api 120 pass; fake fix Falsified, real fix Confirmed over HTTP with the simulated probe and fake Muse; secret scan PASS | None |
 | 2026-10-29T23:13:23-07:00 | `d16dc96` | VK-T27: prediction card, receipt predictions/visualChange/proposals blocks, ops timeline | dotnet test: Core 134, Meta 18, Api 120; web 30 tests, tsc, build; browser run with 2 genuine Muse proposals and the simulated probe: 1 Falsified, 1 Confirmed, receipt/verify isValid | None |
+| 2026-10-29T23:52:13-07:00 | `a7ddf23` | Re-review fixes: policy 1.4 pending photos, readiness and ack reset, probe preflight, retry replays, keyed gate, safety actor switch, receipt issuance record, Android queue retention and Back | dotnet test: Core 144, Meta 18, Api 123 (new API tests fail on old code); web 30 + tsc; Android testDebugUnitTest 111 + assembleDebug; secret scan PASS; no device run | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
