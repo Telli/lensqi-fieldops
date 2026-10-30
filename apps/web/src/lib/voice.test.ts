@@ -11,6 +11,9 @@ describe("voice commands", () => {
     expect(parseCommand("Say that again")).toBe("repeat");
     expect(parseCommand("skip this step")).toBe("skip");
     expect(parseCommand("stop talking")).toBe("mute");
+    expect(parseCommand("Hold on")).toBe("pause");
+    expect(parseCommand("pause please")).toBe("pause");
+    expect(parseCommand("I'm back")).toBe("resume");
   });
   it("treats anything more as a question", () => {
     expect(parseCommand("is this the drain plug")).toBeNull();

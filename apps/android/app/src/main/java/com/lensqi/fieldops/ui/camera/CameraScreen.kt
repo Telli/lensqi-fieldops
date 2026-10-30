@@ -8,6 +8,8 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
@@ -37,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,15 +100,17 @@ fun CameraScreen(
     prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
     header: String? = null, onGuidance: (String) -> Unit = {},
     details: (@Composable ColumnScope.() -> Unit)? = null, controls: (@Composable (CameraHandle) -> Unit)? = null,
-) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls) }
+    targetConcept: String? = null,
+) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept) }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
-class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean)
+class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {})
 
 @Composable
 private fun CameraContent(
     prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
     header: String?, onGuidance: (String) -> Unit, details: (@Composable ColumnScope.() -> Unit)?, controls: (@Composable (CameraHandle) -> Unit)?,
+    targetConcept: String?,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -167,6 +172,8 @@ private fun CameraContent(
 
     val executor = remember { Executors.newSingleThreadExecutor() }
     val session = remember(liveEnabled) { if (liveEnabled) LiveCameraSession(analyze = analyzeLive) else null }
+    // Distance coaching follows the current step's part, also when the step changes while live assist runs.
+    SideEffect { session?.targetConcept = targetConcept }
     val feedback = session?.state?.collectAsState()?.value ?: LiveCameraState()
     // New AI guidance (its age resets to 0), not the local light and focus hints that change every frame.
     LaunchedEffect(feedback.guidanceAge) { if (liveEnabled && feedback.guidanceAge == 0L) onGuidance(feedback.recommendation) }
@@ -272,8 +279,10 @@ private fun CameraContent(
             }
         }
 
+        // Kept below the header; when the panels are taller than the room left, the details scroll and the controls stay.
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().statusBarsPadding().padding(top = 64.dp)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
                 .navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
@@ -307,7 +316,9 @@ private fun CameraContent(
                     (status ?: arFailure)?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
                 }
             }
-            details?.invoke(this)
+            details?.let { d ->
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { d() }
+            }
             val shutter = {
                 if (!capturing) {
                     capturing = true
@@ -317,7 +328,7 @@ private fun CameraContent(
                     if (arActive || controls == null) liveEnabled = false
                 }
             }
-            if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled))
+            if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled, { liveEnabled = it }))
             else Box(
                 Modifier.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
                     .background(if (capturing) FoDark.Primary else FoDark.Foreground)

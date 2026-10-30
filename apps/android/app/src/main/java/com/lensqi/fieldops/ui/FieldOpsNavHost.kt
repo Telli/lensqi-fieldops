@@ -121,7 +121,11 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 }
                 composable("task/{taskId}/step", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
                     val id = requireNotNull(e.arguments?.getString("taskId"))
-                    StepScreen(hiltViewModel(), onClose = { nav.popBackStack() }, onDone = { nav.navigate("task/$id/done") { popUpTo("task/{taskId}/step") { inclusive = true } } })
+                    // Close goes to the plan (as on the web), where the task can be stopped, also when the list opened the step directly.
+                    StepScreen(hiltViewModel(), onClose = {
+                        if (nav.previousBackStackEntry?.destination?.route == "task/{taskId}") nav.popBackStack()
+                        else nav.navigate("task/$id") { popUpTo("task/{taskId}/step") { inclusive = true } }
+                    }, onDone = { nav.navigate("task/$id/done") { popUpTo("task/{taskId}/step") { inclusive = true } } })
                 }
                 composable("task/{taskId}/live", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
                     FreeformScreen(hiltViewModel(), onClose = { taskList.refresh(); nav.popBackStack() },

@@ -130,6 +130,9 @@ interface FieldOpsApi {
     @POST("v1/tasks/{id}/finish")
     suspend fun finishTask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
 
+    @POST("v1/tasks/{id}/abandon")
+    suspend fun abandonTask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: AbandonRequest): TaskView
+
     @POST("v1/tasks/{id}/link-inspection")
     suspend fun linkInspection(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): LinkInspectionResponse
 

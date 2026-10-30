@@ -44,6 +44,8 @@ class SpatialFrame(
 class LiveCameraSession(
     /** Accepted detections, for ARCore anchoring. Called off the main thread. */
     @Volatile var onDetection: (String, List<LiveObject>) -> Unit = { _, _ -> },
+    /** The part distance coaching is about (a task step's main `lookFor`); null means the nearest measured part. */
+    @Volatile var targetConcept: String? = null,
     private val analyze: suspend (String, ByteArray, String) -> LiveResponse,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -105,7 +107,7 @@ class LiveCameraSession(
 
             if (guidance.isNotEmpty() && !tracker.current(guidanceFrame)) { guidance = ""; screenText = null; guidanceAt = 0 }
             val quality = frameQuality(frame)
-            val distance = spatial?.let { distanceAdvice(objects) }
+            val distance = spatial?.let { distanceAdvice(objects, targetConcept) }
             val advice = when {
                 quality.brightness < 35 && guidance.isEmpty() -> "Add light so the parts and labels are visible."
                 motion > 32 -> "Move more slowly so I can keep track of the connection."

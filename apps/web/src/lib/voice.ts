@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Hands-free commands. Anything else said to LensQi is a question. */
-export type Command = "next" | "back" | "repeat" | "check" | "skip" | "mute" | "unmute";
+export type Command = "next" | "back" | "repeat" | "check" | "skip" | "mute" | "unmute" | "pause" | "resume";
 
 const phrases: Record<Command, string[]> = {
   next: ["next", "next step", "done", "im done", "i am done", "finished", "step done", "continue", "go on"],
@@ -11,6 +11,9 @@ const phrases: Record<Command, string[]> = {
   skip: ["skip", "skip step", "skip this", "skip this step"],
   mute: ["mute", "quiet", "stop talking", "be quiet"],
   unmute: ["unmute", "speak", "talk to me", "voice on"],
+  // Pause holds everything (speech and live coaching) until "resume"; mute only silences the voice.
+  pause: ["pause", "hold on", "hang on", "wait", "pause coaching", "stop coaching"],
+  resume: ["resume", "unpause", "resume coaching", "im back", "i am back"],
 };
 const lookup = new Map(Object.entries(phrases).flatMap(([c, ps]) => ps.map((p) => [p, c as Command])));
 
@@ -24,18 +27,41 @@ export function parseCommand(text: string): Command | null {
 export function useSpeak(initiallyOn = true) {
   const supported = typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
   const [on, setOn] = useState(initiallyOn && supported);
+  // Held while the person said "pause": nothing is spoken, without turning the voice off.
+  const [held, setHeld] = useState(false);
   const last = useRef("");
   const speak = useCallback((text: string, force = false) => {
-    if (!supported || !on || !text || (!force && text === last.current)) return;
+    if (!supported || !on || held || !text || (!force && text === last.current)) return;
     last.current = text;
     speechSynthesis.cancel();
     speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  }, [on, supported]);
+  }, [on, held, supported]);
+  const hold = useCallback((value: boolean) => { setHeld(value); if (value && supported) speechSynthesis.cancel(); }, [supported]);
   useEffect(() => () => { if (supported) speechSynthesis.cancel(); }, [supported]);
   const toggle = useCallback((value?: boolean) => {
     setOn((now) => { const next = value ?? !now; if (!next && supported) speechSynthesis.cancel(); return next; });
   }, [supported]);
-  return { supported, on, toggle, speak };
+  return { supported, on, toggle, speak, hold };
+}
+
+/** "Pause" holds speech and live coaching; "resume" brings back what was on before. */
+export function usePause(coaching: { enabled: boolean; setEnabled: (on: boolean) => void }, speech: { hold: (on: boolean) => void }) {
+  const [paused, setPaused] = useState(false);
+  const wasCoaching = useRef(false);
+  const pause = () => {
+    if (paused) return;
+    wasCoaching.current = coaching.enabled;
+    coaching.setEnabled(false);
+    speech.hold(true);
+    setPaused(true);
+  };
+  const resume = () => {
+    if (!paused) return;
+    setPaused(false);
+    speech.hold(false);
+    if (wasCoaching.current) coaching.setEnabled(true);
+  };
+  return { paused, pause, resume };
 }
 
 interface RecognitionResult { readonly isFinal: boolean; readonly 0: { transcript: string } }

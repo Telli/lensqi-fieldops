@@ -1,0 +1,88 @@
+{
+  "note": "Android emulator (Medium_Phone_API_36.1, its virtual camera scene), Oct 29 2026, against the local API. Not a phone run. Three times: airplane mode on, step-check photo taken on step s6 (queued on the phone as a StepCheckPhoto command), airplane mode off, WorkManager sent it with the queued Idempotency-Key. Each queued key produced exactly one TaskPhotoRecorded and one genuine Muse StepChecked; the scene is the emulator living room, so every verdict is CantTell. The second photo stayed queued across an app reinstall. Screenshots are from the third run, after the layout fix. Finally the task was stopped from the Android plan screen (TaskAbandoned). The task is a local copy of an in-progress test task.",
+  "events": [
+    {
+      "kind": "TaskPhotoRecorded",
+      "evidenceId": "step-e259915e03",
+      "sha256": "6e32523405bdbb7ae4fa4f049182d0e137f978ac17adcd43c8a5b931ae2f1d97",
+      "width": 960,
+      "height": 1280,
+      "purpose": "StepCheck",
+      "stepId": "s6",
+      "sequence": 8,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:53:13.26619+00:00",
+      "requestId": "a7ae64c4-22e8-4f56-a95d-725e3a628952:photo"
+    },
+    {
+      "kind": "StepChecked",
+      "stepId": "s6",
+      "photoId": "step-e259915e03",
+      "verdict": "CantTell",
+      "reason": "Photo shows a living room with TV, bookshelf and rug but no smoke detector, base, or test light is visible.",
+      "modelId": "muse-spark-1.3",
+      "sequence": 9,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:53:18.372927+00:00",
+      "requestId": "a7ae64c4-22e8-4f56-a95d-725e3a628952"
+    },
+    {
+      "kind": "TaskPhotoRecorded",
+      "evidenceId": "step-a5d548f9d0",
+      "sha256": "a64559e581db67b069267c2b34cede52c501465fa29af53a26ccb9f5092448f1",
+      "width": 960,
+      "height": 1280,
+      "purpose": "StepCheck",
+      "stepId": "s6",
+      "sequence": 10,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:55:50.914107+00:00",
+      "requestId": "c8be73a4-d651-4c73-ac6a-12b2d8548ee4:photo"
+    },
+    {
+      "kind": "StepChecked",
+      "stepId": "s6",
+      "photoId": "step-a5d548f9d0",
+      "verdict": "CantTell",
+      "reason": "The photo shows a living room with TV and bookshelf but no smoke detector is visible, so reattachment and test light cannot be confirmed.",
+      "modelId": "muse-spark-1.3",
+      "sequence": 11,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:55:55.747467+00:00",
+      "requestId": "c8be73a4-d651-4c73-ac6a-12b2d8548ee4"
+    },
+    {
+      "kind": "TaskPhotoRecorded",
+      "evidenceId": "step-57d5963dca",
+      "sha256": "39aca7d2fb2cb9ac93c98e4b8a5210cb7fb83a8f9eed275e06d5df8916715b92",
+      "width": 960,
+      "height": 1280,
+      "purpose": "StepCheck",
+      "stepId": "s6",
+      "sequence": 12,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:56:39.894633+00:00",
+      "requestId": "830ec266-b4a4-47db-9469-0f02c3ed7333:photo"
+    },
+    {
+      "kind": "StepChecked",
+      "stepId": "s6",
+      "photoId": "step-57d5963dca",
+      "verdict": "CantTell",
+      "reason": "The image shows a living room with TV, bookshelf and rug, but no smoke detector is visible.",
+      "modelId": "muse-spark-1.3",
+      "sequence": 13,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:56:43.369549+00:00",
+      "requestId": "830ec266-b4a4-47db-9469-0f02c3ed7333"
+    },
+    {
+      "kind": "TaskAbandoned",
+      "reason": "Stopped by the user",
+      "sequence": 14,
+      "taskId": "T-offline0001",
+      "occurredAt": "2026-10-30T01:58:18.780753+00:00",
+      "requestId": "e8ad6256-fb12-4cf9-9cfd-8f6214148975"
+    }
+  ]
+}

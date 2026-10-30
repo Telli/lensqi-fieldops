@@ -27,7 +27,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Hands-free commands. Anything else said to LensQi is a question. Same grammar as the web app. */
-enum class VoiceCommand { Next, Back, Repeat, Check, Skip, Mute, Unmute }
+enum class VoiceCommand { Next, Back, Repeat, Check, Skip, Mute, Unmute, Pause, Resume }
 
 private val phrases = mapOf(
     VoiceCommand.Next to listOf("next", "next step", "done", "im done", "i am done", "finished", "step done", "continue", "go on"),
@@ -37,6 +37,9 @@ private val phrases = mapOf(
     VoiceCommand.Skip to listOf("skip", "skip step", "skip this", "skip this step"),
     VoiceCommand.Mute to listOf("mute", "quiet", "stop talking", "be quiet"),
     VoiceCommand.Unmute to listOf("unmute", "speak", "talk to me", "voice on"),
+    // Pause holds everything (speech and live coaching) until "resume"; mute only silences the voice.
+    VoiceCommand.Pause to listOf("pause", "hold on", "hang on", "wait", "pause coaching", "stop coaching"),
+    VoiceCommand.Resume to listOf("resume", "unpause", "resume coaching", "im back", "i am back"),
 )
 private val lookup = phrases.flatMap { (c, ps) -> ps.map { it to c } }.toMap()
 
@@ -53,10 +56,13 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) {
     @Volatile private var ready = false
     private val tts = TextToSpeech(context) { status -> ready = status == TextToSpeech.SUCCESS }
     @Volatile var enabled = true
+    /** Held while the person said "pause": nothing is spoken, without turning the voice off. */
+    @Volatile var held = false
+        set(value) { field = value; if (value) stop() }
     private var last = ""
 
     fun speak(text: String, force: Boolean = false) {
-        if (!enabled || !ready || text.isBlank() || (!force && text == last)) return
+        if (!enabled || held || !ready || text.isBlank() || (!force && text == last)) return
         last = text
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "lensqi-${text.hashCode()}")
     }
