@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.data.queue
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -19,12 +20,13 @@ enum class CommandState { Pending, Rejected }
 /**
  * One command waiting for the server, in capture order. The id is the Idempotency-Key, so a command replayed
  * after a crash or a lost response is applied once. Nothing here is evidence until the server accepts it.
- * [inspectionId] is the session the command belongs to: an inspection, or a task for a step check (with [stepId]).
+ * [sessionId] is the session the command belongs to (GT-R12.1): an inspection for a photo, or a task for a step check
+ * (with [stepId]). The column keeps its version-1 name so queued commands survive upgrades without a table rebuild.
  */
 @Entity(tableName = "pending_command")
 data class PendingCommand(
     @PrimaryKey val id: String,
-    val inspectionId: String,
+    @ColumnInfo(name = "inspectionId") val sessionId: String,
     val kind: CommandKind,
     val createdAtMillis: Long,
     val filePath: String? = null,
@@ -44,8 +46,8 @@ interface PendingCommandDao {
     @Insert
     suspend fun insert(command: PendingCommand)
 
-    @Query("SELECT * FROM pending_command WHERE inspectionId = :inspectionId ORDER BY createdAtMillis")
-    fun observe(inspectionId: String): Flow<List<PendingCommand>>
+    @Query("SELECT * FROM pending_command WHERE inspectionId = :sessionId ORDER BY createdAtMillis")
+    fun observe(sessionId: String): Flow<List<PendingCommand>>
 
     @Query("SELECT * FROM pending_command WHERE state = 'Pending' ORDER BY createdAtMillis LIMIT 1")
     suspend fun nextPending(): PendingCommand?
@@ -66,8 +68,9 @@ abstract class QueueDatabase : RoomDatabase() {
 
     companion object {
         /** Version 2 adds the step of a queued step check; queued inspection photos are kept. */
+        const val MIGRATION_1_2_SQL = "ALTER TABLE pending_command ADD COLUMN stepId TEXT"
         val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE pending_command ADD COLUMN stepId TEXT")
+            override fun migrate(db: SupportSQLiteDatabase) = db.execSQL(MIGRATION_1_2_SQL)
         }
     }
 }

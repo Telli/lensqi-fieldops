@@ -14,11 +14,11 @@ import com.lensqi.fieldops.data.api.TaskView
 import com.lensqi.fieldops.data.api.apiCall
 import com.lensqi.fieldops.data.api.retryable
 import com.lensqi.fieldops.data.queue.CommandKind
-import com.lensqi.fieldops.data.queue.CommandQueue
+import com.lensqi.fieldops.data.queue.StepCheckQueue
 import com.lensqi.fieldops.data.queue.CommandState
 import com.lensqi.fieldops.domain.live.LiveResponse
 import com.lensqi.fieldops.ui.common.friendly
-import com.lensqi.fieldops.voice.Speaker
+import com.lensqi.fieldops.voice.SpeechOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,8 +89,10 @@ data class TaskUi(
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
 @HiltViewModel
-class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: Speaker, private val queue: CommandQueue) : ViewModel() {
+class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: SpeechOutput, private val queue: StepCheckQueue) : ViewModel() {
     val taskId: String = checkNotNull(saved["taskId"])
+    /** Decodes and shrinks a shutter photo; Android's bitmap decoder in the app, a stand-in in JVM tests. */
+    internal var reduce: (File, Int) -> ByteArray? = ::downscaledJpeg
     private val _state = MutableStateFlow(TaskUi())
     val state: StateFlow<TaskUi> = _state
 
@@ -147,7 +149,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun check(stepId: String, photo: File) = viewModelScope.launch {
         _state.update { it.copy(busy = "check", error = null) }
         // Upright pixels (EXIF rotation applied) so the model never judges a sideways photo.
-        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { downscaledJpeg(photo, 2400) }
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reduce(photo, 2400) }
         val part = if (bytes != null) jpeg("image", bytes) else MultipartBody.Part.createFormData("image", photo.name, photo.asRequestBody("image/jpeg".toMediaType()))
         val action = "check:$stepId"
         val key = keyFor(action)
@@ -188,7 +190,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     /** Asks about a full-resolution shutter photo, reduced to at most 1600 px on its long side before upload. */
     fun askAboutPhoto(question: String, photo: File) = viewModelScope.launch {
-        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { downscaledJpeg(photo, 1600) }
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reduce(photo, 1600) }
         ask(question, bytes)
     }
 

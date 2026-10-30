@@ -50,24 +50,32 @@ fun parseCommand(text: String): VoiceCommand? {
     return lookup[t]
 }
 
+/** What screens and view models need from speech; [Speaker] is the device's, tests use their own. */
+interface SpeechOutput {
+    var enabled: Boolean
+    /** Held while the person said "pause": nothing is spoken, without turning the voice off. */
+    var held: Boolean
+    fun speak(text: String, force: Boolean = false)
+    fun stop()
+}
+
 /** Text-to-speech for guidance, shared by every screen. Speaking a new line interrupts the previous one. */
 @Singleton
-class Speaker @Inject constructor(@ApplicationContext context: Context) {
+class Speaker @Inject constructor(@ApplicationContext context: Context) : SpeechOutput {
     @Volatile private var ready = false
     private val tts = TextToSpeech(context) { status -> ready = status == TextToSpeech.SUCCESS }
-    @Volatile var enabled = true
-    /** Held while the person said "pause": nothing is spoken, without turning the voice off. */
-    @Volatile var held = false
+    @Volatile override var enabled = true
+    @Volatile override var held = false
         set(value) { field = value; if (value) stop() }
     private var last = ""
 
-    fun speak(text: String, force: Boolean = false) {
+    override fun speak(text: String, force: Boolean) {
         if (!enabled || held || !ready || text.isBlank() || (!force && text == last)) return
         last = text
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "lensqi-${text.hashCode()}")
     }
 
-    fun stop() = tts.stop()
+    override fun stop() { tts.stop() }
 }
 
 class VoiceInputState(val listening: Boolean, val heard: String, val error: String?, val supported: Boolean, val start: () -> Unit, val stop: () -> Unit)

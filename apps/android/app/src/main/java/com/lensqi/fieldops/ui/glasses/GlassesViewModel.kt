@@ -11,6 +11,7 @@ import com.lensqi.fieldops.wearables.GlassesPhoto
 import com.lensqi.fieldops.wearables.GlassesSource
 import com.lensqi.fieldops.wearables.GlassesLiveService
 import com.lensqi.fieldops.wearables.GlassesLiveStore
+import com.lensqi.fieldops.wearables.LiveSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -34,8 +35,8 @@ class GlassesViewModel @Inject constructor(
     suspend fun cameraPermissionGranted() = source.cameraPermissionGranted()
     fun start() = source.startStreaming()
     fun stop() { pauseLive(); source.stopStreaming() }
-    fun startLive(inspectionId: String) {
-        runCatching { GlassesLiveService.start(context, inspectionId) }
+    fun startLive(session: LiveSession) {
+        runCatching { GlassesLiveService.start(context, session) }
             .onFailure { source.reportError("Could not start live assistance. Return to the glasses screen and try again.") }
     }
     fun pauseLive() { if (live.value.enabled) GlassesLiveService.pause(context) }
