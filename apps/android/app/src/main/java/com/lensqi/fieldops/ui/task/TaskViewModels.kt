@@ -3,6 +3,7 @@ package com.lensqi.fieldops.ui.task
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lensqi.fieldops.data.api.AbandonRequest
 import com.lensqi.fieldops.data.api.AcceptRequest
 import com.lensqi.fieldops.data.api.ApiOutcome
 import com.lensqi.fieldops.data.api.FieldOpsApi
@@ -12,6 +13,9 @@ import com.lensqi.fieldops.data.api.TaskSummary
 import com.lensqi.fieldops.data.api.TaskView
 import com.lensqi.fieldops.data.api.apiCall
 import com.lensqi.fieldops.data.api.retryable
+import com.lensqi.fieldops.data.queue.CommandKind
+import com.lensqi.fieldops.data.queue.CommandQueue
+import com.lensqi.fieldops.data.queue.CommandState
 import com.lensqi.fieldops.domain.live.LiveResponse
 import com.lensqi.fieldops.ui.common.friendly
 import com.lensqi.fieldops.voice.Speaker
@@ -79,16 +83,35 @@ data class TaskUi(
     val answer: Pair<String, String>? = null,
     /** The FieldProof inspection a technician task is linked to, for its stage and live or simulated outcome. */
     val linked: InspectionView? = null,
+    /** Step-check photos saved on the phone, waiting for the network. */
+    val queuedChecks: Int = 0,
 )
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
 @HiltViewModel
-class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: Speaker) : ViewModel() {
+class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: Speaker, private val queue: CommandQueue) : ViewModel() {
     val taskId: String = checkNotNull(saved["taskId"])
     private val _state = MutableStateFlow(TaskUi())
     val state: StateFlow<TaskUi> = _state
 
-    init { refresh() }
+    init {
+        refresh()
+        // Queued step checks: show how many wait, refresh when one is checked, and report a refused one once.
+        viewModelScope.launch {
+            var waiting = 0
+            queue.observe(taskId).collect { all ->
+                val checks = all.filter { it.kind == CommandKind.StepCheckPhoto }
+                val pending = checks.count { it.state == CommandState.Pending }
+                if (pending < waiting) refresh()
+                waiting = pending
+                _state.update { it.copy(queuedChecks = pending) }
+                checks.filter { it.state == CommandState.Rejected }.forEach { c ->
+                    _state.update { it.copy(error = "A saved check photo was not checked: ${c.errorMessage ?: c.errorCode}") }
+                    queue.dismiss(c)
+                }
+            }
+        }
+    }
 
     fun refresh() = viewModelScope.launch {
         val r = apiCall { api.task(taskId) }
@@ -127,7 +150,16 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { downscaledJpeg(photo, 2400) }
         val part = if (bytes != null) jpeg("image", bytes) else MultipartBody.Part.createFormData("image", photo.name, photo.asRequestBody("image/jpeg".toMediaType()))
         val action = "check:$stepId"
-        val r = apiCall { api.checkStep(taskId, stepId, keyFor(action), part) }
+        val key = keyFor(action)
+        val r = apiCall { api.checkStep(taskId, stepId, key, part) }
+        if (r is ApiOutcome.Unreachable) {
+            // GT-R09.5: offline, the photo waits on the phone under the same key and is checked when the network returns.
+            val jpeg = bytes ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { photo.readBytes() }
+            queue.enqueueStepCheck(taskId, stepId, key, jpeg)
+            keys.remove(action)
+            _state.update { it.copy(busy = null, error = "No connection. The photo is saved on the phone and will be checked when you're back online.") }
+            return@launch
+        }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         settle(action, r)
         (r as? ApiOutcome.Ok)?.value?.check?.let { c -> speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
@@ -151,6 +183,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     /** Ends free-form help. */
     fun finish(onDone: () -> Unit) = act("finish", "finish", { k -> api.finishTask(taskId, k) }) { onDone() }
+    /** Stops a task that is not finished; the record is kept and no more steps are accepted. */
+    fun abandon(onStopped: () -> Unit) = act("stop", "abandon", { k -> api.abandonTask(taskId, k, AbandonRequest("Stopped by the user")) }) { onStopped() }
 
     /** Asks about a full-resolution shutter photo, reduced to at most 1600 px on its long side before upload. */
     fun askAboutPhoto(question: String, photo: File) = viewModelScope.launch {

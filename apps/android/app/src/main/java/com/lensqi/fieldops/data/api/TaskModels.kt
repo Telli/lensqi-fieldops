@@ -49,6 +49,7 @@ data class TaskSummary(
 @Serializable data class PlanError(val code: String, val message: String)
 @Serializable data class CreateTaskResponse(val task: TaskView, val planError: PlanError? = null)
 @Serializable data class AcceptRequest(val safetyAcknowledged: Boolean)
+@Serializable data class AbandonRequest(val reason: String? = null)
 @Serializable data class StepCheckResponse(val check: TaskStepCheck, val task: TaskView)
 @Serializable data class AskResponse(val answer: String, val focus: List<String> = emptyList(), val stepId: String? = null, val modelId: String = "")
 @Serializable data class LinkInspectionResponse(val inspectionId: String, val task: TaskView)

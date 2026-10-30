@@ -195,7 +195,9 @@ fun fuseTracks(tracked: List<LiveObject>, anchored: List<LiveObject>): List<Live
 /** Distance coaching from a measured anchor distance; null when no part has one. */
 fun distanceAdvice(objects: List<LiveObject>, targetConcept: String? = null): String? {
     val measured = objects.filter { it.spatialAnchored && it.distanceCm != null }
-    val part = targetConcept?.let { t -> measured.firstOrNull { it.concept.equals(t, ignoreCase = true) } } ?: measured.minByOrNull { it.distanceCm!! } ?: return null
+    // With a target (a task step's main part) only that part is coached on; otherwise the nearest measured one.
+    val part = (if (targetConcept != null) measured.firstOrNull { it.concept.equals(targetConcept, ignoreCase = true) }
+        else measured.minByOrNull { it.distanceCm!! }) ?: return null
     val cm = part.distanceCm!!; val name = part.label.lowercase()
     return when {
         cm > 45 -> "Move about ${cm - 30} cm closer to the $name (about $cm cm away)."

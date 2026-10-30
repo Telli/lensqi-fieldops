@@ -115,6 +115,14 @@ class ArSpatialTest {
         assertNull(distanceAdvice(listOf(near.copy(distanceCm = null, spatialAnchored = false))))
     }
 
+    @Test fun `a step's target part is coached on, not a nearer one`() {
+        val plug = LiveObject("p", "drain plug", "Drain plug", centre, distanceCm = 60, spatialAnchored = true)
+        val pan = LiveObject("q", "oil pan", "Oil pan", centre, distanceCm = 20, spatialAnchored = true)
+        assertEquals("Move about 30 cm closer to the drain plug (about 60 cm away).", distanceAdvice(listOf(pan, plug), "Drain Plug"))
+        assertEquals("Good distance from the oil pan (about 20 cm). Capture when ready.", distanceAdvice(listOf(pan, plug)))
+        assertNull(distanceAdvice(listOf(pan), "drain plug"))
+    }
+
     @Test fun `upright image points map back to the sensor image`() {
         assertEquals(0.3 to 0.8, uprightToSensor(0.2, 0.3, 90))
         assertEquals(0.8 to 0.7, uprightToSensor(0.2, 0.3, 180))

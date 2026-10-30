@@ -1,5 +1,10 @@
 package com.lensqi.fieldops.ui.task
 
+import com.lensqi.fieldops.wearables.SpokenFeedbackGate
+import com.lensqi.fieldops.voice.Speaker
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.DisposableEffect
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -28,6 +33,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -298,6 +304,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
                     PrimaryButton(if (s.busy == "plan") "Writing the plan…" else "Try again", { vm.replan() }, Modifier.fillMaxWidth(), busy = s.busy == "plan")
                 }
             }
+            item { StopTask(t.phase, s.busy == "stop") { vm.abandon(onBack) } }
             return@LazyColumn
         }
         item {
@@ -327,7 +334,8 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
         }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
-            if (t.phase != TaskPhase.Planned) PrimaryButton(if (t.phase == TaskPhase.InProgress) "Continue" else "See the summary", { if (t.phase == TaskPhase.InProgress) onStep() else onDone() }, Modifier.fillMaxWidth())
+            if (t.phase == TaskPhase.Abandoned) Panel { Text("You stopped this task. Its record is kept.", style = MaterialTheme.typography.bodySmall) }
+            else if (t.phase != TaskPhase.Planned) PrimaryButton(if (t.phase == TaskPhase.InProgress) "Continue" else "See the summary", { if (t.phase == TaskPhase.InProgress) onStep() else onDone() }, Modifier.fillMaxWidth())
             else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 val cautions = plan.steps.flatMap { it.cautions }.map { it.text }.distinct()
                 Panel(border = if (plan.needsSafetyAck) Fo.Warning else Fo.Border) {
@@ -339,6 +347,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
                 PrimaryButton(if (plan.needsSafetyAck) "I've read the safety notes · Start" else "Start step 1", { vm.accept(plan.needsSafetyAck, onStep) }, Modifier.fillMaxWidth(), busy = s.busy == "accept")
             }
         }
+        item { StopTask(t.phase, s.busy == "stop") { vm.abandon(onBack) } }
         item { Text("Plan by ${plan.modelId ?: "AI"} · AI inference", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 24.dp)) }
     }
 }
@@ -370,6 +379,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         step?.let { vm.speaker.speak("Step ${n + 1}. ${it.title}. ${it.instruction} ${it.cautions.joinToString(". ") { c -> c.text }}", force = true) }
     }
     var typed by remember { mutableStateOf("") }
+    val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
     val voice = rememberVoiceInput { said ->
         val now = vm.state.value
         val current = now.task?.currentStep ?: return@rememberVoiceInput
@@ -382,6 +392,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
             VoiceCommand.Repeat -> vm.speaker.speak("${current.title}. ${current.instruction}", force = true)
             VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
             VoiceCommand.Unmute -> vm.speaker.enabled = true
+            VoiceCommand.Pause -> pace.pause(camera.value)
+            VoiceCommand.Resume -> pace.resume(camera.value)
             null -> if (reviewingNow) vm.speaker.speak("Questions are about the current step. Say next to go to it.", force = true)
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
@@ -391,11 +403,17 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     CameraScreen(
         prompt = step.instruction,
         analyzeLive = vm::analyzeLiveFrame,
+        targetConcept = step.lookFor.firstOrNull(),
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
         header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,
-        onGuidance = { if (!reviewingNow) vm.speaker.speak(it) },
-        details = { StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error) },
+        onGuidance = pace::guidance,
+        details = {
+            if (pace.paused) PausedNote { pace.resume(camera.value) }
+            if (s.queuedChecks > 0) Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp))
+            StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
+        },
         controls = { handle ->
             camera.value = handle
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
@@ -421,7 +439,76 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     )
 }
 
+/** Stopping a task that is not finished, after a confirmation. */
+@Composable
+private fun StopTask(phase: TaskPhase, busy: Boolean, onStop: () -> Unit) {
+    if (phase != TaskPhase.Planned && phase != TaskPhase.InProgress) return
+    var confirming by remember { mutableStateOf(false) }
+    TextButton(onClick = { confirming = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Stopping…" else "Stop this task", color = Fo.Muted) }
+    if (confirming) AlertDialog(
+        onDismissRequest = { confirming = false },
+        title = { Text("Stop this task?") },
+        text = { Text("Its record stays in your list, but no more steps can be done.") },
+        confirmButton = { TextButton(onClick = { confirming = false; onStop() }) { Text("Stop task", color = Fo.Failure) } },
+        dismissButton = { TextButton(onClick = { confirming = false }) { Text("Keep going") } },
+    )
+}
+
 private class HandleRef { var value: CameraHandle? = null }
+
+/**
+ * Spoken live guidance and the pause command for one camera screen. Guidance goes through [SpokenFeedbackGate], so
+ * unchanged advice is not repeated and lines are spaced; "pause" holds speech and live coaching until "resume".
+ */
+private class VoicePace(private val speaker: Speaker) {
+    var paused by mutableStateOf(false)
+        private set
+    private var wasLive = false
+    private val gate = SpokenFeedbackGate()
+    private var latest = ""
+
+    fun guidance(text: String) { latest = text }
+
+    /** Called on a short timer; speaks the latest guidance when the gate allows it. */
+    fun tick(now: Long, allowed: Boolean) {
+        if (!paused && allowed) gate.next(latest, now)?.let { speaker.speak(it) }
+    }
+
+    fun pause(camera: CameraHandle?) {
+        if (paused) return
+        wasLive = camera?.live == true
+        camera?.setLive?.invoke(false)
+        latest = ""
+        speaker.held = true
+        paused = true
+    }
+
+    fun resume(camera: CameraHandle?) {
+        if (!paused) return
+        paused = false
+        speaker.held = false
+        if (wasLive) camera?.setLive?.invoke(true)
+    }
+}
+
+@Composable
+private fun rememberVoicePace(speaker: Speaker, camera: HandleRef, allowed: () -> Boolean): VoicePace {
+    val pace = remember { VoicePace(speaker) }
+    LaunchedEffect(pace) {
+        while (true) {
+            delay(500)
+            pace.tick(SystemClock.elapsedRealtime(), allowed() && camera.value?.live == true)
+        }
+    }
+    // Leaving the screen never leaves the app's voice held.
+    DisposableEffect(pace) { onDispose { speaker.held = false } }
+    return pace
+}
+
+@Composable
+private fun PausedNote(onResume: () -> Unit) =
+    Text("Paused: no speech or live coaching. Say “resume” or tap here.", color = FoDark.Primary, fontSize = 13.sp,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).clickable(onClick = onResume).padding(horizontal = 12.dp, vertical = 8.dp))
 
 /** Ask by voice or by typing: both are always offered, so a missing microphone or a noisy room never blocks a question. */
 @Composable
@@ -527,8 +614,11 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     val open = t?.phase == TaskPhase.InProgress
     val answers = t?.answers.orEmpty().asReversed()
     var typed by remember { mutableStateOf("") }
+    val pace = rememberVoicePace(vm.speaker, camera) { true }
     val voice = rememberVoiceInput { said ->
         when (parseCommand(said)) {
+            VoiceCommand.Pause -> pace.pause(camera.value)
+            VoiceCommand.Resume -> pace.resume(camera.value)
             VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) }
             VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
             VoiceCommand.Unmute -> vm.speaker.enabled = true
@@ -542,8 +632,9 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         onClose = onClose,
         onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
         header = "Just ask · no plan",
-        onGuidance = { vm.speaker.speak(it) },
+        onGuidance = pace::guidance,
         details = {
+            if (pace.paused) PausedNote { pace.resume(camera.value) }
             val note = s.error ?: voice.error
             if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link, Redirect, useLocation } from "wouter";
+import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, Camera, Clock, Hand, Loader2, OctagonX, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page, TopBar } from "@/components/fo/mobile-shell";
 import { AiCard } from "@/components/fo/ai";
-import { cautionLabel, riskTone, tasks, useTask, useTaskAct, type TaskStep } from "@/lib/tasks";
+import { cautionLabel, riskTone, tasks, useTask, useTaskAct, type Task, type TaskStep } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 function StepItem({ step, n }: { step: TaskStep; n: number }) {
@@ -22,6 +24,28 @@ function StepItem({ step, n }: { step: TaskStep; n: number }) {
         {step.stopIf.length > 0 && <p className="text-[11px] text-failure">Stop if {step.stopIf.join("; ")}.</p>}
       </div>
     </li>
+  );
+}
+
+/** Stopping a task that is not finished, after a confirmation. The record is kept; no more steps are accepted. */
+function StopTask({ t }: { t: Task }) {
+  const [, nav] = useLocation();
+  const [confirming, setConfirming] = useState(false);
+  const stop = useTaskAct(t.taskId, () => tasks.abandon(t.taskId, "Stopped by the user"));
+  if (t.phase !== "Planned" && t.phase !== "InProgress") return null;
+  if (!confirming)
+    return <button onClick={() => setConfirming(true)} className="mx-auto flex min-h-11 items-center gap-1.5 px-2 text-sm text-muted-foreground"><OctagonX className="size-4" />Stop this task</button>;
+  return (
+    <div className="space-y-2 rounded-2xl border border-border p-3.5 text-sm">
+      <p>Stop this task? Its record stays in your list, but no more steps can be done.</p>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" className="h-11 rounded-xl" onClick={() => setConfirming(false)} disabled={stop.isPending}>Keep going</Button>
+        <Button variant="destructive" className="h-11 rounded-xl" disabled={stop.isPending}
+          onClick={() => stop.mutate([], { onSuccess: () => { toast.success("Task stopped"); nav("/m"); } })}>
+          {stop.isPending && <Loader2 className="animate-spin" />}Stop task
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -46,6 +70,7 @@ export default function TaskPlanPage({ id }: { id: string }) {
               {replan.isPending ? <Loader2 className="animate-spin" /> : <RotateCcw />} {replan.isPending ? "Writing the plan…" : "Try again"}
             </Button>
           </AiCard>
+          <StopTask t={t} />
         </Page>
       </>
     );
@@ -85,7 +110,9 @@ export default function TaskPlanPage({ id }: { id: string }) {
           {plan.steps.map((s, n) => <StepItem key={s.id} step={s} n={n + 1} />)}
         </ol>
 
-        {started ? (
+        {t.phase === "Abandoned" ? (
+          <p className="rounded-2xl border border-border p-3.5 text-sm text-muted-foreground">You stopped this task{t.abandonReason && t.abandonReason !== "Stopped by the user" ? `: ${t.abandonReason}` : ""}. Its record is kept.</p>
+        ) : started ? (
           <Button asChild size="lg" className="h-12 w-full rounded-2xl">
             <Link href={t.phase === "InProgress" ? `/m/t/${id}/step` : `/m/t/${id}/done`}>{t.phase === "InProgress" ? "Continue" : "See the summary"} <ArrowRight /></Link>
           </Button>
@@ -102,6 +129,7 @@ export default function TaskPlanPage({ id }: { id: string }) {
             </Button>
           </div>
         )}
+        <StopTask t={t} />
         <p className="text-center text-[11px] text-muted-foreground">Plan by {plan.modelId} · AI inference</p>
       </Page>
     </>

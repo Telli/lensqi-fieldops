@@ -22,6 +22,9 @@ class TaskClientTest {
         assertEquals(VoiceCommand.Repeat, parseCommand("Say that again"))
         assertEquals(VoiceCommand.Skip, parseCommand("skip this step"))
         assertEquals(VoiceCommand.Mute, parseCommand("stop talking"))
+        assertEquals(VoiceCommand.Pause, parseCommand("Hold on"))
+        assertEquals(VoiceCommand.Pause, parseCommand("pause please"))
+        assertEquals(VoiceCommand.Resume, parseCommand("I'm back"))
     }
 
     @Test fun `anything more is a question`() {

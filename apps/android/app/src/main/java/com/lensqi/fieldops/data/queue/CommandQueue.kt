@@ -31,7 +31,8 @@ import javax.inject.Singleton
 enum class DrainResult { Empty, Offline }
 
 /**
- * Offline-first command queue (Track B day 2). Captures land in Room first, then drain in order. A 4xx keeps the
+ * Offline-first command queue (Track B day 2): inspection photos, and task step-check photos taken while the API was
+ * unreachable. Captures land in Room first, then drain in order. A 4xx keeps the
  * command visible with the server's code and moves on; a network failure stops the drain and WorkManager retries.
  */
 @Singleton
@@ -64,6 +65,28 @@ class CommandQueue @Inject constructor(
         return command
     }
 
+    /**
+     * Saves a step-check photo that could not be sent and queues it under the same [key] the first attempt used, so if
+     * that attempt reached the server after all, the server returns its recorded check instead of checking twice.
+     */
+    suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray): PendingCommand {
+        val dir = File(context.filesDir, "captures").apply { mkdirs() }
+        val target = File(dir, "$key.jpg").apply { writeBytes(jpeg) }
+        val command = PendingCommand(
+            id = key, inspectionId = taskId, kind = CommandKind.StepCheckPhoto, createdAtMillis = System.currentTimeMillis(),
+            filePath = target.absolutePath, mediaType = "image/jpeg", sha256 = sha256(jpeg), stepId = stepId,
+        )
+        dao.insert(command)
+        scheduleSync(context)
+        return command
+    }
+
+    /** Removes a command the person has been told about (a refused step check), with its saved photo. */
+    suspend fun dismiss(command: PendingCommand) {
+        dao.delete(command.id)
+        command.filePath?.let { File(it).delete() }
+    }
+
     suspend fun drain(): DrainResult = mutex.withLock {
         var next = dao.nextPending()
         while (next != null) {
@@ -92,6 +115,16 @@ class CommandQueue @Inject constructor(
                     if (r.value.sha256 != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "device ${c.sha256?.take(12)} vs server ${r.value.sha256.take(12)}")
                     else ApiOutcome.Ok(Unit)
                 }
+                is ApiOutcome.Rejected -> r
+                is ApiOutcome.Unreachable -> r
+            }
+        }
+        // The check is recorded on the task by the server; the screen refreshes when the queue empties.
+        CommandKind.StepCheckPhoto -> {
+            val file = File(requireNotNull(c.filePath))
+            val part = MultipartBody.Part.createFormData("image", file.name, file.asRequestBody("image/jpeg".toMediaType()))
+            when (val r = apiCall { api.checkStep(c.inspectionId, requireNotNull(c.stepId), c.id, part) }) {
+                is ApiOutcome.Ok -> ApiOutcome.Ok(Unit)
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }

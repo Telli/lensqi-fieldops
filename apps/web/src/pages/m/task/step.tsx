@@ -9,7 +9,7 @@ import { cameraError, connectCamera } from "@/lib/camera";
 import { friendlyError } from "@/lib/hooks";
 import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { parseCommand, speechNotice, usePushToTalk, useSpeak } from "@/lib/voice";
+import { parseCommand, speechNotice, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 /** The current camera frame as a JPEG, no larger than `maxSide` on its long edge. */
@@ -48,6 +48,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   const reviewing = open && !!step && t?.currentStepId !== step.id;
   const assist = useLiveAssist(video, live === "on" && open && !!step && !reviewing, `/v1/tasks/${encodeURIComponent(id)}`);
   const save = (next: Task) => qc.setQueryData(taskKeys.one(id), next);
+  const pauser = usePause(assist, speech);
 
   // Camera for the whole visit, once the video element is on screen (after the task loads, on a cold start too); frames
   // leave the phone only while live coaching is on.
@@ -68,7 +69,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   useEffect(() => {
     if (!t) return;
     if (t.phase === "Completed") { nav(`/m/t/${id}/done`, { replace: true }); return; }
-    if (t.phase === "Planned") { nav(`/m/t/${id}`, { replace: true }); return; }
+    if (t.phase === "Planned" || t.phase === "Abandoned") { nav(`/m/t/${id}`, { replace: true }); return; }
     if (!stepId && t.currentStepId) { nav(`/m/t/${id}/step/${t.currentStepId}`, { replace: true }); return; }
     // Only an unfinished step becomes current; a finished one is shown read-only with a way back to the current step.
     const routed = steps.find((s) => s.id === stepId);
@@ -129,6 +130,8 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       case "repeat": return void readStep(true);
       case "mute": return speech.toggle(false);
       case "unmute": return speech.toggle(true);
+      case "pause": return pauser.pause();
+      case "resume": return pauser.resume();
       default: return void ask(text);
     }
   });
@@ -195,6 +198,11 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
             <img src={tasks.photoUrl(id, step.lastCheck.photoId)} alt="Step check photo" className="size-14 shrink-0 rounded-lg object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
             <div><p className={cn("font-medium", verdictLabel[step.lastCheck.verdict].tone)}>AI check: {verdictLabel[step.lastCheck.verdict].text}</p><p className="text-xs opacity-80">{step.lastCheck.reason}</p><p className="mt-0.5 text-[10px] opacity-60">A suggestion. You decide when the step is done.</p></div>
           </div>
+        )}
+        {pauser.paused && (
+          <button onClick={pauser.resume} className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-primary/40 bg-primary/10 px-3 text-sm text-primary" aria-live="polite">
+            Paused: no speech or live coaching. <span className="font-medium">Say “resume” or tap</span>
+          </button>
         )}
         {voice.listening && <p className="text-center text-sm text-primary" aria-live="polite">{voice.heard || "Listening…"}</p>}
         {voice.error && <p className="text-center text-xs text-warning">{voice.error}</p>}
