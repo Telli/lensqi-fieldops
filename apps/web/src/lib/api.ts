@@ -28,6 +28,8 @@ export interface Photo { evidenceId: string; origin: Origin; artifactSha256: str
 export interface DiagnosticResult {
   fixtureId: string; diagnosticId: string; targetAlias: string; passed: boolean | null; completedAt: string;
   source: DiagnosticSource; traceId: string; normalizedValue?: string | null; rawDigest?: string | null;
+  /** The status a live server answered with; absent when nothing answered. */
+  httpStatus?: number | null;
 }
 export interface Decision {
   result: "Verified" | "Denied" | "NeedsHumanReview"; outcomeKind: OutcomeKind | null; reasons: string[];

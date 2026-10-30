@@ -18,6 +18,7 @@ public sealed class LiveLocalHttpHealthProbe(HttpClient http, DiagnosticsOptions
         var d = request.Diagnostic;
         bool? passed = null;
         string? digest = null;
+        int? answered = null;
         if (request.Target is { } target && IsAcceptable(target.Url))
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -27,6 +28,7 @@ public sealed class LiveLocalHttpHealthProbe(HttpClient http, DiagnosticsOptions
                 using var req = new HttpRequestMessage(HttpMethod.Get, target.Url);
                 using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
                 var status = (int)resp.StatusCode;
+                answered = status;
                 if (status is >= 300 and < 400)
                 {
                     passed = null; // redirect leaves the allowlist: fail closed
@@ -41,10 +43,11 @@ public sealed class LiveLocalHttpHealthProbe(HttpClient http, DiagnosticsOptions
             catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {
                 passed = null; // timeout, DNS, TLS, connection refused: Unavailable, never a presumed pass
+                answered = null; // an oversize body is not an answer either
             }
         }
         return new DiagnosticResult(request.FixtureId, d.DiagnosticId, d.TargetAlias, passed, clock.GetUtcNow(), Source, request.TraceId,
-            ProbeNormalization.Normalize(passed), digest);
+            ProbeNormalization.Normalize(passed), digest, answered);
     }
 
     public static bool IsAcceptable(Uri url) =>

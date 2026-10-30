@@ -115,7 +115,7 @@ public static class VerificationPolicyEvaluator
                 if (r.Passed is null)
                     return Deny($"Diagnostic '{diag.DiagnosticId}' was unavailable; no measurement to verify against");
                 if (r.Passed == false)
-                    return Deny($"{DiagnosticFailedPrefix}: {diag.DiagnosticId} measured {r.NormalizedValue ?? "a failure"} ({r.Source} probe). " +
+                    return Deny($"{DiagnosticFailedPrefix}: {diag.DiagnosticId} measured {(r.HttpStatus is int status ? $"HTTP {status}" : r.NormalizedValue ?? "a failure")} ({r.Source} probe). " +
                         $"Still required: “{diag.ClaimVerified ?? $"{diag.DiagnosticId} passes"}”");
                 claims.Add(diag.ClaimVerified ?? $"Diagnostic {diag.DiagnosticId} passed at test time");
                 if (r.Source != policy.VerifiedLiveRequiresSource) weakestSource = r.Source;

@@ -43,10 +43,10 @@ from the shutter are corrected for that.
 **Not measured:** the time from the server's response to the result appearing on the phone, so tap-to-screen
 times are not claimed. The verify step itself is effectively instant; the slow parts are the model calls.
 
-## What the run turned up (not fixed here)
+## What the run turned up (fixed afterwards, in the same PR)
 
-- After the comparison accepts a photo, the review card is below the photo and off screen. The tester took it for the end of the round until they scrolled.
-- The live check labels an HTTP 404 as `Unreachable`, but the server was reachable and answered. A non-200 answer and no answer should be told apart.
+- After the comparison accepts a photo, the review card was below the photo and off screen; the tester took it for the end of the round until they scrolled. The verify screen now scrolls to the next step's card whenever the step changes.
+- The live check labelled an HTTP 404 as `Unreachable`, though the server answered. Probe results now keep the status a server answered with (`httpStatus`), and the decision and screen say "HTTP 404"; `Unreachable` stays as the closed-set value predictions are scored against. The event log in this folder predates the fix, so it still reads `Unreachable`.
 
 ## Not in this folder
 

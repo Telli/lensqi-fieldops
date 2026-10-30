@@ -25,6 +25,25 @@ public class InspectionNegativeTests
     }
 
     [Fact]
+    public void A_live_server_that_answered_is_reported_by_its_status_not_as_unreachable()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        k.PostRepairEvidence();
+        k.Tick(); k.RecordProbe(k.Probe(false, DiagnosticSource.LiveLocal) with { HttpStatus = 404 });
+        var reason = Assert.Single(k.Verify().Reasons);
+        Assert.Contains("NODE-A-HEALTH measured HTTP 404 (LiveLocal probe)", reason);
+        Assert.DoesNotContain("Unreachable", reason);
+
+        // The status is written only when a server answered, so results recorded before it existed serialize as they did.
+        var json = System.Text.Json.JsonSerializer.Serialize(k.Probe(false), KnowledgeJson.Options);
+        Assert.DoesNotContain("httpStatus", json);
+        var answered = System.Text.Json.JsonSerializer.Serialize(k.Probe(false) with { HttpStatus = 404 }, KnowledgeJson.Options);
+        Assert.Equal(404, System.Text.Json.JsonSerializer.Deserialize<DiagnosticResult>(answered, KnowledgeJson.Options)!.HttpStatus);
+        Assert.Equal(k.Session.State.Stage, InspectionState.Replay(k.Session.Events).Stage);
+    }
+
+    [Fact]
     public void N02_Passed_pre_repair_probe_is_stale_after_the_claim()
     {
         var k = new InspectionTestKit();

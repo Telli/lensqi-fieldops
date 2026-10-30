@@ -21,11 +21,12 @@ public class ProbeTests
     {
         var ok = Live(new Stub(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("ok") }));
         var r = await ok.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None);
-        Assert.True(r.Passed); Assert.Equal(DiagnosticSource.LiveLocal, r.Source); Assert.Equal("Reachable", r.NormalizedValue); Assert.NotNull(r.RawDigest);
+        Assert.True(r.Passed); Assert.Equal(DiagnosticSource.LiveLocal, r.Source); Assert.Equal("Reachable", r.NormalizedValue); Assert.NotNull(r.RawDigest); Assert.Equal(200, r.HttpStatus);
 
         var bad = Live(new Stub(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
         var f = await bad.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None);
-        Assert.False(f.Passed); Assert.Equal("Unreachable", f.NormalizedValue);
+        // The server answered, so the status is kept beside the closed-set value predictions are scored against.
+        Assert.False(f.Passed); Assert.Equal("Unreachable", f.NormalizedValue); Assert.Equal(503, f.HttpStatus);
     }
 
     [Fact]
@@ -35,10 +36,12 @@ public class ProbeTests
         Assert.Null((await redirect.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None)).Passed);
 
         var boom = Live(new Stub(_ => throw new HttpRequestException("connection refused")));
-        Assert.Null((await boom.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None)).Passed);
+        var refused = await boom.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None);
+        Assert.Null(refused.Passed); Assert.Null(refused.HttpStatus);
 
         var big = Live(new Stub(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[100_000]) }), max: 1024);
-        Assert.Null((await big.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None)).Passed);
+        var oversize = await big.RunAsync(Req(new Uri("http://127.0.0.1:9/health")), CancellationToken.None);
+        Assert.Null(oversize.Passed); Assert.Null(oversize.HttpStatus);
 
         var stub = new Stub(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var noTarget = await Live(stub).RunAsync(Req(null), CancellationToken.None);

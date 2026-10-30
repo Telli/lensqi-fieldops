@@ -42,7 +42,9 @@ public sealed record VisualAssessment(
     string ModelId,
     string SchemaVersion);
 
-/// <summary>Result of an allowlisted probe. Produced by the Diagnostics layer; the model never constructs one.</summary>
+/// <summary>Result of an allowlisted probe. Produced by the Diagnostics layer; the model never constructs one.
+/// NormalizedValue stays in the closed prediction set (Reachable/Unreachable for a health check) so predictions can be
+/// scored; HttpStatus is the status a live server actually answered with, absent when nothing answered.</summary>
 public sealed record DiagnosticResult(
     string FixtureId,
     string DiagnosticId,
@@ -52,7 +54,8 @@ public sealed record DiagnosticResult(
     DiagnosticSource Source,
     string TraceId,
     string? NormalizedValue = null,
-    string? RawDigest = null);
+    string? RawDigest = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? HttpStatus = null);
 
 public sealed record VerificationDecision(
     VerificationResult Result,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, ShieldCheck, SlidersHorizontal, Sparkles, Eye, ClipboardCheck, Gauge, Lock } from "lucide-react";
@@ -13,7 +13,7 @@ import { aiSummary, verifySteps } from "@/lib/ai";
 import { arTags, usePhotoOutlines } from "@/lib/ar";
 import { qk, useAct } from "@/lib/hooks";
 import { beforePhoto, useInspectionBundle, verifications } from "@/lib/inspection";
-import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason, predictionOutcome, probeValue } from "@/lib/labels";
+import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason, measuredValue, predictionOutcome, probeValue } from "@/lib/labels";
 import { COMPARE_GIVE_UP_MS, COMPARE_POLL_MS, currentAttempt, verifyCard, verifyCardStep, type Attempt } from "@/lib/verify";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +57,7 @@ export default function Verify({ id }: { id: string }) {
   const claim = useAct(id, (d: string) => api.claim(id, d), { success: "New repair attempt recorded" });
   const card = i ? verifyCard(i) : "photo";
   const tooLong = useComparePolling(id, !!i?.currentClaimId && card === "comparing");
+  const nextStep = useScrollToNextStep(card);
 
   if (!i) return <><TopBar title="Repair verification" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
@@ -194,7 +195,7 @@ export default function Verify({ id }: { id: string }) {
         {attempt ? (
           <AttemptResult id={id} i={i} a={attempt} fixture={fixture} card={card} onRetake={openCamera} claimAgain={claimAgain} />
         ) : (
-          !showCamera && gateCard
+          !showCamera && <div ref={nextStep} className="scroll-mt-20">{gateCard}</div>
         )}
 
         {!attempt && !verify.isPending && blocking.length > 1 && card !== "closed" && (
@@ -224,6 +225,24 @@ export default function Verify({ id }: { id: string }) {
       </Page>
     </>
   );
+}
+
+/**
+ * When the step changes (a photo accepted, a review finished, a claim made), bring the new step's card into view: after
+ * a photo is accepted the review sits below the photo, off screen on a phone, and looked like the end of the round.
+ * Nothing moves on the first render.
+ */
+function useScrollToNextStep(card: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = card;
+    if (before === null || before === card) return;
+    const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ref.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }, [card]);
+  return ref;
 }
 
 /**
@@ -276,7 +295,7 @@ function AttemptResult({ id, i, a, fixture, card, onRetake, claimAgain }: {
           {a.measured.length ? a.measured.map((m) => (
             <div key={m.traceId} className="space-y-0.5">
               <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium">{target(m.diagnosticId) ?? m.targetAlias}</span><SourceBadge source={m.source} /></div>
-              <p>{m.passed === null ? "Unavailable: no measurement" : `${probeValue(m.normalizedValue)} · ${m.passed ? "passed" : "failed"}`} · {fmtTime(m.completedAt)}</p>
+              <p>{m.passed === null ? "Unavailable: no measurement" : `${measuredValue(m)} · ${m.passed ? "passed" : "failed"}`} · {fmtTime(m.completedAt)}</p>
             </div>
           )) : <p>No check ran: the photo, review or confirmation decided first.</p>}
         </Part>

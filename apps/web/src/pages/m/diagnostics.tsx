@@ -69,7 +69,7 @@ export default function Diagnostics({ id }: { id: string }) {
                 {r.passed === true ? "Pass — endpoint reachable" : r.passed === false ? "Fail — endpoint unreachable" : "No answer — check unavailable"}
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                {[["Result", r.passed === true ? "Pass" : r.passed === false ? "Fail" : "—"], ["Measured", r.normalizedValue ?? "—"], ["Source", r.source === "LiveLocal" ? "Live" : r.source === "Simulated" ? "Sim" : "Replay"]].map(([k, v]) => (
+                {[["Result", r.passed === true ? "Pass" : r.passed === false ? "Fail" : "—"], ["Measured", r.httpStatus != null ? `HTTP ${r.httpStatus}` : r.normalizedValue ?? "—"], ["Source", r.source === "LiveLocal" ? "Live" : r.source === "Simulated" ? "Sim" : "Replay"]].map(([k, v]) => (
                   <div key={k} className="rounded-lg bg-surface p-2"><div className="eyebrow">{k}</div><div className="mt-1 text-sm">{v}</div></div>
                 ))}
               </div>
