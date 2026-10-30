@@ -119,4 +119,33 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.NotEqual(manifest, next.GetProperty("issued").GetProperty("manifestSha256").GetString());
         Assert.Equal(2, File.ReadAllLines(Path.Combine(_factory.DataDir, "receipts", id + ".issued.jsonl")).Length);
     }
+
+    [Fact]
+    public async Task Sam_mask_geometry_is_bundled_with_its_recorded_digest_and_an_altered_mask_fails()
+    {
+        var create = await _client.PostAsJsonAsync("/v1/inspections", new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("inspectionId").GetString()!;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(800, 600, salt: 11)), "image", "f.png" } };
+        Assert.True((await _client.PostAsync($"/v1/inspections/{id}/observations", form)).IsSuccessStatusCode);
+        _factory.FakeSam.Queued.Enqueue([new LensQi.FieldOps.Meta.Segmentation.MaskRecord("0", 20, 20, 10, 10, 30, 30,
+            new LensQi.FieldOps.Meta.Segmentation.RleMask([20, 20], LensQi.FieldOps.Core.Inspection.CocoRle.Encode([0, 400])), 0.9)]);
+        var seg = JsonDocument.Parse(await (await _client.PostAsJsonAsync($"/v1/inspections/{id}/segment", new { concept = "yellow ethernet cable" })).Content.ReadAsStringAsync()).RootElement;
+        var segId = seg.GetProperty("segmentation").GetProperty("segmentationId").GetString()!;
+        var recorded = _factory.Services.GetRequiredService<InspectionStore>().Find(id)!.Events.OfType<LensQi.FieldOps.Core.Inspection.SegmentationRecorded>().Single();
+        Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(_factory.DataDir, "evidence", id, segId + ".json")))), recorded.GeometrySha256);
+
+        var check = await Check(id);
+        Assert.True(check.GetProperty("isValid").GetBoolean());
+        var receipt = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt")).RootElement;
+        var mask = receipt.GetProperty("artifacts").EnumerateArray().Single(a => a.GetProperty("kind").GetString() == "segmentation");
+        Assert.Equal(segId, mask.GetProperty("evidenceId").GetString());
+        var copy = Path.Combine(check.GetProperty("bundle").GetString()!, mask.GetProperty("path").GetString()!);
+        Assert.True(File.Exists(copy));
+
+        File.WriteAllText(copy, File.ReadAllText(copy).Replace("\"matched\": true", "\"matched\": false"));
+        var altered = await Check(id);
+        Assert.False(altered.GetProperty("isValid").GetBoolean());
+        Assert.Contains(altered.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains(segId));
+    }
 }
+

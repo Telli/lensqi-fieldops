@@ -22,7 +22,7 @@ interface Receipt {
   visualChange?: { claims: { claimId: string; description: string; verdict: string }[] };
   proposals?: { accepted: number; rejected: { proposalId: string; nextAction?: string | null; codes: string[] }[] };
   events: EventRecord[];
-  artifacts: { evidenceId: string; sha256: string }[];
+  artifacts: { evidenceId: string; kind?: string; sha256: string }[];
   manifestSha256: string;
   generatedAt: string;
 }
@@ -175,7 +175,7 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
               <button onClick={() => check.refetch()} className="text-[11px] text-primary">{check.isFetching ? "Checking…" : "Check now"}</button>
             </div>
             <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{r.manifestSha256}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">{r.artifacts.length} photos · {r.diagnostics.length} checks · {r.events.length} events</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{r.artifacts.filter((a) => a.kind !== "segmentation").length} photos · {r.artifacts.filter((a) => a.kind === "segmentation").length} SAM masks · {r.diagnostics.length} checks · {r.events.length} events</div>
             {check.data && (
               <div className={cn("mt-2 flex items-center gap-1.5 text-xs", check.data.isValid ? "text-success" : "text-failure")}>
                 <ShieldCheck className="size-3.5" />{check.data.isValid ? `Intact · ${check.data.checks.length} checks passed` : `Tampered: ${check.data.failures.join("; ")}`}

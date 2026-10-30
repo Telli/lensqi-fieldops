@@ -71,7 +71,7 @@ public sealed class InspectionSession
         });
 
     public IReadOnlyList<InspectionEvent> RecordSegmentation(string requestId, string evidenceId, string sourcePhotoEvidenceId, string concept,
-        bool matched, string? maskSha256, string? modelId, DateTimeOffset now) =>
+        bool matched, string? maskSha256, string? modelId, DateTimeOffset now, string? geometrySha256 = null) =>
         Idempotent(requestId, () =>
         {
             Require(State.Photos.Any(p => p.EvidenceId == sourcePhotoEvidenceId), $"Photo '{sourcePhotoEvidenceId}' is not part of this inspection");
@@ -79,7 +79,7 @@ public sealed class InspectionSession
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, "A matched segmentation must carry a mask digest");
             if (!matched && maskSha256 is not null)
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, "A no-match segmentation cannot carry a mask");
-            var batch = new List<InspectionEvent> { new SegmentationRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, sourcePhotoEvidenceId, concept, matched, maskSha256, modelId) };
+            var batch = new List<InspectionEvent> { new SegmentationRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, sourcePhotoEvidenceId, concept, matched, maskSha256, modelId, geometrySha256) };
             // No-match never advances the stage; a mask is an interpretation, not evidence of state.
             if (!matched && State.Stage == InspectionStage.InitialScan) batch.Add(Stage(InspectionStage.NeedsEvidence, "segmentation found no region", now, 1));
             return Commit(batch);

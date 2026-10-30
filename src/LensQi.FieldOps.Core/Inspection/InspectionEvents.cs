@@ -45,7 +45,8 @@ public sealed record PhotoRecorded(long Sequence, string InspectionId, DateTimeO
     string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null, string? PerceptualHash = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record SegmentationRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId,
+    string? GeometrySha256 = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);   // digest of the stored {EvidenceId}.json with the masks
 
 public sealed record AssessmentRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string EvidenceId, VisualAssessment Assessment, string? PromptDigest = null, string? ResponseDigest = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);

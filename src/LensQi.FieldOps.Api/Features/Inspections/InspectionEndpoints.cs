@@ -120,14 +120,16 @@ public static class InspectionEndpoints
                     analysis = session.State.ChangeAnalyses.LastOrDefault(a => a.ClaimId == session.State.CurrentClaimId && a.PhotoEvidenceId == photo.EvidenceId);
                     if (analysis is null)
                     {
-                        var result = await change.AnalyzeAsync(session.State, photo, artifactPath, ct);
+                        // Once the photo is recorded its analysis is finished even if the client goes away: a photo left
+                        // half-analysed would hold verification until a newer photo arrived.
+                        var result = await change.AnalyzeAsync(session.State, photo, artifactPath, CancellationToken.None);
                         analysis = result.Analysis;
                         await store.ExecuteAsync(id, s =>
                         {
                             if (result.AfterSegmentation is { } seg)
-                                s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow());
+                                s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow(), seg.GeometrySha256);
                             return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
-                        }, ct);
+                        }, CancellationToken.None);
                     }
                 }
                 var st = store.Find(id)!;
@@ -301,7 +303,7 @@ public static class InspectionEndpoints
             stage = st.Stage.ToString(), st.LastSequence, st.ViewRequests, st.CurrentClaimId, st.RepairClaimedAt, st.TechnicianAcknowledged,
             photos = st.Photos, diagnostics = st.Diagnostics.Select(d => new { d.EvidenceId, d.Result, source = d.Result.Source.ToString() }),
             checklist = st.Checklist.Values, segmentations = st.Segmentations, changeAnalyses = st.ChangeAnalyses,
-            acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
+            acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, awaitingAnalysis = st.PhotosBeingCompared.Select(p => p.EvidenceId), pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,
             lastDecision = st.LastDecision, evidenceRequests = st.EvidenceRequests,
             outcomeKind = st.LastDecision?.OutcomeKind?.ToString(),
         };

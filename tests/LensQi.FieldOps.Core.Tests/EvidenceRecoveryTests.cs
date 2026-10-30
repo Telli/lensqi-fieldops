@@ -60,4 +60,19 @@ public class EvidenceRecoveryTests
         Assert.False(k.Session.State.TechnicianAcknowledged);
         Assert.Contains("acknowledged", k.Verify().Reasons[0]);
     }
+
+    [Fact]
+    public void A_photo_whose_analysis_never_finished_stops_holding_once_a_newer_photo_is_accepted()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        k.Tick();
+        k.Session.RecordPhoto("rp-cut", "photo-cut", EvidenceOrigin.Phone, "sha-cut", k.Now, 1600, 1000, k.Now);   // upload cut off mid-analysis
+        Assert.Equal(["photo-cut"], k.Session.State.PhotosBeingCompared.Select(p => p.EvidenceId));
+        k.PostRepairEvidence();                                              // the retake: newer, analysed, reviewed, acknowledged
+        Assert.Empty(k.Session.State.PhotosBeingCompared);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        Assert.Equal(VerificationResult.Verified, k.Verify().Result);
+    }
 }
+

@@ -29,9 +29,9 @@ public static class VerificationPolicyEvaluator
         if (policy.RequireTechnicianAcknowledgement && !state.TechnicianAcknowledged)
             return Deny(loaded, "Repair has not been acknowledged by the technician");
 
-        // 1.4: any post-repair photo still being compared holds the decision, even when an older photo was accepted;
-        // its verdict may contradict the evidence the review relied on.
-        if (state.Photos.FirstOrDefault(p => state.IsAwaitingAnalysis(p.EvidenceId)) is { } waiting)
+        // 1.4: a post-repair photo still being compared holds the decision when it is newer than the accepted one, even
+        // though an older photo was accepted; its verdict may contradict the evidence the review relied on.
+        if (state.PhotosBeingCompared.LastOrDefault() is { } waiting)
             return Review($"The post-repair photo {waiting.EvidenceId} is still being compared with the earlier view");
 
         // 1.3: a post-repair photo counts only once its change analysis is recorded, and only Satisfied meets a requirement.
