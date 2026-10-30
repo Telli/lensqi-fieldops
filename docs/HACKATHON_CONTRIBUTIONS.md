@@ -79,6 +79,7 @@ as implementation commits land.
 | 2026-10-29T22:28:58-07:00 | `59113b8` | Knowledge proposals on the event log; predictions registered before the probe and scored in Core (VK-T06/T24/T25) | dotnet test: Core 133, Meta 18, Api 120 pass; fake fix Falsified, real fix Confirmed over HTTP with the simulated probe and fake Muse; secret scan PASS | None |
 | 2026-10-29T23:13:23-07:00 | `d16dc96` | VK-T27: prediction card, receipt predictions/visualChange/proposals blocks, ops timeline | dotnet test: Core 134, Meta 18, Api 120; web 30 tests, tsc, build; browser run with 2 genuine Muse proposals and the simulated probe: 1 Falsified, 1 Confirmed, receipt/verify isValid | None |
 | 2026-10-29T23:52:13-07:00 | `a7ddf23` | Re-review fixes: policy 1.4 pending photos, readiness and ack reset, probe preflight, retry replays, keyed gate, safety actor switch, receipt issuance record, Android queue retention and Back | dotnet test: Core 144, Meta 18, Api 123 (new API tests fail on old code); web 30 + tsc; Android testDebugUnitTest 111 + assembleDebug; secret scan PASS; no device run | None |
+| 2026-10-29T23:59:07-07:00 | `1aa98c0` | Close gaps: superseded pending photos, analysis survives disconnect, comparing state on web/Android, SAM mask files bundled in receipts | dotnet test: Core 145, Meta 18, Api 124; web 30 + tsc + build; Android unit tests + assembleDebug; live API: receipt issued once across checks/views, page Intact; secret scan PASS | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
