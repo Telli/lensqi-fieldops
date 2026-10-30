@@ -197,8 +197,10 @@ public class InspectionNegativeTests
         Assert.Equal(VerificationResult.NeedsHumanReview, k.Verify().Result);
         // after review marks one item conflicting the gate still refuses
         k.Session.RecordPhoto("r-p", "photo-x", EvidenceOrigin.Phone, "abc", k.Now, 10, 10, k.Now);
+        k.Analyse("photo-x");
         foreach (var req in k.Twin.Twin.MandatoryRequirements)
             k.Session.ReviewChecklist($"r-{req.RequirementId}", req.RequirementId, req.RequirementId == "yellow_cable_near_end_visible" ? ChecklistStatus.Conflicting : ChecklistStatus.Satisfied, p, k.Now);
+        k.Session.Acknowledge("r-ack-2", k.Now);   // the new photo and review need a fresh acknowledgement
         k.Tick(); k.RecordProbe(k.Probe(true));
         Assert.Equal(VerificationResult.NeedsHumanReview, k.Verify().Result);
     }

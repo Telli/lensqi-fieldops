@@ -238,6 +238,13 @@ public class TaskSessionTests
     [InlineData("Ask an electrician about it and disconnect the gas line.", true)]
     [InlineData("Call a licensed electrician to replace the breaker.", false)]
     [InlineData("Hire a plumber to disconnect the gas line.", false)]
+    [InlineData("Have a licensed electrician inspect the panel while you remove the cover.", true)]
+    [InlineData("Have an electrician inspect the panel and you remove the cover.", true)]
+    [InlineData("Let a plumber look at it, but disconnect the gas line first.", true)]
+    [InlineData("Have an electrician check the wiring before you replace the breaker.", true)]
+    [InlineData("Have an electrician come over and remove the cover yourself.", true)]
+    [InlineData("Let a plumber disconnect the gas line and replace the valve.", false)]
+    [InlineData("Have your electrician turn off the main breaker and replace the panel.", false)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
 

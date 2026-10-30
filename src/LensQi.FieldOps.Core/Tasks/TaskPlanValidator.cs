@@ -124,7 +124,11 @@ public static class TaskSafety
     // an electrician" and "call an electrician, then remove the cover" all still tell the person to act.
     private static readonly Regex Delegated = new($@"((have|let)\s+{Pro}|(ask|call|get|hire|book|pay)\s+{Pro}\s+to(?![a-z])|{Pro}\s+(should|will|can|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    private static readonly Regex ClauseBreak = new(@"(?<![a-z])then(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // A delegation covers the actions after it only while the professional stays the actor. "then", "while", "but",
+    // "before" and the like start a clause with its own actor, and "you"/"yourself" hand the action back to the person:
+    // "have an electrician inspect the panel while you remove the cover" tells the person to act.
+    private static readonly Regex ClauseBreak = new(@"(?<![a-z])(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SecondPerson = new(@"(?<![a-z'])(you|yourself|yourselves)(?![a-z'])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>True when any sentence tells the person to do hands-on work themselves.</summary>
     public static bool InstructsHandsOn(string? text) =>
@@ -134,8 +138,14 @@ public static class TaskSafety
     private static bool DelegatedBefore(string sentence, int actionAt)
     {
         var clauseStart = ClauseBreak.Matches(sentence[..actionAt]).LastOrDefault() is { } brk ? brk.Index + brk.Length : 0;
-        return Delegated.Matches(sentence[clauseStart..actionAt]).Count > 0;
+        if (Delegated.Matches(sentence[clauseStart..actionAt]).LastOrDefault() is not { } delegation) return false;
+        // "...while you remove the cover", "...and you disconnect it", "...remove the cover yourself": the person acts.
+        var between = sentence[(clauseStart + delegation.Index + delegation.Length)..actionAt];
+        return !SecondPerson.IsMatch(between) && !SecondPerson.IsMatch(NextClause(sentence, actionAt));
     }
+
+    private static string NextClause(string sentence, int from) =>
+        ClauseBreak.Match(sentence, from) is { Success: true } brk ? sentence[from..brk.Index] : sentence[from..];
 
     /// <summary>Whether this task, or the words of a question about it, concerns professionals-only work.</summary>
     public static bool IsRestricted(TaskState task, string? text = null) =>

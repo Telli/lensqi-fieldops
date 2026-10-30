@@ -101,7 +101,8 @@ fun CameraScreen(
     header: String? = null, onGuidance: (String) -> Unit = {},
     details: (@Composable ColumnScope.() -> Unit)? = null, controls: (@Composable (CameraHandle) -> Unit)? = null,
     targetConcept: String? = null,
-) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept) }
+    liveAllowed: Boolean = true,
+) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept, liveAllowed) }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
 class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {})
@@ -111,6 +112,7 @@ private fun CameraContent(
     prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
     header: String?, onGuidance: (String) -> Unit, details: (@Composable ColumnScope.() -> Unit)?, controls: (@Composable (CameraHandle) -> Unit)?,
     targetConcept: String?,
+    liveAllowed: Boolean,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -119,6 +121,8 @@ private fun CameraContent(
     var capturing by remember { mutableStateOf(false) }
     // Survive rotation: turning the phone must not switch live assist or 3D AR off.
     var liveEnabled by rememberSaveable { mutableStateOf(false) }
+    // Live guidance follows the screen's subject; when the screen says it does not apply (an earlier step is shown), it stops.
+    LaunchedEffect(liveAllowed) { if (!liveAllowed) liveEnabled = false }
     var arAvailability by remember { mutableStateOf(ArCore.availability(context)) }
     LaunchedEffect(arAvailability) { if (arAvailability == ArAvailability.Checking) { delay(250); arAvailability = ArCore.availability(context) } }
     var spatialEnabled by rememberSaveable { mutableStateOf(true) }
@@ -298,7 +302,9 @@ private fun CameraContent(
                         }
                         else -> Unit
                     }
-                    TextButton(onClick = { liveEnabled = !liveEnabled }) { Text(if (liveEnabled) "Pause live assist" else "Start live assist", color = FoDark.Foreground) }
+                    TextButton(onClick = { liveEnabled = !liveEnabled }, enabled = liveAllowed) {
+                        Text(if (!liveAllowed) "Live assist: current step only" else if (liveEnabled) "Pause live assist" else "Start live assist", color = if (liveAllowed) FoDark.Foreground else FoDark.Muted)
+                    }
                 }
                 Text(if (liveEnabled) "${feedback.fps} tracking updates/s · AI guidance ${feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}"
                     else if (arAvailability == ArAvailability.Ready && spatialEnabled) "Sampled frames go to AI for guidance; ARCore measures distance on this phone. Only shutter photos are saved."
@@ -328,7 +334,7 @@ private fun CameraContent(
                     if (arActive || controls == null) liveEnabled = false
                 }
             }
-            if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled, { liveEnabled = it }))
+            if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled, { liveEnabled = it && liveAllowed }))
             else Box(
                 Modifier.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
                     .background(if (capturing) FoDark.Primary else FoDark.Foreground)

@@ -272,6 +272,10 @@ public sealed class InspectionSession
             var batch = new List<InspectionEvent> { new VisualChangeAnalyzed(Next(), State.InspectionId, now, State.FixtureDigest, analysis) };
             if (analysis.RejectsPhoto && State.Stage == InspectionStage.ReadyToVerify)
                 batch.Add(Stage(InspectionStage.NeedsEvidence, $"{analysis.Verdict}: {analysis.Reason}", now, 1));
+            // An accepted analysis is the evidence arriving, as a new photo is: a verification attempted while it was
+            // still pending must not strand the claim.
+            else if (!analysis.RejectsPhoto && State.Stage == InspectionStage.NeedsEvidence)
+                batch.Add(Stage(InspectionStage.ReadyToVerify, $"change analysis accepted {analysis.PhotoEvidenceId}", now, 1));
             return Commit(batch);
         });
 

@@ -137,15 +137,17 @@ public static class InspectionEndpoints
         }).DisableAntiforgery();
 
         // FR-04: genuine Muse assessment of a photo already in the inspection; the Core validates and decides the stage.
-        g.MapPost("/inspections/{id}/investigate", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, VisualAssessmentService muse, ExpectedTwinStore twins, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/inspections/{id}/investigate", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, VisualAssessmentService muse, ExpectedTwinStore twins, KeyedGate gate, TimeProvider clock, CancellationToken ct) =>
         {
             var session = store.Find(id);
             if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
-            // A retried key returns what was recorded, and a stage that would refuse the assessment is refused before the paid call.
+            // A retried key returns what was recorded, and a stage that would refuse the assessment is refused before the paid
+            // call. An overlapping retry waits for the first request, then replays it.
+            using var _ = await gate.EnterAsync(id, Key(http), ct);
             if (Key(http) is { } key && session.Recorded(key) is { } done)
                 return done.OfType<AssessmentRecorded>().FirstOrDefault() is { } a
                     ? Results.Ok(new { a.EvidenceId, a.Assessment.ModelId, promptDigest = a.PromptDigest ?? "", responseDigest = a.ResponseDigest ?? "", usage = (object?)null, assessment = a.Assessment, events = done.Count, state = View(session), replayed = true })
-                    : ApiResults.Conflict(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
+                    : DifferentCommand();
             if (!session.AcceptsAssessment)
                 return ApiResults.Conflict(InspectionErrorCodes.InvalidState, $"Assessment is not accepted in the current stage (stage {session.State.Stage})");
             var photo = session.State.Photos.LastOrDefault();
@@ -177,35 +179,37 @@ public static class InspectionEndpoints
         g.MapPost("/inspections/{id}/segmentations", (string id, SegmentationRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s =>
             {
-                var evidenceId = "seg-" + Guid.NewGuid().ToString("N")[..10];
-                s.RecordSegmentation(RequestId(http, "seg:" + req.PhotoEvidenceId + ":" + req.Concept), evidenceId, req.PhotoEvidenceId, req.Concept, req.Matched, req.MaskSha256, req.ModelId, clock.GetUtcNow());
-                return Results.Ok(new { evidenceId, state = View(s) });
+                var events = s.RecordSegmentation(RequestId(http, "seg:" + req.PhotoEvidenceId + ":" + req.Concept), "seg-" + Guid.NewGuid().ToString("N")[..10], req.PhotoEvidenceId, req.Concept, req.Matched, req.MaskSha256, req.ModelId, clock.GetUtcNow());
+                // A replayed key returns the recorded ID, never the one this attempt would have used.
+                return events.OfType<SegmentationRecorded>().FirstOrDefault() is { } seg ? Results.Ok(new { evidenceId = seg.EvidenceId, state = View(s) }) : DifferentCommand();
             })));
 
         g.MapPost("/inspections/{id}/predictions", (string id, PredictionRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s =>
             {
-                var predictionId = "pred-" + Guid.NewGuid().ToString("N")[..10];
-                s.RegisterPrediction(RequestId(http, "pred:" + req.DiagnosticId + ":" + req.PredictedValue), predictionId, req.DiagnosticId, req.PredictedValue, req.BasedOnFactIds, clock.GetUtcNow());
-                return Results.Ok(new { predictionId, state = View(s) });
+                var events = s.RegisterPrediction(RequestId(http, "pred:" + req.DiagnosticId + ":" + req.PredictedValue), "pred-" + Guid.NewGuid().ToString("N")[..10], req.DiagnosticId, req.PredictedValue, req.BasedOnFactIds, clock.GetUtcNow());
+                return events.OfType<PredictionRegistered>().FirstOrDefault() is { } p ? Results.Ok(new { predictionId = p.PredictionId, state = View(s) }) : DifferentCommand();
             })));
 
-        // FR-06: only a fixture-approved diagnostic ID; the dispatcher resolves the alias server-side.
+        // FR-06: only a fixture-approved diagnostic ID; the dispatcher resolves the alias server-side. The replay check, the
+        // probe and the record run under the inspection's lock: a retried key returns the recorded measurement instead of
+        // probing again, so the response always matches the event trail.
         g.MapPost("/inspections/{id}/diagnostics/{diagnosticId}:run", async (string id, string diagnosticId, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, TimeProvider clock, CancellationToken ct) =>
         {
-            var session = store.Find(id);
-            if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
-            return await GuardAsync(async () =>
+            if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
+            var requestId = RequestId(http, "diag");
+            return await GuardAsync(() => store.ExecuteAsync(id, async s =>
             {
+                if (s.Recorded(requestId) is { } done)
+                    return done.OfType<DiagnosticCompleted>().FirstOrDefault() is { } d
+                        ? Results.Ok(new { evidenceId = d.EvidenceId, result = d.Result, source = d.Result.Source.ToString(), events = done.Count, state = View(s), replayed = true })
+                        : DifferentCommand();
                 var traceId = Guid.NewGuid().ToString("N");
-                var result = await dispatcher.RunAsync(session.Twin.Twin, diagnosticId, traceId, ct);
-                return await store.ExecuteAsync(id, s =>
-                {
-                    var evidenceId = "diag-" + traceId[..10];
-                    var events = s.RecordDiagnostic(RequestId(http, "diag:" + traceId), evidenceId, result, clock.GetUtcNow());
-                    return Task.FromResult(Results.Ok(new { evidenceId, result, source = result.Source.ToString(), events = events.Count, state = View(s) }));
-                }, ct);
-            });
+                var result = await dispatcher.RunAsync(s.Twin.Twin, diagnosticId, traceId, ct);
+                var evidenceId = "diag-" + traceId[..10];
+                var events = s.RecordDiagnostic(requestId, evidenceId, result, clock.GetUtcNow());
+                return Results.Ok(new { evidenceId, result, source = result.Source.ToString(), events = events.Count, state = View(s), replayed = false });
+            }, ct));
         });
 
         g.MapPost("/inspections/{id}/decline-view", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
@@ -218,8 +222,9 @@ public static class InspectionEndpoints
             Guard(() => store.Execute(id, s =>
             {
                 var claimId = "claim-" + Guid.NewGuid().ToString("N")[..10];
-                s.ClaimRepair(RequestId(http, "claim:" + claimId), claimId, req.Description, clock.GetUtcNow());
-                return Results.Ok(new { claimId, state = View(s) });
+                var events = s.ClaimRepair(RequestId(http, "claim:" + claimId), claimId, req.Description, clock.GetUtcNow());
+                // A replayed key returns the claim that was recorded, not the ID this attempt generated.
+                return events.OfType<RepairClaimed>().FirstOrDefault() is { } c ? Results.Ok(new { claimId = c.ClaimId, state = View(s) }) : DifferentCommand();
             })));
 
         g.MapPost("/inspections/{id}/checklist", (string id, ChecklistRequest req, HttpRequest http, InspectionStore store, TimeProvider clock) =>
@@ -236,7 +241,8 @@ public static class InspectionEndpoints
         g.MapPost("/inspections/{id}/acknowledge", (string id, HttpRequest http, InspectionStore store, TimeProvider clock) =>
             Guard(() => store.Execute(id, s => { s.Acknowledge(RequestId(http, "ack:" + s.State.CurrentClaimId), clock.GetUtcNow()); return Results.Ok(View(s)); })));
 
-        // FR-08: server-owned gate. Runs the fixture's diagnostics first unless a fresh post-claim result exists. The stage
+        // FR-08: server-owned gate. Runs the fixture's diagnostics first unless a fresh post-claim result exists or the
+        // visual and human prerequisites already decide the outcome. The stage
         // check, the probes and the decision run under one lock, so a concurrent or retried verify waits and then replays
         // or is refused instead of running the probes a second time.
         g.MapPost("/inspections/{id}/verify", async (string id, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, TimeProvider clock, CancellationToken ct) =>
@@ -251,7 +257,10 @@ public static class InspectionEndpoints
                     throw new InspectionConflictException(InspectionErrorCodes.InvalidState, $"Verification requires a pending repair claim (stage {s.State.Stage})");
                 var twin = s.Twin.Twin;
                 var now = clock.GetUtcNow();
-                foreach (var d in twin.Diagnostics)
+                // Photo, checklist and acknowledgement are checked first and decide first; when they already decide, no
+                // probe is spent and the recorded decision says what is missing.
+                var ready = VerificationPolicyEvaluator.Prerequisites(s.State, s.Twin) is null;
+                foreach (var d in ready ? twin.Diagnostics : [])
                 {
                     var latest = s.State.LatestDiagnosticFor(d.DiagnosticId);
                     var fresh = latest is not null && latest.Result.CompletedAt > s.State.RepairClaimedAt
@@ -300,6 +309,8 @@ public static class InspectionEndpoints
 
     /// <summary>Idempotency is keyed only by a client-supplied Idempotency-Key (PRD FR-05). Without one, every request is
     /// distinct; content-derived keys would silently swallow legitimate repeats such as two identical test photos.</summary>
+    internal static IResult DifferentCommand() => ApiResults.Conflict(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
+
     /// <summary>The client's Idempotency-Key, or null when the request did not send one.</summary>
     internal static string? Key(HttpRequest http) =>
         http.Headers.TryGetValue("Idempotency-Key", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : null;

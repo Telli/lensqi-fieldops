@@ -9,52 +9,95 @@ using LensQi.FieldOps.Meta.Vision;
 
 namespace LensQi.FieldOps.Api.Features.Receipts;
 
-/// <summary>Builds a receipt bundle under data/receipts/{inspectionId}/: receipt.json, receipt.html and a copy of every
-/// photo artifact. The bundle is what `verify-receipt` checks. Rebuilt on every request from the append-only events.</summary>
+/// <summary>One issued receipt: the manifest the server stands behind, how many events it covers and when it was issued.</summary>
+public sealed record ReceiptIssue(string ManifestSha256, int EventCount, DateTimeOffset IssuedAt, string ReceiptVersion);
+
+/// <summary>
+/// Issues receipt bundles under data/receipts/{inspectionId}/ (receipt.json, receipt.html and a copy of every photo) and
+/// keeps a server-owned issuance record beside them in {inspectionId}.issued.jsonl. A new version is issued only when none
+/// exists, the event log has grown or the receipt format changed; otherwise the issued receipt is rebuilt from the log in
+/// memory with its original issue time, and the bundle on disk is never rewritten. Checking a bundle therefore compares
+/// it with what was issued and never repairs it.
+/// </summary>
 public sealed class ReceiptService(InspectionStore store, EvidenceFileStore files, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, TimeProvider clock)
 {
+    private readonly Lock _issuing = new();
+
     public string BundleRoot => Path.Combine(files.DataDirectoryPath, "receipts");
 
-    public (EvidenceReceipt Receipt, string BundleDir)? Build(string inspectionId)
+    private string IssueLog(string inspectionId) => Path.Combine(BundleRoot, inspectionId + ".issued.jsonl");
+
+    /// <summary>The receipt the server currently stands behind, issuing a new version first when the log has moved on.</summary>
+    public (EvidenceReceipt Receipt, string BundleDir, ReceiptIssue Issue)? Current(string inspectionId)
     {
         var session = store.Find(inspectionId);
         if (session is null) return null;
         var dir = Path.Combine(BundleRoot, inspectionId);
+        lock (_issuing)
+        {
+            if (LastIssue(inspectionId) is { } last && last.EventCount == session.Events.Count && last.ReceiptVersion == EvidenceReceipt.Version
+                && Compose(session, last.IssuedAt) is { } again && again.ManifestSha256 == last.ManifestSha256)
+                return (again, dir, last);
+            return Issue(session, dir);
+        }
+    }
+
+    public ReceiptIssue? LastIssue(string inspectionId)
+    {
+        var path = IssueLog(inspectionId);
+        if (!File.Exists(path)) return null;
+        var line = File.ReadLines(path).LastOrDefault(l => !string.IsNullOrWhiteSpace(l));
+        return line is null ? null : JsonSerializer.Deserialize<ReceiptIssue>(line, KnowledgeJson.Options);
+    }
+
+    private (EvidenceReceipt, string, ReceiptIssue) Issue(InspectionSession session, string dir)
+    {
+        var id = session.State.InspectionId;
+        var receipt = Compose(session, clock.GetUtcNow());
         var artDir = Path.Combine(dir, "artifacts");
         Directory.CreateDirectory(artDir);
+        // An existing copy is never replaced: an altered or missing file then fails verification instead of being re-certified.
+        foreach (var a in receipt.Artifacts)
+            if (Original(id, a.EvidenceId) is { } src && Path.Combine(dir, a.Path) is var dst && !File.Exists(dst)) File.Copy(src, dst);
+        File.WriteAllText(Path.Combine(dir, "receipt.json"), JsonSerializer.Serialize(receipt, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(dir, "receipt.html"), ReceiptHtml.Render(receipt));
+        var issue = new ReceiptIssue(receipt.ManifestSha256!, session.Events.Count, receipt.GeneratedAt, receipt.ReceiptVersion);
+        File.AppendAllText(IssueLog(id), JsonSerializer.Serialize(issue, KnowledgeJson.Options) + "\n");
+        return (receipt, dir, issue);
+    }
 
-        var artifacts = new List<ReceiptArtifact>();
-        var srcDir = Path.Combine(files.DataDirectoryPath, "evidence", inspectionId);
-        foreach (var photo in session.State.Photos)
+    /// <summary>The receipt for this log at this issue time. Digests come from the photo events and sizes from the stored
+    /// originals, never from the bundle copies, so the same log and issue time always give the same manifest.</summary>
+    private EvidenceReceipt Compose(InspectionSession session, DateTimeOffset issuedAt)
+    {
+        var id = session.State.InspectionId;
+        var artifacts = session.State.Photos.Select(photo =>
         {
-            // The digest comes from the photo's event, never from the bytes on disk, and an existing copy is never
-            // replaced: an altered or missing file then fails verification instead of being re-certified.
-            var src = Directory.Exists(srcDir) ? Directory.EnumerateFiles(srcDir).FirstOrDefault(f => Path.GetFileName(f).StartsWith(photo.EvidenceId + "-", StringComparison.Ordinal)) : null;
+            var src = Original(id, photo.EvidenceId);
             var name = src is not null ? Path.GetFileName(src) : photo.EvidenceId;
-            var dst = Path.Combine(artDir, name);
-            if (src is not null && !File.Exists(dst)) File.Copy(src, dst);
-            var bytes = File.Exists(dst) ? File.ReadAllBytes(dst) : [];
-            var media = EvidenceFileStore.DetectImageType(bytes) ?? "application/octet-stream";
-            artifacts.Add(new ReceiptArtifact(photo.EvidenceId, "photo", Path.Combine("artifacts", name).Replace('\\', '/'),
-                photo.ArtifactSha256, bytes.LongLength, media, photo.Origin.ToString(), photo.ObservedAt));
-        }
+            var bytes = src is not null ? File.ReadAllBytes(src) : [];
+            return new ReceiptArtifact(photo.EvidenceId, "photo", Path.Combine("artifacts", name).Replace('\\', '/'), photo.ArtifactSha256, bytes.LongLength,
+                EvidenceFileStore.DetectImageType(bytes) ?? "application/octet-stream", photo.Origin.ToString(), photo.ObservedAt);
+        }).ToList();
 
         ReceiptKnowledge? knowledge = null;
         var binding = bindings.FirstOrDefault(b => b.FixtureId == session.State.FixtureId && b.AssetId == session.State.AssetId);
         if (binding is not null)
             knowledge = ReceiptBuilder.FromResolution(resolver.Resolve(binding, binding.ToAssetIdentity(), []));
-
-        var receipt = ReceiptBuilder.Build(session, artifacts, knowledge, clock.GetUtcNow(), VisualAssessmentService.SchemaVersion);
-        File.WriteAllText(Path.Combine(dir, "receipt.json"), JsonSerializer.Serialize(receipt, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }));
-        File.WriteAllText(Path.Combine(dir, "receipt.html"), ReceiptHtml.Render(receipt));
-        return (receipt, dir);
+        return ReceiptBuilder.Build(session, artifacts, knowledge, issuedAt, VisualAssessmentService.SchemaVersion);
     }
 
-    /// <summary>How many events the issued receipt covers; -1 when there is no readable receipt.</summary>
-    public static int IssuedEventCount(string bundleDir)
+    private string? Original(string inspectionId, string evidenceId)
     {
-        try { return System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(Path.Combine(bundleDir, "receipt.json")))?["events"]?.AsArray().Count ?? -1; }
-        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { return -1; }
+        var srcDir = Path.Combine(files.DataDirectoryPath, "evidence", inspectionId);
+        return Directory.Exists(srcDir) ? Directory.EnumerateFiles(srcDir).FirstOrDefault(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal)) : null;
+    }
+
+    /// <summary>The manifest digest written in the bundle's receipt.json, or null when it cannot be read.</summary>
+    public static string? BundleManifest(string bundleDir)
+    {
+        try { return System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(Path.Combine(bundleDir, "receipt.json")))?["manifestSha256"]?.GetValue<string>(); }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { return null; }
     }
 
     /// <summary>Failures where the bundle's artifact list disagrees with the photos the event log recorded.</summary>
@@ -81,21 +124,24 @@ public static class ReceiptEndpoints
     public static IEndpointRouteBuilder MapReceipts(this IEndpointRouteBuilder app)
     {
         app.MapGet("/v1/inspections/{id}/receipt", (string id, ReceiptService svc) =>
-            svc.Build(id) is { } b ? Results.Json(b.Receipt, new JsonSerializerOptions(KnowledgeJson.Options)) : ApiResults.NotFound($"Inspection '{id}' not found"));
+            svc.Current(id) is { } b ? Results.Json(b.Receipt, new JsonSerializerOptions(KnowledgeJson.Options)) : ApiResults.NotFound($"Inspection '{id}' not found"));
 
         app.MapGet("/v1/inspections/{id}/receipt.html", (string id, ReceiptService svc) =>
-            svc.Build(id) is { } b ? Results.Content(ReceiptHtml.Render(b.Receipt), "text/html; charset=utf-8") : ApiResults.NotFound($"Inspection '{id}' not found"));
+            svc.Current(id) is { } b ? Results.Content(ReceiptHtml.Render(b.Receipt), "text/html; charset=utf-8") : ApiResults.NotFound($"Inspection '{id}' not found"));
 
-        // Verifies the issued bundle on disk the same way the CLI does, and checks every artifact digest against the photo
-        // recorded in the event log. A bundle is (re)issued only when none exists or the log has grown since.
+        // Checks the bundle on disk the way the CLI does, against the photos in the event log, and against the issuance
+        // record: a bundle whose manifest is not the one the server issued fails, even when it is internally consistent.
+        // Nothing here rewrites the bundle; a new version is issued only when the log has grown.
         app.MapGet("/v1/inspections/{id}/receipt/verify", (string id, ReceiptService svc, InspectionStore store) =>
         {
-            if (store.Find(id) is not { } session) return ApiResults.NotFound($"Inspection '{id}' not found");
-            var dir = Path.Combine(svc.BundleRoot, id);
-            if (ReceiptService.IssuedEventCount(dir) < session.Events.Count) svc.Build(id);
-            var v = ReceiptVerifier.Verify(dir);
-            var failures = v.Failures.Concat(ReceiptService.AgainstRecord(dir, session.State.Photos)).ToList();
-            return Results.Ok(new { bundle = dir, isValid = failures.Count == 0, v.Checks, failures });
+            if (store.Find(id) is not { } session || svc.Current(id) is not { } current) return ApiResults.NotFound($"Inspection '{id}' not found");
+            var v = ReceiptVerifier.Verify(current.BundleDir);
+            var failures = v.Failures.Concat(ReceiptService.AgainstRecord(current.BundleDir, session.State.Photos)).ToList();
+            var checks = v.Checks.ToList();
+            var onDisk = ReceiptService.BundleManifest(current.BundleDir);
+            if (onDisk == current.Issue.ManifestSha256) checks.Add($"manifest is the receipt issued at {current.Issue.IssuedAt:u}");
+            else failures.Add($"receipt.json is not the receipt issued at {current.Issue.IssuedAt:u} (issued manifest {current.Issue.ManifestSha256[..12]}…)");
+            return Results.Ok(new { bundle = current.BundleDir, isValid = failures.Count == 0, checks, failures, issued = current.Issue });
         });
         return app;
     }

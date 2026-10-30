@@ -34,11 +34,12 @@ public static class InspectionKnowledgeEndpoints
         // VK-T06/T25: every proposal call lands on the inspection log, accepted or rejected. An accepted RunApprovedProbe
         // registers its prediction in the same batch, before any probe for it can run. A retried key returns what was
         // recorded, and a closed inspection is refused before the paid call.
-        app.MapPost("/v1/inspections/{id}/knowledge/reason", async (string id, ReasonRequest req, HttpRequest http, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, GroundedProposalService service, TimeProvider clock, CancellationToken ct) =>
+        app.MapPost("/v1/inspections/{id}/knowledge/reason", async (string id, ReasonRequest req, HttpRequest http, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, GroundedProposalService service, KeyedGate gate, TimeProvider clock, CancellationToken ct) =>
         {
             var s = store.Find(id);
             if (s is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             var key = InspectionEndpoints.Key(http);
+            using var _ = await gate.EnterAsync(id, key, ct);   // an overlapping retry waits, then replays
             if (key is not null && s.Recorded(key) is { } done)
                 return Outcome(done) is { } earlier ? Reply(earlier, s, null) : ApiResults.Conflict(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
             if (!s.AcceptsKnowledgeProposal) return ApiResults.Conflict(InspectionErrorCodes.InvalidState, $"Knowledge proposals are not accepted in the current stage (stage {s.State.Stage})");
