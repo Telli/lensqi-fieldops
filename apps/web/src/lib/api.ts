@@ -88,7 +88,7 @@ export class ApiError extends Error {
 
 const key = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-async function request<T>(method: string, url: string, body?: unknown, form?: FormData): Promise<T> {
+export async function request<T>(method: string, url: string, body?: unknown, form?: FormData): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (method === "POST") headers["Idempotency-Key"] = key();
   if (body !== undefined) headers["Content-Type"] = "application/json";

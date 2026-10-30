@@ -5,12 +5,19 @@
 **Prior private project:** `Telli/LensIQ-Monorepo` at `593f467` (2026-10-16). Zero source copied; see `docs/PRIOR_ART.md`.  
 **Indie prior-code reuse clarification from organizers:** not received; default is fresh implementation (PRD §4A).
 
-Every row below is new work authored during the event. Rows are appended as commits land; this file is updated with each
-feature commit, not at submission time.
+This ledger records commits made during the event; a commit timestamp alone is not evidence that its inputs were
+newly authored. The v1.1/v2.0 specification kits and any pre-event design material are **not claimed as new
+implemented functionality**. The specification-kit baselines in `f46e967` and `bb863be` are excluded from novelty
+claims; independently implemented validators, adapters, workflows and tests are identified in their own rows.
+
+The owner-provided Lovable/Replit UI design inputs listed in [PRIOR_ART.md](PRIOR_ART.md) have unconfirmed creation
+dates. Their underlying designs are excluded from novelty claims pending attribution confirmation; the event-built
+API integration and workflow behavior are claimed separately. No private LensIQ source is copied. Rows are appended
+as implementation commits land.
 
 | Commit time (UTC/local ISO) | Commit | New module / functionality | Real test evidence | Prior-code reference |
 |---|---|---|---|---|
-| 2026-10-27T18:08:32-07:00 | `f46e967` | Specification kit (child spec v1.2, schemas, sample packs, Python validators) | 19 Python negative cases pass | None |
+| 2026-10-27T18:08:32-07:00 | `f46e967` | Specification-kit baseline (child spec v1.2, schemas, sample packs, Python validators); excluded from novelty claims | 19 Python negative cases pass | None |
 | 2026-10-27T18:18:30-07:00 | `ce84d0b` | Core: knowledge contracts, exact applicability, conflict detector, bounded resolver, binding invariants (VK-T03, VK-T04) | 21 Core tests | None |
 | 2026-10-27T18:18:30-07:00 | `d69ea06` | Api: strict pack loader, byte-exact SHA-256, fail-closed startup, pack listing endpoint (VK-T01, VK-T02) | 27 Api tests | None |
 | 2026-10-27T18:18:30-07:00 | `891bd75` | Docs: tasks checked off, design aligned | n/a | None |
@@ -18,7 +25,7 @@ feature commit, not at submission time.
 | 2026-10-27T18:35:31-07:00 | `55b77be` | Meta: MuseSparkChatClient (Chat Completions, strict json_schema), grounding composer, GroundedProposalService; Core: proposal contracts, diagnostic registry, KnowledgeActionValidator (VK-T05, VK-T06); Stage One gate runner | 19 new tests, 67 total | None |
 | 2026-10-27T18:43:37-07:00 | `c5d0984` | Stage One gate PASSED: two genuine muse-spark-1.3 structured-output calls validated server-side; reasoning-token budget fix | LIVE_META evidence in docs/evidence/ | None |
 | 2026-10-27T19:04:56-07:00 | `69da6d2` | Docs: review of the v1.1 parent kit and PRD | n/a | None |
-| 2026-10-27T19:20:22-07:00 | `bb863be` | Merge the FieldOps v1.1 parent kit with review fixes | 19 twin negative cases; all fixture validators green | None |
+| 2026-10-27T19:20:22-07:00 | `bb863be` | Import the FieldOps v1.1 parent-kit baseline with review fixes; baseline excluded from novelty claims | 19 twin negative cases; all fixture validators green | None |
 | 2026-10-27T19:20:22-07:00 | `df419e0` | Unify model next-action vocabulary on the parent ProposedNextAction enum | 68 tests; Stage One gate re-run PASS (LIVE_META) | None |
 | 2026-10-27T19:20:22-07:00 | `b53d2ea` | Adopt the PRD reuse stance, prior-art register, project README, new gate evidence | n/a | None |
 | 2026-10-27T19:26:15-07:00 | `26d33e0` | SAM 3.1 spike: sidecar parser, genuine segmentation calls, overlay on original image, synthetic fixture photo (T1.1, T1.2) | LIVE_META evidence docs/evidence/sam-spike-20261028T022522Z.json; 1 match + 1 honest no-match | None |
@@ -54,6 +61,17 @@ feature commit, not at submission time.
 | 2026-10-28T15:03:11-07:00 | `9618c90` | Live AR assistance (Web/Android/Glasses), ROI port loupe, before/after split scrubber, expected topology schematic, Dual-Key gate, and Android ARCore 3D world-locked spatial anchors + metric distance coaching | 175 .NET tests, 22 web tests, 95 Android unit tests (incl. SpatialAnchorTrackerTest + ArTagsTest), debug APK and production web bundle built, secret_scan PASS | None |
 | 2026-10-28T15:39:10-07:00 | `88b5543` | Real ARCore session for Android 3D AR (measured depth anchors, no fixed distance), review fixes on web and Android; corrects the earlier 9618c90 ARCore claim, which had no ARCore session | 175 .NET, 23 web, 104 Android unit tests (ArSpatialTest, HevcResyncTest); emulator 2D fallback screenshot; ARCore not run on a phone; secret_scan PASS | None |
 | 2026-10-28T17:15:47-07:00 | `6bbec93` | Open-scene live guidance (screen error text, model-named outline targets) and rotation-safe live assist; first ARCore run on a Galaxy S23 Ultra | 178 .NET (new LiveVision guidance/focus/validation tests), 23 web, 104 Android unit tests; phone: ARCore tracking + depth with genuine SAM/Muse calls, no anchors (no target in view), shutter hand-off not run; secret_scan PASS | None |
+| 2026-10-28T17:56:57-07:00 | `c722a14` | Guided-task backend: TaskSession, server-enforced plan safety, TaskPlanner/StepCoach, /v1/tasks API | 216 .NET tests (21 new Core TaskSession, 9 new TaskApi); fakes only, no genuine model calls yet; secret_scan PASS | None |
+| 2026-10-28T18:05:17-07:00 | `ba64285` | Guided-task web flow (two-mode home, plan, step runner with voice and photo checks) and first genuine task calls | 216 .NET, 25 web tests; browser: home, plan, step runner, Done to step 2, check card; genuine Muse: 3 plans incl. restricted panel, 1 question, 1 step check (docs/evidence/tasks); camera, voice input and phone not exercised | None |
+| 2026-10-28T18:15:21-07:00 | `3d999b6` | Guided tasks on Android: two-mode home, plan, step runner on the live camera with voice, photo checks | 107 Android unit tests; emulator: plan, step runner, real step check (CantTell), real live coaching within the step, Done to step 2; voice input and phone not exercised | None |
+| 2026-10-28T18:16:36-07:00 | `20d2a85` | Ops Guided tasks list; technician task on the site record linked to FieldProof | 25 web tests; genuine technician plan (site-aware: port P2, Node A); link to I-ebdf6b18bb3b shown on /ops/tasks; no verification run | None |
+| 2026-10-28T22:17:07-07:00 | `180b3f4` | Free-form help (Just ask): camera and questions without a plan on web and Android, appended referral safeguard (not structural rejection of unsafe answers) | 218 .NET (new Core and API free-form tests), 25 web, 107 Android; genuine answers in browser and on the emulator incl. gas-line referral (docs/evidence/tasks) | None |
+| 2026-10-28T22:32:01-07:00 | `8c39f29` | Correction: .NET test totals in the rows for c722a14 and ba64285 were 208 (95 Core, 18 Meta, 95 API), not 216; for 180b3f4 it was 210 (96, 18, 96), not 218 | dotnet test --nologo on the current head: 96 + 18 + 96 = 210 passed | None |
+| 2026-10-28T23:07:14-07:00 | `9cc5c85` | Continuous technician API journey with fake models and simulated diagnostics; speech/privacy and referral claim corrections, guided-task storyboard, contribution exclusions; Open feasibility deferred pending owner access (GT-T21, Tasks 1–4) | 211 .NET tests and 25 web tests passed; web production build and secret scan PASS; offline CLI receipt PASS and tamper rejection; docs/evidence/tasks/technician-journey.md | None |
+| 2026-10-29T11:52:41-07:00 | `46348ef` | Review fixes: link-inspection under the task lock, step-check retry reuses its photo and verdict, generic 500 bodies; docs brought up to the reviewed code | dotnet 214/214 (3 new TaskApiTests); web 25/25 and Android 107/107 unchanged; secret_scan PASS | None |
+| 2026-10-29T12:31:07-07:00 | `3215c23` | UX pass and GT-T34–T37: one-tap plan from home, one-tap start, photo check never blocks Done, typing beside the mic, persisted task request ids, bare www. links caught, linked FieldProof outcome on the task summary | dotnet 220/220; web 25/25 + build; Android 107/107 + assembleDebug; browser at phone size with one genuine plan; secret_scan PASS | None |
+| 2026-10-29T17:44:22-07:00 | `f2dbb48` | PR review fixes: text-level safety for restricted work, Back dead end, idempotent questions, state checks before model calls, Android retries and refreshes | 237 .NET, 25 web, 108 Android unit tests; secret_scan PASS; not yet re-run on the emulator | None |
+| 2026-10-29T17:46:43-07:00 | `e85bbff` | Restricted-work text check counts an action only on the hazard itself | 240 .NET tests (118 Core); genuine breaker-panel plan passes with five observe/document steps (docs/evidence/tasks/plan-panel-text-checked.json) | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
@@ -67,14 +85,14 @@ feature commit, not at submission time.
 
 ## Evaluation
 
-Latest run: `docs/evaluation/eval-20261028T032756Z.md` (25 synthetic scenarios, genuine Muse Spark and SAM 3.1 calls, Simulated probe). Rerun with `dotnet run --project tools/LensQi.FieldOps.Eval` against a running API.
+Latest recorded evaluation: `docs/evaluation/eval-20261028T061752Z.md` (25 synthetic scenarios, genuine Muse Spark and SAM 3.1 calls, Simulated probe). Rerun with `dotnet run --project tools/LensQi.FieldOps.Eval` against a running API.
 
 ## Separately disclosed existing project
 
 - Original private LensIQ heritage application: `Telli/LensIQ-Monorepo` before Oct 27, 2026. Product context only.
 - Do not show old LensIQ tourism workflows as newly built FieldOps features.
-- Nothing has been reused. If the indie rule is clarified in writing, record any reuse in `docs/PRIOR_ART.md` **before** copying.
+- No private LensIQ source has been reused. Owner-provided UI design inputs are separately disclosed above and in `docs/PRIOR_ART.md`; do not treat those design inputs as newly authored implementation.
 
 ## Test labels
 
-For each demonstrated result, record: `LIVE_META`, `LIVE_LOCAL_PROBE`, `SIMULATED_PROBE`, `RECORDED_REPLAY`, `META_WEARABLE_MOCK`, or `ACTUAL_GLASSES`. Do not conflate them. Current evidence files carry `LIVE_META` only; no probe has run.
+For each demonstrated result, record: `LIVE_META`, `LIVE_LOCAL_PROBE`, `SIMULATED_PROBE`, `RECORDED_REPLAY`, `META_WEARABLE_MOCK`, or `ACTUAL_GLASSES`. Do not conflate them. Existing evidence includes genuine model calls, simulated probes, a live HTTP loopback probe and mock wearables. The continuous technician journey uses `FAKE_MODELS_SIMULATED_DIAGNOSTICS`; it is not a genuine model or hardware run.
