@@ -187,7 +187,18 @@ public static class TaskEndpoints
             return await GuardAsync(async () =>
             {
                 string? photoId = null;
-                if (frame is { } f)
+                // A retry after a failed model call keeps the photo the first attempt recorded under this request, and
+                // asks about that photo rather than a newer frame.
+                if (store.Execute(id, s => s.Replayed(requestId + ":photo"))?.OfType<TaskPhotoRecorded>().FirstOrDefault() is { } earlierPhoto)
+                {
+                    photoId = earlierPhoto.EvidenceId;
+                    if (ArtifactPath(files, id, photoId) is { } savedPath)
+                    {
+                        var saved = File.ReadAllBytes(savedPath);
+                        frame = (saved, EvidenceFileStore.DetectImageType(saved)!, earlierPhoto.Width, earlierPhoto.Height);
+                    }
+                }
+                else if (frame is { } f)
                 {
                     photoId = "ask-" + Guid.NewGuid().ToString("N")[..10];
                     var stored = files.SaveImage(id, photoId, f.Bytes, f.MediaType, f.Width, f.Height);

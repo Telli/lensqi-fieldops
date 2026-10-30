@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { request } from "./api";
+import { ApiError, newKey, request } from "./api";
 import { friendlyError } from "./hooks";
 
 export type TaskMode = "Diy" | "Technician" | "Freeform";
@@ -35,6 +35,28 @@ export interface PlanError { code: string; message: string }
 
 const T = (id: string) => `/v1/tasks/${encodeURIComponent(id)}`;
 
+const pending = new Map<string, string>();
+const retryable = new Set(["provider_unavailable", "invalid_model_output"]);
+
+/**
+ * Sends one command under a key that is kept until the server gives a final answer, so a retry after a lost response
+ * or a server error replays the recorded outcome (and reuses a saved photo) instead of acting twice.
+ */
+export async function once<R>(command: string, send: (key: string) => Promise<R>): Promise<R> {
+  const key = pending.get(command) ?? newKey();
+  pending.set(command, key);
+  try {
+    const r = await send(key);
+    pending.delete(command);
+    return r;
+  } catch (e) {
+    // A refusal is final. An unreachable server, a server error or a failed model call may have applied the command
+    // or saved its photo, so the retry keeps the key.
+    if (e instanceof ApiError && e.status >= 400 && e.status < 500 && !retryable.has(e.code)) pending.delete(command);
+    throw e;
+  }
+}
+
 export const tasks = {
   list: (mode?: TaskMode) => request<TaskSummary[]>("GET", `/v1/tasks${mode ? `?mode=${mode}` : ""}`),
   get: (id: string) => request<Task>("GET", T(id)),
@@ -47,22 +69,22 @@ export const tasks = {
     return request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f);
   },
   plan: (id: string) => request<Task>("POST", `${T(id)}/plan`),
-  accept: (id: string, safetyAcknowledged: boolean) => request<Task>("POST", `${T(id)}/accept`, { safetyAcknowledged }),
-  start: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:start`),
-  complete: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:complete`),
-  skip: (id: string, stepId: string) => request<Task>("POST", `${T(id)}/steps/${stepId}:skip`),
-  finish: (id: string) => request<Task>("POST", `${T(id)}/finish`),
-  abandon: (id: string, reason?: string) => request<Task>("POST", `${T(id)}/abandon`, { reason }),
+  accept: (id: string, safetyAcknowledged: boolean) => once(`${id}:accept`, (k) => request<Task>("POST", `${T(id)}/accept`, { safetyAcknowledged }, undefined, k)),
+  start: (id: string, stepId: string) => once(`${id}:start:${stepId}`, (k) => request<Task>("POST", `${T(id)}/steps/${stepId}:start`, undefined, undefined, k)),
+  complete: (id: string, stepId: string) => once(`${id}:complete:${stepId}`, (k) => request<Task>("POST", `${T(id)}/steps/${stepId}:complete`, undefined, undefined, k)),
+  skip: (id: string, stepId: string) => once(`${id}:skip:${stepId}`, (k) => request<Task>("POST", `${T(id)}/steps/${stepId}:skip`, undefined, undefined, k)),
+  finish: (id: string) => once(`${id}:finish`, (k) => request<Task>("POST", `${T(id)}/finish`, undefined, undefined, k)),
+  abandon: (id: string, reason?: string) => once(`${id}:abandon`, (k) => request<Task>("POST", `${T(id)}/abandon`, { reason }, undefined, k)),
   check: (id: string, stepId: string, photo: Blob) => {
     const f = new FormData(); f.append("image", photo, "step.jpg");
-    return request<{ check: StepCheck & { source: string }; task: Task }>("POST", `${T(id)}/steps/${stepId}/check`, undefined, f);
+    return once(`${id}:check:${stepId}`, (k) => request<{ check: StepCheck & { source: string }; task: Task }>("POST", `${T(id)}/steps/${stepId}/check`, undefined, f, k));
   },
   ask: (id: string, question: string, frame?: Blob | null) => {
     const f = new FormData(); f.append("question", question);
     if (frame) f.append("image", frame, "frame.jpg");
-    return request<{ answer: string; focus: string[]; stepId: string | null; photoId: string | null; modelId: string }>("POST", `${T(id)}/ask`, undefined, f);
+    return once(`${id}:ask:${question}`, (k) => request<{ answer: string; focus: string[]; stepId: string | null; photoId: string | null; modelId: string }>("POST", `${T(id)}/ask`, undefined, f, k));
   },
-  linkInspection: (id: string) => request<{ inspectionId: string; task: Task }>("POST", `${T(id)}/link-inspection`),
+  linkInspection: (id: string) => once(`${id}:link`, (k) => request<{ inspectionId: string; task: Task }>("POST", `${T(id)}/link-inspection`, undefined, undefined, k)),
   photoUrl: (id: string, evidenceId: string) => `${T(id)}/artifacts/${encodeURIComponent(evidenceId)}`,
 };
 
@@ -82,7 +104,7 @@ export function useTaskAct<A extends unknown[]>(id: string, fn: (...args: A) => 
   return useMutation({
     mutationFn: (args: A) => fn(...args),
     onSuccess: (t) => qc.setQueryData(taskKeys.one(id), t),
-    onError: (e) => toast.error(friendlyError(e)),
+    onError: (e) => { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: taskKeys.one(id) }); },
     onSettled: () => qc.invalidateQueries({ queryKey: taskKeys.list }),
   });
 }

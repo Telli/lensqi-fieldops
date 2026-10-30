@@ -230,6 +230,10 @@ public class TaskSessionTests
     [InlineData("Remove boxes and clutter blocking access to the panel.", false)]
     [InlineData("Unplug sensitive electronics in the garage.", false)]
     [InlineData("Replace the old breaker with a new one.", true)]
+    [InlineData("Remove the breaker panel cover, and call a licensed electrician.", true)]
+    [InlineData("Disconnect the gas line and have a plumber inspect it.", true)]
+    [InlineData("Call an electrician, then remove the panel cover.", true)]
+    [InlineData("Have the electrician obtain permits, coordinate the utility, replace the panel and test it.", false)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
 

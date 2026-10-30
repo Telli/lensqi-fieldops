@@ -27,6 +27,12 @@ namespace LensQi.FieldOps.Core.Inspection;
 [JsonDerivedType(typeof(EvidenceRequested), "EvidenceRequested")]
 public abstract record InspectionEvent(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest)
 {
+    /// <summary>
+    /// The command request (Idempotency-Key) that appended this event, so a retry replays its outcome after a restart too.
+    /// Not to be confused with an evidence or verification request id carried by some events.
+    /// </summary>
+    public string? CommandId { get; init; }
+
     [JsonIgnore] public string EventKind => GetType().Name;
 }
 

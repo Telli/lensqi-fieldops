@@ -87,6 +87,8 @@ public sealed class FakeVisionChat : IChatClient
     public int Calls { get; private set; }
     /// <summary>Every text part of the last request: system prompt, context and ask.</summary>
     public string LastText { get; private set; } = "";
+    /// <summary>The first image of the last request.</summary>
+    public byte[]? LastImage { get; private set; }
     public Exception? Throw { get; set; }
     /// <summary>When set, the call waits this long (honouring cancellation) before answering.</summary>
     public TimeSpan? Delay { get; set; }
@@ -95,6 +97,7 @@ public sealed class FakeVisionChat : IChatClient
         Images += messages.SelectMany(m => m.Contents).OfType<DataContent>().Count();
         Calls++;
         LastText = string.Join("\n", messages.SelectMany(m => m.Contents).OfType<TextContent>().Select(t => t.Text));
+        LastImage = messages.SelectMany(m => m.Contents).OfType<DataContent>().FirstOrDefault()?.Data.ToArray();
         if (Delay is { } d) await Task.Delay(d, cancellationToken);
         if (Throw is { } ex) throw ex;
         return new ChatResponse(new ChatMessage(ChatRole.Assistant, Responses.TryDequeue(out var next) ? next : CannedResponse)) { ModelId = "fake-muse" };
