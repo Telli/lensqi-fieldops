@@ -309,6 +309,11 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 Field(s.claimText, vm::onClaimChanged, "What did you do this time?")
                 PrimaryButton("Fixed it again — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
             }
+            view.awaitingAnalysis.isNotEmpty() -> AiCard("I'm comparing the new photo with the earlier view.", "Comparing the new photo…",
+                "Verification waits for this. If it doesn't finish, take the photo again.") {
+                SecondaryButton("Take it again", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+                SecondaryButton("Refresh", { vm.refresh() }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Refresh)
+            }
             gate == 0 -> AiCard(
                 aiSummary(view, null), asked?.note ?: "Photograph the repair",
                 asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",

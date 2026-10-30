@@ -123,6 +123,12 @@ export default function Verify({ id }: { id: string }) {
       );
     if (decided && decision.result === "NeedsHumanReview")
       return <AiCard tone="warning" says={plainReason(decision.reasons[0] ?? "")} title="Needs a decision" hint="A supervisor decides this one; I can't." />;
+    if (i.awaitingAnalysis?.length)
+      return (
+        <AiCard says="I'm comparing the new photo with the earlier view." title="Comparing the new photo…" hint="Verification waits for this. If it doesn't finish, take the photo again.">
+          <Button asChild size="lg" variant="outline" className={btn}><Link href={`/m/i/${id}/scan`}><Camera /> Take it again</Link></Button>
+        </AiCard>
+      );
     switch (gate) {
       case "photo":
         return (

@@ -158,6 +158,8 @@ data class InspectionView(
     val segmentations: List<SegmentationRef> = emptyList(),
     /** The post-repair photo the server will count for the current claim; null when none is accepted yet. */
     val acceptedPostRepairPhotoId: String? = null,
+    /** Newer post-repair photos still being compared with the earlier view; while any remain, verification waits. */
+    val awaitingAnalysis: List<String> = emptyList(),
     val evidenceRequests: List<EvidenceRequest> = emptyList(),
 )
 

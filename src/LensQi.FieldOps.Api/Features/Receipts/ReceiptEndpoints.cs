@@ -58,7 +58,7 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
         Directory.CreateDirectory(artDir);
         // An existing copy is never replaced: an altered or missing file then fails verification instead of being re-certified.
         foreach (var a in receipt.Artifacts)
-            if (Original(id, a.EvidenceId) is { } src && Path.Combine(dir, a.Path) is var dst && !File.Exists(dst)) File.Copy(src, dst);
+            if (Original(id, a.EvidenceId, a.Kind) is { } src && Path.Combine(dir, a.Path) is var dst && !File.Exists(dst)) File.Copy(src, dst);
         File.WriteAllText(Path.Combine(dir, "receipt.json"), JsonSerializer.Serialize(receipt, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }));
         File.WriteAllText(Path.Combine(dir, "receipt.html"), ReceiptHtml.Render(receipt));
         var issue = new ReceiptIssue(receipt.ManifestSha256!, session.Events.Count, receipt.GeneratedAt, receipt.ReceiptVersion);
@@ -66,19 +66,21 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
         return (receipt, dir, issue);
     }
 
-    /// <summary>The receipt for this log at this issue time. Digests come from the photo events and sizes from the stored
-    /// originals, never from the bundle copies, so the same log and issue time always give the same manifest.</summary>
+    /// <summary>The receipt for this log at this issue time. Digests come from the events (photos and the SAM geometry
+    /// files with their masks) and sizes from the stored originals, never from the bundle copies, so the same log and issue
+    /// time always give the same manifest.</summary>
     private EvidenceReceipt Compose(InspectionSession session, DateTimeOffset issuedAt)
     {
         var id = session.State.InspectionId;
-        var artifacts = session.State.Photos.Select(photo =>
+        ReceiptArtifact Artifact(string evidenceId, string kind, string sha256, string origin, DateTimeOffset observedAt)
         {
-            var src = Original(id, photo.EvidenceId);
-            var name = src is not null ? Path.GetFileName(src) : photo.EvidenceId;
+            var src = Original(id, evidenceId, kind);
+            var name = src is not null ? Path.GetFileName(src) : evidenceId;
             var bytes = src is not null ? File.ReadAllBytes(src) : [];
-            return new ReceiptArtifact(photo.EvidenceId, "photo", Path.Combine("artifacts", name).Replace('\\', '/'), photo.ArtifactSha256, bytes.LongLength,
-                EvidenceFileStore.DetectImageType(bytes) ?? "application/octet-stream", photo.Origin.ToString(), photo.ObservedAt);
-        }).ToList();
+            var media = kind == "segmentation" ? "application/json" : EvidenceFileStore.DetectImageType(bytes) ?? "application/octet-stream";
+            return new ReceiptArtifact(evidenceId, kind, "artifacts/" + name, sha256, bytes.LongLength, media, origin, observedAt);
+        }
+        var artifacts = Expected(session).Select(e => Artifact(e.EvidenceId, e.Kind, e.Sha256, e.Origin, e.At)).ToList();
 
         ReceiptKnowledge? knowledge = null;
         var binding = bindings.FirstOrDefault(b => b.FixtureId == session.State.FixtureId && b.AssetId == session.State.AssetId);
@@ -87,10 +89,19 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
         return ReceiptBuilder.Build(session, artifacts, knowledge, issuedAt, VisualAssessmentService.SchemaVersion);
     }
 
-    private string? Original(string inspectionId, string evidenceId)
+    /// <summary>Every file the receipt must carry, with the digest the event log recorded for it. Segmentations recorded
+    /// before their geometry digest was kept are listed in the events only.</summary>
+    public static IEnumerable<(string EvidenceId, string Kind, string Sha256, string Origin, DateTimeOffset At)> Expected(InspectionSession session) =>
+        session.State.Photos.Select(p => (p.EvidenceId, "photo", p.ArtifactSha256, p.Origin.ToString(), p.ObservedAt))
+            .Concat(session.Events.OfType<SegmentationRecorded>().Where(s => s.GeometrySha256 is not null)
+                .Select(s => (s.EvidenceId, "segmentation", s.GeometrySha256!, "Sam", s.OccurredAt)));
+
+    private string? Original(string inspectionId, string evidenceId, string kind)
     {
         var srcDir = Path.Combine(files.DataDirectoryPath, "evidence", inspectionId);
-        return Directory.Exists(srcDir) ? Directory.EnumerateFiles(srcDir).FirstOrDefault(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal)) : null;
+        if (!Directory.Exists(srcDir)) return null;
+        if (kind == "segmentation") return Path.Combine(srcDir, evidenceId + ".json") is var json && File.Exists(json) ? json : null;
+        return Directory.EnumerateFiles(srcDir).FirstOrDefault(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal));
     }
 
     /// <summary>The manifest digest written in the bundle's receipt.json, or null when it cannot be read.</summary>
@@ -100,8 +111,8 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { return null; }
     }
 
-    /// <summary>Failures where the bundle's artifact list disagrees with the photos the event log recorded.</summary>
-    public static IEnumerable<string> AgainstRecord(string bundleDir, IEnumerable<PhotoEvidence> photos)
+    /// <summary>Failures where the bundle's artifact list disagrees with the files the event log recorded.</summary>
+    public static IEnumerable<string> AgainstRecord(string bundleDir, IEnumerable<(string EvidenceId, string Kind, string Sha256, string Origin, DateTimeOffset At)> expected)
     {
         Dictionary<string, string?> listed;
         try
@@ -111,10 +122,10 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
                 .ToDictionary(a => a!["evidenceId"]!.GetValue<string>(), a => a!["sha256"]?.GetValue<string>(), StringComparer.Ordinal);
         }
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or ArgumentException) { yield break; }
-        foreach (var photo in photos)
+        foreach (var e in expected)
         {
-            if (!listed.TryGetValue(photo.EvidenceId, out var sha)) yield return $"artifact {photo.EvidenceId}: recorded in the inspection but missing from the receipt";
-            else if (!string.Equals(sha, photo.ArtifactSha256, StringComparison.Ordinal)) yield return $"artifact {photo.EvidenceId}: receipt digest differs from the inspection record";
+            if (!listed.TryGetValue(e.EvidenceId, out var sha)) yield return $"artifact {e.EvidenceId}: recorded in the inspection but missing from the receipt";
+            else if (!string.Equals(sha, e.Sha256, StringComparison.Ordinal)) yield return $"artifact {e.EvidenceId}: receipt digest differs from the inspection record";
         }
     }
 }
@@ -136,7 +147,7 @@ public static class ReceiptEndpoints
         {
             if (store.Find(id) is not { } session || svc.Current(id) is not { } current) return ApiResults.NotFound($"Inspection '{id}' not found");
             var v = ReceiptVerifier.Verify(current.BundleDir);
-            var failures = v.Failures.Concat(ReceiptService.AgainstRecord(current.BundleDir, session.State.Photos)).ToList();
+            var failures = v.Failures.Concat(ReceiptService.AgainstRecord(current.BundleDir, ReceiptService.Expected(session))).ToList();
             var checks = v.Checks.ToList();
             var onDisk = ReceiptService.BundleManifest(current.BundleDir);
             if (onDisk == current.Issue.ManifestSha256) checks.Add($"manifest is the receipt issued at {current.Issue.IssuedAt:u}");

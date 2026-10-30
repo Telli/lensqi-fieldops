@@ -158,9 +158,9 @@ public static class ReceiptHtml
         foreach (var x in r.Diagnostics)
             sb.Append("<tr><td>").Append(E(x.Result.DiagnosticId)).Append("</td><td><b>").Append(E(x.Result.Source.ToString())).Append("</b></td><td>").Append(x.Result.Passed?.ToString() ?? "Unavailable").Append("</td><td>").Append(x.Result.CompletedAt.ToString("u")).Append("</td><td>").Append(E(x.Result.TargetAlias)).Append("</td><td><code>").Append(E(x.Result.RawDigest)).Append("</code></td></tr>");
         sb.Append("</table>");
-        sb.Append("<h2>Visual evidence (photographs) and checklist (human reviewed)</h2><table><tr><th>Evidence</th><th>Origin</th><th>Observed</th><th>SHA-256</th><th>Path</th></tr>");
+        sb.Append("<h2>Visual evidence (photographs, SAM masks) and checklist (human reviewed)</h2><table><tr><th>Evidence</th><th>Kind</th><th>Origin</th><th>Observed</th><th>SHA-256</th><th>Path</th></tr>");
         foreach (var a in r.Artifacts)
-            sb.Append("<tr><td>").Append(E(a.EvidenceId)).Append("</td><td>").Append(E(a.Origin)).Append("</td><td>").Append(a.ObservedAt.ToString("u")).Append("</td><td><code>").Append(E(a.Sha256)).Append("</code></td><td>").Append(E(a.Path)).Append("</td></tr>");
+            sb.Append("<tr><td>").Append(E(a.EvidenceId)).Append("</td><td>").Append(E(a.Kind == "segmentation" ? "SAM mask (inferred)" : a.Kind)).Append("</td><td>").Append(E(a.Origin)).Append("</td><td>").Append(a.ObservedAt.ToString("u")).Append("</td><td><code>").Append(E(a.Sha256)).Append("</code></td><td>").Append(E(a.Path)).Append("</td></tr>");
         sb.Append("</table>");
         if (r.Checklist.Count > 0) { sb.Append("<ul>"); foreach (var c in r.Checklist) sb.Append("<li>").Append(E(c.RequirementId)).Append(": <b>").Append(E(c.Status.ToString())).Append("</b> at ").Append(c.ReviewedAt.ToString("u")).Append("</li>"); sb.Append("</ul>"); }
         if (r.VisualChange.Claims.Count > 0)

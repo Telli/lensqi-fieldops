@@ -45,6 +45,8 @@ export interface Inspection {
   photos: Photo[]; diagnostics: { evidenceId: string; result: DiagnosticResult; source: DiagnosticSource }[];
   checklist: { requirementId: string; status: ChecklistStatus; reviewedAt?: string; reviewedByEvidenceId?: string | null }[];
   segmentations: Segmentation[]; changeAnalyses: ChangeAnalysis[]; acceptedPostRepairPhotoId?: string | null;
+  /** Newer post-repair photos still being compared with the earlier view; verification waits while any remain. */
+  awaitingAnalysis?: string[];
   lastDecision?: Decision | null; outcomeKind?: OutcomeKind | null; evidenceRequests?: EvidenceRequest[];
 }
 export interface InspectionSummary {

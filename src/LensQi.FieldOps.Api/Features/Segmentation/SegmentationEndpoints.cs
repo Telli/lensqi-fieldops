@@ -78,14 +78,16 @@ public static class SegmentationEndpoints
                 crop = crop is null ? null : new { file = cropName, sha256 = cropSha, transform = crop.Transform },
                 label = "LIVE_META", note = "Boxes and masks are model interpretations of the photo; a crop is not independent evidence.",
             };
-            await File.WriteAllTextAsync(Path.Combine(evidenceDir, segId + ".json"), JsonSerializer.Serialize(geometry, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }), ct);
+            var geometryBytes = JsonSerializer.SerializeToUtf8Bytes(geometry, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true });
+            await File.WriteAllBytesAsync(Path.Combine(evidenceDir, segId + ".json"), geometryBytes, ct);
+            var geometrySha = Convert.ToHexStringLower(SHA256.HashData(geometryBytes));
 
             var requestId = key ?? "segment:" + segId;
             try
             {
                 return await store.ExecuteAsync(id, s =>
                 {
-                    s.RecordSegmentation(requestId, segId, photo.EvidenceId, concept, outcome.Matched, maskSha, outcome.ModelId, clock.GetUtcNow());
+                    s.RecordSegmentation(requestId, segId, photo.EvidenceId, concept, outcome.Matched, maskSha, outcome.ModelId, clock.GetUtcNow(), geometrySha);
                     return Task.FromResult(Results.Ok(new { segmentation = geometry, state = Features.Inspections.InspectionEndpoints.View(s), replayed = false }));
                 }, ct);
             }

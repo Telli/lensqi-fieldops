@@ -23,7 +23,7 @@ public sealed class ChangeEvidenceOptions
 }
 
 /// <summary>The SAM call made for a post-repair photo, stored beside the evidence like any other segmentation.</summary>
-public sealed record ChangeSegmentation(string SegmentationId, string Concept, bool Matched, string? MaskSha256, string ModelId);
+public sealed record ChangeSegmentation(string SegmentationId, string Concept, bool Matched, string? MaskSha256, string ModelId, string GeometrySha256);
 
 public sealed record ChangeEvidenceResult(VisualChangeAnalysis Analysis, ChangeSegmentation? AfterSegmentation);
 
@@ -73,10 +73,10 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
         var segId = "seg-" + Guid.NewGuid().ToString("N")[..10];
         var afterMask = outcome.Masks.OrderByDescending(m => m.Confidence ?? 0).FirstOrDefault();
         var afterSha = MaskDigest(outcome.Masks);
-        await SaveGeometryAsync(state.InspectionId, segId, photo, outcome, afterSha, ct);
+        var geometrySha = await SaveGeometryAsync(state.InspectionId, segId, photo, outcome, afterSha, ct);
         var analysis = VisualChangeAnalyzer.Compare(claimId, referencePhoto, photo, reference.Concept,
             before, reference.MaskSha256, afterMask is null ? null : Place(afterMask), afterSha, thresholds);
-        return new(analysis, new ChangeSegmentation(segId, reference.Concept, outcome.Matched, afterSha, outcome.ModelId));
+        return new(analysis, new ChangeSegmentation(segId, reference.Concept, outcome.Matched, afterSha, outcome.ModelId, geometrySha));
     }
 
     /// <summary>Same digest the segment endpoint records: SHA-256 over the masks' RLE counts.</summary>
@@ -105,7 +105,8 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
         return best;
     }
 
-    private async Task SaveGeometryAsync(string inspectionId, string segId, PhotoEvidence photo, SegmentationOutcome o, string? maskSha, CancellationToken ct)
+    /// <summary>Writes the geometry beside the evidence and returns the SHA-256 of the bytes written, for the event and the receipt.</summary>
+    private async Task<string> SaveGeometryAsync(string inspectionId, string segId, PhotoEvidence photo, SegmentationOutcome o, string? maskSha, CancellationToken ct)
     {
         var dir = Path.Combine(files.DataDirectoryPath, "evidence", inspectionId);
         Directory.CreateDirectory(dir);
@@ -116,6 +117,8 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
             matched = o.Matched, boxes = o.Boxes, masks = o.Masks, maskSha256 = maskSha, crop = (object?)null,
             purpose = "change-evidence", label = "LIVE_META", note = "Boxes and masks are model interpretations of the photo; change metrics are computed by code.",
         };
-        await File.WriteAllTextAsync(Path.Combine(dir, segId + ".json"), JsonSerializer.Serialize(geometry, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }), ct);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(geometry, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true });
+        await File.WriteAllBytesAsync(Path.Combine(dir, segId + ".json"), bytes, ct);
+        return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }
 }

@@ -115,6 +115,20 @@ public sealed record InspectionState
         RepairClaimedAt is null ? null : Photos.Where(p => IsPostClaim(p) && IsAnalysedForCurrentClaim(p.EvidenceId) && !IsRejectedForCurrentClaim(p.EvidenceId))
             .OrderByDescending(p => p.RecordedAt ?? p.ObservedAt).FirstOrDefault();
 
+    /// <summary>
+    /// Post-repair photos still being compared that are newer than the accepted one: their verdict could contradict the
+    /// evidence a review relied on, so they hold verification. An older photo whose analysis never finished (the upload was
+    /// cut off) is superseded by a newer accepted photo and holds nothing.
+    /// </summary>
+    public IReadOnlyList<PhotoEvidence> PhotosBeingCompared
+    {
+        get
+        {
+            var accepted = LatestPostRepairPhoto;
+            return Photos.Where(p => IsAwaitingAnalysis(p.EvidenceId) && (accepted is null || (p.RecordedAt ?? p.ObservedAt) > (accepted.RecordedAt ?? accepted.ObservedAt))).ToList();
+        }
+    }
+
     /// <summary>Change analysis of this photo is recorded under the current claim.</summary>
     public bool IsAnalysedForCurrentClaim(string photoEvidenceId) =>
         CurrentClaimId is not null && ChangeAnalyses.Any(a => a.ClaimId == CurrentClaimId && a.PhotoEvidenceId == photoEvidenceId);
