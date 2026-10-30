@@ -84,4 +84,29 @@ public class RestartTests
             Assert.True(File.Exists(Path.Combine(logs, bad + ".jsonl")));
         }
     }
+
+    [Fact]
+    public async Task A_retried_photo_upload_after_a_restart_is_not_recorded_twice()
+    {
+        string dir, id;
+        HttpRequestMessage Upload(string inspectionId)
+        {
+            var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(640, 480)), "image", "a.png" } };
+            var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/inspections/{inspectionId}/observations") { Content = form };
+            m.Headers.Add("Idempotency-Key", "capture-1");
+            return m;
+        }
+        using (var first = new FieldOpsApiFactory())
+        {
+            using var c = first.CreateClient();
+            id = (await Post(c, "/v1/inspections", new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" })).GetProperty("inspectionId").GetString()!;
+            Assert.Equal(HttpStatusCode.OK, (await c.SendAsync(Upload(id))).StatusCode);
+            dir = first.DataDir;
+        }
+        using var second = FieldOpsApiFactory.Over(dir);
+        using var c2 = second.CreateClient();
+        await c2.SendAsync(Upload(id));
+        var view = await Json(await c2.GetAsync($"/v1/inspections/{id}"));
+        Assert.Single(view.GetProperty("photos").EnumerateArray());
+    }
 }

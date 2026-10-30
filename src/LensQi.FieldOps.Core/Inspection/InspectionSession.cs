@@ -21,6 +21,9 @@ public sealed class InspectionSession
         _twin = twin;
         _events = events;
         State = InspectionState.Replay(events);
+        // Outcomes come back from the log: each event carries the command that appended it.
+        foreach (var batch in events.Where(e => e.CommandId is not null).GroupBy(e => e.CommandId!, StringComparer.Ordinal))
+            _outcomes[batch.Key] = (IReadOnlyList<InspectionEvent>)batch.ToList();
     }
 
     public InspectionState State { get; private set; }
@@ -280,7 +283,7 @@ public sealed class InspectionSession
     {
         // Renumber sequentially so helpers can be composed without caring about offsets.
         var seq = State.LastSequence;
-        var fixedBatch = batch.Select(e => e with { Sequence = ++seq }).ToList();
+        var fixedBatch = batch.Select(e => e with { Sequence = ++seq, CommandId = _commandId }).ToList();
         foreach (var e in fixedBatch)
         {
             _events.Add(e);
@@ -289,12 +292,19 @@ public sealed class InspectionSession
         return fixedBatch;
     }
 
+    private string? _commandId;
+
     private IReadOnlyList<InspectionEvent> Idempotent(string requestId, Func<IReadOnlyList<InspectionEvent>> action)
     {
         if (_outcomes.TryGetValue(requestId, out var earlier))
             return (IReadOnlyList<InspectionEvent>?)earlier ?? [];
-        var result = action();
-        _outcomes[requestId] = result;
-        return result;
+        _commandId = requestId;
+        try
+        {
+            var result = action();
+            _outcomes[requestId] = result;
+            return result;
+        }
+        finally { _commandId = null; }
     }
 }

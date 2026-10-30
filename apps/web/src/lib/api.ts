@@ -86,11 +86,12 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
-const key = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+export const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-export async function request<T>(method: string, url: string, body?: unknown, form?: FormData): Promise<T> {
+/** A POST carries an Idempotency-Key: the caller's, so a retry of the same command is recognised, or a fresh one. */
+export async function request<T>(method: string, url: string, body?: unknown, form?: FormData, idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (method === "POST") headers["Idempotency-Key"] = key();
+  if (method === "POST") headers["Idempotency-Key"] = idempotencyKey ?? newKey();
   if (body !== undefined) headers["Content-Type"] = "application/json";
   let r: Response;
   try {

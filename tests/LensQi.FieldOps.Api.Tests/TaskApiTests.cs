@@ -345,4 +345,24 @@ public class TaskApiTests
         Assert.Contains("Remove the drain plug", f.FakeChat.LastText);
         Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/steps/s1:start", null)).StatusCode);
     }
+
+    [Fact]
+    public async Task A_question_retried_after_a_failed_model_call_keeps_its_first_photo()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Freeform" });
+        // The retry carries a newer frame; the answer is about the photo the first attempt recorded.
+        HttpRequestMessage Ask(int w) { var form = Image(w: w); form.Add(new StringContent("What is this?"), "question"); var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/tasks/{id}/ask") { Content = form }; m.Headers.Add("Idempotency-Key", "ask-photo-1"); return m; }
+        f.FakeChat.Throw = new HttpRequestException("down");
+        Assert.Equal(HttpStatusCode.Conflict, (await c.SendAsync(Ask(640))).StatusCode);
+        f.FakeChat.Throw = null;
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "A network switch.", focus = Array.Empty<string>() });
+        var r = await c.SendAsync(Ask(800));
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(TestImages.Png(640, 480), f.FakeChat.LastImage);
+        var task = await Body(await c.GetAsync($"/v1/tasks/{id}"));
+        var photos = task.GetProperty("photos").EnumerateArray().ToList();
+        Assert.Single(photos);
+        Assert.Equal(photos[0].GetProperty("evidenceId").GetString(), (await Body(r)).GetProperty("photoId").GetString());
+    }
 }

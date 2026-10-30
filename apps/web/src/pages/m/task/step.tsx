@@ -95,7 +95,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       const r = await tasks.check(id, step.id, blob);
       save(r.task);
       speech.speak(`${verdictLabel[r.check.verdict].text}. ${r.check.reason}`, true);
-    } catch (e) { toast.error(friendlyError(e)); } finally { setBusy(null); }
+    } catch (e) { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: taskKeys.one(id) }); } finally { setBusy(null); }
   }
 
   async function move(kind: "complete" | "skip" | "back") {
@@ -107,7 +107,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       save(next);
       qc.invalidateQueries({ queryKey: taskKeys.list });
       nav(next.phase === "Completed" ? `/m/t/${id}/done` : `/m/t/${id}/step/${next.currentStepId}`);
-    } catch (e) { toast.error(friendlyError(e)); } finally { setBusy(null); }
+    } catch (e) { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: taskKeys.one(id) }); } finally { setBusy(null); }
   }
 
   const voice = usePushToTalk((text) => {
