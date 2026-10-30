@@ -28,12 +28,15 @@ public static class TaskEndpoints
         // Create a task and write its plan. JSON {mode, goal, details, fixtureId?, assetId?} or multipart with up to 3 manual photos.
         g.MapPost("", async (HttpRequest http, TaskStore store, ExpectedTwinStore twins, EvidenceFileStore files, TaskPlanner planner, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
-            string? mode, goal, details, fixtureId, assetId;
+            string? mode, goal, details, fixtureId, assetId, height;
+            IReadOnlyList<string> tools;
             var manuals = new List<(byte[] Bytes, string MediaType, int Width, int Height)>();
             if (http.HasFormContentType)
             {
                 var form = await http.ReadFormAsync(ct);
                 (mode, goal, details, fixtureId, assetId) = (form["mode"], form["goal"], form["details"], form["fixtureId"], form["assetId"]);
+                // The person, when they said: height in cm and the tools they have, so the plan fits them.
+                (height, tools) = (form["heightCm"], [.. form["tools"].Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim())]);
                 var photos = form.Files.GetFiles("manual");
                 if (photos.Count > 3) return ApiResults.BadRequest("too_many_photos", "Attach at most 3 manual photos");
                 foreach (var f in photos)
@@ -51,11 +54,19 @@ public static class TaskEndpoints
                 catch (Exception ex) when (ex is System.Text.Json.JsonException or BadHttpRequestException) { body = null; }
                 if (body is null) return ApiResults.BadRequest("A JSON body or multipart form is required");
                 (mode, goal, details, fixtureId, assetId) = (body.Mode, body.Goal, body.Details, body.FixtureId, body.AssetId);
+                (height, tools) = (body.HeightCm?.ToString(), body.Tools ?? []);
             }
             // GT-R01.5: a repeated creation key returns the task it made, with no new task, photos or plan call.
             var creationKey = http.Headers.TryGetValue("Idempotency-Key", out var k) && !string.IsNullOrWhiteSpace(k) ? "create:" + k : null;
             if (store.FindCreated(creationKey) is { } earlier) return Results.Ok(new { task = View(earlier), planError = (PlanError?)null, replayed = true });
             if (!Enum.TryParse<TaskMode>(mode, ignoreCase: true, out var taskMode)) return ApiResults.BadRequest("invalid_mode", "mode must be Diy, Technician or Freeform");
+            int? heightCm = null;
+            if (!string.IsNullOrWhiteSpace(height))
+            {
+                if (!int.TryParse(height, out var h)) return ApiResults.BadRequest("invalid_height", "heightCm must be a whole number of centimetres");
+                heightCm = h;
+            }
+            var person = heightCm is null && tools.Count == 0 ? null : new PersonContext(heightCm, tools);
             SiteLink? site = null;
             PlanSiteContext? siteContext = null;
             if (!string.IsNullOrWhiteSpace(fixtureId) || !string.IsNullOrWhiteSpace(assetId))
@@ -68,7 +79,7 @@ public static class TaskEndpoints
             }
             return await GuardAsync(async () =>
             {
-                var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey);
+                var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey, person);
                 var id = task.State.TaskId;
                 if (!created) return Results.Ok(new { task = View(task), planError = (PlanError?)null, replayed = true });
                 var manualIds = new List<string>();
@@ -121,8 +132,18 @@ public static class TaskEndpoints
         g.MapPost("/{id}/steps/{stepId}:complete", (string id, string stepId, HttpRequest http, TaskStore store, TimeProvider clock) =>
             Guard(() => { store.Execute(id, s => s.CompleteStep(RequestId(http, "complete"), stepId, clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
 
-        g.MapPost("/{id}/steps/{stepId}:skip", (string id, string stepId, HttpRequest http, TaskStore store, TimeProvider clock) =>
-            Guard(() => { store.Execute(id, s => s.SkipStep(RequestId(http, "skip"), stepId, clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
+        // An optional JSON body says why: {reason, partHeightCm?, reachCm?}, the numbers when the phone measured the part.
+        g.MapPost("/{id}/steps/{stepId}:skip", async (string id, string stepId, HttpRequest http, TaskStore store, TimeProvider clock) =>
+        {
+            SkipBody? body = null;
+            if (http.HasJsonContentType())
+            {
+                try { body = await http.ReadFromJsonAsync<SkipBody>(); }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or BadHttpRequestException) { return ApiResults.BadRequest("invalid_skip_reason", "The skip body is {reason, partHeightCm?, reachCm?}"); }
+            }
+            var reason = body?.Reason is { } text ? new SkipReason(text.Trim(), body.PartHeightCm, body.ReachCm) : null;
+            return Guard(() => { store.Execute(id, s => s.SkipStep(RequestId(http, "skip"), stepId, clock.GetUtcNow(), reason)); return Results.Ok(View(store.Find(id)!)); });
+        });
 
         g.MapPost("/{id}/finish", (string id, HttpRequest http, TaskStore store, TimeProvider clock) =>
             Guard(() => { store.Execute(id, s => s.Finish(RequestId(http, "finish"), clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
@@ -176,6 +197,7 @@ public static class TaskEndpoints
             var form = await http.ReadFormAsync(ct);
             var question = form["question"].ToString().Trim();
             if (question.Length is < 1 or > 500) return ApiResults.BadRequest("invalid_question", "Ask in 1 to 500 characters");
+            if (MeasuredParts.Parse(form["measured"]) is not { } measured) return MeasuredParts.Invalid();
             (byte[] Bytes, string MediaType, int Width, int Height)? frame = null;
             if (form.Files.GetFile("image") is { } file)
             {
@@ -210,7 +232,7 @@ public static class TaskEndpoints
                     store.Execute(id, s => s.RecordPhoto(requestId + ":photo", pid, stored.Sha256, f.Width, f.Height, TaskPhotoPurpose.Question, s.State.CurrentStepId, clock.GetUtcNow()));
                 }
                 var state = store.Find(id)!.State;
-                var result = await coach.AskAsync(state, question, frame is { } fr ? (fr.Bytes, fr.MediaType) : null, ct);
+                var result = await coach.AskAsync(state, question, frame is { } fr ? (fr.Bytes, fr.MediaType) : null, ct, measured);
                 if (result.Value is not { } a || a.Answer is not { Length: > 0 and <= 1200 } || TaskPlanValidator.HasLink(a.Answer) || a.Focus is not { Count: <= 2 } || !a.Focus.All(TaskPlanValidator.IsConcept))
                     return ModelFailure(result.Error, "LensQi couldn't answer that just now; try again");
                 gate.SetFocus(id, a.Focus);
@@ -268,7 +290,8 @@ public static class TaskEndpoints
                 .Select(c => $"{c.FromAssetId} port {c.FromPortLabel} to {c.ToAssetId}, cable {c.CableLabel}, {c.ExpectedState}").ToList());
     }
 
-    private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId);
+    private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId, int? HeightCm = null, IReadOnlyList<string>? Tools = null);
+    private sealed record SkipBody(string? Reason, int? PartHeightCm, int? ReachCm);
     private sealed record PlanError(string Code, string Message);
 
     /// <summary>
@@ -282,7 +305,7 @@ public static class TaskEndpoints
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var state = store.Find(id)!.State;
-            var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct, error?.Message);
+            var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct, error?.Message, state.Person);
             if (result.Value is not { } plan)
                 return result.Error?.StartsWith("provider_unavailable") == true
                     ? new PlanError("provider_unavailable", "The planner is unavailable; try again shortly")
@@ -342,7 +365,8 @@ public static class TaskEndpoints
         var plan = s.Plan;
         return new
         {
-            s.TaskId, s.Mode, s.Goal, s.Details, s.Site, s.Phase, s.CurrentStepId, s.InspectionId, s.CreatedAt, s.UpdatedAt, s.SafetyAcknowledged, s.AbandonReason,
+            s.TaskId, s.Mode, s.Goal, s.Details, s.Site, s.Phase,
+            person = s.Person is { } p ? new { p.HeightCm, p.StandingReachCm, p.Tools } : null, s.CurrentStepId, s.InspectionId, s.CreatedAt, s.UpdatedAt, s.SafetyAcknowledged, s.AbandonReason,
             plan = plan is null ? null : new
             {
                 plan.Title, plan.Summary, plan.Risk, plan.EstimatedMinutes, plan.Restricted, plan.ProfessionalRequired, plan.ProfessionalReason,
@@ -350,7 +374,8 @@ public static class TaskEndpoints
                 needsSafetyAck = plan.Risk != RiskLevel.Low || plan.ProfessionalRequired || plan.Steps.Any(x => x.Cautions.Count > 0),
                 steps = plan.Steps.Select(step => new
                 {
-                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.Cautions, step.StopIf, step.Check,
+                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.AccessFor, step.Cautions, step.StopIf, step.Check,
+                    skipReason = s.SkipReasons.GetValueOrDefault(step.Id),
                     status = s.CompletedStepIds.Contains(step.Id) ? "Done" : s.SkippedStepIds.Contains(step.Id) ? "Skipped" : s.CurrentStepId == step.Id ? "Active" : "Todo",
                     lastCheck = s.Checks.LastOrDefault(c => c.StepId == step.Id),
                 }),

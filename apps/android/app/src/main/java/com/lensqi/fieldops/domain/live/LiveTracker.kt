@@ -16,6 +16,8 @@ import kotlin.math.*
     /** Set only when the box comes from a world anchor with no live 2D track: seconds since a detection confirmed it. */
     val seenSecondsAgo: Int? = null,
     val depthSource: String? = null,
+    /** Height above the floor plane ARCore found, from the part's anchor; null until the floor is found. Measured. */
+    val heightAboveFloorCm: Int? = null,
 )
 @Serializable data class LiveFinding(val featureId: String, val status: String, val reason: String)
 @Serializable data class LiveResponse(val frameId: String, val objects: List<LiveObject> = emptyList(), val recommendation: String? = null,

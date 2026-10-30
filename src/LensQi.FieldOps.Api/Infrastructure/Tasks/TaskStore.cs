@@ -66,13 +66,14 @@ public sealed class TaskStore
         requestKey is not null && _created.TryGetValue(requestKey, out var id) ? Find(id) : null;
 
     /// <summary>Creates a task, or returns the one an earlier request with the same key created (<c>Created</c> false).</summary>
-    public (TaskSession Session, bool Created) Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestKey = null)
+    public (TaskSession Session, bool Created) Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestKey = null,
+        PersonContext? person = null)
     {
         lock (_createLock)
         {
             if (FindCreated(requestKey) is { } earlier) return (earlier, false);
             var id = "T-" + Guid.NewGuid().ToString("N")[..12];
-            var entry = new Entry(TaskSession.Create(id, mode, goal, details, site, now, requestKey));
+            var entry = new Entry(TaskSession.Create(id, mode, goal, details, site, now, requestKey, person));
             Persist(entry);
             _tasks[id] = entry;
             if (requestKey is not null) _created[requestKey] = id;

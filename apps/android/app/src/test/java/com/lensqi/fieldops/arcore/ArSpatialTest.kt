@@ -130,4 +130,53 @@ class ArSpatialTest {
         val map = ViewMap(-0.1, 0.0, 1.2, 0.0, 0.0, 1.0)
         assertEquals(LiveBox(0.0, 0.2, 0.62, 0.4), map.box(LiveBox(0.0, 0.2, 0.6, 0.4))!!.let { b -> LiveBox(b.left, b.top, Math.round(b.right * 100) / 100.0, b.bottom) })
     }
+
+    @Test fun `a ceiling part seen again with noisy depth stays one label and settles`() {
+        val anchors = SpatialAnchors()
+        anchors.seed(view(), depthEverywhere(2.8), listOf(part("a", centre, "smoke detector")), 0) { FakeAnchor(it) }
+        // ARCore's depth on a plain ceiling jumps by tens of centimetres; the part projects inside the new box, so it is the same.
+        anchors.seed(view(), depthEverywhere(3.2), listOf(part("b", LiveBox(0.42, 0.41, 0.62, 0.61), "smoke detector")), 4000) { FakeAnchor(it) }
+        anchors.seed(view(x = 0.05), depthEverywhere(2.9), listOf(part("c", LiveBox(0.39, 0.4, 0.59, 0.6), "smoke detector")), 8000) { FakeAnchor(it) }
+        val one = anchors.visible(view(), 8000).single()
+        assertTrue(one.distanceCm!! in 280..320, "averaged, not the last noisy reading: ${one.distanceCm}")
+    }
+
+    @Test fun `one part found under two names is one label with the step's name`() {
+        val anchors = SpatialAnchors().apply { preferredConcept = "smoke detector" }
+        anchors.seed(view(), depthEverywhere(2.5), listOf(part("a", centre, "ceiling detector")), 0) { FakeAnchor(it) }
+        anchors.seed(view(), depthEverywhere(2.5), listOf(part("b", LiveBox(0.41, 0.41, 0.61, 0.61), "smoke detector")), 4000) { FakeAnchor(it) }
+        assertEquals(listOf("smoke detector"), anchors.visible(view(), 4000).map { it.concept })
+        // In one frame too: overlapping boxes under two names are one part, the step's name kept.
+        val merged = onePerPart(listOf(part("x", centre, "ceiling detector").copy(confidence = 0.95) to centre, part("y", centre, "smoke detector").copy(confidence = 0.6) to centre)) { it == "smoke detector" }
+        assertEquals(listOf("smoke detector"), merged.map { it.first.concept })
+    }
+
+    @Test fun `a sub-part inside a part stays its own label`() {
+        val button = LiveBox(0.48, 0.48, 0.52, 0.52)
+        val kept = onePerPart(listOf(part("d", centre, "smoke detector") to centre, part("t", button, "test button") to button))
+        assertEquals(listOf("smoke detector", "test button"), kept.map { it.first.concept }.sorted())
+    }
+
+    @Test fun `at most two labels are drawn, the step's part first, and the rest are counted`() {
+        val objects = listOf(
+            part("a", LiveBox(0.0, 0.0, 0.1, 0.1), "closet door").copy(distanceCm = 150),
+            part("b", LiveBox(0.4, 0.4, 0.6, 0.6), "smoke detector").copy(distanceCm = 290),
+            part("c", LiveBox(0.41, 0.41, 0.61, 0.61), "smoke detector").copy(distanceCm = 300),   // its 2D track: the same part
+            part("d", LiveBox(0.8, 0.8, 0.9, 0.9), "shelf").copy(distanceCm = 200),
+            part("e", LiveBox(0.7, 0.1, 0.8, 0.2), "lamp"),
+        )
+        val (shown, more) = partsToShow(objects, "smoke detector")
+        assertEquals(listOf("b", "a"), shown.map { it.id })
+        assertEquals(2, more)
+    }
+
+    @Test fun `height above the floor comes from the anchor and the floor plane`() {
+        val anchors = SpatialAnchors()
+        // Camera 1.5 m up, looking level; the part is 1 m ahead at the camera's height.
+        anchors.seed(view(y = 1.5), depthEverywhere(1.0), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        assertNull(anchors.visible(view(y = 1.5), 0).single().heightAboveFloorCm)
+        val h = anchors.visible(view(y = 1.5), 0, floorY = 0.0).single().heightAboveFloorCm!!
+        assertTrue(h in 145..155, "about 150 cm, got $h")
+    }
 }
+

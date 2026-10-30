@@ -108,7 +108,7 @@ interface FieldOpsApi {
     @POST("v1/tasks")
     suspend fun createTask(@Header(IDEMPOTENCY_KEY) key: String, @Part("mode") mode: RequestBody, @Part("goal") goal: RequestBody,
         @Part("details") details: RequestBody?, @Part("fixtureId") fixtureId: RequestBody?, @Part("assetId") assetId: RequestBody?,
-        @Part manual: List<MultipartBody.Part>): CreateTaskResponse
+        @Part manual: List<MultipartBody.Part>, @Part("heightCm") heightCm: RequestBody? = null, @Part("tools") tools: List<RequestBody> = emptyList()): CreateTaskResponse
 
     @POST("v1/tasks/{id}/plan")
     suspend fun replan(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
@@ -125,7 +125,11 @@ interface FieldOpsApi {
 
     @Multipart
     @POST("v1/tasks/{id}/ask")
-    suspend fun ask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part("question") question: RequestBody, @Part image: MultipartBody.Part?): AskResponse
+    suspend fun ask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part("question") question: RequestBody, @Part image: MultipartBody.Part?,
+        @Part("measured") measured: RequestBody? = null): AskResponse
+
+    @POST("v1/tasks/{id}/steps/{stepId}:skip")
+    suspend fun skipStep(@Path("id") id: String, @Path("stepId") stepId: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: SkipRequest): TaskView
 
     @POST("v1/tasks/{id}/finish")
     suspend fun finishTask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
@@ -139,7 +143,7 @@ interface FieldOpsApi {
     @Multipart
     @POST("v1/tasks/{id}/live/{kind}")
     suspend fun taskLiveFrame(@Path("id") id: String, @Path("kind") kind: String, @Part image: MultipartBody.Part,
-        @Part("frameId") frameId: RequestBody): com.lensqi.fieldops.domain.live.LiveResponse
+        @Part("frameId") frameId: RequestBody, @Part("measured") measured: RequestBody? = null): com.lensqi.fieldops.domain.live.LiveResponse
 
     companion object {
         const val IDEMPOTENCY_KEY = "Idempotency-Key"

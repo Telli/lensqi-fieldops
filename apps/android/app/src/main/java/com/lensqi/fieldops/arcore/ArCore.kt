@@ -92,6 +92,17 @@ fun Frame.cameraView(map: ViewMap): ArCameraView? {
     return ArCameraView(m, p, map, doubleArrayOf(t[0].toDouble(), t[1].toDouble(), t[2].toDouble()))
 }
 
+/**
+ * The floor's height in world metres (ARCore's Y axis points up): the lowest upward-facing plane ARCore tracks at least
+ * 30 cm below the camera, so a table top or shelf in view is not taken for the floor. Null until one is found.
+ */
+fun Session.floorY(cameraY: Double): Double? =
+    getAllTrackables(Plane::class.java)
+        .filter { it.trackingState == TrackingState.TRACKING && it.type == Plane.Type.HORIZONTAL_UPWARD_FACING && it.subsumedBy == null }
+        .map { it.centerPose.ty().toDouble() }
+        .filter { it < cameraY - 0.3 }
+        .minOrNull()
+
 /** What the technician sees about ARCore's state; tracking failures name the fix. */
 fun Frame.trackingLabel(depth: Boolean): String = when (camera.trackingState) {
     TrackingState.TRACKING -> if (depth) "Live AR · ARCore tracking + depth" else "Live AR · ARCore tracking"

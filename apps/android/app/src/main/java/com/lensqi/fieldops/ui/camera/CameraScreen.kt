@@ -22,6 +22,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import com.lensqi.fieldops.arcore.partsToShow
+import com.lensqi.fieldops.domain.live.LiveObject
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -103,7 +109,13 @@ fun CameraScreen(
     details: (@Composable ColumnScope.() -> Unit)? = null, controls: (@Composable (CameraHandle) -> Unit)? = null,
     targetConcept: String? = null,
     liveAllowed: Boolean = true,
-) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept, liveAllowed) }
+    /** One line shown while the details are collapsed, such as the step's first "stop if"; tapping it expands them. */
+    detailsSummary: String? = null,
+    /** Keeps the details open while something in them needs attention (an answer, an error, listening). */
+    showDetails: Boolean = false,
+    /** The parts on screen after each analysed frame, with ARCore's distance and height where measured. */
+    onObjects: (List<LiveObject>) -> Unit = {},
+) = ForceDark { CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept, liveAllowed, detailsSummary, showDetails, onObjects) }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
 class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {})
@@ -114,7 +126,13 @@ private fun CameraContent(
     header: String?, onGuidance: (String) -> Unit, details: (@Composable ColumnScope.() -> Unit)?, controls: (@Composable (CameraHandle) -> Unit)?,
     targetConcept: String?,
     liveAllowed: Boolean,
+    detailsSummary: String?,
+    showDetails: Boolean,
+    onObjects: (List<LiveObject>) -> Unit,
 ) {
+    // The view stays clear: details start collapsed, and a tap on the picture hides every panel but the controls.
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var hideChrome by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
@@ -214,9 +232,14 @@ private fun CameraContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer); controller.unbind(); executor.shutdown() }
     }
     val glass = Color(0xB30B0F14)
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    val shown = remember(feedback.objects, targetConcept) { partsToShow(feedback.objects, targetConcept) }
+    LaunchedEffect(feedback.objects) { onObjects(feedback.objects) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        val screenHeight = maxHeight
         if (arActive && session != null) ArCameraFeed(session) { arFailure = it }
         else AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+        // A tap on the picture hides the guidance panels for a clear view; another tap brings them back.
+        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { hideChrome = !hideChrome } })
 
         if (liveEnabled && (feedback.viewSpace || feedback.width > 0)) Canvas(Modifier.fillMaxSize()) {
             // ARCore draws the camera across the whole view; CameraX letterboxes the image inside it.
@@ -225,8 +248,9 @@ private fun CameraContent(
             val h = if (feedback.viewSpace) size.height else feedback.height * scale
             val ox = (size.width - w) / 2; val oy = (size.height - h) / 2
             val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(16f, 12f))
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 14.sp.toPx(); setShadowLayer(5f, 0f, 0f, android.graphics.Color.BLACK) }
-            for ((n, part) in feedback.objects.withIndex()) {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 13.sp.toPx() }
+            // At most two parts are drawn, the step's own first; the rest are counted in a note, not stacked on the view.
+            for (part in shown.first) {
                 val b = part.box; val x = ox + (b.left * w).toFloat(); val y = oy + (b.top * h).toFloat()
                 val bw = ((b.right - b.left) * w).toFloat(); val bh = ((b.bottom - b.top) * h).toFloat()
                 // A box held only by its world anchor (no live 2D track) is drawn fainter and says when it was last seen.
@@ -245,9 +269,15 @@ private fun CameraContent(
                     drawLine(tone, o, Offset(o.x + d.x * c, o.y), strokeW, StrokeCap.Round)
                     drawLine(tone, o, Offset(o.x, o.y + d.y * c), strokeW, StrokeCap.Round)
                 }
-                val distance = part.distanceCm?.let { " · ≈$it cm" }.orEmpty()
-                val seen = part.seenSecondsAgo?.let { " · seen ${it}s ago" }.orEmpty()
-                drawContext.canvas.nativeCanvas.drawText("${n + 1}. ${part.label}$distance$seen", x + 4.dp.toPx(), maxOf(oy + 18.dp.toPx(), y - 6.dp.toPx()), paint)
+                // A short label on a dark pill, above the part (or below it near the top edge), never across it.
+                val text = part.label.replaceFirstChar { it.uppercase() } + part.distanceCm?.let { " · ${metres(it)} away" }.orEmpty() +
+                    part.heightAboveFloorCm?.let { " · ${metres(it)} up" }.orEmpty() + part.seenSecondsAgo?.let { " · seen ${it}s ago" }.orEmpty()
+                val pad = 6.dp.toPx(); val tw = paint.measureText(text); val th = paint.textSize
+                val above = y - pad * 2 - th >= oy + 4.dp.toPx()
+                val ty = if (above) y - pad * 2 else y + bh + pad + th
+                val tx = (x).coerceIn(ox + pad, ox + w - tw - pad * 3)
+                drawRoundRect(Color.Black.copy(alpha = 0.62f), Offset(tx - pad, ty - th - pad / 2), Size(tw + pad * 2, th + pad * 1.5f), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+                drawContext.canvas.nativeCanvas.drawText(text, tx, ty, paint)
             }
         }
 
@@ -287,15 +317,21 @@ private fun CameraContent(
         }
 
         // Kept below the header; when the panels are taller than the room left, the details scroll and the controls stay.
+        if (shown.second > 0 && !hideChrome) Text("+${shown.second} more part${if (shown.second == 1) "" else "s"} found", color = FoDark.Foreground, fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 64.dp, end = 12.dp).clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 10.dp, vertical = 4.dp))
+
+        // Panels sit in the bottom part of the screen only, so the middle of the picture (where the part usually is)
+        // stays clear; the details scroll inside that space and the controls always show.
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().statusBarsPadding().padding(top = 64.dp)
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = screenHeight * 0.58f)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
-                .navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(22.dp),
+                .navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 28.dp, bottom = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(glass).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          if (!hideChrome) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (liveEnabled) feedback.status else "Live camera assistance", color = FoDark.Primary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text(if (liveEnabled) feedback.status else "Live camera assistance", color = FoDark.Primary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     when (arAvailability) {
                         ArAvailability.Ready -> TextButton(onClick = { spatialEnabled = !spatialEnabled; arFailure = null }) {
                             Text(if (spatialEnabled) "3D AR: On" else "3D AR: Off", color = if (spatialEnabled) FoDark.Primary else FoDark.Muted, fontSize = 11.sp)
@@ -309,25 +345,31 @@ private fun CameraContent(
                         Text(if (!liveAllowed) "Live assist: current step only" else if (liveEnabled) "Pause live assist" else "Start live assist", color = if (liveAllowed) FoDark.Foreground else FoDark.Muted)
                     }
                 }
-                Text(if (liveEnabled) "${feedback.fps} tracking updates/s · AI guidance ${feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}"
+                if (!liveEnabled || expanded) Text(if (liveEnabled) "${feedback.fps} tracking updates/s · AI guidance ${feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}"
                     else if (arAvailability == ArAvailability.Ready && spatialEnabled) "Sampled frames go to AI for guidance; ARCore measures distance on this phone. Only shutter photos are saved."
-                    else "Sampled frames go to AI for guidance. Only shutter photos are saved.", fontSize = 11.sp, color = FoDark.Muted)
+                    else "Sampled frames go to AI for guidance. Only shutter photos are saved.", fontSize = 11.sp, color = FoDark.Muted, modifier = Modifier.padding(bottom = 6.dp))
             }
             // LensQi's ask: the view the server needs next.
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(18.dp)).padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(18.dp))
+                    .clickable { expanded = !expanded }.padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 LensQiMark(24)
                 Column(Modifier.weight(1f)) {
-                    Text(if (liveEnabled) feedback.recommendation else prompt, fontSize = 15.sp, lineHeight = 20.sp, color = FoDark.Foreground)
+                    Text(if (liveEnabled) feedback.recommendation else prompt, fontSize = 15.sp, lineHeight = 20.sp, color = FoDark.Foreground,
+                        maxLines = if (expanded) 8 else 3, overflow = TextOverflow.Ellipsis)
                     if (liveEnabled) feedback.screenText?.let { Text("On screen: “$it”", fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted, maxLines = 3) }
                     (status ?: arFailure)?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
                 }
             }
             details?.let { d ->
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { d() }
+                if (expanded || showDetails) Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { d() }
+                else Text(detailsSummary?.let { "⚠ $it · more" } ?: "Safety notes and details · more", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (detailsSummary != null) FoDark.Warning else FoDark.Muted, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(glass).clickable { expanded = true }.padding(horizontal = 12.dp, vertical = 8.dp))
             }
+          }
             val shutter = {
                 if (!capturing) {
                     capturing = true
@@ -393,3 +435,6 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
+/** "85 cm", or "2.4 m" from a metre up. */
+private fun metres(cm: Int): String = if (cm < 100) "$cm cm" else "${"%.1f".format(cm / 100.0)} m"

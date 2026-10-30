@@ -14,6 +14,8 @@ public sealed record TaskState
     public required string Goal { get; init; }
     public string? Details { get; init; }
     public SiteLink? Site { get; init; }
+    public PersonContext? Person { get; init; }
+    public IReadOnlyDictionary<string, SkipReason> SkipReasons { get; init; } = new Dictionary<string, SkipReason>();
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
     public TaskPhase Phase { get; init; } = TaskPhase.Planned;
@@ -40,7 +42,7 @@ public sealed record TaskState
         TaskState? state = null;
         foreach (var e in events)
             state = state is null
-                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
+                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, Person = c.Person, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
                     // Free-form help has no plan to accept: it is in progress from the start.
                     Phase = c.Mode == TaskMode.Freeform ? TaskPhase.InProgress : TaskPhase.Planned }
                     : throw new InvalidOperationException("A task log must start with TaskCreated")
@@ -60,7 +62,11 @@ public sealed record TaskState
             StepChecked c => next with { Checks = [.. Checks, new StepCheckRecord(c.StepId, c.PhotoId, c.Verdict, c.Reason, c.ModelId, c.OccurredAt)] },
             QuestionAnswered q => next with { Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },
             StepCompleted s => next with { CompletedStepIds = [.. CompletedStepIds, s.StepId], CurrentStepId = CurrentStepId == s.StepId ? null : CurrentStepId },
-            StepSkipped s => next with { SkippedStepIds = [.. SkippedStepIds, s.StepId], CurrentStepId = CurrentStepId == s.StepId ? null : CurrentStepId },
+            StepSkipped s => next with
+            {
+                SkippedStepIds = [.. SkippedStepIds, s.StepId], CurrentStepId = CurrentStepId == s.StepId ? null : CurrentStepId,
+                SkipReasons = s.Reason is null ? SkipReasons : new Dictionary<string, SkipReason>(SkipReasons) { [s.StepId] = s.Reason },
+            },
             TaskCompleted => next with { Phase = TaskPhase.Completed, CurrentStepId = null },
             TaskAbandoned a => next with { Phase = TaskPhase.Abandoned, AbandonReason = a.Reason, CurrentStepId = null },
             InspectionLinked l => next with { InspectionId = l.InspectionId },

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Page, TopBar } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { friendlyError, useFixtures } from "@/lib/hooks";
+import { loadPerson, parseHeightCm, savePerson, toolChoices } from "@/lib/person";
 import { taskKeys, tasks, type TaskMode } from "@/lib/tasks";
 import { speechNotice, usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,9 @@ export default function NewTask() {
   const [mode, setMode] = useState<TaskMode>(params.get("mode") === "Technician" ? "Technician" : "Diy");
   const [goal, setGoal] = useState(params.get("goal") ?? "");
   const [details, setDetails] = useState("");
+  const [person, setPerson] = useState(loadPerson);
+  const [heightText, setHeightText] = useState(() => (person.heightCm ? `${person.heightCm} cm` : ""));
+  const heightCm = heightText.trim() ? parseHeightCm(heightText) : null;
   const [asset, setAsset] = useState(params.get("asset") ?? "");
   const [manuals, setManuals] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -30,7 +34,9 @@ export default function NewTask() {
   async function submit() {
     setBusy(true);
     try {
-      const r = await tasks.create({ mode, goal: goal.trim(), details: details.trim() || undefined, fixtureId: chosen?.fixtureId, assetId: chosen?.assetId, manuals });
+      const me = { heightCm, tools: person.tools };
+      savePerson(me);
+      const r = await tasks.create({ mode, goal: goal.trim(), details: details.trim() || undefined, fixtureId: chosen?.fixtureId, assetId: chosen?.assetId, manuals, ...me });
       qc.setQueryData(taskKeys.one(r.task.taskId), r.task);
       qc.invalidateQueries({ queryKey: taskKeys.list });
       if (r.planError) toast.warning(r.planError.code === "unsafe_plan" ? "The first plan failed the safety checks. Try again." : "The plan isn't ready. Try again.");
@@ -76,6 +82,24 @@ export default function NewTask() {
             placeholder={mode === "Diy" ? "Engine size, tools you have, anything unusual" : "Site notes, access, what's already in place"}
             className="w-full resize-none rounded-2xl border border-input bg-background px-3.5 py-3 text-sm outline-none focus:border-primary" />
         </label>
+
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">About you <span className="font-normal text-muted-foreground">(optional, kept in this browser)</span></span>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={heightText} onChange={(e) => setHeightText(e.target.value)} placeholder={`Height: 6'2" or 188 cm`} aria-label="Your height"
+              className={cn("h-10 w-44 rounded-2xl border bg-background px-3.5 text-sm outline-none focus:border-primary", heightText.trim() && !heightCm ? "border-failure" : "border-input")} />
+            {toolChoices.map((t) => {
+              const on = person.tools.includes(t);
+              return (
+                <button key={t} type="button" onClick={() => setPerson((p) => ({ ...p, tools: on ? p.tools.filter((x) => x !== t) : [...p.tools, t] }))}
+                  className={cn("h-10 rounded-full border px-3.5 text-sm", on ? "border-primary bg-primary/10 text-foreground" : "border-input text-muted-foreground")}>
+                  {on ? "✓ " : ""}I have a {t}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">{heightText.trim() && !heightCm ? `Couldn't read that height. Try 6'2" or 188 cm.` : "Lets the plan fit you, for example whether you need a ladder."}</p>
+        </div>
 
         {mode === "Technician" && (
           <label className="block space-y-1.5">
