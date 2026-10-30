@@ -108,7 +108,7 @@ interface FieldOpsApi {
     @POST("v1/tasks")
     suspend fun createTask(@Header(IDEMPOTENCY_KEY) key: String, @Part("mode") mode: RequestBody, @Part("goal") goal: RequestBody,
         @Part("details") details: RequestBody?, @Part("fixtureId") fixtureId: RequestBody?, @Part("assetId") assetId: RequestBody?,
-        @Part manual: List<MultipartBody.Part>, @Part("heightCm") heightCm: RequestBody? = null, @Part("tools") tools: List<RequestBody> = emptyList()): CreateTaskResponse
+        @Part manual: List<MultipartBody.Part>, @Part("heightCm") heightCm: RequestBody? = null, @Part("tools") tools: List<@JvmSuppressWildcards RequestBody> = emptyList()): CreateTaskResponse
 
     @POST("v1/tasks/{id}/plan")
     suspend fun replan(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
