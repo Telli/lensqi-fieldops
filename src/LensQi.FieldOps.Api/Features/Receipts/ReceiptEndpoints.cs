@@ -44,17 +44,20 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
             if (issued.LastOrDefault() is { } last && last.EventCount == session.Events.Count && last.ReceiptVersion == EvidenceReceipt.Version
                 && Compose(session, last.IssuedAt) is { } again && again.ManifestSha256 == last.ManifestSha256)
                 return (again, BundleDir(inspectionId, last), last);
-            return Issue(session, issued.Count + 1);
+            return Issue(session, (issued.LastOrDefault()?.Number ?? 0) + 1);
         }
     }
 
-    /// <summary>Every receipt issued for the inspection, oldest first.</summary>
+    /// <summary>Every receipt version still on disk, oldest first. Before versions were kept each reissue overwrote the
+    /// inspection's folder and added a line without a number, so of those lines only the last describes that folder.</summary>
     public IReadOnlyList<ReceiptIssue> Issues(string inspectionId)
     {
         var path = IssueLog(inspectionId);
         if (!File.Exists(path)) return [];
-        return File.ReadLines(path).Where(l => !string.IsNullOrWhiteSpace(l))
+        var all = File.ReadLines(path).Where(l => !string.IsNullOrWhiteSpace(l))
             .Select(l => JsonSerializer.Deserialize<ReceiptIssue>(l, KnowledgeJson.Options)!).ToList();
+        var legacy = all.LastOrDefault(i => i.Number == 0);
+        return all.Where(i => i.Number != 0 || ReferenceEquals(i, legacy)).ToList();
     }
 
     private (EvidenceReceipt, string, ReceiptIssue) Issue(InspectionSession session, int number)

@@ -153,6 +153,43 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _client.GetAsync($"/v1/inspections/{id}/receipt/verify?number=9")).StatusCode);
     }
 
+    [Fact]
+    public async Task A_receipt_issued_before_versions_is_version_0_and_the_next_issue_is_version_1()
+    {
+        var create = await _client.PostAsJsonAsync("/v1/inspections", new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("inspectionId").GetString()!;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(800, 600, salt: 15)), "image", "f.png" } };
+        Assert.True((await _client.PostAsync($"/v1/inspections/{id}/observations", form)).IsSuccessStatusCode);
+        Assert.True((await Check(id)).GetProperty("isValid").GetBoolean());
+
+        // Rewrite the bundle as the old layout left it: files in the inspection's folder and a log of numberless lines, one
+        // per reissue, of which only the last matches the folder (each reissue overwrote the one before).
+        var root = Path.Combine(_factory.DataDir, "receipts", id);
+        var v1 = Path.Combine(root, "v1");
+        foreach (var f in Directory.EnumerateFiles(v1)) File.Move(f, Path.Combine(root, Path.GetFileName(f)));
+        Directory.Move(Path.Combine(v1, "artifacts"), Path.Combine(root, "artifacts"));
+        Directory.Delete(v1);
+        var log = Path.Combine(_factory.DataDir, "receipts", id + ".issued.jsonl");
+        var real = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllLines(log).Single())!.AsObject();
+        real.Remove("number");
+        var stale = real.DeepClone().AsObject();
+        stale["manifestSha256"] = new string('0', 64);
+        File.WriteAllLines(log, [stale.ToJsonString(), real.ToJsonString()]);
+
+        var versions = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipts")).RootElement.GetProperty("versions");
+        Assert.Equal([0], versions.EnumerateArray().Select(v => v.GetProperty("number").GetInt32()));
+        var legacy = await CheckVersion(id, 0);
+        Assert.True(legacy.GetProperty("isValid").GetBoolean(), legacy.ToString());
+        Assert.Equal(root, legacy.GetProperty("bundle").GetString());
+
+        using var second = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(800, 600, salt: 16)), "image", "g.png" } };
+        Assert.True((await _client.PostAsync($"/v1/inspections/{id}/observations", second)).IsSuccessStatusCode);
+        var next = await Check(id);
+        Assert.Equal(1, next.GetProperty("issued").GetProperty("number").GetInt32());
+        Assert.True(next.GetProperty("isValid").GetBoolean(), next.ToString());
+        Assert.True((await CheckVersion(id, 0)).GetProperty("isValid").GetBoolean());
+    }
+
     private async Task<JsonElement> CheckVersion(string id, int number) =>
         JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt/verify?number={number}")).RootElement;
 
