@@ -44,3 +44,7 @@ genuine calls above. The full .NET suite passed 211 tests. No inspection gate or
 
 [Feasibility record](open-model-feasibility.md): deferred until hackathon alias/access confirmation and a locally
 configured Baseten credential. No Open integration, genuine Open call or bonus eligibility is claimed.
+
+## Restricted plan under the text-level check (2026-10-29)
+
+`plan-panel-text-checked.json`: "Replace the breaker panel in my garage" after the validator began checking each step's words, not only the model's hands-on label. A first version of that check, which counted any "remove" or "unplug", rejected the genuine plan twice on a harmless step; it now counts an action only when its object is the hazard ("remove the panel cover"). The genuine plan that passed has five observe/document steps ("look at the panel without opening it", "do not unmount anything") ending with "Have the electrician … replace the panel".

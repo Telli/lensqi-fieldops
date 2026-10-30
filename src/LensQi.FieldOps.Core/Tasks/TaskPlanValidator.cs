@@ -110,7 +110,10 @@ public static class TaskSafety
 {
     public const string Referral = "This is work for a qualified professional; LensQi can help you look and document, not do it.";
 
-    private static readonly Regex Action = new(@"(?<![a-z])(disconnect|reconnect|unscrew|unbolt|loosen|tighten|pry|cut|splice|strip|crimp|solder|rewire|wire|unplug|plug in|bleed|discharge|depressuri[sz]e|vent|purge|recharge|refill|remove|replace|install|detach|reattach|open the (panel|cover|valve|line|housing)|close the valve|turn the (valve|fitting|nut)|take (off|out|apart))(?![a-z])",
+    // An action counts when its object, within two words, is the hazard itself ("remove the panel cover", "disconnect the gas
+    // line", "replace the old breaker"); clearing access or unplugging appliances does not. A few verbs are hazardous on their own.
+    private const string Hazard = @"(panel|panels|cover|covers|breaker|breakers|fuse|fuses|wire|wires|wiring|conductor|conductors|terminal|terminals|bus|busbar|meter|gas|line|lines|pipe|pipes|valve|valves|fitting|fittings|connector|connectors|airbag|airbags|inflator|module|battery|batteries|cable|cables|refrigerant|freon|compressor|wall|beam|joist|joists|stud|studs|support|supports)";
+    private static readonly Regex Action = new($@"(?<![a-z])((disconnect|reconnect|unscrew|unbolt|loosen|tighten|pry|cut|strip|remove|replace|install|detach|reattach|unplug|open|close|turn|take off|take out|take apart|wire)\s+(\S+\s+){{0,2}}{Hazard}(?![a-z])|(splice|solder|crimp|rewire|bleed|discharge|depressuri[sz]e|purge|recharge)(?![a-z]))",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private const string Pro = @"(licensed |qualified |certified |a |an |the |your )*(electrician|plumber|professional|pro|technician|installer|contractor|engineer|dealer|mechanic|gas company|utility)";
     // "Do not open the panel", "never disconnect…": a negation within three words before the action.
