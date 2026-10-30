@@ -7,6 +7,20 @@ namespace LensQi.FieldOps.Tests;
 
 public class MuseSparkChatClientTests
 {
+    [Theory]
+    [InlineData("minimal", "minimal")]
+    [InlineData("invalid", "low")]
+    public void Per_call_reasoning_can_reduce_live_latency_without_changing_default(string requested, string expected)
+    {
+        var handler = new StubHandler(_ => throw new InvalidOperationException("no network"));
+        var client = Client(handler);
+        var body = client.BuildRequestForInspection([new ChatMessage(ChatRole.User, "frame")], new ChatOptions {
+            MaxOutputTokens = 3000, AdditionalProperties = new AdditionalPropertiesDictionary { ["reasoning_effort"] = requested } });
+        Assert.Equal(expected, body["reasoning_effort"]!.GetValue<string>());
+        Assert.Equal(3000, body["max_tokens"]!.GetValue<int>());
+        Assert.Equal("low", client.BuildRequestForInspection([new ChatMessage(ChatRole.User, "saved photo")], null)["reasoning_effort"]!.GetValue<string>());
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }

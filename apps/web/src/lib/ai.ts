@@ -39,11 +39,13 @@ export function nextMove(i?: Inspection | null, assessment?: Assessment | null):
   const asked = i.evidenceRequests?.find((r) => !r.answeredByPhotoId);
   const diag = i.diagnostics[i.diagnostics.length - 1];
   switch (i.stage) {
-    case "VerifiedComplete": return { kind: "receipt", title: "Verified complete", hint: "The FieldProof receipt is ready." };
+    case "VerifiedComplete": return { kind: "receipt", title: i.outcomeKind === "VerifiedCompleteSimulated" ? "Verified complete · simulated check" : "Verified complete", hint: "The FieldProof receipt is ready." };
+    case "Inconclusive": return null;
     case "VerificationFailed": return { kind: "retry", title: "Still failing", hint: "Check the connection again, then verify." };
     case "AwaitingRepair": return { kind: "repair", title: "Do the repair", hint: "Then tell me what you did." };
     case "ReadyToVerify": return { kind: "verify", title: i.acceptedPostRepairPhotoId ? "Review and verify" : "Photograph the repair", hint: "A new photo and a fresh check both have to pass." };
-    case "FaultConfirmed": case "FaultSuspected": return { kind: "plan", title: "Fault confirmed", hint: "Say how you'll fix it." };
+    case "FaultConfirmed": return { kind: "plan", title: "Fault confirmed", hint: "Say how you'll fix it." };
+    case "FaultSuspected": return { kind: "check", title: "Fault suspected", hint: "Run the approved check to confirm it on the equipment." };
   }
   if (i.currentClaimId) return { kind: "verify", title: "Photograph the repair", hint: "The same photo as before won't count." };
   if (asked) return { kind: "scan", title: asked.note, hint: `Requested by the ${asked.requestedBy.toLowerCase()}.` };

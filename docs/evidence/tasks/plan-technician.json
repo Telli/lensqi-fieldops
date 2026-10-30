@@ -1,0 +1,168 @@
+{
+    "task": {
+        "taskId": "T-c6dac8c1de73",
+        "mode": "Technician",
+        "goal": "Reseat the yellow cable on the lab switch and confirm the link to Node A",
+        "details": null,
+        "site": {
+            "fixtureId": "LAB-RACK-01",
+            "assetId": "LAB-SW-01"
+        },
+        "phase": "Planned",
+        "currentStepId": null,
+        "inspectionId": null,
+        "createdAt": "2026-10-29T01:15:59.386961+00:00",
+        "updatedAt": "2026-10-29T01:16:05.237741+00:00",
+        "safetyAcknowledged": false,
+        "abandonReason": null,
+        "plan": {
+            "title": "Reseat yellow cable on LAB-SW-01 and confirm link to Node A",
+            "summary": "Reseat yellow cable at port P2 on LAB-SW-01 and verify link to Node A.",
+            "risk": "Low",
+            "estimatedMinutes": 5,
+            "restricted": "None",
+            "professionalRequired": false,
+            "professionalReason": null,
+            "tools": [],
+            "parts": [],
+            "sourceNote": "AI-written plan \u00b7 check your owner's manual",
+            "modelId": "muse-spark-1.3",
+            "source": "AI inference",
+            "needsSafetyAck": false,
+            "steps": [
+                {
+                    "id": "s1",
+                    "title": "Locate Lab Switch 01",
+                    "instruction": "Locate Lab Switch 01 and confirm asset label LAB-SW-01 before touching any cables.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "lab switch",
+                        "asset label"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "asset label does not read LAB-SW-01",
+                        "switch is not accessible safely"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s2",
+                    "title": "Locate port P2 yellow cable",
+                    "instruction": "Find port P2 on the switch and identify the yellow cable connected there.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "port P2",
+                        "yellow cable"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "port P2 is not labeled",
+                        "no yellow cable is present at port P2"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s3",
+                    "title": "Check link status before",
+                    "instruction": "Note link light status for port P2 before unplugging.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "link light",
+                        "port P2"
+                    ],
+                    "cautions": [],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s4",
+                    "title": "Unplug yellow cable",
+                    "instruction": "Press the latch and gently pull the yellow cable straight out of port P2.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "yellow cable",
+                        "port P2"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "connector will not release with gentle pull",
+                        "port or latch is damaged"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s5",
+                    "title": "Inspect connector and port",
+                    "instruction": "Visually inspect cable connector and port P2 for dust, bent pins, or damage.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "cable connector",
+                        "port P2"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "connector pins are bent or broken",
+                        "port is damaged or blocked"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s6",
+                    "title": "Reseat yellow cable",
+                    "instruction": "Push the yellow cable firmly straight into port P2 until the latch clicks.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "yellow cable",
+                        "port P2"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "cable does not click into place",
+                        "cable feels loose after insertion"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Yellow cable fully seated in port P2 with latch clicked"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s7",
+                    "title": "Confirm link to Node A",
+                    "instruction": "Confirm link light for port P2 is on steady and shows connection to LAB-NODE-A.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "link light",
+                        "port P2"
+                    ],
+                    "cautions": [],
+                    "stopIf": [
+                        "link light stays off after 30 seconds",
+                        "wrong port shows activity"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Link light on steady for port P2 showing link to Node A"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                }
+            ]
+        },
+        "photos": [],
+        "answers": []
+    },
+    "planError": null
+}

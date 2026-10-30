@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ScanLine, ChevronRight, Camera, User, ShieldCheck, ShieldX, Wrench, Search } from "lucide-react";
+import { ScanLine, ChevronRight, Camera, User, ShieldCheck, ShieldX, Wrench, Search, Boxes, Plus } from "lucide-react";
 import { EvidenceBadge } from "@/components/fo/primitives";
 import { ConnBadge, Page } from "@/components/fo/mobile-shell";
 import { ArFrame } from "@/components/fo/ar-frame";
@@ -8,7 +8,7 @@ import { useFixtures, useHealth, useInspections } from "@/lib/hooks";
 import { lastPhoto, useInspectionBundle } from "@/lib/inspection";
 import { arTags, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { aiSummary, nextMove } from "@/lib/ai";
-import { fmtWhen, greeting, stageLabel, stageState } from "@/lib/labels";
+import { fmtWhen, stageLabel, stageState } from "@/lib/labels";
 import type { InspectionSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ function FocusHero({ s, assetName }: { s: InspectionSummary; assetName?: string 
   const src = photo && photoUrl(photo.evidenceId);
   return (
     <Link href={inspectionHref(s)} className="group relative block overflow-hidden rounded-[28px] bg-overlay text-overlay-foreground shadow-xl shadow-black/20">
-      {src ? <ArFrame src={src} outlines={outlines} tags={arTags(fixture, shown, outlines)} guide={(() => { const t = targetConcept(fixture, shown); return t ? { concept: t, label: "Target" } : null; })()} />
+      {src ? <ArFrame src={src} outlines={outlines} tags={arTags(fixture, shown, outlines)} interactive={false} guide={(() => { const t = targetConcept(fixture, shown); return t ? { concept: t, label: "Target" } : null; })()} />
         : <div className="grid aspect-[4/3] place-items-center"><ScanLine className="size-10 opacity-40" /></div>}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
         <span className="glass rounded-full px-2.5 py-1 text-[11px] font-medium">{assetName ?? s.assetId}</span>
@@ -110,14 +110,21 @@ export default function Home() {
     <Page className="space-y-6 pt-5">
       <header className="flex items-center gap-3">
         <div className="flex-1">
-          <p className="text-xs text-muted-foreground">{greeting()}</p>
+          <p className="text-xs text-muted-foreground">Technician</p>
           <h1 className="text-[22px] font-semibold tracking-tight">{focus ? "Pick up where you left off" : "Ready when you are"}</h1>
         </div>
         <ConnBadge reachable={!health.isError} />
+        <Link href="/m/assets" aria-label="Assets" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><Boxes className="size-4" /></Link>
         <Link href="/m/profile" aria-label="Profile" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><User className="size-4" /></Link>
       </header>
 
       {focus ? <FocusHero s={focus} assetName={nameOf(focus.assetId)} /> : <ScanHero />}
+
+      <Link href="/m/new?mode=Technician" className="panel flex items-center gap-3 p-3.5 hover:border-primary/40">
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary"><Plus className="size-[18px]" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium">New install or job with a plan</span><span className="block text-xs text-muted-foreground">LensQi writes the steps and guides you with the camera and voice.</span></span>
+        <ChevronRight className="size-4 text-muted-foreground" />
+      </Link>
 
       {rest.length > 0 && (
         <section className="space-y-1">

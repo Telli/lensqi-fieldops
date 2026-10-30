@@ -109,7 +109,8 @@ public sealed class MuseSparkChatClient : IChatClient
             Temperature: options?.Temperature ?? (float)_options.Temperature,
             MaxTokens: options?.MaxOutputTokens ?? _options.MaxOutputTokens,
             ResponseFormat: format,
-            ReasoningEffort: _options.ReasoningEffort);
+            ReasoningEffort: options?.AdditionalProperties?.TryGetValue("reasoning_effort", out var effort) == true
+                && effort is string requested && requested is "minimal" or "low" or "medium" or "high" or "xhigh" or "max" ? requested : _options.ReasoningEffort);
     }
 
     private static WireMessage ToWireMessage(ChatMessage message)

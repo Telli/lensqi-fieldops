@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
+import android.graphics.Paint
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.view.Surface
 import android.view.TextureView
@@ -13,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +69,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +81,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.lensqi.fieldops.ui.common.Dot
 import com.lensqi.fieldops.ui.common.Panel
 import com.lensqi.fieldops.ui.common.PrimaryButton
@@ -82,9 +92,11 @@ import com.lensqi.fieldops.ui.common.SectionTitle
 import com.lensqi.fieldops.ui.common.SimBadge
 import com.lensqi.fieldops.ui.theme.Eyebrow
 import com.lensqi.fieldops.ui.theme.Fo
+import com.lensqi.fieldops.ui.theme.FoDark
 import com.lensqi.fieldops.wearables.GlassesMode
 import com.lensqi.fieldops.wearables.GlassesPhase
 import com.lensqi.fieldops.wearables.GlassesState
+import com.lensqi.fieldops.ui.camera.LiveCameraState
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
@@ -98,6 +110,7 @@ import java.io.File
  */
 @Composable
 fun GlassesScreen(
+    inspectionId: String,
     prompt: String,
     status: String?,
     onClose: () -> Unit,
@@ -105,10 +118,23 @@ fun GlassesScreen(
     vm: GlassesViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val live by vm.live.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val owner = LocalLifecycleOwner.current
+    val liveActive by rememberUpdatedState(live.enabled)
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP && !liveActive) vm.stop() }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
     val captured by rememberUpdatedState(onCaptured)
     val capture = { vm.capture { photo -> captured(photo.file, photo.origin) } }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.startLive(inspectionId) }
+    val startLive = {
+        if (Build.VERSION.SDK_INT >= 33 && !granted(context, Manifest.permission.POST_NOTIFICATIONS)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else vm.startLive(inspectionId)
+    }
 
     var bluetoothDenied by remember { mutableStateOf(false) }
     val askBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -129,28 +155,43 @@ fun GlassesScreen(
     val pickMockImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setMockCapturedImage(uri) }
     val pickMockVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setMockVideoFeed(uri) }
 
-    LaunchedEffect(prompt, status) { vm.showHud(prompt, status) }
+    LaunchedEffect(prompt, status, live.enabled) { if (!live.enabled) vm.showHud(prompt, status) }
     LaunchedEffect(Unit) { vm.shutter.collect { capture() } }
 
-    var muted by rememberSaveable { mutableStateOf(false) }
+    var muted by rememberSaveable { mutableStateOf(true) }
     val speaker = rememberSpeaker()
-    LaunchedEffect(prompt, speaker, muted) {
-        if (muted) speaker?.stop() else speaker?.speak(prompt, TextToSpeech.QUEUE_FLUSH, null, "glasses-prompt")
+    LaunchedEffect(prompt, speaker, muted, live.enabled) {
+        if (muted || live.enabled) speaker?.stop() else speaker?.speak(prompt, TextToSpeech.QUEUE_FLUSH, null, "glasses-prompt")
     }
 
     val mock = s.mode == GlassesMode.Mock
     Column(Modifier.fillMaxSize().background(Fo.Background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Close glasses capture") }
-            Text("Glasses capture", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text("Glasses assist", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (mock) SimBadge("Mock glasses", Fo.Warning)
             Spacer(Modifier.width(8.dp))
             StatusChip(s.phase)
             Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            PreviewPanel(s, vm)
-            HudPanel(prompt, status, s, muted) { muted = !muted }
+            PreviewPanel(s, vm, if (live.enabled) live.feedback else null)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (live.enabled) {
+                    Text(live.feedback.status, color = Fo.Primary, fontWeight = FontWeight.Medium)
+                    Text("${live.feedback.fps} tracking updates/s · AI guidance ${live.feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}", style = MaterialTheme.typography.bodySmall)
+                    SecondaryButton("Pause live assist", vm::pauseLive, Modifier.fillMaxWidth())
+                    Text("Active with the phone locked. Stop the camera from its notification.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    PrimaryButton("Start live assist", startLive, Modifier.fillMaxWidth(), enabled = s.streaming)
+                    Text("Tracks what your glasses see and speaks guidance. Sampled frames go to AI, including with the phone locked. Only shutter photos are saved.", style = MaterialTheme.typography.bodySmall)
+                }
+                live.audioNote?.let { Text(it, color = Fo.Warning, style = MaterialTheme.typography.bodySmall) }
+            }
+            HudPanel(if (live.enabled) live.feedback.recommendation else prompt,
+                if (live.enabled) "AI inferred · ${live.feedback.status}" else status, s, if (live.enabled) live.muted else muted) {
+                if (live.enabled) vm.muteLive() else muted = !muted
+            }
             s.error?.let { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) }
             Controls(
                 s, bluetoothDenied,
@@ -190,7 +231,7 @@ private fun StatusChip(phase: GlassesPhase) {
 
 /** The glasses' camera, decoded on the phone. Nothing is shown unless frames really arrive from the SDK. */
 @Composable
-private fun PreviewPanel(s: GlassesState, vm: GlassesViewModel) {
+private fun PreviewPanel(s: GlassesState, vm: GlassesViewModel, feedback: LiveCameraState?) {
     val ratio = if (s.frameWidth > 0 && s.frameHeight > 0) s.frameWidth.toFloat() / s.frameHeight else 9f / 16f
     val live = s.stream != null
     Box(
@@ -200,6 +241,14 @@ private fun PreviewPanel(s: GlassesState, vm: GlassesViewModel) {
         if (live) {
             Box(Modifier.heightIn(max = 400.dp).aspectRatio(ratio, matchHeightConstraintsFirst = true)) {
                 AndroidView(factory = { ctx -> previewView(ctx, vm) }, modifier = Modifier.fillMaxSize())
+                if (feedback != null) Canvas(Modifier.fillMaxSize()) {
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 12.sp.toPx(); setShadowLayer(5f, 0f, 0f, android.graphics.Color.BLACK) }
+                    for ((n, part) in feedback.objects.withIndex()) {
+                        val b = part.box; val x = (b.left * size.width).toFloat(); val y = (b.top * size.height).toFloat()
+                        drawRect(FoDark.Primary, Offset(x, y), Size(((b.right - b.left) * size.width).toFloat(), ((b.bottom - b.top) * size.height).toFloat()), style = Stroke(2.dp.toPx()))
+                        drawContext.canvas.nativeCanvas.drawText("${n + 1}. ${part.label}", x + 4.dp.toPx(), maxOf(16.dp.toPx(), y - 4.dp.toPx()), paint)
+                    }
+                }
             }
         } else {
             Column(Modifier.fillMaxWidth().height(220.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -208,7 +257,7 @@ private fun PreviewPanel(s: GlassesState, vm: GlassesViewModel) {
             }
         }
         Row(Modifier.align(Alignment.TopStart).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (s.mode == GlassesMode.Mock) SimBadge("Mock glasses", Fo.Warning)
+            if (s.mode == GlassesMode.Mock) SimBadge("Mock glasses", FoDark.Warning)
             if (s.streaming) GlassLabel("${s.deviceName ?: "Glasses"} · live")
         }
         if (s.capturing) CircularProgressIndicator(Modifier.size(36.dp), color = Fo.Primary)
@@ -240,7 +289,7 @@ private fun previewView(ctx: Context, vm: GlassesViewModel) = TextureView(ctx).a
 
 @Composable
 private fun GlassLabel(text: String) = Text(
-    text, fontSize = 11.sp, color = Fo.Foreground,
+    text, fontSize = 11.sp, color = FoDark.Foreground,
     modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xB30B0F14)).padding(horizontal = 6.dp, vertical = 2.dp),
 )
 
@@ -264,6 +313,7 @@ private fun HudPanel(prompt: String, status: String?, s: GlassesState, muted: Bo
             when {
                 s.displayActive -> "Shown on the glasses display."
                 s.displayCapable && s.session != null -> "Glasses display not ready yet."
+                s.displayCapable -> "Start the glasses camera to show instructions on the display."
                 else -> "No display on these glasses: the instruction is spoken only."
             } + if (muted) " Voice muted." else " Read aloud through the phone's audio, which plays on the glasses when they are connected over Bluetooth.",
             style = MaterialTheme.typography.bodySmall,

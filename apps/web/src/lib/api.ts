@@ -88,7 +88,7 @@ export class ApiError extends Error {
 
 const key = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-async function request<T>(method: string, url: string, body?: unknown, form?: FormData): Promise<T> {
+export async function request<T>(method: string, url: string, body?: unknown, form?: FormData): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (method === "POST") headers["Idempotency-Key"] = key();
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -124,7 +124,7 @@ export const api = {
     return request<ObservationResponse>("POST", `${I(id)}/observations`, undefined, f);
   },
   investigate: (id: string) => request<InvestigateResponse>("POST", `${I(id)}/investigate`),
-  segment: (id: string, concept?: string) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, concept ? { concept } : {}),
+  segment: (id: string, concept?: string, photoEvidenceId?: string) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, { concept, photoEvidenceId }),
   knowledge: (id: string) => request<Knowledge>("GET", `${I(id)}/knowledge`),
   runDiagnostic: (id: string, diagnosticId: string) => request<{ result: DiagnosticResult; state: Inspection }>("POST", `${I(id)}/diagnostics/${encodeURIComponent(diagnosticId)}:run`),
   workOrder: (id: string, summary: string) => request<Inspection>("POST", `${I(id)}/work-order`, { summary }),

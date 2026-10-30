@@ -14,7 +14,7 @@
 | `LensIqApiService.kt` | No direct reuse | Entwined billing, heritage, auth endpoints | P0 new client |
 | `AudioCaptureService.kt` and `AdaptiveVad.kt` | Conditional targeted reuse | Complex concurrency and AEC; add only when core works | P1 |
 | `LocationProvider.kt`, `HeadingProvider.kt` | Defer | GPS not needed for asset ID or lab fixture | Future |
-| `ArCapabilityChecker.kt` and `ar/` | Defer | World anchor unnecessary for evidence gate | Future |
+| `ArCapabilityChecker.kt` and `ar/` | Reimplement clean optional P1 ARCore spatial anchor + depth bridge | Optional 3D world-locked anchors & metric distance on ARCore phones, with CameraX 2D fallback | P1 |
 | `SceneCandidateService.kt` | Exclude | Geography-based heritage candidate ranking | Not applicable |
 | `GroundingService.kt`, `ConfidenceScoringEngine.kt` | Exclude | Soft scoring unsuitable as verification authority | Not applicable |
 | `ExplainService.kt`, `TimeTravelService.kt` | Exclude | Heritage story workflow and Gemini semantics | Not applicable |

@@ -1,0 +1,280 @@
+{
+    "task": {
+        "taskId": "T-2039789ed4aa",
+        "mode": "Diy",
+        "goal": "Mount a wired PoE IP camera above my garage door",
+        "details": "Brick wall, cable runs from a PoE switch inside",
+        "site": null,
+        "phase": "Planned",
+        "currentStepId": null,
+        "inspectionId": null,
+        "createdAt": "2026-10-29T00:58:18.373516+00:00",
+        "updatedAt": "2026-10-29T00:58:27.182141+00:00",
+        "safetyAcknowledged": false,
+        "abandonReason": null,
+        "plan": {
+            "title": "Mount wired PoE camera above garage door",
+            "summary": "Mount PoE camera centered above garage door on brick, drill and plug bracket, route indoor PoE cable, aim and verify live view.",
+            "risk": "Moderate",
+            "estimatedMinutes": 90,
+            "restricted": "None",
+            "professionalRequired": false,
+            "professionalReason": null,
+            "tools": [
+                "ladder",
+                "masonry drill",
+                "masonry bit",
+                "spirit level",
+                "pencil",
+                "screwdriver",
+                "safety glasses",
+                "dust mask"
+            ],
+            "parts": [
+                "camera mount",
+                "mounting screws",
+                "wall plugs",
+                "ethernet cable",
+                "cable clips"
+            ],
+            "sourceNote": "AI-written plan \u00b7 check your owner's manual",
+            "modelId": "muse-spark-1.3",
+            "source": "AI inference",
+            "needsSafetyAck": true,
+            "steps": [
+                {
+                    "id": "s1",
+                    "title": "Choose mounting spot",
+                    "instruction": "Stand back and choose a spot centered above the garage door on brick, high enough to see driveway but reachable by ladder. Hold camera there without drilling and check phone app view if possible. Confirm cable can reach from inside.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "garage door",
+                        "brick wall",
+                        "camera body"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Height",
+                            "text": "Do not lean out from ladder to check view"
+                        }
+                    ],
+                    "stopIf": [
+                        "no solid brick or mortar joint to fix to",
+                        "cable from inside cannot reach spot"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s2",
+                    "title": "Power off and set ladder",
+                    "instruction": "Switch off PoE switch inside. Set ladder stable on level ground in front of garage door. Put on safety glasses and dust mask. Lay out drill, level, pencil and mount.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "ladder feet",
+                        "PoE switch"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Unplug or switch off PoE switch before handling cable ends"
+                        },
+                        {
+                            "kind": "Height",
+                            "text": "Set ladder on level firm ground and lock it"
+                        }
+                    ],
+                    "stopIf": [
+                        "ground is uneven or slippery",
+                        "ladder is unstable"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s3",
+                    "title": "Mark holes level",
+                    "instruction": "Climb ladder, hold mounting bracket level above garage door, mark screw holes with pencil. Check marks against camera manual for spacing. Confirm no wires or pipes behind marks.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "mounting bracket",
+                        "screw holes"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Wear eye protection and dust mask for brick dust"
+                        },
+                        {
+                            "kind": "Sharp",
+                            "text": "Drill bit is sharp and hot after drilling"
+                        }
+                    ],
+                    "stopIf": [
+                        "brick is cracked or crumbling at marks",
+                        "marks do not match bracket"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s4",
+                    "title": "Drill masonry holes",
+                    "instruction": "Drill pilot holes into brick or mortar joint with masonry bit as shown in camera manual. Drill straight and to plug depth only. Clear dust from holes.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "drill bit",
+                        "pilot holes"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Wear eye protection, brick dust can injure eyes"
+                        },
+                        {
+                            "kind": "Electrical",
+                            "text": "Avoid hidden cables, stop if drill hits resistance unlike brick"
+                        }
+                    ],
+                    "stopIf": [
+                        "brick cracks or hole is loose",
+                        "you hit metal or cable"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s5",
+                    "title": "Fit wall plugs",
+                    "instruction": "Push wall plugs from kit into drilled holes until flush with brick. Tap lightly if needed.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "wall plugs"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Sharp",
+                            "text": "Tap gently to avoid splitting brick edges"
+                        }
+                    ],
+                    "stopIf": [
+                        "plugs spin loose or will not grip"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Plugs flush with brick face with no cracks"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s6",
+                    "title": "Fix camera mount",
+                    "instruction": "Fix camera base or bracket to wall with screws from kit using screwdriver. Check with level and tighten evenly. Confirm screw size and plug type in manual if unsure.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "camera mount",
+                        "mounting screws"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Height",
+                            "text": "Keep one hand on ladder when fixing screws"
+                        }
+                    ],
+                    "stopIf": [
+                        "bracket wobbles or screws strip"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Bracket tight to wall with no wobble"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s7",
+                    "title": "Connect PoE cable",
+                    "instruction": "Route ethernet cable from inside to camera, leaving a small drip loop below camera. Plug into camera ethernet port and seal gland as per manual. Clip cable neatly along wall.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "ethernet cable",
+                        "ethernet port",
+                        "cable clips"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Keep PoE power off while plugging cable"
+                        }
+                    ],
+                    "stopIf": [
+                        "connector is damaged or will not click",
+                        "cable jacket is cut"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Cable clicked into camera with drip loop and no strain"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s8",
+                    "title": "Aim and tighten camera",
+                    "instruction": "Attach camera to mount, aim lens at driveway and garage door. Tighten adjustment screws by hand. Confirm torque and settings in owners manual.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "camera body",
+                        "camera lens"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Height",
+                            "text": "Do not overreach while aiming camera"
+                        }
+                    ],
+                    "stopIf": [
+                        "joint will not hold position"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Camera aimed at driveway and tightened"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s9",
+                    "title": "Power on and verify",
+                    "instruction": "Climb down, switch on PoE switch inside. Wait 2 minutes then check phone app for live view and adjust aim if needed. Confirm waterproofing and cable entry per product label.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "phone screen",
+                        "camera lens"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Check cable is dry and seated before power on"
+                        }
+                    ],
+                    "stopIf": [
+                        "no video after 5 minutes",
+                        "water can enter at cable hole"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                }
+            ]
+        },
+        "photos": [],
+        "answers": []
+    },
+    "planError": null
+}

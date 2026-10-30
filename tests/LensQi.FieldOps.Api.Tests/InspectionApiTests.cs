@@ -53,11 +53,13 @@ public sealed class FakeSegmenter : ISegmenter
     public bool Match { get; set; } = true;
     public Exception? Throw { get; set; }
     public int Calls { get; private set; }
+    public List<string> Concepts { get; } = [];
     /// <summary>When non-empty, each call returns the next queued mask set (empty = honest no-match).</summary>
     public Queue<MaskRecord[]> Queued { get; } = new();
     public Task<SegmentationOutcome> SegmentAsync(byte[] image, string mediaType, string concept, CancellationToken ct)
     {
         Calls++;
+        lock (Concepts) Concepts.Add(concept);
         if (Queued.TryDequeue(out var masks))
             return Task.FromResult(new SegmentationOutcome(concept, "sam-3.1", "rq", masks.Length > 0 ? "<queued>" : "", "raw",
                 masks.Select(m => new BoxRecord(m.ObjectId, m.Left, m.Top, m.Right, m.Bottom, m.Confidence)).ToList(), masks, "fake", 0.1));
@@ -79,16 +81,23 @@ public sealed class FakeCropper : IRoiCropper
 public sealed class FakeVisionChat : IChatClient
 {
     public string CannedResponse { get; set; } = "{}";
+    /// <summary>When non-empty, each call answers with the next queued response before falling back to <see cref="CannedResponse"/>.</summary>
+    public Queue<string> Responses { get; } = new();
     public int Images { get; private set; }
+    public int Calls { get; private set; }
+    /// <summary>Every text part of the last request: system prompt, context and ask.</summary>
+    public string LastText { get; private set; } = "";
     public Exception? Throw { get; set; }
     /// <summary>When set, the call waits this long (honouring cancellation) before answering.</summary>
     public TimeSpan? Delay { get; set; }
     public async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         Images += messages.SelectMany(m => m.Contents).OfType<DataContent>().Count();
+        Calls++;
+        LastText = string.Join("\n", messages.SelectMany(m => m.Contents).OfType<TextContent>().Select(t => t.Text));
         if (Delay is { } d) await Task.Delay(d, cancellationToken);
         if (Throw is { } ex) throw ex;
-        return new ChatResponse(new ChatMessage(ChatRole.Assistant, CannedResponse)) { ModelId = "fake-muse" };
+        return new ChatResponse(new ChatMessage(ChatRole.Assistant, Responses.TryDequeue(out var next) ? next : CannedResponse)) { ModelId = "fake-muse" };
     }
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public object? GetService(Type serviceType, object? serviceKey = null) => null;

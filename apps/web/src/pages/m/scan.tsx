@@ -8,7 +8,10 @@ import { friendlyError, qk } from "@/lib/hooks";
 import { useInspectionBundle } from "@/lib/inspection";
 import { changeLabel, featureName, isPostRepairItem, observationState, sentence } from "@/lib/labels";
 import { ArFrame } from "@/components/fo/ar-frame";
-import { arTags, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
+import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
+import { cameraError, connectCamera } from "@/lib/camera";
+import { useLiveAssist } from "@/lib/use-live-assist";
+import { LiveOverlay } from "@/components/fo/live-overlay";
 import { EvidenceBadge } from "@/components/fo/primitives";
 import { LensQiMark } from "@/components/fo/ai";
 import { aiSummary, assetMatch, nextMove } from "@/lib/ai";
@@ -36,6 +39,10 @@ export default function Scan({ id }: { id: string }) {
   const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; outlines: SegmentationGeometry[]; change?: ChangeAnalysis | null; state: Inspection } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [cameraMessage, setCameraMessage] = useState<string | null>(null);
+  const [cameraAttempt, setCameraAttempt] = useState(0);
+  const processing = useRef(false);
+  const assist = useLiveAssist(video, live === "on" && !preview && !busy, `/v1/inspections/${encodeURIComponent(id)}`);
 
   const afterRepair = !!i?.currentClaimId && (i.stage === "ReadyToVerify" || i.stage === "NeedsEvidence");
   const asked = i?.evidenceRequests?.find((r) => !r.answeredByPhotoId);
@@ -45,20 +52,32 @@ export default function Scan({ id }: { id: string }) {
     : "Point at the equipment and capture a wide view";
 
   useEffect(() => {
-    let stream: MediaStream | undefined;
-    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) { setLive("off"); return; }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
-      .then((s) => { stream = s; if (video.current) { video.current.srcObject = s; setLive("on"); } })
-      .catch(() => setLive("off"));
-    return () => stream?.getTracks().forEach((t) => t.stop());
-  }, []);
+    if (preview) return;
+    setLive("starting");
+    setCameraMessage(null);
+    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
+      setLive("off"); setCameraMessage("Live preview isn't available here. Open your device camera or choose a photo."); return;
+    }
+    const v = video.current;
+    const dispose = connectCamera(
+      () => navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }),
+      (s) => { if (v) { v.srcObject = s; setLive("on"); } },
+      (e) => { setLive("off"); setCameraMessage(cameraError(e)); },
+    );
+    return () => { dispose(); if (v) v.srcObject = null; };
+  }, [preview, cameraAttempt]);
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const setStep = (n: number, state: Step["state"]) => setSteps((s) => s.map((x, k) => (k === n ? { ...x, state } : x)));
 
   async function process(blob: Blob, name: string, source: "Phone" | "RecordedFixture") {
-    if (!i) return;
+    if (!i || processing.current) return;
+    processing.current = true;
     setBusy(true);
     setResult(null);
+    setSelected(null);
+    setDrawer(false);
     setPreview(URL.createObjectURL(blob));
     const plan: Step[] = afterRepair
       ? [{ label: "Saving photo", state: "doing" }, { label: "Comparing with before", state: "todo" }]
@@ -76,7 +95,7 @@ export default function Scan({ id }: { id: string }) {
         setStep(1, "doing");
         try {
           const inv = await api.investigate(id);
-          assessment = inv.assessment;
+          assessment = assessmentForPhoto(inv.assessment, up.evidenceId);
           state = inv.state;
           setStep(1, "done");
         } catch (e) {
@@ -89,8 +108,8 @@ export default function Scan({ id }: { id: string }) {
         let failed = 0;
         for (const concept of outlineOrder(fixture, assessment ?? prior)) {
           try {
-            const seg = await api.segment(id, concept);
-            if (seg.segmentation.matched) outlines.push(seg.segmentation);
+            const seg = await api.segment(id, concept, up.evidenceId);
+            if (seg.segmentation.matched && seg.segmentation.photoEvidenceId === up.evidenceId) outlines.push(seg.segmentation);
             state = seg.state;
           } catch (e) {
             failed++;
@@ -106,6 +125,7 @@ export default function Scan({ id }: { id: string }) {
       setPreview(null);
       toast.error(friendlyError(e));
     } finally {
+      processing.current = false;
       setBusy(false);
       qc.invalidateQueries({ queryKey: qk.events(id) });
       qc.invalidateQueries({ queryKey: qk.artifacts(id) });
@@ -114,6 +134,7 @@ export default function Scan({ id }: { id: string }) {
   }
 
   function onShutter() {
+    if (processing.current || busy) return;
     const v = video.current;
     if (live !== "on" || !v || !v.videoWidth) {
       fileCamera.current?.click();
@@ -148,30 +169,18 @@ export default function Scan({ id }: { id: string }) {
   const rejected = result?.change && (result.change.verdict === "DuplicateImage" || result.change.verdict === "NoVisualChange");
   const findings = result?.assessment?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)) ?? [];
   const last = i?.photos[i.photos.length - 1];
+  const retake = () => { setPreview(null); setResult(null); setSteps([]); setSelected(null); };
 
   return (
-    <div className="relative h-dvh overflow-hidden bg-overlay text-overlay-foreground md:h-full">
+    <div className="dark relative flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       {/* Feed: live camera, or the photo just taken with its outline */}
-      <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-cover", (live !== "on" || preview) && "hidden")} />
-      {preview && (
-        <div className="absolute inset-x-0 top-14 bottom-56 grid place-items-center">
-          <ArFrame src={result ? photoUrl(result.evidenceId) ?? preview : preview} outlines={outlines} tags={tags} selected={selected} onSelect={setSelected}
-            guide={target ? { concept: target, label: `Target region · ${sentence(result?.assessment?.requestedView) || target}` } : null} className="w-full" />
-        </div>
-      )}
-      {!preview && live === "off" && (
-        <div className="absolute inset-0 grid place-items-center px-10 text-center text-sm text-overlay-foreground/70">
-          <div>
-            <CameraIcon className="mx-auto mb-3 size-10 opacity-60" />
-            Tap the shutter to open your camera, or pick a photo you already took.
-          </div>
-        </div>
-      )}
-      <div className={cn("absolute inset-0 bg-overlay transition-opacity", shot ? "opacity-80" : "opacity-0")} />
+      <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-contain", (live !== "on" || preview) && "hidden")} />
+      {!preview && assist.enabled && <LiveOverlay {...assist} targetConcept={!afterRepair ? targetConcept(fixture, prior) : undefined} />}
+      <div className={cn("pointer-events-none absolute inset-0 bg-overlay transition-opacity", shot ? "opacity-80" : "opacity-0")} />
       {busy && <div className="pointer-events-none absolute inset-x-0 top-0 h-[9%] animate-scan bg-gradient-to-b from-transparent via-primary/25 to-transparent" />}
 
       {/* Reticle */}
-      {!preview && live === "on" && (
+      {!preview && live === "on" && !assist.objects.length && (
         <div className="pointer-events-none absolute left-1/2 top-[44%] size-20 -translate-x-1/2 -translate-y-1/2">
           {["left-0 top-0 border-l-2 border-t-2", "right-0 top-0 border-r-2 border-t-2", "left-0 bottom-0 border-l-2 border-b-2", "right-0 bottom-0 border-r-2 border-b-2"].map((c) => (
             <span key={c} className={cn("absolute size-4 rounded-[3px] border-overlay-foreground/80", c)} />
@@ -181,13 +190,13 @@ export default function Scan({ id }: { id: string }) {
       )}
 
       {/* Top controls */}
-      <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3">
+      <div className="relative flex shrink-0 items-center gap-2 p-3">
         <Link href={i?.currentClaimId ? `/m/i/${id}/verify` : `/m/i/${id}`} className="glass grid size-10 place-items-center rounded-full" aria-label="Close camera"><X className="size-5" /></Link>
         <div className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">
           {!fixture ? "Loading…"
-            : busy && !result ? <span className="opacity-80">Matching asset…</span>
+            : busy && !result ? <span className="opacity-80">{steps.find((s) => s.state === "doing")?.label ?? "Processing photo"}…</span>
             : match === "mismatch" ? <span className="text-warning">▲ Looks like {result?.assessment?.assetId}, not {name}</span>
-            : match === "match" ? <span><span className="text-success">●</span> {name} · matches site record</span>
+            : match === "match" ? <span><span className="text-success">●</span> {name} · AI match</span>
             : match === "unseen" ? <span className="text-warning">▲ Can't confirm {name} in this photo</span>
             : assetMatch(shown, i?.assetId) === "match" ? <span><span className="text-success">●</span> {name} · matched earlier</span>
             : <span className="opacity-80">{expected?.displayName ?? i?.assetId} · from asset label</span>}
@@ -195,14 +204,47 @@ export default function Scan({ id }: { id: string }) {
         <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>
       </div>
 
+      <div className={cn("relative min-h-0 flex-1", preview && "overflow-y-auto")}>
+        {!preview && live === "off" && <div className="grid h-full place-items-center px-8 text-center text-sm text-overlay-foreground/70"><div>
+          <CameraIcon className="mx-auto mb-3 size-10 opacity-60" /><p role="status">{cameraMessage}</p>
+          <button type="button" onClick={() => setCameraAttempt((n) => n + 1)} className="mt-4 min-h-11 rounded-xl border border-overlay-foreground/30 px-4 text-overlay-foreground">Try camera again</button>
+        </div></div>}
+        {preview && <ArFrame src={result ? photoUrl(result.evidenceId) ?? preview : preview} outlines={outlines} tags={tags} selected={selected} onSelect={setSelected}
+          guide={target ? { concept: target, label: `Frame this part next · ${sentence(result?.assessment?.requestedView) || target}` } : null}
+          className="w-full" imgClassName="max-h-[45dvh] object-contain" />}
+        {!preview && live === "starting" && <p role="status" className="absolute inset-x-0 top-1/2 flex items-center justify-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Starting camera…</p>}
+      </div>
+
       {/* Bottom: LensQi's prompt and the shutter, or what LensQi sees in the photo just taken */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-16 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="relative shrink-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {!result ? (
           <>
+            {!preview && live === "on" && <div className="glass mb-3 rounded-2xl px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-primary" role="status">{assist.enabled ? assist.status : "Live camera assistance"}</span>
+                <button type="button" className="min-h-11 rounded-xl border border-primary/50 px-3 text-xs" onClick={() => assist.setEnabled(!assist.enabled)}>{assist.enabled ? "Pause live assist" : "Start live assist"}</button>
+              </div>
+              <p className="text-[11px] opacity-70">{assist.enabled ? `${assist.fps} tracking updates/s · AI guidance${assist.updatedAt ? ` from ${Math.max(0, Math.round((performance.now() - assist.updatedAt) / 1000))}s ago` : ' updating'}` : "Sampled frames go to AI for live guidance. Only shutter photos are saved to the inspection."}</p>
+              {assist.enabled && assist.telemetry && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]" aria-label="Camera quality telemetry">
+                  {[
+                    { label: "Light", ok: assist.telemetry.brightness >= 35, state: assist.telemetry.brightness >= 35 ? "OK" : "Low" },
+                    { label: "Focus", ok: assist.telemetry.sharpness >= 3, state: assist.telemetry.sharpness >= 3 ? "Sharp" : "Soft" },
+                    { label: "Stability", ok: assist.telemetry.motion <= 32, state: assist.telemetry.motion <= 32 ? "Steady" : "Moving" },
+                  ].map((m) => (
+                    <span key={m.label} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5", m.ok ? "border-overlay-foreground/15 text-overlay-foreground/80" : "border-warning/50 bg-warning/15 text-warning")}>
+                      <span className={cn("size-1.5 rounded-full", m.ok ? "bg-success" : "bg-warning")} />
+                      {m.label}: {m.state}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>}
             <div className="glass mx-auto mb-5 flex max-w-sm items-start gap-2.5 rounded-2xl px-3 py-2.5">
               <LensQiMark className="size-6" />
               <div className="min-w-0 flex-1">
-                <div className="text-sm leading-snug">{busy ? (afterRepair ? "Comparing with the photo from before…" : "Looking at your photo…") : prompt}</div>
+                <div className="text-sm leading-snug">{busy ? (afterRepair ? "Comparing with the photo from before…" : "Looking at your photo…") : assist.enabled && live === "on" ? assist.recommendation : prompt}</div>
+                {!busy && assist.enabled && live === "on" && assist.screenText && <p className="mt-1 line-clamp-3 text-xs opacity-70">On screen: “{assist.screenText}”</p>}
                 {steps.length > 0 && <StepLine steps={steps} />}
               </div>
             </div>
@@ -210,7 +252,7 @@ export default function Scan({ id }: { id: string }) {
               <button onClick={() => fileGallery.current?.click()} disabled={busy} className="glass grid size-12 place-items-center rounded-2xl" aria-label="Choose a photo">
                 <Images className="size-5" />
               </button>
-              <button onClick={onShutter} disabled={busy || !i} aria-label="Capture" className="grid size-[76px] place-items-center rounded-full border-4 border-overlay-foreground/90 disabled:opacity-60">
+              <button onClick={onShutter} disabled={busy || !i || live === "starting"} aria-label="Capture" className="grid size-[76px] place-items-center rounded-full border-4 border-overlay-foreground/90 disabled:opacity-60">
                 <span className={cn("size-[60px] rounded-full bg-overlay-foreground transition-transform active:scale-90", busy && "animate-pulse bg-primary")} />
               </button>
               {last && photoUrl(last.evidenceId) ? (
@@ -235,7 +277,7 @@ export default function Scan({ id }: { id: string }) {
             </div>
             {(findings.length > 0 || result.change) && (
               <button onClick={() => setDrawer(!drawer)} className="mt-3 flex w-full items-center justify-between text-xs opacity-80">
-                {drawer ? "Hide details" : tags.length ? "Details · tap a label on the photo for the reason" : "Details"}
+                {drawer ? "Hide findings" : "All findings"}
                 <ChevronUp className={cn("size-4 transition-transform", !drawer && "rotate-180")} />
               </button>
             )}
@@ -252,10 +294,11 @@ export default function Scan({ id }: { id: string }) {
                 ))}
               </div>
             )}
-            <button onClick={() => (rejected ? (setPreview(null), setResult(null), setSteps([])) : nav(next))}
+            <button onClick={() => (rejected || target ? retake() : nav(next))}
               className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground">
-              {rejected ? <><CameraIcon className="size-4" /> Take another photo</> : <>{afterRepair ? "Continue to verification" : "Continue"} <ArrowRight className="size-4" /></>}
+              {rejected || target ? <><CameraIcon className="size-4" /> {target ? "Capture the requested view" : "Take another photo"}</> : <>{afterRepair ? "Continue to verification" : "Continue"} <ArrowRight className="size-4" /></>}
             </button>
+            {!rejected && !target && <button type="button" onClick={retake} className="mt-1 min-h-11 w-full rounded-xl text-xs text-overlay-foreground/80">Take another photo</button>}
           </div>
         )}
       </div>
