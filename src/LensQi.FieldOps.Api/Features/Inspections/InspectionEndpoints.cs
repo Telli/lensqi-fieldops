@@ -290,7 +290,6 @@ public static class InspectionEndpoints
         try { return action(); }
         catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (KeyNotFoundException ex) { return ApiResults.NotFound($"Inspection '{ex.Message}' not found"); }
-        catch (Exception ex) { return Results.Json(new ApiError("internal", ex.GetType().Name + ": " + ex.Message), statusCode: 500); }
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
@@ -299,6 +298,5 @@ public static class InspectionEndpoints
         catch (OperationCanceledException) { throw; }   // request aborted or timed out: the timeout middleware answers
         catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }
         catch (KeyNotFoundException ex) { return ApiResults.NotFound($"Inspection '{ex.Message}' not found"); }
-        catch (Exception ex) { return Results.Json(new ApiError("internal", ex.GetType().Name + ": " + ex.Message), statusCode: 500); }
     }
 }

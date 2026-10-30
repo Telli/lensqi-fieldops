@@ -1,115 +1,183 @@
-# LensQi FieldOps
+# LensQi
 ## Product Requirements Document — Meta Global AI Developer Hackathon
 
-**Version:** 1.1 — Hackathon scope, component reuse and public-repo architecture  
-**Date:** October 27, 2026  
+**Version:** 2.0 — Guided tasks for DIY users and technicians (re-architecture)  
+**Date:** October 28, 2026 (status in §1 updated October 29, 2026)  
 **Track / theme:** Indie Developer / Push the Frontier  
 **Build period:** October 27–November 4, 2026  
 **Submission:** November 4, 2026, 9:00 PM Eastern / 6:00 PM Pacific  
-**Status:** Build-ready specifications; model calls, hardware, and benchmarks remain unimplemented/unverified until tested.  
-**Repository strategy:** Public `Telli/lensqi-fieldops`, created October 28, 2026 (UTC) from the specification kits; existing `Telli/LensIQ-Monorepo` remains private.
+**Status:** Target product. Version 2.0 describes what the product is being rebuilt into. Only the items listed under "What exists today" in §1 have run; everything else in this document is a requirement, not a claim.  
+**Repository strategy:** Public `Telli/lensqi-fieldops`, created October 28, 2026 (UTC) from the specification kits; existing `Telli/LensIQ-Monorepo` remains private.  
+**Specs:** `.kiro/specs/guided-tasks/` (this re-architecture), `.kiro/specs/lensqi-fieldops/` (the FieldProof inspection loop, kept as the technician closer), `.kiro/specs/vendor-knowledge-and-diagnostics/` (cited vendor knowledge for site records).
 
-
-**Brand hierarchy:** **LensQi** (visual intelligence platform) → **FieldOps** (field worker product) → **FieldProof Engine** (evidence and verification capability). **LensIQ** refers only to the existing private heritage/tourism repository; it is not the hackathon product name.
+**Brand hierarchy:** **LensQi** (visual intelligence platform) → **LensQi guided tasks** (the product: DIY mode and Technician mode) → **FieldProof Engine** (evidence and verification capability used by Technician mode). The repository and API keep the `LensQi.FieldOps` names. **LensIQ** refers only to the existing private heritage/tourism repository; it is not the hackathon product name.
 
 **Pre-existing private baseline:** `Telli/LensIQ-Monorepo` `main` at `593f467372c7e88acb7a217242fb70b1b0c49525` (2026-10-16). This is a provenance reference, **not** permission to redistribute code. The public repository's first commit is `f46e967` (specification kit); no private source has been copied.
 
 **Competition rules assumption:** The guide requires public code and demonstrations limited to work built during the event; it explicitly discusses existing-code reuse for startups but is less clear for indie entrants. **Default to fresh implementation unless the organizer confirms permitted indie reuse.** Pre-existing code, if permitted, must be separately credited and excluded from claims of hackathon novelty.
 
+**Section numbering:** Sections §4A, §5, §7, §8, §9, §11, §16, §17 and §19 keep their v1.1 numbers and topics because code comments, tests and other documents cite them. FR-01 to FR-10 keep their v1.1 identifiers as the Technician-mode FieldProof requirements.
+
 ---
 
 ## 1. Executive summary
 
-**LensQi FieldOps** is a visual AI agent for field technicians that turns observations of physical equipment into **traceable, verified maintenance outcomes**. In the first demonstration, a technician inspects a small Ethernet-switch installation using an Android camera or a compatible Meta AI glasses feed. The agent compares visible equipment with a declared expected state, identifies ambiguity, requests a specific additional view, obtains read-only network diagnostics, and tracks the repair. The system refuses to mark a repair **Verified Complete** unless fresh, relevant visual and diagnostic evidence satisfies deterministic verification rules.
+**LensQi** walks a person through a hands-on technical task with a live camera, AR outlines, AI-written steps and voice. It has two modes built on one guided-task core:
 
-Its core innovation is an **epistemic state machine**: the agent explicitly represents *known*, *hypothesized*, *unknown*, and *contradictory* facts and chooses the next evidence-gathering action accordingly. The model proposes hypotheses and evidence requests; application code enforces state transitions, permissions, evidence freshness, and completion criteria. A memorable **fake-fix scenario** shows a cable that looks connected while an independent connectivity test still fails.
+- **DIY mode** for everyday technical users. Example goals: *"Change the oil in my 2025 Civic"*, *"Mount an IP camera over the garage door"*.
+- **Technician mode** for installs, repairs and on-site help. A technician task can be tied to a **site record**; that unlocks the fixture-approved equipment check and the **FieldProof verified receipt**, which stay the technician's closer.
+- **Free-form help ("Just ask")** for spontaneous use: no goal or plan first. The camera opens at once; the user asks about whatever is in view (an error on a screen, an unfamiliar part, a quick fix) by voice or text, live coaching outlines what LensQi points at, and "Make a plan" turns a longer job into a guided task. Free-form answers use prompt instructions, output checks and a referral safeguard for recognized restricted phrases. This is weaker than the structural plan validator and does not block every unsafe answer.
 
-**Tagline:** *See the problem. Prove the solution.*
+**The guided task, in both modes:**
 
-**Nine-day deliverable:** One reproducible telecom/IT-network inspection loop, a fresh public Android + ASP.NET Core implementation, real Meta API calls, a seeded fixture, a failure-and-recovery demo, an integrity-checkable evidence receipt, and a three-minute video.
+1. The user states a goal (typed or spoken) and may add details and photos of the owner's manual.
+2. Muse Spark writes a plan: steps, tools and parts, time estimate, risk level, per-step cautions and "stop if" conditions. The plan is labelled **"AI-written plan · check your owner's manual"**, and the server rejects or restricts plans that break the safety policy (§4).
+3. The user accepts the plan's safety notes and starts. Each step shows the live camera with SAM 3.1 outlines of the parts the step needs, ARCore anchors and measured distance on supported Android phones, and 2D tracking elsewhere. The instruction is spoken; the user can ask questions out loud about what the camera sees and move through steps by voice.
+4. An optional photo check after a step *suggests* whether it looks done. The user decides. In Technician mode, verified completion still comes only from the FieldProof gate.
 
-**Longer-term vision:** Extend the **FieldProof Engine** to telecoms, energy, water, facilities, municipal assets, and construction; eventually share a reusable visual intelligence layer with the existing private LensIQ heritage product under the **LensQi** brand.
+**Tagline:** *See the task. Do it right. Prove it when it matters.*
+
+**Core innovation:** the model writes and coaches; application code decides. A deterministic plan validator enforces safety rules the prompt cannot override, every step and answer is an append-only event, and in Technician mode the existing epistemic state machine and dual-proof gate (§7, §17) refuse to call a repair verified on appearance alone. The memorable moments are a DIY plan that refuses to hand a user hands-on airbag steps, and the v1.1 fake-fix rejection: a cable that looks connected while an independent check still fails.
+
+### What exists today (reviewed October 29, 2026)
+
+Status from a code review of the `guided-tasks` branch at `044c906` and a fresh run of the automated suites on October 29: **211 .NET tests** (96 Core, 18 Meta, 97 API), **25 web tests** and **107 Android unit tests** passed. Fixes the same day for the review findings and UX blockers (GT-T31–T37) brought the .NET suite to 220; web and Android counts are unchanged. Nothing on a physical phone or with a real microphone was re-run for this review.
+
+| Capability | State |
+|---|---|
+| FieldProof inspection loop for one lab switch fixture (`LAB-SW-01`): Muse assessment, SAM outlines, fixture-approved diagnostic (simulated, replay and loopback live), fake fix denied, real fix verified, hashed receipt and offline verifier | Built and tested; evaluation `docs/evaluation/eval-20261028T061752Z.md` |
+| Vendor knowledge packs with citations and predictions for the site record | Partly built (see the vendor-knowledge spec's task status) |
+| Live camera assistance (web, Android CameraX, glasses stream): 2D tracking, periodic SAM detection, Muse live guidance about anything in view | Built; checked in the browser and on the emulator (`docs/LIVE_AR.md`) |
+| Android ARCore mode: anchors from measured depth and camera-to-part distance | Built with geometry unit tests. First phone run on a Galaxy S23 Ultra ran live assist on an ARCore session with genuine model calls, but produced **no anchor or distance yet** (no fixture part in view). Anchors on real equipment and the AR-to-CameraX shutter hand-off are untested on hardware |
+| Meta glasses through the Wearables Device Access Toolkit | Exercised against the Mock Device Kit only; no real glasses tested |
+| Guided-task core: `TaskSession` with append-only JSONL events and replay, `TaskPlanValidator` with the restricted categories, `TaskPlanner` and `StepCoach` (guide, ask, step check), `/v1/tasks` API | **Built** (commits `c722a14`, `180b3f4`) with Core and API tests. Genuine Muse plans (oil change, IP camera, restricted breaker panel → referral only, a site-aware technician job), typed questions, step checks and live step coaching are recorded in `docs/evidence/tasks/` |
+| Web task flow: three-entry home, goal entry with push-to-talk, plan screen with safety acknowledgement, step runner (live outlines, spoken instruction, questions, voice commands, photo check), done screen, free-form help, ops Guided tasks list | **Built** (`ba64285`, `20d2a85`, `180b3f4`); checked in the browser pane at phone size. Camera and microphone were not available in that pane |
+| Android task flow: home, new task, plan, step runner on `CameraScreen` (CameraX or ARCore), free-form help, Speaker and push-to-talk | **Built** (`3d999b6`, `180b3f4`); checked on the arm64 emulator (2D, no ARCore). Not yet: `SpokenFeedbackGate` on task speech, distance coaching aimed at the step's main part, the offline queue for step-check photos, glasses on tasks |
+| Technician task linked to a site-record inspection | **Built**; `TechnicianJourneyTests` drives plan → steps → linked inspection → fake fix denied → `VerifiedCompleteSimulated` → offline receipt verification with fake models and simulated diagnostics (`docs/evidence/tasks/technician-journey.md`). Since Oct 29 the task summary shows the linked inspection's stage and live or simulated label; no user-operated run with genuine models |
+| Free-form help ("Just ask") | **Built** (`180b3f4`); genuine answers on web and the emulator, including a gas-line referral. Its restricted-work safeguard is a phrase match plus an appended referral, not structural rejection |
+| Voice | Spoken guidance and push-to-talk code on both clients with one command grammar; **not yet exercised with a real microphone** or checked by ear on a phone |
 
 ## 2. Problem, users, and jobs to be done
 
 ### Problem
 
-Technicians often document asset condition with disconnected photos, notes, inventory spreadsheets, and network checks. AI image analyzers can describe a scene but may invent details when labels are small, cables occlude ports, or equipment is viewed obliquely. Existing work-order systems can record that someone pressed “complete” without proving the reported fault was resolved.
+People increasingly attempt technical jobs themselves using scattered videos, forum posts and manuals that do not match their exact model. They lose their place, miss a caution, or cannot tell whether a step is done. Technicians face the same problem on unfamiliar equipment, and work-order systems record that someone pressed "complete" without proving the fault was resolved. A general chatbot can write steps, but it does not see the work, does not keep the user inside a safe plan, and will happily describe dangerous work.
 
-### Primary user and job
+### Users and jobs
 
-**Primary:** Telecom/IT field technician responsible for low-voltage network installations or service restoration. *When I inspect or repair an asset, help me collect enough evidence to distinguish a plausible fault from a confirmed fault, and demonstrate that the outcome was actually achieved.*
+**DIY user (primary, new):** An everyday technical person: comfortable with tools, not a professional. *When I take on a job like an oil change or mounting a camera, give me a plan for my exact situation, show me where things are, keep me safe, and let me ask questions without putting the tools down.*
 
-**Secondary:** Site supervisor or QA reviewer who needs to review a compact record of what was observed, tested, changed, and verified.
+**Field technician (primary):** Installs, repairs and on-site help, including the telecom/IT technician from v1.1. *Guide me through an install or repair, and when the job is on a site record, help me collect enough evidence to show the outcome was actually achieved.*
 
-**Later users (not hackathon scope):** Solar technicians, municipal inspectors, water utility teams, facilities managers, and mobile infrastructure auditors.
+**Site supervisor or QA reviewer (secondary):** Reviews a compact record of what was planned, observed, tested and verified.
+
+**Developer or judge (secondary):** Reproduces the product from the public repository with synthetic fixtures and fakes, and can tell genuine model calls from simulations.
+
+**Later users (not hackathon scope):** Solar technicians, municipal inspectors, water utility teams, facilities managers, mobile infrastructure auditors, and shared household or fleet maintenance records.
 
 ### Principles
 
-1. **Do not claim more than the evidence supports.** Unknown is a valid outcome.
-2. **Active perception beats passive classification.** Request a useful second view when needed.
-3. **Proposed action is not verified outcome.** Visual appearance and independent functional telemetry must be reconciled.
-4. **Structured, inspectable evidence.** Each claim has an origin, timestamp, and status.
-5. **Human-controlled physical work.** The agent never autonomously changes a real device configuration or instructs unsafe interventions.
-6. **Offline/resilient interface.** Field capture and review may continue without a connection; cloud AI and live probes require connectivity.
-7. **New hackathon work must be obvious.** A clean standalone repository, dated commits, and an honest demo showing only event-built functionality.
+1. **Do not claim more than the evidence supports.** Unknown is a valid outcome; "can't tell" is a valid photo-check verdict.
+2. **Plans are AI-written and say so.** Every plan carries the label "AI-written plan · check your owner's manual", a risk level, cautions and stop conditions. Nothing in the product implies a plan is manufacturer-approved.
+3. **Code enforces safety; the prompt only asks for it.** The server validates every plan and every answer. Restricted work never gets hands-on steps, whatever the model returns.
+4. **Coach inside the plan.** Live guidance and spoken answers stay within the accepted plan's current step; they do not start new jobs.
+5. **The user decides; FieldProof verifies.** A step photo check is a suggestion. Only the FieldProof gate in Technician mode marks anything verified.
+6. **Active perception beats passive classification.** Ask for a better view, outline the part, measure distance only where ARCore measured it.
+7. **Structured, inspectable record.** Each plan, step, question, check and decision is an append-only event with an origin and a server timestamp.
+8. **Only recognised text reaches LensQi.** Android prefers on-device recognition where available on Android 12+; system fallback and browser recognition may send audio to their providers. Both clients offer typing next to the mic, and web discloses the browser's speech provider before first use.
+9. **Honest labelling.** Simulated checks are labelled simulated, mock devices are labelled mock, and nothing is described as run, tested or verified until it has been.
+10. **New hackathon work must be obvious.** A clean standalone repository, dated commits, and a demo showing only event-built functionality.
 
 ## 3. Hackathon success definition
 
-A successful project must demonstrate this *entire closed loop* with actual Meta models:
+A successful submission demonstrates, with genuine Meta model calls:
 
-1. **Observe:** Capture a wide-angle image of an identified test network switch.
-2. **Recognize uncertainty:** Muse Spark identifies one or more plausible discrepancies, but marks occluded or tiny visual details as unknown.
-3. **Request evidence:** FieldProof points to an inspectable ROI and asks for a targeted close-up. SAM 3.1 supplies a box/mask around a concrete object such as a network switch or yellow Ethernet cable.
-4. **Corroborate:** The system compares visual observations against a versioned expected-state JSON fixture and a read-only network check.
-5. **Reject a false repair:** The technician presses “Verify” when the near-end cable appears seated but the remote endpoint is still unreachable. Completion is denied, with a specific reason.
-6. **Verify the real repair:** A fresh follow-up image plus passing read-only diagnostic establishes that the approved test condition is restored; a technician acknowledges the result.
-7. **Produce evidence:** Export an integrity-checkable JSON/HTML FieldProof receipt linking before/after photos, visual annotations, tests, and model/tool versions.
+1. **DIY plan:** A spoken or typed goal ("change the oil in my 2025 Civic") produces a labelled AI-written plan with risk level, tools, parts, per-step cautions and stop-if conditions.
+2. **Safety boundary:** A restricted goal (for example an airbag or gas-appliance job) produces a prepare-and-observe plan with a professional referral, and a model plan containing hands-on steps for it is rejected by the server.
+3. **Guided step with live AR:** The step runner outlines the step's parts with SAM 3.1 on a live camera, with ARCore distance on a supported Android phone and 2D tracking elsewhere, and speaks the instruction.
+4. **Voice:** A push-to-talk question about what the camera sees is answered within the current step; "next step" by voice advances the task.
+5. **Step check:** A photo check returns a suggested verdict ("looks done", "not yet", "can't tell") with a reason; the user confirms or overrides it.
+6. **Technician closer:** A technician task linked to the `LAB-SW-01` site record continues into the existing FieldProof loop: fake fix rejected, real fix verified, receipt verified. The simulated diagnostic is labelled simulated.
 
-Judges must be able to run a **clearly labeled simulated diagnostic fixture** without the physical equipment. A real local low-voltage network demo is preferred for the video, but simulations must never be represented as live measurement.
+### Pass/fail acceptance gates
 
-### Proposed pass/fail acceptance gates
+- Genuine Muse Spark calls for at least two DIY plans (oil change, IP camera), one step check and one voice question, and genuine SAM 3.1 calls on step targets, recorded under `docs/evidence/tasks/` with model ids and digests.
+- The restricted-category rule rejects hands-on steps in automated tests and in at least one genuine-call run.
+- A step photo check never marks a step complete by itself; a technician task never shows "verified" without a FieldProof decision.
+- The FieldProof acceptance gates from v1.1 still pass: an image alone never closes an inspection; a mocked or failed diagnostic never becomes an unlabelled live-verified result; stale or cross-asset evidence cannot cause completion; receipts verify.
+- A user can open the public code, reproduce the simulated demonstration with fakes, and validate receipt hashes.
 
-- At least one real request to **Muse Spark** and one real request to **SAM 3.1** are visible in logs/trace with sensitive data removed.
-- Three scripted flows work end-to-end: **genuine fault**, **ambiguous view**, and **fake fix rejected before successful re-verification**.
-- An image alone never closes an inspection; a mocked or failed diagnostic never becomes an unlabeled “live-verified” result.
-- Unknown asset IDs, stale photos, stale pre-repair diagnostics, and unapproved network targets cannot cause completion.
-- A user can open the public code, reproduce the simulated demonstration, and validate the receipt hashes.
+## 4. Scope boundaries and safety policy
 
-## 4. Scope boundaries
+### Safety policy (needed because DIY means hands-on instructions)
+
+v1.1 said the agent never instructs hands-on work. v2.0 replaces that rule with this policy, enforced on the server.
+
+**Every plan carries:**
+
+- The label **"AI-written plan · check your owner's manual"** (`sourceNote`, set by the server, never by the model).
+- A **risk level**: low, moderate or high.
+- **Per-step cautions** by kind: hot parts, electrical, lifting or jacking, chemicals, working at height, sharp parts, stored pressure, other.
+- **"Stop if" conditions** per step (for example "stop if you smell fuel", "stop if the jack stand will not sit level").
+- A **`professionalRequired`** flag with its reason.
+
+**Restricted categories.** For goals in these categories the server allows only **prepare-and-observe** steps (gather information, locate, photograph, shut off at a user-accessible control where safe, call a professional) plus a referral to a professional. Any hands-on step in such a plan is rejected:
+
+| Category | Examples |
+|---|---|
+| Gas lines or gas appliances | Gas pipe, valve, meter, gas stove, furnace, water heater or dryer connection |
+| Main electrical panel or live mains wiring | Breaker panel, service panel, subpanel, meter base, working on live wires |
+| EV high-voltage systems | Traction or hybrid battery, orange high-voltage cables |
+| Airbags / SRS | Airbag modules, seatbelt pretensioners, clock spring |
+| Refrigerant | A/C recharge, refrigerant lines |
+| Structural or load-bearing work | Load-bearing walls, joists, structural beams, foundation |
+
+The category is decided from the user's own words as well as the model's label: if the goal or details name restricted work and the model's plan does not flag it, the plan is rejected. Restriction cannot be lowered by the client.
+
+**Every model answer** (plans, live guidance, spoken answers, step-check reasons) passes the same checks: no links, bounded text length, and outline names (`lookFor`, focus phrases) must be plain 1–4 word noun phrases. Live guidance and answers stay inside the accepted plan's current step.
+
+**Step checks** only suggest a verdict ("looks done", "not yet", "can't tell") with a reason. The user decides whether a step is complete. In Technician mode, verified completion comes only from the FieldProof gate.
+
+**Starting a task** requires accepting its safety notes (`PlanAccepted(safetyAcknowledged: true)`).
+
+**What the policy does not do:** it is not a safety certification, it does not guarantee the plan is correct for the user's vehicle or building, and it does not replace the owner's manual or local codes. The UI says so on the plan screen.
 
 ### P0 — Mandatory
 
-- Fresh Android app (Kotlin, Jetpack Compose, CameraX) with camera capture, basic inspection status, ROI overlay, second-view request, repair claim, and results screen.
-- ASP.NET Core 10 API using explicit typed contracts, state transitions, and SQLite storage for sessions and evidence metadata; local media in a controlled file store.
-- Meta Model API integration: Muse Spark for multimodal reasoning/structured decisions; SAM 3.1 for image segmentation and masks.
-- Deterministic expected-state asset catalog for **one** Ethernet switch fixture and **one** network endpoint.
-- One independent read-only diagnostic: HTTP `/health` or ICMP against a fixed, explicitly allowlisted target. Managed-switch SNMP/LLDP is optional.
-- Active second-view guidance and a cropped high-resolution ROI, without claiming accurate port-level recognition unless legible and independently supported.
-- Fail-closed dual-evidence completion gate, timeline of evidence, technician confirmation, and a JSON + printable HTML receipt with SHA-256 evidence-manifest verification.
-- Simulated diagnostic adapter, pre-recorded camera observations, unit tests, reproducible evaluation runner, README and demo video.
+- Guided-task core: `TaskSession` aggregate with append-only, idempotent events; plan schema and `TaskPlanValidator` with the safety policy; `TaskStore` on the existing JSONL event log and evidence file store.
+- Muse Spark task planner (goal + details + manual photos → plan), step coach (live guidance and spoken questions within the current step) and step checker (photo → suggested verdict).
+- `/v1/tasks` API (§9) with the existing guard, error and `Idempotency-Key` patterns.
+- Web DIY flow at phone size: mode home, goal entry with mic, plan screen, step runner with live camera and SAM outlines, speech, push-to-talk with typed fallback, voice commands, step check, done screen.
+- Android task screens on the same contract: step runner on CameraX or ARCore, speaker, push-to-talk voice input, voice commands, offline queue for step-check photos.
+- Technician mode: install and repair tasks, linking a task to a site-record inspection, and the existing FieldProof loop (FR-01 to FR-09) unchanged.
+- Fakes for every model call, automated tests, genuine-call evidence, README and demo video.
 
 ### P1 — Valuable only after P0 works
 
-- Meta Wearables Device Access Toolkit capture source (real glasses when available, otherwise labeled Mock Device Kit).
-- Hands-free push-to-talk, spoken evidence request, spoken inspection summary, audio feedback (Android speech/TTS or supported Meta toolkit features).
-- Manual ROI selection, perspective correction when reliable, side-by-side image comparisons, additional fault class.
-- A small web reviewer panel if time permits; not necessary for P0 because Android UI + HTML receipt suffice.
+- Glasses (Wearables Device Access Toolkit) for tasks: spoken step guidance and voice questions through the existing glasses live service, Mock Device Kit labelled.
+- Ops dashboard Tasks list for technician tasks and their linked inspections.
+- Vendor knowledge packs cited inside technician task plans for site-record equipment.
+- Manual-photo grounding shown per step ("from your manual, page N" only when the photo shows it).
 
 ### P2 — Stretch / post-hackathon
 
-- Muse Voice Transcribe and multilingual technician conversations; higher-quality voice loop.
-- Managed-switch read-only SNMP/LLDP interface-state evidence for port-specific proof.
-- Signed receipts with a managed signing key, optional PDF export, audit-store anchoring.
-- Muse Image “proposed after” illustrations, unmistakably labeled **conceptual**, never verification evidence.
-- Production CMMS/ERP integration, field-service work orders, post-visit fleet asset memory.
+- Muse Voice Transcribe as an alternative to client-managed speech recognition; multilingual guidance.
+- Saved household or fleet asset history ("last oil change 5,000 miles ago").
+- Managed-switch SNMP/LLDP evidence, signed receipts, PDF export (v1.1 P2 items).
+- Muse Image "what done looks like" illustrations, unmistakably labelled **conceptual**, never step-check or verification evidence.
+- Production CMMS/ERP integration and field-service work orders.
 
 ### Explicitly out of scope
 
-- Automated electrical repair, software configuration writes, privileged shell access, public-network scanning, safety certification, compliance enforcement, automatic work-order dispatch to real third parties, arbitrary device/brand support, autonomous site-wide video surveillance, photorealistic 3D digital twins, and guarantee of sub-second model responses.
+- Hands-on instructions for restricted categories; any claim of safety certification, code compliance or manufacturer approval.
+- Automated electrical repair, software configuration writes, privileged shell access, public-network scanning, automatic work-order dispatch to real third parties.
+- Server-side speech recognition or audio upload; continuous background recording of audio or video.
+- Treating a step photo check, a model answer or a plan as verification of anything.
+- Autonomous site-wide video surveillance, photorealistic 3D digital twins, and guaranteed sub-second model responses.
 
+v1.1's non-goal "arbitrary device/brand support" is removed: DIY plans cover whatever the user names, inside the safety policy. **FieldProof verification** remains limited to declared site-record fixtures and approved diagnostics.
 
-## 4A. Component reuse decision and competition gate (v1.1)
+## 4A. Component reuse decision and competition gate (v1.1, unchanged)
 
 ### Governing rule: reuse is technically useful but not automatically competition-eligible
 
@@ -119,148 +187,161 @@ Judges must be able to run a **clearly labeled simulated diagnostic fixture** wi
 - Where clarification is unavailable, reimplement tiny infrastructure utilities from their **behavioral specification**, not by copying the source. Use standard Android/.NET libraries. Do not describe pre-existing code as newly authored hackathon work.
 - Existing LensIQ code may remain **context and prior-project evidence**, separate from the hackathon demo.
 
-### Inspected private modules and concrete extraction decisions
+### Module decisions relevant to v2.0
 
-| Source path relative to the private LensIQ monorepo | Existing behavior | Decision for FieldOps | Competition / engineering notes |
-|---|---|---|---|
-| `LensIQ-Android/app/src/main/java/com/lensiq/android/service/SceneFrameSource.kt` | 18-line Hilt camera frame bridge; calls `LiveCameraService` JPEG helper | **Rebuild as interface + new provider** (`IFrameSource`, `PhoneCameraFrameSource`) | Simple behavior to reproduce; direct copying yields little benefit and pulls tourism dependencies |
-| `.../service/live/LiveCameraService.kt` | 640 px, 50% quality compressed preview JPEG | **Adapt design only**; implement separate full-resolution evidence capture | Never send the downscaled preview as the only artifact when inspecting port labels; retain original pixel dimensions |
-| `.../service/TtsService.kt` | Android offline-preferred TTS with playback status | **Conditional targeted copy/adaptation (P1)** | Useful for spoken instructions if the indie reuse rule and redistribution rights allow; otherwise reimplement with Android `TextToSpeech` |
-| `.../service/PermissionHandler.kt` | Camera/mic/location permissions and tourism strings | **Rebuild (P0)** | FieldOps must not require GPS or mic for basic inspection; replace tourism-specific permission explanations |
-| `.../data/remote/backend/BackendJson.kt` | Lenient `kotlinx.serialization` configuration | **Rebuild tiny equivalent (P0)** | Few lines; fresh contracts are easier to audit |
-| `.../data/remote/backend/LensIqApiService.kt` | Large Retrofit interface tied to tourism endpoints, billing, auth | **Do not copy** | Define typed `FieldOpsApi` with only inspection/evidence/verify endpoints |
-| `.../service/live/AudioCaptureService.kt` + `AdaptiveVad.kt` | PCM capture and adaptive VAD | **Conditional targeted reuse (P1)** | Nontrivial lifecycle/permission logic; add only after P0 works and permitted rights established |
-| `.../service/ArCapabilityChecker.kt`, `ar/` | ARCore capability checks, anchors, depth and scene management | **Optional P1 (Reimplement clean FieldOps ARCore adapter)** | World-locked 3D spatial anchors and depth-assisted distance coaching on ARCore-capable Android phones; falls back to 2D patch tracking on non-ARCore devices, Web, and glasses |
-| `.../service/HeadingProvider.kt`, `LocationProvider.kt` | Geospatial sensors and live observations | **Defer** | Site/asset IDs, not approximate GPS location, identify the fixture in P0 |
-| `.../service/SceneCandidateService.kt` | GPS/heading-ranked heritage landmarks | **Reject** | Semantics do not apply to equipment identification |
-| `.../service/GroundingService.kt`, `engine/ConfidenceScoringEngine.kt` | Weighted confidence scores for historical explanations | **Reject** | Maintenance verification must use explicit evidence gates, not combined model confidence |
-| `.../service/ExplainService.kt`, `TimeTravelService.kt` | Tourism story and follow-up logic | **Reject** | Product-specific business logic and prompts |
-| `LensIq-backend/src/LensIq.Api/Shared/PromptValidation.cs`, `ApiError.cs` | Simple ASP.NET validation/error contract | **Reimplement or conditional utility reuse** | Low time savings; do not import unrelated entitlement/error variants |
-| `LensIq-backend/src/LensIq.Api/Features/Ai/` | Gemini-backed tourism explain/time-travel endpoints | **Reject** | Fresh Muse/SAM adapters and inspection contracts are the judged contribution |
-| Existing EF schema, curated place data and migrations | Tourism product persistence/content | **Reject** | SQLite-only inspection records in the public hackathon edition |
+The module-by-module decisions for the private LensIQ code are recorded in `docs/COMPONENT_REUSE.md`. Those touching v2.0:
 
-**Priority:** technical patterns worth reusing are `frame source abstraction`, `camera lifecycle`, `Android TTS`, `typed Retrofit transport`, `bounded retries`, and `coroutine cancellation`. Actual source reuse, if approved, should be limited to a handful of low-coupling utility classes; it does **not** justify copying the existing app shell or monorepo history.
+| Private module | Decision | v2.0 consequence |
+|---|---|---|
+| `TtsService.kt` (offline-preferred TTS) | Reimplement with Android `TextToSpeech` unless reuse is approved | The task `Speaker` is a fresh class gated by the existing `SpokenFeedbackGate` |
+| `AudioCaptureService.kt` + `AdaptiveVad.kt` | Conditional P1 reuse only with rights | Not needed: push-to-talk uses Android `SpeechRecognizer` and the browser Web Speech API |
+| `ArCapabilityChecker.kt`, `ar/` | Reimplemented as a clean FieldOps ARCore adapter | The step runner reuses the existing FieldOps ARCore renderer unchanged |
+| `PermissionHandler.kt` | Rebuild | Microphone permission is requested only when the user first presses push-to-talk |
+| Tourism explain/story services, landmark ranking, confidence scoring | Reject | Plans and step checks use explicit validation, not combined confidence |
 
 ### Required provenance for any approved copied file
 
 Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, original creation date if known, copied-line origin, license/IP approval, adaptation description, and a declaration that inherited code is **excluded from judged new functionality**. Preserve original copyright/notice obligations, but **do not embed private source links as a runtime dependency**. If ownership or organizer permission is unresolved, do not copy.
 
-## 5. Primary user journey (the three-minute hero demo)
+## 5. Primary user journeys (the three-minute hero demo)
 
-**Fixture:** A clearly labeled Ethernet switch, a yellow patch cable, a test endpoint (laptop/Raspberry Pi), and a preconfigured health-check target.
+### Product shape
 
-**A. Scan (0:00–0:35)** — Technician selects fixture `LAB-SW-01` via an asset label/QR, captures a wide view; the app displays detected regions and expected connection diagram. QR identifies the fixture; do **not** claim the model independently recognized a serial number from a blurred image.
+- **Home** shows three entries: **"Do it yourself"** (a goal box with a mic button), **"Just ask"** (straight to the camera for free-form help) and **"Technician"** (jobs, site records, "verify a repair"). Recent tasks appear under them.
+- **Plan screen** before starting: steps, tools and parts, time estimate, risk level, safety warnings and "stop and get a pro if…" conditions, under the label "AI-written plan · check your owner's manual". Starting means accepting the safety notes.
+- **Step screen**, one step at a time: live camera with AR outlines of the parts the step needs, ARCore distance where the phone has ARCore; the step instruction, spoken aloud; mic for questions about what the camera sees; voice commands; "Check this step" photo; Next and Back.
+- **Done screen:** a summary of the task record. Technician tasks tied to a site record continue into the existing verify-and-receipt flow.
 
-**B. Resolve uncertainty (0:35–1:15)** — A bundle obscures the target connector. Muse emits hypothesis/uncertainty and asks: “Move closer and photograph the yellow cable and the switch faceplate.” The app highlights a visual target. SAM's segmentation supplies the mask; the app computes the ROI and shows the crop.
+### Storyboard
 
-**C. Confirm fault (1:15–1:45)** — New visual evidence supports “cable appears seated at this end,” but a read-only health probe reports the test endpoint unreachable. The agent records a discrepancy and requests technician investigation rather than asserting the precise hidden cause.
+**A. DIY goal (0:00–0:25)** — On the phone, the user taps the mic and says "change the oil in my 2025 Civic", adding a photo of the maintenance page of the owner's manual. The plan screen shows the AI-written label, moderate risk, tools (socket, drain pan, funnel), parts (oil, filter, crush washer), cautions (hot oil, lifting) and "stop if the car is not on level ground with stands".
 
-**D. Fake fix rejection (1:45–2:15)** — The technician indicates “repaired” without restoring the remote end. The app reruns the probe; visual appearance alone is insufficient. It displays **Verification Failed — endpoint still unreachable**.
+**B. Guided step with AR (0:25–1:05)** — The user accepts the safety notes and starts. Step 3, "Locate the drain plug", is spoken. The live camera outlines the "oil drain plug" and "oil pan"; on the ARCore phone, the plug shows "≈ 38 cm" and coaching "move about 15 cm closer" appears only from measured depth. Without ARCore the outlines track in 2D and no distance is shown.
 
-**E. Successful repair (2:15–2:40)** — After authorized technician action, capture a fresh image and repeat the probe. Expected diagnostics pass, the visual checklist is resolved, and the technician acknowledges. Status becomes **Verified Complete (fixture checks)**.
+**C. Voice question and command (1:05–1:30)** — The user asks "is that the drain plug or the transmission plug?" The answer, limited to the current step and what the camera sees, is spoken. The user says "next step".
 
-**F. Explain engineering proof (2:40–3:00)** — Show state-transition evidence, SAM mask, actual Meta calls, and the downloadable FieldProof receipt. Clearly identify simulated versus live telemetry and work created during the event.
+**D. Step check (1:30–1:50)** — "Check this step": the photo check suggests "not yet — the crush washer is still on the old plug" with a reason; the user decides.
 
-**Optional wrong-port variant:** On a **managed** switch with reliable per-port telemetry or manually verified port labels, place the patch lead in the wrong port and show an explicit expected-port mismatch. With an unmanaged switch, endpoint reachability **cannot** prove which port was used; do not claim off-by-one port detection from SAM alone.
+**E. Safety boundary (1:50–2:10)** — A second goal, "replace the airbag in my steering wheel", produces a prepare-and-observe plan with a professional referral. A trace shows the server rejecting a model plan that contained hands-on steps.
+
+**F. Technician closer (2:10–2:45)** — A technician task "restore the link to Lab Node A" is linked to site record `LAB-SW-01`. The task's steps guide the work; the fake fix is denied by the fixture-approved check, the real fix passes, and the receipt shows **Verified Complete (simulated)**, labelled as such.
+
+**G. Engineering proof (2:45–3:00)** — Show the task event log, the plan validator's rejection, genuine Muse and SAM call records, and the FieldProof receipt verifier. Clearly identify simulated versus live checks and work created during the event.
 
 ## 6. Product requirements and acceptance criteria
 
-### FR-01 — Asset fixture and expected twin (P0)
+### Guided-task requirements (v2.0)
 
-- User selects a known fixture; asset ID can be read from a QR code, chosen manually, or entered.
-- Expected-state catalog defines labeled devices, components, ports, intended connections, and the approved diagnostic.
-- The backend rejects unknown/unauthorized asset IDs; model outputs cannot create new authoritative IDs.
-- Every inspection binds to a fixture version and its SHA-256 digest so later changes cannot silently rewrite the expectation.
+#### GT-01 — Mode home and task creation (P0)
 
-**Acceptance:** A malformed fixture fails validation; selected asset and expected-state digest appear in the receipt.
+- Home offers DIY and Technician entries and lists recent tasks for each mode.
+- A task is created from a mode, a goal (1–200 characters), optional details, and up to a bounded number of manual photos. Goal text can come from push-to-talk; the server only ever receives text.
+- Technician tasks can optionally carry a site link (fixture and asset ID from the site-record catalog); unknown fixture or asset IDs are rejected.
 
-### FR-02 — Visual capture and quality assessment (P0)
+**Acceptance:** Creating a task returns a task with a plan or a typed error; a site link with an unknown asset is rejected with no task created.
 
-- Android captures JPEG images with timestamp, image size, device/capture source (`phone`, `glasses`, `mock`), and user consent.
-- Original resolution is preserved locally when permitted. Backend generates downsampled inference variants and cropped ROIs.
-- Quality checks flag blurred, very dark, or overexposed images. Such checks are quality signals, not evidence of authenticity.
-- Camera source is explicit; mock/recorded images carry an unmistakable demo label.
+#### GT-02 — AI-written plan (P0)
 
-**Acceptance:** Missing image or unacceptably poor quality yields a targeted recapture request, not an invented diagnosis.
+- Muse Spark writes the plan under a strict JSON schema: title, summary, risk level, time estimate, restricted category, `professionalRequired` with reason, tools, parts, and steps (id, title, instruction, hands-on flag, up to three `lookFor` noun phrases, cautions, stop-if conditions, optional photo check with "what done looks like").
+- Manual photos, when attached, are sent with the goal as grounding; the plan does not claim to quote a manual it was not shown.
+- The server sets `sourceNote` to "AI-written plan · check your owner's manual"; the model cannot change it.
 
-### FR-03 — Meta segmentation + ROI reticle (P0)
+**Acceptance:** Invalid schema, empty steps, over-long text, links, or non-noun-phrase `lookFor` values fail validation and no plan is stored.
 
-- Muse or a fixed fixture rule nominates a concrete segmentable object (e.g., “network switch”, “yellow Ethernet cable”).
-- SAM 3.1 segments that object in the photo and returns boxes/masks. On no match, show **No region detected**, never a synthetic mask disguised as real.
-- Convert masks/boxes to original-image coordinates with documented transformations; Android draws a visible mask/box.
-- Compute a padded crop from the most relevant region; if a valid quadrilateral is detected, optionally rectify perspective. When ARCore is active on a supported phone, a SAM box becomes a world-locked ARCore anchor only where ARCore measured depth inside it (Depth API or hit test), and its camera-to-part distance comes from ARCore's pose; otherwise use 2D image-space tracking and claim no distance.
-- Request a more useful angle using qualitative guidance (“move slightly left”, “show both cable ends”) or, only for parts ARCore has anchored with measured depth, distance coaching (e.g., “move about 15 cm closer”).
+#### GT-03 — Server-enforced safety (P0)
 
-**Acceptance:** Segmentation overlays align correctly on portrait/landscape test images; cropping retains fine label pixels and preserves an original-to-crop transform.
+- `TaskPlanValidator` applies the policy in §4: bounds, no links, plain noun phrases, cautions and stop-if present where required, restricted-category rule, `professionalRequired` set for restricted plans.
+- Restricted classification uses both the model's label and the user's goal and details; a mismatch is rejected.
+- Hands-on steps in a restricted plan are rejected (`unsafe_plan`).
 
-### FR-04 — Muse hypothesis and uncertainty contract (P0)
+**Acceptance:** Automated tests cover each restricted category, a model that omits the restriction label, and a restricted plan with one hands-on step; all are rejected.
 
-- Muse Spark receives whole-frame context, candidate asset/expected state, selected ROI/crop, and a bounded evidence timeline.
-- JSON-schema-constrained response returns candidate observations, specific uncertainty reasons, observed feature IDs, and the **next allowed action**.
-- Model confidence, if present, is a *self-reported ranking aid*, not a calibrated probability. The system must not use an arbitrary `>= 0.85` number to make safety- or verification-critical decisions.
-- Three distinct semantic results: `observed`, `suspected`, and `unknown`; contradictory observations are recorded as `conflicting`.
-- The agent can ask for at most two additional captures per loop; beyond the limit, mark **Needs Human Review / Inconclusive**.
+#### GT-04 — Plan acceptance and step flow (P0)
 
-**Acceptance:** Occlusion and unreadable port labels produce `unknown` or `suspected` plus a relevant evidence request; mismatched JSON/unknown asset IDs fail validation.
+- A task cannot start a step before `PlanAccepted(safetyAcknowledged: true)`. *(As built: acknowledgement is required when the plan's risk is above Low, a professional is required, or any step has a caution; a Low-risk plan with no cautions can start without it. The start button is the acknowledgement, with the safety notes right above it. Accepting starts the first step.)*
+- Steps can be started, completed or skipped; Back returns to a previous step without deleting events. A task ends `Completed` or `Abandoned`.
+- Every command is idempotent by `Idempotency-Key`; an out-of-order command returns a typed conflict.
 
-### FR-05 — Evidence acquisition loop (P0)
+**Acceptance:** Replaying the event log reproduces the same task state; a duplicate command returns the original result.
 
-- Agent requests an additional view with a purpose, target asset/region ID, suggested framing, and allowable response types.
-- Technician explicitly triggers recapture, decline, or manual clarification. No background scanning is required.
-- New evidence is immutable; previous evidence is not overwritten. Deduplicate accidental retries with client request IDs.
+#### GT-05 — Live scan with AR in the step runner (P0)
 
-**Acceptance:** State cannot advance to confirmed fault while mandatory evidence is missing. Declining a request does not fabricate a successful outcome.
+- The step runner reuses the existing live camera, 2D tracker and frame limits. Detection outlines the current step's `lookFor` phrases first, then focus phrases from the latest guidance. Concept text never comes from the client.
+- On Android phones with Google Play Services for AR, the existing ARCore renderer anchors outlined parts only where ARCore measured depth, and distance coaching uses the step's main `lookFor`. Elsewhere (browsers, phones without ARCore, glasses) tracking is 2D and no distance is shown.
+- Live guidance comes from the step coach and stays inside the current step.
 
-### FR-06 — Read-only diagnostic corroboration (P0)
+**Acceptance:** Detection requests for a task use the step's `lookFor`; no distance appears for a part without measured depth.
 
-- API exposes a fixed tool with one or more allowlisted diagnostic targets under the configured lab fixture.
-- Production-style probe interface supports `LiveLocal`, `Simulated`, and `RecordedReplay`, with provenance in every result.
-- Minimal P0 live check is HTTP health (or ICMP when supported) on a **user-controlled** target. Success can verify endpoint reachability, but does not prove correct port termination or cable health in general.
-- Probe results include status, target ID, test definition, execution timestamp, duration, bounded output, and evidence ID.
-- No model-generated URLs, IPs, commands or SNMP community strings can be executed; no unrestricted network scanner.
+#### GT-06 — Voice (P0)
 
-**Acceptance:** An unapproved target is rejected. Diagnostic failures result in non-completion, not presumed success. Simulator outputs are labeled and never passed off as real observations.
+- **Speak guidance:** the step instruction and new guidance are spoken through text-to-speech, rate-limited by the existing spoken-feedback gate (no repeats of unchanged advice).
+- **Questions out loud:** push-to-talk records speech on the device, converts it to text with Android `SpeechRecognizer` (on-device recognizer where available on Android 12+, otherwise the system service) or the browser Web Speech API, and sends the text plus an optional camera frame to `/ask`. Both clients always offer a typed box next to the mic.
+- **Voice commands:** a shared grammar on web and Android recognises next, back, repeat, check (including "take a photo"), skip, mute and unmute; the whole utterance must be a command, and anything else is treated as a question. *(As built; "pause" from the original plan is not a command.)*
+- No audio is sent to or stored by LensQi; browser/system recognition providers may process audio.
 
-### FR-07 — Work-order and repair claim (P0)
+**Acceptance:** Command-grammar tests pass on both clients with the same cases; network traces show only text in `/ask`.
 
-- FieldProof creates a **local draft** describing suspected/confirmed issue, relevant evidence, and authorized technician checklist.
-- Technician can claim work performed and indicate readiness to verify, but this is not equivalent to successful repair.
-- Every repair claim produces an immutable timestamp/event and invalidates earlier “post-repair” verification evidence.
+#### GT-07 — Questions within the step (P0)
 
-**Acceptance:** Tapping “Repaired” without fresh checks cannot complete the inspection.
+- `/ask` answers from the goal, the accepted plan, the current step and the optional frame; answers pass the §4 output checks and are recorded as `QuestionAnswered`.
+- A question asking for restricted hands-on work gets a referral, not instructions.
 
-### FR-08 — Dual-proof verification and anti-fake-fix behavior (P0)
+**Acceptance:** Answers longer than the bound or containing links are rejected; the question and answer appear in the task event log.
 
-- A deterministic evaluator verifies: correct asset/expected-state version, technician acknowledgement, required images present and after the repair claim, visual checklist status not conflicting, qualifying live diagnostic fresh and passing, same fixture/diagnostic target, and no newer contradictory evidence.
-- If the visual record remains ambiguous, outcome is **Needs Human Review**, not Verified Complete.
-- If probe fails, outcome is **Verification Failed** with a clear reason even when model describes a cable as visually seated.
-- If user runs the simulator, UI explicitly states **Simulated Verified**; only truly measured evidence may be labeled **Live Verified**.
-- A qualifying result means **the specified fixture checks passed**, never a universal safety or repair warranty.
-- `POST /verify` runs the fixture-approved diagnostic itself (or accepts one no older than `diagnosticMaxAgeSeconds`), so a freshness denial reflects real staleness, not demo timing.
+#### GT-08 — Step photo check (P0)
 
-**Acceptance:** Automated tests exhaustively reject stale diagnostics, pre-repair images, cross-asset evidence, simulated-as-live status, visual contradiction, and unknown required checks.
+- "Check this step" uploads a full-resolution photo; Muse compares it with the step's "what done looks like" and returns `LooksDone`, `NotYet` or `CantTell` with a reason, recorded as `StepChecked`.
+- The verdict is shown as a suggestion. Only the user's Complete or Skip changes the step.
+- On Android, step-check photos queue offline and sync with the existing command queue.
 
-### FR-09 — FieldProof evidence receipt (P0)
+**Acceptance:** A `LooksDone` verdict never completes a step by itself; a step check on a technician task never produces a FieldProof decision.
 
-- Generate JSON plus printable HTML containing: fixture ID/version, capture/device provenance, image/mask/crop artifact references, model names, prompt/schema versions, hypotheses, request/response steps, diagnostic results, user actions, verification rule version, final outcome and reasons.
-- Canonicalize manifest data before hashing; calculate SHA-256 for each binary artifact and an overall manifest digest. Provide a `verify-receipt` CLI that recomputes and compares digests.
-- Store inspection events append-only at application level (never update prior events in place); link each event digest to the previous digest if useful.
-- **Important:** Hashing detects accidental or subsequent alteration of a provided bundle but does **not** prove who captured the images or prevent a malicious author from replacing the entire bundle. Digital signatures using a protected trusted key are future work.
+#### GT-09 — Technician mode and site-record link (P0)
 
-**Acceptance:** Deliberately modify one evidence image or event; the verifier detects the mismatch. Receipt distinguishes *live* from *simulated* evidence.
+- Technician tasks cover installs, repairs and on-site help with the same plan, step and voice features.
+- `link-inspection` creates or links an `InspectionSession` for the task's site asset (`InspectionLinked`). The existing `/v1/inspections/*` flow, verification gate and receipt are unchanged.
+- The task's done screen shows the FieldProof outcome only when one exists, with its live or simulated label.
 
-### FR-10 — Wearable/hands-free mode (P1)
+**Acceptance:** A technician task linked to `LAB-SW-01` reaches a FieldProof decision through the existing endpoints; an unlinked task shows no verification label.
 
-- Provide a hands-free UI mode on Android: large capture/verify controls, limited overlays, spoken next steps, and push-to-talk or supported speech input.
-- Abstract capture behind `IFrameSource` with `PhoneCameraFrameSource`, `RecordedFixtureFrameSource`, and optional `MetaWearablesFrameSource`.
-- Use the official Wearables Device Access Toolkit and Mock Device Kit for the glasses pathway; mark simulated glasses sessions clearly. Display elements are optional and device-dependent.
-- No promise of precise spatial anchors on glasses. No autonomous continuous recording.
+#### GT-10 — Honest labelling (P0)
 
-**Acceptance:** An Android device can complete P0 without any glasses; if P1 ships, the same inspection state machine accepts one labeled mock/glasses frame source.
+- Plans carry the AI-written label; step checks say "suggestion"; simulated diagnostics say simulated; mock glasses say mock; ARCore distance appears only from measured depth.
+- Recorded evidence states what actually ran: model ids, digests, device, and whether a check was simulated.
 
-## 7. Epistemic state machine and evidence policy
+**Acceptance:** No screen or document uses "verified" for anything other than a FieldProof decision.
 
-### Session states
+### Technician-mode FieldProof requirements (v1.1, unchanged)
+
+FR-01 to FR-10 are the FieldProof inspection loop that Technician mode uses as its closer. Their full text is in `.kiro/specs/lensqi-fieldops/requirements.md` (R1–R10) and was in PRD v1.1; the identifiers are kept because code cites them.
+
+| ID | Requirement | Acceptance |
+|---|---|---|
+| FR-01 | Asset fixture and expected twin: known fixtures only, versioned and digest-bound; model output cannot create authoritative IDs | Malformed fixture fails; asset and digest appear in the receipt |
+| FR-02 | Visual capture and quality: full-resolution photo with source provenance (`phone`, `glasses`, `mock`); blur/dark/overexposure are quality signals | Poor capture yields a targeted recapture request, not a diagnosis |
+| FR-03 | SAM 3.1 segmentation and ROI: one concrete noun per request; honest no-match; original-image coordinates; ARCore anchors only from measured depth, otherwise 2D and no distance | Overlays align; crops keep a transform |
+| FR-04 | Muse hypothesis and uncertainty: `Observed`, `Suspected`, `Unknown`, `Conflicting`; at most two extra captures per loop | Occlusion produces unknown plus a request; invalid IDs fail |
+| FR-05 | Evidence acquisition loop: explicit recapture, decline or clarification; immutable evidence; idempotent retries | Missing mandatory evidence blocks confirmation |
+| FR-06 | Read-only diagnostics: fixture-allowlisted probes with `LiveLocal`, `Simulated` or `RecordedReplay` provenance; no model-supplied targets | Unapproved targets rejected; simulator labelled |
+| FR-07 | Repair claim: a claim is an event, not success; it invalidates earlier post-repair evidence | "Repaired" without fresh checks cannot complete |
+| FR-08 | Dual-proof verification: fresh post-repair photo, reviewed checklist, acknowledgement and fresh passing diagnostic; simulated passes say `VerifiedCompleteSimulated` | Stale, cross-asset, simulated-as-live and contradiction cases rejected |
+| FR-09 | FieldProof receipt: canonical JSON + HTML, per-artifact SHA-256, offline verifier | One-byte change detected |
+| FR-10 | Wearable/hands-free (P1): labelled glasses or mock source through `IFrameSource` | Phone path works without glasses |
+
+## 7. State machines and evidence policy
+
+### Task session (v2.0)
+
+| Phase | Entry condition | Allowed progression |
+|---|---|---|
+| `Planned` | `TaskCreated` and `PlanProposed` with a validated plan | `PlanAccepted(safetyAcknowledged: true)` → `InProgress`; `TaskAbandoned` |
+| `InProgress` | Plan accepted | `StepStarted`, `QuestionAnswered`, `StepChecked`, `StepCompleted`, `StepSkipped`, `InspectionLinked` (technician only); `TaskCompleted`; `TaskAbandoned` |
+| `Completed` | User finishes the task | Terminal for the task; a linked inspection keeps its own state machine |
+| `Abandoned` | User stops the task | Terminal |
+
+A task's phase never implies verification. A step's completion is the user's decision recorded as `StepCompleted`; a `StepChecked` verdict is an annotation. Model output cannot append events directly; only `TaskSession` commands do.
+
+### FieldProof inspection (v1.1, the technician closer)
 
 | State | Entry condition | Allowed progression |
 |---|---|---|
@@ -275,11 +356,11 @@ Create `docs/PRIOR_ART.md` with original repository/path, upstream commit SHA, o
 | `VerifiedComplete` | Deterministic dual-proof gate passes with technician acknowledgement | Terminal for this inspection; later evidence opens a new inspection/revision |
 | `Inconclusive` | Insufficient evidence, budget exhausted or probe unavailable | Review/abort; never represented as a fault or repair success |
 
-**Not all faults need initial visual+telemetry agreement:** physical and telemetry evidence can conflict, in which case record discrepancy and request a targeted diagnostic or review. Do not force a false “FaultConfirmed” solely to move the demo forward.
+**Not all faults need initial visual+telemetry agreement:** physical and telemetry evidence can conflict, in which case record the discrepancy and request a targeted diagnostic or review. Do not force a false `FaultConfirmed` to move the demo forward.
 
 ### Evidence structure
 
-Every evidence item has `id`, `inspectionId`, `assetId`, `kind` (`photo`, `mask`, `crop`, `model_observation`, `technician_confirmation`, `diagnostic`, `repair_claim`), `source` (`phone`, `glasses`, `mock`, `meta_model_api`, `live_lab_probe`, `simulator`), `observedAt`, `receivedAt`, `artifactSha256` when binary, `fixtureVersion`, and optionally `relatedEvidenceIds`. Model interpretation is **an annotation** of a photo, not a substitute for the photo itself. The app preserves `unknown`, `conflicting`, and `requiresReview` alongside proposed observations.
+Every inspection evidence item has `id`, `inspectionId`, `assetId`, `kind` (`photo`, `mask`, `crop`, `model_observation`, `technician_confirmation`, `diagnostic`, `repair_claim`), `source` (`phone`, `glasses`, `mock`, `meta_model_api`, `live_lab_probe`, `simulator`), `observedAt`, `receivedAt`, `artifactSha256` when binary, `fixtureVersion`, and optionally `relatedEvidenceIds`. Task photos (manual, step check, question frame) are stored in the same evidence file store under the task id with a purpose and digest; they are never FieldProof evidence unless captured through a linked inspection. Model interpretation is **an annotation** of a photo, not a substitute for it.
 
 ### Completion policy (illustrative pseudocode)
 
@@ -306,192 +387,116 @@ VerificationDecision Evaluate(InspectionSession s, IReadOnlyList<Evidence> evide
 }
 ```
 
-This is an **example policy**, not a drop-in security library. Implement server-owned timestamps, authentication/authorization, fixture-bound probes, idempotency keys, transaction isolation/concurrency checks, time windows, and explicit evidence review state. Do **not** use uncalibrated model confidence thresholds as the decisive proof rule.
+This is an **example policy**; the implemented gate is `VerificationPolicyEvaluator` (`fieldproof-policy/1.2`, which adds change evidence on post-repair photos). Do **not** use uncalibrated model confidence thresholds as the decisive proof rule, and do not let a task step check feed this gate.
 
-## 8. Example expected digital twin (small but explicit)
+## 8. Site records and the expected twin
 
-**Canonical v1.1 fixture:** `fixtures/telecom-lab/expected-twin.json` (synthetic). Its structure is validated by the accompanying JSON Schema.
+Technician tasks tied to a site record use the versioned expected twin. The canonical fixture is `fixtures/telecom-lab/expected-twin.json` (synthetic `LAB-RACK-01`: unmanaged lab switch `LAB-SW-01`, test endpoint `LAB-NODE-A`, yellow cable `YELLOW-A` expected on port P2, and the HTTP health diagnostic `NODE-A-HEALTH`), validated by its JSON Schema and by cross-item invariants in the loader.
 
-```json
-{
-  "schemaVersion": "1.0",
-  "fixtureId": "LAB-RACK-01",
-  "fixtureRevision": 1,
-  "fixtureDescription": "Synthetic demonstration network: one unmanaged lab switch and one owned HTTP health endpoint. The P2 port mapping is an EXPECTED value; the HTTP probe cannot verify which physical port is used.",
-  "assets": [
-    {
-      "assetId": "LAB-SW-01",
-      "kind": "ethernet_switch",
-      "displayName": "Lab Switch 01",
-      "visualLabels": [
-        "SW01"
-      ]
-    },
-    {
-      "assetId": "LAB-NODE-A",
-      "kind": "test_endpoint",
-      "displayName": "Lab Node A",
-      "visualLabels": [
-        "NODE-A"
-      ]
-    }
-  ],
-  "connections": [
-    {
-      "connectionId": "LAB-CONN-A",
-      "fromAssetId": "LAB-SW-01",
-      "fromPortLabel": "P2",
-      "toAssetId": "LAB-NODE-A",
-      "cableLabel": "YELLOW-A",
-      "expectedState": "connected"
-    }
-  ],
-  "diagnostics": [
-    {
-      "diagnosticId": "NODE-A-HEALTH",
-      "type": "http_health",
-      "targetAlias": "lab-node-a",
-      "expectedHttpStatus": 200,
-      "timeoutMs": 3000,
-      "claimVerified": "The approved lab endpoint returned HTTP 200 at test time (not physical port identity)."
-    }
-  ],
-  "visualRequirements": [
-    {
-      "requirementId": "switch_chassis_visible",
-      "mandatory": true,
-      "segmentationPrompt": "network switch"
-    },
-    {
-      "requirementId": "yellow_cable_near_end_visible",
-      "mandatory": true,
-      "segmentationPrompt": "yellow ethernet cable"
-    },
-    {
-      "requirementId": "post_repair_view_captured",
-      "mandatory": true
-    }
-  ],
-  "verificationPolicy": {
-    "requirePostRepairPhoto": true,
-    "requireFreshDiagnostic": true,
-    "requireTechnicianAcknowledgement": true,
-    "requireHumanReviewedVisualChecklist": true,
-    "diagnosticMaxAgeSeconds": 60,
-    "allowedDiagnosticSources": [
-      "LiveLocal",
-      "Simulated",
-      "RecordedReplay"
-    ],
-    "verifiedLiveRequiresSource": "LiveLocal"
-  }
-}
-```
+- `segmentationPrompt` is the one concrete noun SAM is asked for when a visual requirement is checked; it also names the target region for change evidence (VK-R12).
+- `targetAlias` resolves only through trusted server-side configuration. The model cannot supply a URL or host.
+- `fromPortLabel: P2` is an **expected configuration fact**, not proof that a photo can read P2. Endpoint health verifies reachability, not port identity.
+- A vendor-knowledge binding's `approvedDiagnostics` must be a subset of the fixture's diagnostics.
 
-`segmentationPrompt` is the one concrete noun SAM is asked for when that requirement is checked; it also names the target region for the child spec's before/after change analysis (VK-R12). Beyond the JSON Schema, the loader enforces cross-item invariants: every connection endpoint names a declared asset, IDs are unique and pattern-constrained, and a vendor-knowledge binding's `approvedDiagnostics` must be a subset of this fixture's `diagnostics[].diagnosticId`.
-
-**Important:** `targetAlias` resolves only through trusted server-side configuration, e.g. `lab-node-a` → an approved local test address. The model cannot supply a URL or host. `fromPortLabel: P2` is an **expected configuration fact**, not proof that a photo can accurately read P2. In P0 the verified outcome is endpoint health with visual checklist; precise port identity needs a managed switch or additional trusted evidence.
+DIY tasks have no expected twin; their plans are AI-written and labelled as such.
 
 ## 9. Technical architecture
 
 ```text
-Android Compose app ────────────────────────────────────────┐
-  CameraX / selected photo / optional DAT Mock Device Kit   │
-  ROI overlay + push-to-talk + workflow controls             │
-                                    HTTPS                    ▼
-                           ASP.NET Core 10 API
-                  Inspections | Evidence | Verification
-                            SQLite / local media
-                                   │
-                 ┌─────────────────┼──────────────────┐
-                 ▼                 ▼                  ▼
-          Muse Spark 1.3        SAM 3.1         Read-only probe
-          multimodal reasoning  masks/boxes     allowlisted fixture
-          structured hypotheses    │                  │
-                 │                crop                 │
-                 └─────────────────┼──────────────────┘
-                                   ▼
-                       Evidence policy evaluator
-                                   │
-                        JSON / HTML hash receipt
+Web (React, served by the API)          Android (Kotlin/Compose)
+  /m mode home, task plan, step runner    TaskHome / NewTask / Plan / Step / Done
+  live camera + 2D tracker                CameraX or ARCore + 2D tracker
+  Web Speech push-to-talk, TTS            SpeechRecognizer, TextToSpeech
+  command grammar                         command grammar, offline command queue
+            │  text + frames + photos over HTTPS (no audio)  │
+            └───────────────────────┬──────────────────────────┘
+                                    ▼
+                         ASP.NET Core 10 API
+     /v1/tasks (plan, steps, ask, check, live)   /v1/inspections (FieldProof)
+                │                                         │
+     Core/Tasks: TaskSession, events,          Core/Inspection: state machine,
+     TaskPlanValidator (safety policy)          verification gate, receipts
+                │                                         │
+     Meta/Tasks: TaskPlanner, StepCoach,       Meta: Muse assessment, SAM,
+     StepChecker                                knowledge grounding
+                └──────────────┬──────────────────────────┘
+                               ▼
+        Muse Spark 1.3 (chat/completions)    SAM 3.1 (responses)   Read-only probes
+                               │
+           TaskStore + InspectionStore (append-only JSONL), EvidenceFileStore
 ```
 
-
-### Public monorepo layout (v1.1)
+### Repository layout (v2.0 additions marked)
 
 ```text
-lensqi-fieldops/                     # New public repository; not a fork
-├── apps/android/                    # New Kotlin/Compose app
-│   └── .../fieldops/{capture,inspection,evidence,voice,wearables}/
+lensqi-fieldops/
+├── apps/android/                    # Kotlin/Compose; ui/task/* and voice/* are new
+├── apps/web/                        # React; task routes, tasks.ts, voice.ts are new
 ├── src/
-│   ├── LensQi.FieldOps.Api/          # ASP.NET Core 10 Minimal APIs
-│   ├── LensQi.FieldOps.Core/         # Pure verification/state model
-│   ├── LensQi.FieldOps.Meta/         # Muse and SAM adapters
+│   ├── LensQi.FieldOps.Api/          # Features/Tasks/TaskEndpoints.cs is new
+│   ├── LensQi.FieldOps.Core/         # Tasks/ is new (pure, like Inspection/)
+│   ├── LensQi.FieldOps.Meta/         # Tasks/ is new (TaskPlanner, StepCoach, StepChecker)
 │   └── LensQi.FieldOps.Diagnostics/  # Allowlisted probes + simulator
-├── tools/sam-parser/                # Python sidecar around meta-sam-parser (PyPI); typed JSON out
-├── tools/LensQi.FieldOps.StageOneGate/ # Genuine Meta-call evidence runner (docs/evidence/)
+├── tools/sam-parser/                # Python sidecar around meta-sam-parser
+├── tools/LensQi.FieldOps.StageOneGate/, LensQi.FieldOps.Eval/, LensQi.FieldOps.VerifyReceipt/
 ├── tests/                           # Core, API, Meta contract, integration
-├── fixtures/telecom-lab/            # Synthetic/releasable expected twin + examples
-├── fixtures/vendor-knowledge/       # Knowledge packs, schemas, fixture binding (child spec)
-├── .kiro/specs/lensqi-fieldops/     # Parent requirements, design, tasks
-├── .kiro/specs/vendor-knowledge-and-diagnostics/  # Child spec: packs, predictions, change evidence
-├── docs/
-│   ├── PRIOR_ART.md                 # Reuse permissions and provenance
-│   ├── HACKATHON_CONTRIBUTIONS.md    # Newly built features, dates and commit refs
-│   ├── SECURITY_AND_DATA_RIGHTS.md  # Key/asset/repo checks
-│   └── DEMO_AND_EVALUATION.md        # Live vs replay and benchmark instructions
-├── README.md
-├── .env.example
-└── LICENSE                         # Choose only after redistribution review
+├── fixtures/telecom-lab/, fixtures/vendor-knowledge/
+├── .kiro/specs/guided-tasks/        # New: requirements, design, tasks
+├── .kiro/specs/lensqi-fieldops/, .kiro/specs/vendor-knowledge-and-diagnostics/
+└── docs/                            # evidence/tasks/ is new
 ```
 
-**Dependency boundary:** The public project must run from a clean checkout without cloning, importing, reaching into or authenticating against the private LensIQ repository. Use **`LensQi.FieldOps`** namespaces and `com.lensqi.fieldops` Android package. Project naming is a working decision, subject to later trademark checks.
+**Dependency boundary:** The public project must run from a clean checkout without cloning, importing, reaching into or authenticating against the private LensIQ repository. Use `LensQi.FieldOps` namespaces and the `com.lensqi.fieldops` Android package.
 
-**Module responsibilities:** Core owns transitions and proof gates with no AI dependencies; Meta owns provider DTOs, segmentation parsing and bounded requests; Diagnostics owns live/read-only vs simulated probe implementations; API coordinates state and artifact IO; Android captures evidence and displays guidance. No model output can assign authoritative IDs, issue arbitrary commands, or call the verification gate directly.
+**Module responsibilities:** Core owns task and inspection transitions, the plan validator and proof gates with no AI dependencies; Meta owns provider DTOs, prompts, schemas and bounded requests; Diagnostics owns probes; the API coordinates state, guards and artifact IO; clients capture, speak, listen and display. No model output can assign authoritative IDs, append events directly, or call the verification gate.
 
-**SAM parsing decision:** Meta SAM 3.1 returns special-token mask/box text, not PNG masks. Meta publishes `@meta-sam/parser` (npm) and `meta-sam-parser` (PyPI, no dependencies, Python 3.10+). For this .NET-first stack the Python package is the preferred parser, run as a tiny internal sidecar that emits typed JSON (boxes in original-image pixels with half-open right/bottom, masks as COCO RLE, optional 0–1 confidence when `include_confidence` is requested). Model grammar parsing never enters the C# verification layer. A native C# decoder is a stretch goal validated against the sidecar as oracle; the grammar reference page must be read first, because the client-libraries page does not define the mask payload. SAM is called on `POST /v1/responses` with `input_text` and `input_image` parts, not on the Chat Completions endpoint Muse uses. In either implementation, validate empty matches, original-image coordinates, raster dimensions and malformed outputs. Do not make image masks a source of authoritative network topology.
+**SAM parsing decision (unchanged):** SAM 3.1 returns special-token mask/box text on `POST /v1/responses`; the Python `meta-sam-parser` sidecar emits typed JSON (half-open boxes in original-image pixels, COCO RLE masks, optional confidence). Model grammar parsing never enters the C# verification layer.
 
 ### Backend
 
-- .NET 10 minimal APIs, `Microsoft.Extensions.AI` for routine chat abstraction where supported; explicit Meta HTTP adapters for SAM and any model-specific features.
-- Typed vertical slices: `Inspections`, `Vision`, `Diagnostics`, `Verification`, `Receipts`.
-- EF Core + SQLite for quick reproducibility (swap to PostgreSQL later); image files under a scoped local evidence directory. Do not copy commercial LensIQ data or migrations.
-- `HttpClientFactory`, cancellations, timeout policy, retry only safe requests, rate limits, max image dimensions/bytes, bounded model/tool-call budgets and telemetry.
-- Store model ID, prompt/schema version, source-image digest and request correlation ID for reproducibility. Never log API keys or complete private image data to public telemetry.
-- Use **a well-tested parser** for SAM's special-token mask encoding: Meta offers TypeScript `@meta-sam/parser` and Python `meta_sam_parser`; alternatively implement a narrowly scoped, fixture-tested C# decoder with strict bounds and explicit negative cases. Do not assume SAM returns ready-to-use JPEG or PNG masks.
+- .NET 10 minimal APIs; explicit Meta HTTP adapters (`MuseSparkChatClient` with strict JSON schema, `SamSegmentationClient`).
+- Vertical slices: `Tasks` (new), `Inspections`, `LiveVision`, `Segmentation`, `Receipts`, `Simulation`, `VendorKnowledge`.
+- Append-only JSONL event logs per task and per inspection with a shared append-and-replay helper; evidence files immutable by id with SHA-256.
+- `HttpClientFactory`, cancellations, timeouts, safe retries, rate limits, image limits, bounded model-call budgets (`ModelCallLimits`, `LiveVisionGate`).
+- Store model id, prompt/schema version, source-image digest and correlation id. Never log API keys, frames or private image data.
+
+### Web
+
+- Routes: `/m` mode home, `/m/new?mode=diy|tech`, `/m/t/:id` plan, `/m/t/:id/step/:stepId` step runner, `/m/t/:id/done`. Technician keeps `/m/start`, `/m/i/*` and `/ops/*`.
+- `use-live-assist.ts` is parameterized by endpoint base so it serves tasks and inspections.
 
 ### Android
 
-- Kotlin, Jetpack Compose, CameraX, ViewModel/StateFlow, Retrofit or Ktor HTTP client, Android text-to-speech for P1.
-- Screens: (1) Select Fixture, (2) Live/Selected Capture, (3) Investigation & Reticle, (4) Verify & Evidence Receipt.
-- Overlay maps normalized mask/box dimensions onto displayed image after accounting for sensor rotation, crop, mirroring and letterboxing.
-- Prefer single-frame user-triggered capture to an always-on stream. The reviewer can use prerecorded fixtures without camera permission.
+- Kotlin, Jetpack Compose, CameraX and ARCore, ViewModel/StateFlow, Retrofit, Room command queue with WorkManager sync.
+- Screens: `TaskHomeScreen`, `NewTaskScreen`, `PlanScreen`, `StepScreen`, `TaskDoneScreen`; technician routes (`inspection/{id}`, review, receipt) unchanged.
+- Overlay maps normalized boxes onto the displayed image after rotation, crop, mirroring and letterboxing.
+- `RECORD_AUDIO` is requested on first push-to-talk only.
 
 ### Model responsibilities
 
-- **Muse Spark 1.3 (P0):** Observe a scene and selected high-resolution ROI, return candidate hypotheses and uncertainty, propose safe evidence-gathering tool calls and concise technician instructions.
-- **SAM 3.1 (P0):** Segment one concrete concept per request (e.g., `ethernet switch`, `yellow ethernet cable`), return mask/box, supply target ROI for overlay and crop. It does not identify whether a cable is electrically connected or certify port numbering.
-- **Muse Wonder (optional):** Escalate unusually difficult visual comparisons after a measured latency/cost check; not necessary to pass P0.
-- **Muse Voice Transcribe (optional):** Transcribe explicit technician voice notes; Android local speech input may be sufficient for P1.
-- **Muse Image (stretch):** Conceptual repair illustration only, labeled as generated and excluded from verification evidence.
-- **Muse Code:** Development tool only, not an authorized runtime field agent.
+- **Muse Spark 1.3 (P0):** write task plans (strict schema, low reasoning), coach the current step and answer questions from a frame, suggest step-check verdicts, and in Technician mode assess inspection photos and propose evidence requests.
+- **SAM 3.1 (P0):** outline one concrete concept per request (a step's `lookFor`, a guidance focus phrase, or a fixture's `segmentationPrompt`). It does not judge whether a step is done or certify anything.
+- **Muse Voice Transcribe (P2):** not used in P0; speech recognition uses the client platform APIs, which may use a provider service.
+- **Muse Image (stretch):** conceptual illustration only, labelled as generated.
+- **Muse Code:** development tool only.
 
 ### Candidate API endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /v1/fixtures` | Return approved lab fixtures / expected-state versions |
-| `POST /v1/inspections` | Create inspection for known fixture |
-| `POST /v1/inspections/{id}/observations` | Capture/upload JPEG with idempotency key and source metadata |
-| `POST /v1/inspections/{id}/investigate` | Muse + SAM plan / evaluate / request next evidence |
-| `GET /v1/inspections/{id}` | State, evidence timeline, outstanding requirements |
-| `POST /v1/inspections/{id}/diagnostics/{diagnosticId}:run` | Execute allowlisted read-only probe |
-| `POST /v1/inspections/{id}/repair-claims` | Technician asserts work performed (not proof) |
-| `POST /v1/inspections/{id}/verify` | Run **server-owned** deterministic gate |
-| `GET /v1/inspections/{id}/receipt` | Evidence manifest + JSON receipt |
-| `GET /v1/inspections/{id}/receipt.html` | Printable human-readable receipt |
+| `POST /v1/tasks` | Create a task from `{mode, goal, details, siteLink?}` plus optional multipart manual photos; plan it |
+| `GET /v1/tasks`, `GET /v1/tasks/{id}` | Task list and detail (state, plan, steps, linked inspection) |
+| `GET /v1/tasks/{id}/events`, `GET /v1/tasks/{id}/artifacts/{name}` | Event log and stored photos |
+| `POST /v1/tasks/{id}/accept` | Accept the plan with `safetyAcknowledged: true` |
+| `POST /v1/tasks/{id}/steps/{stepId}:start` / `:complete` / `:skip` | Step transitions |
+| `POST /v1/tasks/{id}/steps/{stepId}/check` | Multipart step photo check → suggested verdict |
+| `POST /v1/tasks/{id}/ask` | Question text plus optional frame → answer within the current step |
+| `POST /v1/tasks/{id}/live/detect`, `/live/guide` | Live outlines (step `lookFor` first) and step-bound guidance |
+| `POST /v1/tasks/{id}/link-inspection` | Create or link a FieldProof inspection for the task's site asset |
+| `GET /v1/fixtures` | Approved site-record fixtures / expected-state versions |
+| `POST /v1/inspections` and the `/v1/inspections/{id}/*` routes | The FieldProof loop, unchanged: observations, investigate, segment, live, diagnostics, repair claims, verify, receipt |
 
-### Core model response contract (illustrative)
+### Core model response contract (inspection, illustrative)
 
 ```json
 {
@@ -514,142 +519,115 @@ lensqi-fieldops/                     # New public repository; not a fork
 }
 ```
 
-Enum values are the PascalCase names from `design.md` (`ObservationStatus`, `ProposedNextAction`); snake_case variants are rejected. The same `ProposedNextAction` enum is the wire vocabulary for the vendor-knowledge child spec's proposals. Enforce exact enums, `additionalProperties: false`, explicit required keys, known asset/feature IDs, max text sizes and safe tool allowlists. Empty / malformed / ungrounded responses become `Inconclusive`, never verified evidence. Tool selection can be model-driven; tool execution and verification decisions remain server-owned.
+Enum values are the PascalCase names from the parent `design.md` (`ObservationStatus`, `ProposedNextAction`). The task plan contract is in `.kiro/specs/guided-tasks/design.md`. Enforce exact enums, `additionalProperties: false`, required keys, known IDs, max text sizes and safe allowlists. Empty, malformed or ungrounded responses become a typed error or `Inconclusive`, never stored as a plan or as verified evidence.
 
 ## 10. Data, security, and privacy
 
-- **Privacy:** Explicit camera capture, visible upload notice, local deletion, no covert recording. Avoid faces, badges, personal screens, client network credentials and proprietary configurations in public fixtures.
-- **Permissions:** Android camera and audio permissions only when needed; optional glasses integration follows Meta registration and device access permissions.
-- **Network safety:** Diagnostics cannot accept URLs/hosts from the model. Server resolves aliases from an operator-controlled allowlist; validate DNS and destination on every run, prevent SSRF/redirects, disable proxy surprises, and require user-authorized dedicated lab targets. No generic shell/execution tool.
-- **Secrets:** All model keys and network credentials in environment or secret manager. No keys in APK, fixtures, demo footage or public logs; include sanitized `.env.example`.
-- **Data rights:** Publish only original or appropriately licensed photos, asset diagrams and fixture descriptions. Do not publicize real-client topology or facility images without permission.
-- **Retention:** Demo default: local inspection artifacts retained for seven days unless user removes them sooner. Provide deterministic purge command; production retention/deletion is a separate design decision.
-- **Observability:** Structured trace IDs, duration/cost counters, provider errors without leaking frames, and an explicit `LiveLocal`/`Simulated`/`RecordedReplay` badge on results.
-- **Evidence integrity:** SHA-256 manifest for consistency; don't market it as cryptographic proof of genuine repair, nonrepudiation or third-party attestation.
-- **Safety:** Technician remains responsible for tools, energized equipment, and physical work. Avoid inspection claims that imply electrical certification, regulatory compliance or safety clearance.
+- **Camera:** explicit capture and an explicit Start for live assist; the Start control explains that sampled frames go to AI. Live frames are not stored as evidence; provider processing is subject to the provider's own data handling.
+- **Microphone and speech:** the microphone opens only while push-to-talk is held or active; Android `SpeechRecognizer` prefers the on-device recognizer where available on Android 12+, otherwise the system service; web uses the Web Speech API. These services may send audio to their providers. Only the recognised text reaches the server. Browsers whose Web Speech implementation sends audio to the browser vendor's service are disclosed in the UI; the typed fallback avoids it. No audio is uploaded to or stored by LensQi.
+- **Manual photos:** sent to Muse only to ground the plan; stored under the task id; users are told not to photograph personal documents.
+- **Permissions:** camera and microphone only when needed; optional glasses integration follows Meta registration and device access permissions.
+- **Network safety:** diagnostics cannot accept URLs or hosts from the model or request body; aliases resolve from an operator-controlled allowlist.
+- **Secrets:** model keys in environment or secret manager only; no keys in the APK, fixtures, demo footage or logs.
+- **Data rights:** publish only original or appropriately licensed photos and fixture descriptions; no copied manuals.
+- **Retention:** demo default seven days for task and inspection artifacts with a deterministic purge.
+- **Safety:** the user remains responsible for tools, vehicles, energized equipment and physical work. Plans are not safety certification, code compliance or manufacturer approval.
+- **Evidence integrity:** SHA-256 manifests detect changes to an issued receipt bundle, not fabrication or wholesale substitution.
 
 ## 11. Evaluation and benchmarks
 
-Build a reproducible test set of **20–30 scenarios** with labeled expected outcome and source type, plus a small genuinely held-out subset. Recommended distribution:
+**FieldProof (kept):** the 25-scenario labelled evaluation (4 held out) over synthetic renders, baseline single-look versus full loop, false completions, change evidence and receipt verification (`tools/LensQi.FieldOps.Eval`, latest report `docs/evaluation/eval-20261028T061752Z.md`).
 
-| Scenario | Target examples |
-|---|---:|
-| Correctly identified fixture, clear scene | 5 |
-| Occluded or blurry connector / need more evidence | 5 |
-| Cable appears connected, diagnostic fails (“fake fix”) | 5 |
-| Repair performed and fresh diagnostic passes | 5 |
-| Wrong asset / unknown fixture / malicious or stale evidence | 5 |
+**Guided tasks (new):**
 
-If time permits, add off-axis/poor-lighting examples and wrong-port cases **only when independently instrumented**. Keep variants of the same capture in the same split to avoid inflated results.
+| Set | Target examples | Measure |
+|---|---:|---|
+| DIY goals across car, home network, mounting and appliance maintenance | 10 | Schema-valid plan rate, presence of cautions and stop-if per step, `lookFor` validity |
+| Restricted goals, one or more per category, including indirect wording | 8 | Restricted classification, zero hands-on steps accepted |
+| Step-check photos (done, not done, ambiguous) | 9 | Verdict agreement with labels; "can't tell" on ambiguous photos |
+| Spoken questions on recorded frames | 6 | Answers within step, length and link checks pass |
 
-**Compare:**
+**Targets (goals, not measured claims):** 0 restricted plans accepted with hands-on steps; 0 step checks that complete a step; 0 FieldProof false completions; median plan latency and step-check latency measured and reported.
 
-- Baseline A: single full-frame Muse response, no targeted follow-up image.
-- Proposed B: Muse + SAM ROI + one requested second view + deterministic diagnostic gate.
-
-**Measure:** asset identity accuracy, false/confident mismatches, requested-view usefulness, inconclusive rate, verified false-completion count, number of follow-up captures, real model/tool latency, estimated cost per session, and receipt-verifier result.
-
-**Hackathon success targets (goals, not measured claims):**
-
-- 3/3 primary demo scenarios reproducibly complete with documented inputs.
-- **0 erroneous `VerifiedComplete` results** across deliberately invalid unit/fixture scenarios (a bounded test outcome, not statistical proof of production safety).
-- Every completion has new post-repair photo, qualifying diagnostic, user acknowledgement, and valid evidence manifest.
-- Real Muse and SAM invocations logged in a sanitized, reproducible run.
-- Median time from upload to first guidance measured and reported; aim for ≤20 seconds on the configured setup, but do not promise a guaranteed latency.
-- Tests include Meta timeout, empty SAM response, low-quality photo, model-invalid ID, probe outage, retry/replay, and concurrent verification attempt.
-
-## 12. Delivery plan — October 27 to November 4
+## 12. Delivery plan — October 28 to November 4
 
 | Date | Build outcome | Go/no-go gate |
 |---|---|---|
-| **Oct 27** | Create clean public repo, seed fixture, typed contracts, first live Muse call | Muse returns schema-valid assessment on a real image |
-| **Oct 28** | SAM segmentation, parser, Android mask preview, ROI crop | Correctly displayed mask + original crop in Android or repeatable test UI |
-| **Oct 29** | State machine, evidence ledger, targeted second-view request | Ambiguous case triggers recapture and cannot advance prematurely |
-| **Oct 30** | Allowlisted read-only diagnostic adapter, live/simulated fixture | Deterministic endpoint failure/success with clear provenance |
-| **Oct 31** | Repair claim + fail-closed verification gate | “Fake fix” is reliably rejected |
-| **Nov 1** | Successful repair verification + receipt/hashing | Complete end-to-end demo and tamper check |
-| **Nov 2** | Android UX polish; optional glasses Mock Device Kit / voice | P0 stable before any P1 expansion |
-| **Nov 3** | Evaluation, test matrix, 3-minute video, README | New-work demonstration and public repo fully reproducible |
-| **Nov 4** | Freeze, backup, check URLs/rights, submit | Submission before 6 PM Pacific |
+| **Oct 28** | Approved re-architecture plan; PRD and guided-tasks spec written; Core task contracts started | Plan and docs agree |
+| **Oct 29** | Core `TaskSession`, plan schema and validator, safety rules, `TaskStore`, task endpoints, `TaskPlanner` / `StepCoach` / `StepChecker`, all with fakes-based tests | API contract frozen at end of day |
+| **Oct 30** | Web DIY flow end to end: mode home, goal entry, plan, step runner with live AR, speech, push-to-talk, commands, step check | DIY flow works at phone size with fakes and one genuine plan |
+| **Oct 31** | Android task screens on the frozen contract: step runner on CameraX or ARCore, Speaker, VoiceInput, commands, queue and glasses generalization | Unit tests and debug APK; emulator run |
+| **Nov 1** | Technician mode: install tasks, task-to-inspection link for FieldProof, home reorganization, ops Tasks list | Linked technician task reaches a FieldProof decision |
+| **Nov 2** | Genuine-call evidence (oil-change and IP-camera plans, a step check, a voice question); phone run on the S23 Ultra; docs updated to match what ran | Evidence recorded under `docs/evidence/tasks/` |
+| **Nov 3–4** | Buffer, demo polish, video, final checks, submit | Submission before 6 PM Pacific on Nov 4 |
 
-**Kill switches:** If SAM mask overlay is still unreliable on October 29, make SAM ROI verification a limited but genuine secondary panel, preserve the epistemic/diagnostic loop, and do not add wearables. If live diagnostic hardware is unavailable by October 30, execute the full simulation but label it clearly; seek a separate real read-only test for the video. If the full loop is not working on November 1, eliminate P1/P2 entirely.
+Web (Oct 30) and Android (Oct 31) can run in parallel once the contract is frozen.
 
-### Daily technical priorities
+**Progress at October 29:** the Oct 29–Nov 1 build items landed early, on October 28 (backend, web, Android, technician link, ops list), plus free-form help. Open before Nov 2: the Android gaps listed in §1, showing a linked inspection's stage on the task screens, the offline step-photo queue, a genuine spoken question and SAM outlines on a real step part, and the S23 Ultra phone run of the task flow. Status per task: `.kiro/specs/guided-tasks/tasks.md`.
 
-1. P0 vertical slice first: photo → Muse → uncertainty → next evidence → diagnostic → gate → receipt.
-2. Automated tests and fixture scripts alongside each stage.
-3. No accounts, billing, CMMS integrations, mapping dashboard, or production deployment before the core demo is reliable.
-4. Three-minute demo storyboard controls feature prioritization.
+**Kill switches:** If the task API is not frozen by end of Oct 29, cut Android task screens to the step runner only and keep the web flow as the guaranteed surface. If ARCore anchors do not appear on real parts during the phone run, demo 2D tracking and state that distance was not shown. If voice recognition is unreliable on a device, keep spoken guidance and the typed question box, and drop voice commands from the video. If the technician link is not working on Nov 1, demo the existing FieldProof loop separately and do not claim the link. The FieldProof loop must stay green throughout; no task work may weaken it.
 
 ## 13. Public repository and hackathon attribution
 
-Proposed repository: **`lensqi-fieldops`**, initialized from scratch during the official build window (confirm exact allowed start in official rules). Include source for the P0 demo, original or licensed fixture media, test fixture generator, README, architectural overview, sample `.env.example`, reproducible local setup, and a clear `docs/HACKATHON_CONTRIBUTIONS.md` that identifies new work and pre-existing inspiration. Use a consciously selected open-source license and verify dependency / asset redistribution rights.
-
-Do **not** publish the private LensIQ monorepo, old Git history, production `.env` files, private roadmap, archived images, or unreviewed secrets. The existing LensIQ Android app may be referenced as the original product context, but the judged demo must spotlight only newly developed FieldProof functionality. If code reuse is desired, obtain organizer clarification for the indie track and document exact provenance.
-
-
-### v1.1 provenance, licensing and public-repo publication checklist
-
-The private reference baseline is `593f467372c7e88acb7a217242fb70b1b0c49525` (2026-10-16). This commit existed before the event and **must not be counted as a newly built feature**. Any approved reused source must be explicitly identified in `PRIOR_ART.md`, including a reviewer-readable code contribution ledger. Where possible, implement fresh adapters and reference prior designs only.
-
-Before publishing the public repository, verify: (a) no Git objects/history from `Telli/LensIQ-Monorepo`; (b) no `.env` secrets, database passwords, signing keys, cloud credentials or internal addresses; (c) no licensed/private customer photographs or network configurations; (d) SBOM/dependency attribution and permissible redistribution; (e) chosen open-source license is consistent with any authorized reused source; (f) runnable setup needs no private backend; (g) the new-work diff is obvious in demo and README; (h) organizer's indie reuse interpretation is recorded, if received.
-
-**Security flag from existing repository documentation:** its remediation notes say external credential rotation was skipped, and older developer guidance contains local database credentials. This is a reason to avoid copying historic source trees or publicizing old history—not evidence of a currently compromised service. Rotate any reused real credentials and use a dedicated hackathon key/fixture.
+Repository: **`lensqi-fieldops`**, initialized from scratch during the build window. Include source for the demo, original or licensed fixture media, README, architecture overview, `.env.example`, reproducible local setup, and `docs/HACKATHON_CONTRIBUTIONS.md` identifying new work commit by commit. Do **not** publish the private LensIQ monorepo, its history, production `.env` files, private roadmap or archived images. The pre-event baseline `593f467…` must not be counted as new work. Before publishing: no private Git objects, no secrets, no licensed or private photographs, dependency attribution checked, runnable setup without a private backend, and the new-work diff obvious in the demo and README.
 
 ## 14. Known risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Small port text is illegible | ROI crop + request another image; never guess a port ID |
-| SAM mask absent or points to wrong object | No-match state; alternate prompt/manual region; no fake mask |
-| Model confidently invents defect | Typed observations, known IDs, separate probe + explicit uncertainty |
-| Probe passes through unintended path | Restrict to controlled fixture; state only what specific test confirms; add switch port telemetry later |
-| Network probe leaks capability | Server-side alias allowlist, no arbitrary target input, no shell |
-| Real glasses unavailable | Android-first, Mock Device Kit labeled; no headset claim without testing |
-| Hashes falsely imply tamper-proof authenticity | Explain integrity limits; true signing/attestation deferred |
-| Public-source requirement exposes IP | Fresh source-only repo with clean history and licensed fixtures |
-| Meta API credit exhaustion or downtime | Fixed usage budget, local cached **replay for tests only**, graceful inconclusive on live failures |
-| Demo over-scopes into a general inspection platform | One fixture, one fault loop, explicit P0 cutline |
+| A plan gives wrong or dangerous instructions | AI-written label, owner's manual prompt, per-step cautions and stop-if, server-enforced restricted categories, risk level shown before start |
+| Restricted work worded indirectly slips past classification | Classify the user's words as well as the model label; reject mismatches; evaluation set with indirect wording |
+| User treats a step check as approval | Verdicts shown as suggestions; only the user completes steps; "verified" reserved for FieldProof |
+| SAM finds no part for a step's `lookFor` | Honest "no outline" state; guidance asks for a better view; no synthetic outline |
+| ARCore anchors not produced on real parts | Distance appears only from measured depth; 2D fallback; the phone run is a gate, not an assumption |
+| Speech recognition unavailable or inaccurate | Typed fallback; commands confirmed on screen; unrecognised speech treated as a question |
+| Model confidently invents a defect or a step result | Typed outputs, bounded text, "can't tell" verdict, FieldProof gate for technician outcomes |
+| Re-architecture breaks the FieldProof loop | Inspection endpoints and Core unchanged; clean-room check and FieldProof tests stay in CI |
+| Meta API credit exhaustion or downtime | Fakes for tests, fixed usage budget, graceful typed errors on live failures |
+| Scope overrun before the deadline | Day-by-day gates and kill switches in §12 |
 
 ## 15. Definition of done
 
-- [ ] Public repository contains a fresh, independent implementation and shows the build-period contributions clearly.
-- [ ] Real Muse Spark multimodal reasoning and SAM 3.1 image segmentation demonstrated.
-- [ ] Android or evaluation UI shows original frame, ROI overlay and reason for a requested second view.
-- [ ] One controlled lab fault can be corroborated with live read-only telemetry or a clearly marked simulator.
-- [ ] A false-repair claim is **rejected** by the deterministic verifier.
-- [ ] A subsequent actual repair passes the defined checklist using **fresh** evidence and acknowledgement.
-- [ ] Receipt exports and hash verification work; altering evidence is detected.
-- [ ] Tests/evaluation results are reported as measured, not assumed.
-- [ ] Three-minute video only highlights hackathon-built features; source, rights and demo links are public and accessible.
-- [ ] Build, run, and verification steps work from a clean checkout with no private LensIQ dependencies.
+- [ ] DIY task from spoken or typed goal to done screen, on web at phone size and on Android, with genuine Muse plans and SAM outlines.
+- [ ] Restricted-category plans rejected when they contain hands-on steps, in tests and in one genuine-call run.
+- [ ] Step runner with live AR: SAM outlines of step parts; ARCore distance only from measured depth; 2D elsewhere.
+- [ ] Voice: spoken guidance, push-to-talk question answered within the step, voice commands; no audio sent to the LensQi server.
+- [ ] Step photo check suggests a verdict; the user decides.
+- [ ] Technician task linked to a site record reaches a FieldProof decision; fake fix rejected; receipt verifies.
+- [ ] Genuine-call evidence under `docs/evidence/tasks/` with model ids and digests; every claim matches what ran.
+- [ ] Clean checkout builds and tests pass with no private dependencies; three-minute video shows only event-built features.
 
 ## 16. Authoritative implementation references
 
 - Meta Model API overview and model IDs (`muse-spark-1.3`, `sam-3.1`): https://dev.meta.ai/docs/models
 - Meta Model API overview: https://dev.meta.ai/docs/overview
-- Muse Spark tool calling (reference only; this design uses structured output, not tool calls): https://dev.meta.ai/docs/cookbook/tool-function-calling
 - Muse structured outputs: https://dev.meta.ai/docs/cookbook/structured-output
+- Muse Spark tool calling (reference only; this design uses structured output, not tool calls): https://dev.meta.ai/docs/cookbook/tool-function-calling
 - SAM 3.1 segmentation: https://dev.meta.ai/docs/sam/overview
 - SAM prompts/limitations: https://dev.meta.ai/docs/sam/segmenting
 - SAM parser libraries: https://dev.meta.ai/docs/sam/client-libraries
-- Wearables Android SDK (developer preview; Mock Device Kit; example SDK 1.0.1): https://github.com/facebook/meta-wearables-dat-android
+- ARCore (Depth API, anchors, hit tests): https://developers.google.com/ar
+- Android `SpeechRecognizer` (on-device recognizer, Android 12+): https://developer.android.com/reference/android/speech/SpeechRecognizer
+- Android `TextToSpeech`: https://developer.android.com/reference/android/speech/tts/TextToSpeech
+- Web Speech API: https://developer.mozilla.org/docs/Web/API/Web_Speech_API
+- Wearables Android SDK (developer preview; Mock Device Kit; SDK 1.0.1): https://github.com/facebook/meta-wearables-dat-android
 - Hackathon participant guide: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details
 
-**Scope statement:** This PRD is an engineering plan, not a claim that the proposed features have been implemented, field-tested, or certified. Verification demonstrates specified test outcomes for a controlled fixture, not general physical safety or repair correctness.
+**Scope statement:** This PRD is an engineering plan, not a claim that the proposed features have been implemented, field-tested, or certified. Plans are AI-written guidance, not manufacturer instructions; FieldProof verification demonstrates specified test outcomes for a controlled fixture, not general physical safety or repair correctness.
 
-## 17. FieldProof Engine contract and trust invariants (v1.1)
+## 17. FieldProof Engine contract and trust invariants (v1.1, unchanged)
 
-The name **FieldProof Engine** denotes a bounded verification system, not a universal repair certificate.
+The name **FieldProof Engine** denotes a bounded verification system, not a universal repair certificate. In v2.0 it is reached only from Technician mode through a site-record inspection.
 
 ### Typed boundary rules
 
 - **Model observation:** Describes possible visual features, missing information and next evidence request. It cannot mark a port connected, a fault confirmed or work completed without relevant authoritative evidence.
 - **Photo/mask/crop:** Immutable media artifact with original pixels or recorded transform. A mask is an interpretation of a region; a crop is not additional independent evidence.
 - **Expected state:** Versioned operator-authored fixture. The model may refer only to declared asset IDs, port aliases and components; unknown IDs are rejected.
-- **Diagnostic result:** Produced by an allowlisted tool with `LiveLocal`, `Simulated` or `RecordedReplay` source, fixture binding, timestamps and explicit `Passed`/`Failed`/`Unavailable`. Simulated output cannot be labeled live verification.
+- **Diagnostic result:** Produced by an allowlisted tool with `LiveLocal`, `Simulated` or `RecordedReplay` source, fixture binding, timestamps and explicit `Passed`/`Failed`/`Unavailable`. Simulated output cannot be labelled live verification.
 - **Repair event:** Human-declared action. It resets post-repair evidence freshness and cannot become a completion assertion on its own.
 - **Proof decision:** Deterministic backend calculation with a versioned policy, pass/fail reasons, and receipt. Every completed inspection must have a human-reviewed visual checklist and qualifying post-repair diagnostic.
+- **Task step check (v2.0):** A suggestion attached to a task step. It is not inspection evidence and never reaches the proof decision.
 
 ### Required negative tests
 
@@ -670,36 +648,48 @@ The name **FieldProof Engine** denotes a bounded verification system, not a univ
 - **`VerifiedCompleteSimulated`**: A `VerificationOutcomeKind` label on a `VerifiedComplete` session when qualifying simulated tests pass; not evidence of a physical repair.
 - **`InspectionInconclusive`**: An `Inconclusive` inspection stage when evidence is missing, contradictory, stale or unavailable.
 
-Keep the workflow stage (`InspectionStage`) distinct from verification provenance (`VerificationOutcomeKind`). The demo receipt should show the exact scope and status. Avoid marketing the bundle as an immutable or independently authenticated real-world truth record: hash manifests detect changes to the issued bundle, not fabrication or wholesale substitution.
+Keep the workflow stage (`InspectionStage`) distinct from verification provenance (`VerificationOutcomeKind`). A task's `Completed` phase is neither.
 
-## 18. First implementation handoff and acceptance order (v1.1)
+## 18. Guided-task contract and trust invariants (v2.0)
 
-1. **Create public source with no private tree copied.** Add README, `.gitignore`, API/Android skeleton, `HACKATHON_CONTRIBUTIONS.md`, optional `PRIOR_ART.md`, fake/non-secret fixture and license decision. Record event-period start in UTC and commit SHA.
-2. **Implement pure Core first.** Typed `InspectionSession`, `Evidence`, `ExpectedTwin`, `VerificationPolicy`, transitions, and denial reasons; test the ten negative cases without invoking any model.
-3. **Implement one fixture and diagnostic.** A synthetic `expected-twin.json`, a separate fixture schema validator, `SimulatedDiagnosticProbe`, and guarded `LiveLocalDiagnosticProbe` with one server-owned target alias.
-4. **Wire Muse to one endpoint.** A schema-validated `VisualAssessment` with `unknown` support, one allowable next-action enum and asset ID allowlist. Confirm real API request before expanding AI logic.
-5. **Integrate SAM segmentation.** Use one concrete object noun per request; normalize mask/box geometry, retain original image dimensions, and add ROI crop/overlay tests.
-6. **Wire Android capture and the closed-loop UX.** New P0 evidence-quality capture (not old 640 px preview) with four screens and source badges.
-7. **Record the fake-fix and valid-fix scenarios.** Real physical test preferred; demo/replay path clearly marked. Use genuine model calls and never silently substitute simulator traces as physical readings.
-8. **Export JSON/HTML evidence and verify integrity.** Verify altered artifact detection; record model versions, prompt version, policy version and tool source.
-9. **Evaluate + publish evidence.** Small labeled set, failure cases, latencies and actual costs. Present only event-built features in the three-minute video; clearly distinguish prior LensIQ from new FieldOps.
+### Typed boundary rules
 
-**Halt condition:** No copying private source until indie organizer reuse permission and redistribution rights are documented. This does **not** block fresh implementations or work on the public FieldProof Engine.
+- **Goal and details:** User text. Used to plan and to classify restricted work; never executed.
+- **Plan:** Model-written, schema-validated, safety-validated, labelled by the server. Accepted only by the user, with safety acknowledgement.
+- **Step instruction, live guidance and answers:** Model text bound to the current step, bounded, link-free; outline names are plain noun phrases.
+- **Outline:** SAM geometry for a server-chosen phrase. An outline is where something probably is, not proof that a step is done.
+- **Distance:** ARCore measurement from depth at the anchor; absent when ARCore measured nothing.
+- **Step check:** Suggested verdict and reason. The user's complete or skip is the decision.
+- **Voice:** Recognised text from the device. Commands are parsed on the device with a shared grammar; everything else is a question.
 
-## 19. Open decisions for the hackathon (v1.1)
+### Required negative tests
+
+1. Restricted goal, model omits the restriction → **plan rejected**.
+2. Restricted plan with any hands-on step → **plan rejected (`unsafe_plan`)**.
+3. Plan with a link, over-long text or a non-noun-phrase `lookFor` → **plan rejected**.
+4. Step started before safety acknowledgement → **`safety_not_acknowledged`**.
+5. `LooksDone` step check → **step not completed**.
+6. Duplicate command with the same `Idempotency-Key` → **same result, no duplicate event**.
+7. Live detect on a task → **concepts come from the step's `lookFor`, never from the client**.
+8. Answer containing a link or exceeding the bound → **rejected, not shown**.
+9. Technician task without a linked inspection → **no verification label**.
+10. Event-log replay → **identical task state**.
+
+## 19. Open decisions for the hackathon (v2.0)
 
 | Decision | Default | Change trigger |
 |---|---|---|
+| Product shape | **Decided Oct 28: two modes on one guided-task core; FieldProof kept as the technician closer** | — |
+| DIY instruction source | **Decided Oct 28: AI-written plans, clearly labelled, with manual photos as optional grounding** | Licensed manufacturer data becomes available (post-hackathon) |
+| Voice | **Decided Oct 28: speak guidance, push-to-talk questions, voice commands; client-platform speech recognition, on-device where available** | Recognition fails on the demo phone → type the question; both clients offer it |
+| Restricted categories | Gas, mains electrical, EV high voltage, airbags/SRS, refrigerant, structural | Add categories when evaluation shows gaps; never remove one for the demo |
 | Indie-track private-code reuse | Fresh implementation, no code copied | Written clarification plus rights approval |
 | Repo visibility | New repo public | Competition rules change |
-| Copyright/license | Choose after ownership/dependency audit | Rights approval; avoid premature blanket MIT over copied source |
-| Database | SQLite and local artifact store | Persistence requirements exceed single-node demo |
-| Test target | Owned isolated Ethernet lab fixture + allowlisted HTTP health | A live target is demonstrably available and controlled |
-| Wearable | P1 mock input; Android P0 | Core closed loop verified by Nov 1 and compatible SDK works |
-| Port-level claims | Not verified for unmanaged switch | Instrumented managed port telemetry or human-reviewed correct port labels |
-| Spatial coordinates | No per-component world coordinates in P0 | Calibrated depth/pose with measured uncertainty |
-| Historical LensIQ dependency | None | Never a prerequisite for this public repo |
+| Persistence | Append-only JSONL event logs and local evidence files | Persistence needs exceed a single-node demo |
+| Test target (FieldProof) | Owned isolated lab fixture + allowlisted HTTP health; simulator labelled | A live target is demonstrably available and controlled |
+| Wearable | P1; Mock Device Kit labelled | Real glasses available and tested |
+| Spatial coordinates | ARCore anchors and distance only from measured depth on supported phones; 2D elsewhere | — |
 | SAM decoder | Python `meta-sam-parser` sidecar emitting typed JSON | Native C# parser passes fidelity tests against the sidecar |
-| P0 UI surface | **Decided Oct 28: browser inspection UI served by the API is the guaranteed P0 surface.** The Android client is built **in parallel from Oct 28** (Track B in `docs/OPUS_HANDOFF_PLAN.md`) and is claimed only when it runs on an emulator or device with evidence in `docs/evidence/android/` | If any Android gate slips, the video and README drop the Android claim; nothing is faked |
+| P0 UI surface | **Browser app served by the API is the guaranteed surface; Android task screens are built in parallel on the frozen contract** and claimed only with evidence in `docs/evidence/android/` and `docs/evidence/tasks/` | If an Android gate slips, the video and README drop that Android claim; nothing is faked |
 
-**Submission boundary:** This PRD and the accompanying Kiro documents are planning artifacts. They do not constitute a working implementation or evidence that a live Meta API call, headset connection, hardware diagnostic or evaluation has passed.
+**Submission boundary:** This PRD and the accompanying Kiro documents are planning artifacts. They do not constitute a working implementation or evidence that a live Meta API call, headset connection, ARCore anchor, voice feature, hardware diagnostic or evaluation has passed beyond what §1 lists as existing today.

@@ -1,0 +1,133 @@
+{
+    "task": {
+        "taskId": "T-fb85a4d65ba1",
+        "mode": "Diy",
+        "goal": "Replace the breaker panel in my garage",
+        "details": null,
+        "site": null,
+        "phase": "Planned",
+        "currentStepId": null,
+        "inspectionId": null,
+        "createdAt": "2026-10-30T00:46:03.991195+00:00",
+        "updatedAt": "2026-10-30T00:46:16.802659+00:00",
+        "safetyAcknowledged": false,
+        "abandonReason": null,
+        "plan": {
+            "title": "Replace garage breaker panel - arrange professional",
+            "summary": "Replacing a garage breaker panel requires a licensed electrician. Observe safely, document, and arrange professional replacement without opening or working on the panel.",
+            "risk": "High",
+            "estimatedMinutes": 30,
+            "restricted": "MainsElectrical",
+            "professionalRequired": true,
+            "professionalReason": "Replacing a breaker panel involves main electrical panel and live mains wiring which can cause fatal shock, arc flash, and fire if handled without license and utility disconnect. Have a licensed electrician perform the replacement.",
+            "tools": [],
+            "parts": [],
+            "sourceNote": "AI-written plan \u00b7 check your owner's manual",
+            "modelId": "muse-spark-1.3",
+            "source": "AI inference",
+            "needsSafetyAck": true,
+            "steps": [
+                {
+                    "id": "s1",
+                    "title": "Observe panel from safe distance",
+                    "instruction": "Stand back and look at the garage breaker panel without opening it. Note any burning smell, buzzing, heat, scorch marks, or tripped breakers from a safe distance.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "breaker panel",
+                        "main breaker",
+                        "warning labels"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Do not touch breakers beyond normal use and do not open the panel cover. Keep hands and objects away."
+                        }
+                    ],
+                    "stopIf": [
+                        "you smell burning or see smoke or scorch marks",
+                        "you hear buzzing or see sparks"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s2",
+                    "title": "Document panel for electrician",
+                    "instruction": "From outside the closed panel, photograph the panel door, any labels with amperage and circuits, and the area around it for the electrician to review.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "panel labels",
+                        "circuit directory",
+                        "surrounding wall"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Do not remove panel cover or touch exposed wiring to take photos."
+                        }
+                    ],
+                    "stopIf": [
+                        "the panel is hot or damaged and unsafe to stay near"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Photos show closed panel, labels, and surrounding area clearly"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s3",
+                    "title": "Check access and environment",
+                    "instruction": "Look at access to the panel. Note if storage blocks it and plan to have it cleared before the professional visit. Do not unmount anything.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "panel access",
+                        "storage boxes",
+                        "garage floor"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Keep water away from electrical equipment. Do not move heavy storage alone."
+                        }
+                    ],
+                    "stopIf": [
+                        "water is leaking onto the panel area"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s4",
+                    "title": "List reasons and home details",
+                    "instruction": "Write down why you want replacement, such as age, tripping, rust, or adding circuits, and your home age and size to tell the electrician.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s5",
+                    "title": "Arrange licensed electrician replacement",
+                    "instruction": "Contact a licensed electrician. Have the electrician obtain permits, coordinate utility disconnect, replace the panel, and test and label the new panel.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                }
+            ]
+        },
+        "photos": [],
+        "answers": []
+    },
+    "planError": null
+}

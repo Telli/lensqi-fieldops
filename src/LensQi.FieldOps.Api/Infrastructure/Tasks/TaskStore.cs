@@ -1,0 +1,95 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using LensQi.FieldOps.Core.Knowledge;
+using LensQi.FieldOps.Core.Tasks;
+
+namespace LensQi.FieldOps.Api.Infrastructure.Tasks;
+
+/// <summary>
+/// Append-only guided-task store, the same mechanics as the inspection store: sessions in memory, one JSONL log per task
+/// (one event per line, never rewritten), one lock per task serialising its commands.
+/// </summary>
+public sealed class TaskStore
+{
+    private readonly ConcurrentDictionary<string, Entry> _tasks = new(StringComparer.Ordinal);
+    private readonly string _root;
+
+    private sealed class Entry(TaskSession session)
+    {
+        public TaskSession Session { get; } = session;
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public int PersistedCount { get; set; }
+    }
+
+    public sealed record SkippedLog(string File, string Reason);
+
+    public TaskStore(string dataDirectory)
+    {
+        _root = Path.Combine(dataDirectory, "tasks");
+        Directory.CreateDirectory(_root);
+    }
+
+    public IEnumerable<TaskSession> All => _tasks.Values.Select(e => e.Session);
+
+    public TaskSession? Find(string taskId) => _tasks.TryGetValue(taskId, out var e) ? e.Session : null;
+
+    /// <summary>Rebuilds every persisted task. A log that does not parse or is not contiguous is left on disk and reported.</summary>
+    public IReadOnlyList<SkippedLog> LoadPersisted()
+    {
+        var skipped = new List<SkippedLog>();
+        foreach (var path in Directory.EnumerateFiles(_root, "*.jsonl").OrderBy(p => p, StringComparer.Ordinal))
+        {
+            var file = Path.GetFileName(path);
+            try
+            {
+                var events = File.ReadLines(path).Where(l => !string.IsNullOrWhiteSpace(l))
+                    .Select(l => JsonSerializer.Deserialize<TaskEvent>(l, KnowledgeJson.Options) ?? throw new JsonException("null event")).ToList();
+                if (events.Count == 0 || events[0] is not TaskCreated created) { skipped.Add(new(file, "does not start with TaskCreated")); continue; }
+                if (created.TaskId + ".jsonl" != file) { skipped.Add(new(file, $"file name does not match {created.TaskId}")); continue; }
+                if (events.Select((e, i) => e.Sequence == i + 1 && e.TaskId == created.TaskId).Any(ok => !ok)) { skipped.Add(new(file, "sequence is not contiguous from 1 or mixes tasks")); continue; }
+                _tasks[created.TaskId] = new Entry(TaskSession.Rehydrate(events)) { PersistedCount = events.Count };
+            }
+            catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or TaskConflictException)
+            {
+                skipped.Add(new(file, ex.GetType().Name + ": " + ex.Message));
+            }
+        }
+        return skipped;
+    }
+
+    public TaskSession Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now)
+    {
+        var id = "T-" + Guid.NewGuid().ToString("N")[..12];
+        var entry = new Entry(TaskSession.Create(id, mode, goal, details, site, now));
+        _tasks[id] = entry;
+        Persist(entry);
+        return entry.Session;
+    }
+
+    /// <summary>Runs one command under the task's lock and appends any new events to its log.</summary>
+    public async Task<T> ExecuteAsync<T>(string taskId, Func<TaskSession, Task<T>> command, CancellationToken ct)
+    {
+        if (!_tasks.TryGetValue(taskId, out var entry)) throw new KeyNotFoundException(taskId);
+        await entry.Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var result = await command(entry.Session).ConfigureAwait(false);
+            Persist(entry);
+            return result;
+        }
+        finally { entry.Gate.Release(); }
+    }
+
+    public T Execute<T>(string taskId, Func<TaskSession, T> command) =>
+        ExecuteAsync(taskId, s => Task.FromResult(command(s)), CancellationToken.None).GetAwaiter().GetResult();
+
+    private void Persist(Entry entry)
+    {
+        var events = entry.Session.Events;
+        if (events.Count <= entry.PersistedCount) return;
+        using var writer = new StreamWriter(Path.Combine(_root, entry.Session.State.TaskId + ".jsonl"), append: true);
+        for (var i = entry.PersistedCount; i < events.Count; i++)
+            writer.WriteLine(JsonSerializer.Serialize(events[i], KnowledgeJson.Options));
+        entry.PersistedCount = events.Count;
+    }
+}

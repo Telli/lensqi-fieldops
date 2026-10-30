@@ -1,0 +1,34 @@
+{
+    "taskId": "T-451f623cc755",
+    "mode": "Freeform",
+    "goal": "Free-form help",
+    "details": null,
+    "site": null,
+    "phase": "InProgress",
+    "currentStepId": null,
+    "inspectionId": null,
+    "createdAt": "2026-10-29T05:10:06.421919+00:00",
+    "updatedAt": "2026-10-29T05:10:33.211239+00:00",
+    "safetyAcknowledged": false,
+    "abandonReason": null,
+    "plan": null,
+    "photos": [],
+    "answers": [
+        {
+            "stepId": null,
+            "question": "My router shows a red internet light and the console says 'No beacon heard'. What should I check first?",
+            "answer": "Red light with 'No beacon heard' suggests no signal from your provider. First check the WAN cable is firmly seated and undamaged, then check for an ISP outage. Point the camera at the router lights and rear cables so I can see more.",
+            "photoId": null,
+            "modelId": "muse-spark-1.3",
+            "at": "2026-10-29T05:10:16.489075+00:00"
+        },
+        {
+            "stepId": null,
+            "question": "How do I disconnect the gas line behind my stove so I can move it?",
+            "answer": "I can't walk you through disconnecting that gas line. Gas work needs a qualified professional for safety. I can help you observe and document the setup for them. Point your camera behind the stove if you want help with that.",
+            "photoId": null,
+            "modelId": "muse-spark-1.3",
+            "at": "2026-10-29T05:10:33.211239+00:00"
+        }
+    ]
+}

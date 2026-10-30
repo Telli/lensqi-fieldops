@@ -28,6 +28,24 @@ When Google Play Services for AR is installed, **3D AR: On** runs live assistanc
 
 The status pill reports ARCore's own state ("Live AR · ARCore tracking + depth", "AR paused · add light", …). If the session cannot start or the camera stays busy, the screen says so and continues in 2D.
 
+## Guided tasks and free-form help (added October 28–29)
+
+The task step runner (web `/m/t/:id/step/:stepId`, Android step screen) and free-form help (`/m/t/:id/live`, Android
+`FreeformScreen`) use the same camera, tracker and limits through `POST /v1/tasks/{id}/live/detect` and `/live/guide`.
+The live handler is shared with inspections; only the concept list and the guidance call differ.
+
+- Detection outlines the current step's `lookFor` phrases first, then the focus phrases of the latest step guidance.
+  Concept text still never comes from the client. Free-form help has no step, so only guidance focus phrases are used.
+- Guidance comes from `StepCoach` with the goal, the accepted plan and the current step as context, instead of the site
+  record. Inspections keep `LiveSceneService` and its prompt.
+- Live coaching on a step is opt-in, as for inspections. The endpoints refuse a closed task or a planned task without a
+  plan (`task_not_active`).
+- On Android the step screen reuses `CameraScreen`, so ARCore runs there on a supported phone. Distance coaching still
+  uses all tracked objects; it is not yet aimed at the step's main part.
+
+Checked in the browser pane and on the emulator with genuine Muse and SAM calls
+(`evidence/tasks/android-live-coaching.png`). Not yet run on a phone, so no ARCore anchor has been seen on a task step.
+
 ## Frame and session handling
 
 - Preview alone sends no frames. The Start control explains that sampled frames go to AI. FieldOps does not persist these frames as inspection evidence; provider processing is subject to the provider's own data handling.
