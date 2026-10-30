@@ -63,8 +63,8 @@ export function currentAttempt(events: EventRecord[]): Attempt | null {
     if (events[j]!.kind === "DiagnosticCompleted" && String(events[j]!["evidenceId"]).startsWith(VERIFY_DIAGNOSTIC_PREFIX))
       measured.unshift(events[j]!["result"] as DiagnosticResult);
 
-  const claimAt = [...events.slice(0, k)].reverse().findIndex((e) => e.kind === "RepairClaimed");
-  const sinceClaim = claimAt < 0 ? events.slice(0, k) : events.slice(k - claimAt, k);
+  const claimAt = events.slice(0, k).findLastIndex((e) => e.kind === "RepairClaimed");
+  const sinceClaim = claimAt < 0 ? events.slice(0, k) : events.slice(claimAt + 1, k);
   const ack = [...sinceClaim].reverse().find((e) => e.kind === "TechnicianAcknowledged");
   const review = new Map<string, Attempt["review"][number]>();
   for (const e of sinceClaim)
