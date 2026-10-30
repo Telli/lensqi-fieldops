@@ -71,6 +71,7 @@ as implementation commits land.
 | 2026-10-29T11:52:41-07:00 | `46348ef` | Review fixes: link-inspection under the task lock, step-check retry reuses its photo and verdict, generic 500 bodies; docs brought up to the reviewed code | dotnet 214/214 (3 new TaskApiTests); web 25/25 and Android 107/107 unchanged; secret_scan PASS | None |
 | 2026-10-29T12:31:07-07:00 | `3215c23` | UX pass and GT-T34–T37: one-tap plan from home, one-tap start, photo check never blocks Done, typing beside the mic, persisted task request ids, bare www. links caught, linked FieldProof outcome on the task summary | dotnet 220/220; web 25/25 + build; Android 107/107 + assembleDebug; browser at phone size with one genuine plan; secret_scan PASS | None |
 | 2026-10-29T17:44:22-07:00 | `f2dbb48` | PR review fixes: text-level safety for restricted work, Back dead end, idempotent questions, state checks before model calls, Android retries and refreshes | 237 .NET, 25 web, 108 Android unit tests; secret_scan PASS; not yet re-run on the emulator | None |
+| 2026-10-29T17:46:43-07:00 | `e85bbff` | Restricted-work text check counts an action only on the hazard itself | 240 .NET tests (118 Core); genuine breaker-panel plan passes with five observe/document steps (docs/evidence/tasks/plan-panel-text-checked.json) | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
