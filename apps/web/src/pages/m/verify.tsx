@@ -85,6 +85,8 @@ export default function Verify({ id }: { id: string }) {
   const btn = "h-12 w-full rounded-2xl";
   const before = beforePhoto(i);
   const blocking = i.readiness?.blocking ?? [];
+  // The server lists every unreviewed item on its own; in plain words they read the same, so each line shows once.
+  const waitingOn = [...new Set(blocking.map(plainReason))];
   const check = i.readiness?.checks[0];
   const target = fixture?.diagnostics[0]?.targetAlias;
   // The camera opens by itself when a photo is the next step and no decision is waiting to be read.
@@ -198,9 +200,9 @@ export default function Verify({ id }: { id: string }) {
           !showCamera && <div ref={nextStep} className="scroll-mt-20">{gateCard}</div>
         )}
 
-        {!attempt && !verify.isPending && blocking.length > 1 && card !== "closed" && (
-          <Expandable title={`Why verify can't run yet · ${blocking.length}`}>
-            <ul className="space-y-1.5 text-xs text-muted-foreground">{blocking.map((b) => <li key={b}>· {plainReason(b)}</li>)}</ul>
+        {!attempt && !verify.isPending && waitingOn.length > 1 && card !== "closed" && (
+          <Expandable title={`Why verify can't run yet · ${waitingOn.length}`}>
+            <ul className="space-y-1.5 text-xs text-muted-foreground">{waitingOn.map((b) => <li key={b}>· {b}</li>)}</ul>
           </Expandable>
         )}
         {!verify.isPending && <PredictionCard id={id} i={i} ev={ev} canAsk={!attempt && card === "run"} />}

@@ -1,15 +1,26 @@
 {
-  "bundle": "<repo>/src/LensQi.FieldOps.Api/data/receipts/I-3a3f101a9f39",
+  "bundle": "<repo>/src/LensQi.FieldOps.Api/data/record-20261030/receipts/I-cffb07882924/v1",
   "isValid": true,
   "checks": [
-    "manifest digest matches (89af352818d7…)",
-    "artifact photo-1b266686b9 matches (5889ea88e648…)",
-    "artifact photo-01ee3f8762 matches (5889ea88e648…)",
-    "artifact photo-bdc6eef07f matches (f3392814c818…)",
-    "artifact photo-cddf0e57df matches (5c85c8ca9c6d…)",
-    "4 artifact(s) listed",
-    "40 events contiguous",
-    "receipt.html carries the manifest digest"
+    "manifest digest matches (fa0ef210be85…)",
+    "artifact photo-b1f819e3a9 matches (5889ea88e648…)",
+    "artifact photo-b47076c62c matches (5889ea88e648…)",
+    "artifact photo-f46ecfba1c matches (f3392814c818…)",
+    "artifact photo-d28d6b9803 matches (5c85c8ca9c6d…)",
+    "artifact seg-b6a6552b23 matches (e4fcf0cbac98…)",
+    "artifact seg-4a1d953e19 matches (dcf402528688…)",
+    "artifact seg-de9536a4bf matches (b1d3108f7478…)",
+    "7 artifact(s) listed",
+    "39 events contiguous",
+    "receipt.html carries the manifest digest",
+    "manifest is the receipt issued at 2026-10-30 22:52:16Z"
   ],
-  "failures": []
+  "failures": [],
+  "issued": {
+    "manifestSha256": "fa0ef210be859166122e309cb4335c5c93674df45cb9af5b103552e881703ccc",
+    "eventCount": 39,
+    "issuedAt": "2026-10-30T22:52:16.672385+00:00",
+    "receiptVersion": "fieldproof-receipt/1.2",
+    "number": 1
+  }
 }

@@ -1,6 +1,7 @@
 package com.lensqi.fieldops.ui.common
 
 import com.lensqi.fieldops.data.api.InspectionStage
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
 import com.lensqi.fieldops.data.api.InspectionSummary
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.ObservationStatus
@@ -17,9 +18,14 @@ private fun join(xs: List<String>) = if (xs.size <= 1) xs.firstOrNull().orEmpty(
 fun aiSummary(v: InspectionView?, a: VisualAssessment?): String {
     if (v == null) return ""
     if (v.currentClaimId != null) {
-        if (v.stage == InspectionStage.VerifiedComplete) return "The new photo and a fresh equipment check both passed."
+        // A photo the server could not compare is accepted on the person's review alone, and is never called compared.
+        val uncompared = v.changeAnalyses.lastOrNull { it.claimId == v.currentClaimId && it.photoEvidenceId == v.acceptedPostRepairPhotoId }?.verdict == VisualChangeVerdict.Unscorable
+        if (v.stage == InspectionStage.VerifiedComplete)
+            return if (uncompared) "Your review of the new photo and a fresh equipment check both passed." else "The new photo and a fresh equipment check both passed."
         if (v.stage == InspectionStage.VerificationFailed) v.lastDecision?.reasons?.firstOrNull()?.let { return plainReason(it) }
-        if (v.acceptedPostRepairPhotoId != null) return "I've compared your repair photo with the earlier one and accepted it."
+        if (v.acceptedPostRepairPhotoId != null)
+            return if (uncompared) "I couldn't compare your repair photo with the earlier one, so the visual part rests on your review."
+            else "I've compared your repair photo with the earlier one and accepted it."
         v.changeAnalyses.lastOrNull { it.claimId == v.currentClaimId }?.let { return changeText(it.verdict).detail }
         return "Show me the repaired connection so I can compare it with before."
     }

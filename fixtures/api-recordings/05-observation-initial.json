@@ -1,5 +1,5 @@
 {
-  "evidenceId": "photo-1b266686b9",
+  "evidenceId": "photo-b1f819e3a9",
   "sha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
   "mediaType": "image/jpeg",
   "bytes": 74652,
@@ -15,7 +15,7 @@
   "origin": "Phone",
   "events": 2,
   "state": {
-    "inspectionId": "I-3a3f101a9f39",
+    "inspectionId": "I-cffb07882924",
     "fixtureId": "LAB-RACK-01",
     "fixtureRevision": 1,
     "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
@@ -28,17 +28,17 @@
     "technicianAcknowledged": false,
     "photos": [
       {
-        "evidenceId": "photo-1b266686b9",
+        "evidenceId": "photo-b1f819e3a9",
         "origin": "Phone",
         "artifactSha256": "5889ea88e648ccf623411eca0987ffb57b80c0f02c7435a4eba9f1033549d928",
-        "observedAt": "2026-10-28T09:18:14.940828+00:00",
+        "observedAt": "2026-10-30T22:52:02.559689+00:00",
         "quality": {
           "blurLaplacianVariance": 137.61,
           "meanLuminance": 43.996,
           "analyzerVersion": "image-quality/2 (pillow 13.0.0)"
         },
         "perceptualHash": "80809269495ab4a8",
-        "recordedAt": "2026-10-28T09:18:15.051519+00:00"
+        "recordedAt": "2026-10-30T22:52:02.676814+00:00"
       }
     ],
     "diagnostics": [],
@@ -46,10 +46,29 @@
     "segmentations": [],
     "changeAnalyses": [],
     "acceptedPostRepairPhotoId": null,
+    "awaitingAnalysis": [],
     "pendingPredictions": [],
     "predictionScores": [],
     "lastDecision": null,
     "evidenceRequests": [],
-    "outcomeKind": null
+    "outcomeKind": null,
+    "readiness": {
+      "ready": false,
+      "next": "None",
+      "blocking": [
+        "Verification does not apply in stage InitialScan"
+      ],
+      "checks": [
+        {
+          "diagnosticId": "NODE-A-HEALTH",
+          "lastRunAt": null,
+          "source": null,
+          "passed": null,
+          "value": null,
+          "afterClaim": false
+        }
+      ],
+      "measuresOnVerify": true
+    }
   }
 }

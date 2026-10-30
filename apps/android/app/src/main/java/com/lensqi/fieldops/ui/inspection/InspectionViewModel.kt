@@ -28,6 +28,8 @@ import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.api.VisualAssessment
 import com.lensqi.fieldops.data.api.PhotoEvidence
+import com.lensqi.fieldops.domain.Attempt
+import com.lensqi.fieldops.domain.currentAttempt
 import com.lensqi.fieldops.ui.common.AssetMatch
 import com.lensqi.fieldops.ui.common.assetMatch
 import com.lensqi.fieldops.ui.common.sentence
@@ -100,6 +102,8 @@ data class InspectionUi(
     val latestAssessment: VisualAssessment? = null,
     /** Every verification decision so far, oldest first. */
     val attempts: List<VerificationResult> = emptyList(),
+    /** The decision for the evidence on screen now, read from the events; null once a new claim, photo, review or confirmation follows it. */
+    val attempt: Attempt? = null,
     /** Demo control state of the simulated endpoint (Simulated mode only). */
     val simUp: Boolean? = null,
     /** Newest matched outline per part for the latest photo, and that photo's pixels. */
@@ -189,7 +193,7 @@ class InspectionViewModel @Inject constructor(
             ?.let { runCatching { json.decodeFromJsonElement(VisualAssessment.serializer(), it) }.getOrNull() }
         val attempts = events.filter { it["kind"]?.jsonPrimitive?.content == "VerificationEvaluated" }
             .mapNotNull { e -> e["decision"]?.jsonObject?.get("result")?.jsonPrimitive?.content?.let { r -> runCatching { VerificationResult.valueOf(r) }.getOrNull() } }
-        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts) }
+        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
         val latest = view.segmentations.filter { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }.associateBy { it.concept }.values.toList()

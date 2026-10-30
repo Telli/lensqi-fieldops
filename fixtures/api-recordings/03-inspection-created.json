@@ -1,5 +1,5 @@
 {
-  "inspectionId": "I-3a3f101a9f39",
+  "inspectionId": "I-cffb07882924",
   "fixtureId": "LAB-RACK-01",
   "fixtureRevision": 1,
   "fixtureDigest": "e7f5aea73e12fcb1316e110370336cc923d4f92b343b0da5bda3d1a9aa1c4061",
@@ -16,9 +16,28 @@
   "segmentations": [],
   "changeAnalyses": [],
   "acceptedPostRepairPhotoId": null,
+  "awaitingAnalysis": [],
   "pendingPredictions": [],
   "predictionScores": [],
   "lastDecision": null,
   "evidenceRequests": [],
-  "outcomeKind": null
+  "outcomeKind": null,
+  "readiness": {
+    "ready": false,
+    "next": "None",
+    "blocking": [
+      "Verification does not apply in stage Created"
+    ],
+    "checks": [
+      {
+        "diagnosticId": "NODE-A-HEALTH",
+        "lastRunAt": null,
+        "source": null,
+        "passed": null,
+        "value": null,
+        "afterClaim": false
+      }
+    ],
+    "measuresOnVerify": true
+  }
 }
