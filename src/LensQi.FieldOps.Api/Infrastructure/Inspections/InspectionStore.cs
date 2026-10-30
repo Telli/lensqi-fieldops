@@ -83,7 +83,7 @@ public sealed class InspectionStore
         return session;
     }
 
-    /// <summary>Runs one command under the inspection's lock and appends any new events to the JSONL log.</summary>
+    /// <summary>Runs one command under the inspection's lock and appends any new events to the JSONL log, even when the command throws.</summary>
     public async Task<T> ExecuteAsync<T>(string inspectionId, Func<InspectionSession, Task<T>> command, CancellationToken ct)
     {
         if (!_sessions.TryGetValue(inspectionId, out var entry))
@@ -91,13 +91,13 @@ public sealed class InspectionStore
         await entry.Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var result = await command(entry.Session).ConfigureAwait(false);
-            Persist(entry);
-            return result;
+            return await command(entry.Session).ConfigureAwait(false);
         }
         finally
         {
-            entry.Gate.Release();
+            // A command may append events and then fail a later check; what it appended is already the session's truth.
+            try { Persist(entry); }
+            finally { entry.Gate.Release(); }
         }
     }
 

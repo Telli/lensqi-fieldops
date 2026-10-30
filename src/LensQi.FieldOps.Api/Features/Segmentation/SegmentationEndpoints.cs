@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
@@ -24,6 +25,15 @@ public static class SegmentationEndpoints
         {
             var session = store.Find(id);
             if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
+            // A retried key returns the recorded segmentation instead of a second SAM call whose result would not be recorded.
+            var key = Features.Inspections.InspectionEndpoints.Key(http);
+            if (key is not null && session.Recorded(key) is { } done)
+            {
+                var earlier = done.OfType<SegmentationRecorded>().FirstOrDefault();
+                var stored = earlier is null ? null : Path.Combine(files.DataDirectoryPath, "evidence", id, earlier.EvidenceId + ".json");
+                if (stored is null || !File.Exists(stored)) return ApiResults.Conflict(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
+                return Results.Ok(new { segmentation = JsonNode.Parse(await File.ReadAllTextAsync(stored, ct)), state = Features.Inspections.InspectionEndpoints.View(session), replayed = true });
+            }
             var photo = req?.PhotoEvidenceId is { } pid ? session.State.Photos.FirstOrDefault(p => p.EvidenceId == pid) : session.State.Photos.LastOrDefault();
             if (photo is null) return ApiResults.Conflict(InspectionErrorCodes.InvalidState, "No photo to segment");
 
@@ -69,13 +79,13 @@ public static class SegmentationEndpoints
             };
             await File.WriteAllTextAsync(Path.Combine(evidenceDir, segId + ".json"), JsonSerializer.Serialize(geometry, new JsonSerializerOptions(KnowledgeJson.Options) { WriteIndented = true }), ct);
 
-            var requestId = http.Headers.TryGetValue("Idempotency-Key", out var k) && !string.IsNullOrWhiteSpace(k) ? k.ToString() : "segment:" + segId;
+            var requestId = key ?? "segment:" + segId;
             try
             {
                 return await store.ExecuteAsync(id, s =>
                 {
                     s.RecordSegmentation(requestId, segId, photo.EvidenceId, concept, outcome.Matched, maskSha, outcome.ModelId, clock.GetUtcNow());
-                    return Task.FromResult(Results.Ok(new { segmentation = geometry, state = Features.Inspections.InspectionEndpoints.View(s) }));
+                    return Task.FromResult(Results.Ok(new { segmentation = geometry, state = Features.Inspections.InspectionEndpoints.View(s), replayed = false }));
                 }, ct);
             }
             catch (InspectionConflictException ex) { return ApiResults.Conflict(ex.Code, ex.Message); }

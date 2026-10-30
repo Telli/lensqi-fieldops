@@ -82,10 +82,18 @@ public sealed class InspectionSession
             return Commit(batch);
         });
 
-    public IReadOnlyList<InspectionEvent> RecordAssessment(string requestId, string evidenceId, VisualAssessment assessment, DateTimeOffset now) =>
+    /// <summary>Whether <see cref="RecordAssessment"/> would accept an assessment now; lets a caller refuse before paying for a model call.</summary>
+    public bool AcceptsAssessment => State.Stage is InspectionStage.InitialScan or InspectionStage.NeedsEvidence or InspectionStage.FaultSuspected;
+
+    /// <summary>The events an earlier command with this request ID appended, or null when the ID is new.</summary>
+    public IReadOnlyList<InspectionEvent>? Recorded(string requestId) =>
+        _outcomes.TryGetValue(requestId, out var earlier) ? (IReadOnlyList<InspectionEvent>?)earlier ?? [] : null;
+
+    public IReadOnlyList<InspectionEvent> RecordAssessment(string requestId, string evidenceId, VisualAssessment assessment, DateTimeOffset now,
+        string? promptDigest = null, string? responseDigest = null) =>
         Idempotent(requestId, () =>
         {
-            Require(State.Stage is InspectionStage.InitialScan or InspectionStage.NeedsEvidence or InspectionStage.FaultSuspected, "Assessment is not accepted in the current stage");
+            Require(AcceptsAssessment, "Assessment is not accepted in the current stage");
             if (assessment.AssetId != State.AssetId)
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, $"Model named asset '{assessment.AssetId}' but the inspection is bound to '{State.AssetId}'");
             if (!Enum.IsDefined(assessment.NextAction))
@@ -101,7 +109,7 @@ public sealed class InspectionSession
             if (assessment.NextAction == ProposedNextAction.RequestView && string.IsNullOrWhiteSpace(assessment.RequestedView))
                 throw new InspectionConflictException(InspectionErrorCodes.InvalidModelOutput, "RequestView without a requested view");
 
-            var batch = new List<InspectionEvent> { new AssessmentRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, assessment) };
+            var batch = new List<InspectionEvent> { new AssessmentRecorded(Next(), State.InspectionId, now, State.FixtureDigest, evidenceId, assessment, promptDigest, responseDigest) };
             var anyUnknown = assessment.Hypotheses.Any(h => h.Status is ObservationStatus.Unknown or ObservationStatus.Conflicting);
             var anySuspected = assessment.Hypotheses.Any(h => h.Status is ObservationStatus.Suspected or ObservationStatus.Conflicting);
             InspectionStage? target = assessment.NextAction switch

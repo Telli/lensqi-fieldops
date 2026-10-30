@@ -46,7 +46,7 @@ public sealed record SegmentationRecorded(long Sequence, string InspectionId, Da
     string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record AssessmentRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string EvidenceId, VisualAssessment Assessment) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string EvidenceId, VisualAssessment Assessment, string? PromptDigest = null, string? ResponseDigest = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record ViewRequested(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     int RequestNumber, string Reason, string? TargetFeatureId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
