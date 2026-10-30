@@ -43,11 +43,17 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   const step = steps.find((s) => s.id === (stepId ?? t?.currentStepId));
   const n = stepIndex(t, step?.id);
   const open = t?.phase === "InProgress";
-  const assist = useLiveAssist(video, live === "on" && open && !!step, `/v1/tasks/${encodeURIComponent(id)}`);
+  // An earlier, finished step shown read-only. The server coaches and answers for its current step, so questions and live
+  // coaching stay off here rather than answer about a different step than the one on screen.
+  const reviewing = open && !!step && t?.currentStepId !== step.id;
+  const assist = useLiveAssist(video, live === "on" && open && !!step && !reviewing, `/v1/tasks/${encodeURIComponent(id)}`);
   const save = (next: Task) => qc.setQueryData(taskKeys.one(id), next);
 
-  // Camera for the whole visit; frames leave the phone only while live coaching is on.
+  // Camera for the whole visit, once the video element is on screen (after the task loads, on a cold start too); frames
+  // leave the phone only while live coaching is on.
+  const mounted = !!t && !!step;
   useEffect(() => {
+    if (!mounted) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) { setLive("off"); setCameraNote("Live camera isn't available here. You can still follow the steps and add photos."); return; }
     const v = video.current;
     const dispose = connectCamera(
@@ -56,7 +62,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       (e) => { setLive("off"); setCameraNote(cameraError(e)); },
     );
     return () => { dispose(); if (v) v.srcObject = null; };
-  }, []);
+  }, [mounted]);
 
   // The route names the step; the server's current step follows it, so coaching and questions use the right step.
   useEffect(() => {
@@ -76,6 +82,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
 
   async function ask(question: string) {
     if (!question.trim()) return;
+    if (reviewing) { toast.info("Questions are about the current step. Go to it to ask."); return; }
     setBusy("ask");
     try {
       const frame = live === "on" ? await grab(video.current, 1280) : null;
@@ -112,7 +119,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
 
   const voice = usePushToTalk((text) => {
     switch (parseCommand(text)) {
-      case "next": return void move("complete");
+      case "next": return void (reviewing && t?.currentStepId ? nav(`/m/t/${id}/step/${t.currentStepId}`) : move("complete"));
       case "back": return void move("back");
       case "skip": return void move("skip");
       case "check":
@@ -144,7 +151,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
             {speech.on ? <Volume2 className="size-5 text-primary" /> : <VolumeX className="size-5" />}
           </button>
         </div>
-        {live === "on" && (
+        {live === "on" && !reviewing && (
           <button onClick={() => assist.setEnabled(!assist.enabled)} aria-pressed={assist.enabled}
             className={cn("glass absolute bottom-3 left-3 flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs", assist.enabled && "text-primary")}>
             <Radio className="size-4" />{assist.enabled ? assist.status : "Start live coaching"}
@@ -175,7 +182,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
               {assist.screenText && <p className="mt-1 line-clamp-3 text-xs opacity-70">On screen: “{assist.screenText}”</p>}
             </div>
           </div>
-        ) : live === "on" && <p className="text-[11px] opacity-60">Live coaching sends sampled frames to AI for guidance. Only check photos are saved to the task.</p>}
+        ) : live === "on" && !reviewing && <p className="text-[11px] opacity-60">Live coaching sends sampled frames to AI for guidance. Only check photos are saved to the task.</p>}
 
         {answer && (
           <div className="space-y-1 rounded-2xl border border-primary/30 bg-primary/10 p-3 text-sm" aria-live="polite">
@@ -199,7 +206,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
               {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
             </button>
           )}
-          <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy === "ask"} placeholder={busy === "ask" ? "Thinking…" : "Ask about this step…"} aria-label="Ask a question"
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy === "ask" || reviewing} placeholder={busy === "ask" ? "Thinking…" : reviewing ? "Go to the current step to ask" : "Ask about this step…"} aria-label="Ask a question"
             className="h-12 min-w-0 flex-1 rounded-2xl border border-overlay-foreground/20 bg-transparent px-3 text-sm outline-none focus:border-primary" />
           {(typed.trim() || busy === "ask") && (
             <button type="submit" disabled={busy === "ask"} aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20">

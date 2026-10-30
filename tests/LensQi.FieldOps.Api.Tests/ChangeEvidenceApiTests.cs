@@ -141,11 +141,59 @@ public class ChangeEvidenceApiTests
         await flow.Post($"/v1/inspections/{flow.Id}/acknowledge");
         var v = await flow.Post($"/v1/inspections/{flow.Id}/verify");
         Assert.Equal("Verified", v.GetProperty("decision").GetProperty("result").GetString());
-        Assert.Equal("fieldproof-policy/1.2", v.GetProperty("decision").GetProperty("policyVersion").GetString());
+        Assert.Equal(VerificationPolicyEvaluator.PolicyVersion, v.GetProperty("decision").GetProperty("policyVersion").GetString());
 
         var html = await flow.Http.GetStringAsync($"/v1/inspections/{flow.Id}/receipt.html");
         Assert.Contains("Change evidence", html);
         Assert.Contains("Changed", html);
+    }
+
+    [Fact]
+    public async Task A_photo_awaiting_change_analysis_is_not_evidence_and_a_retry_finishes_the_analysis()
+    {
+        using var f = new FieldOpsApiFactory();
+        var flow = new Flow(f);
+        await flow.ToClaim(TestImages.Png(640, 480, salt: 1), Cable(700, 600));
+        HttpRequestMessage Upload()
+        {
+            var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(640, 480, salt: 2)), "image", "f.png" } };
+            form.Add(new StringContent(DateTimeOffset.UtcNow.ToString("o")), "observedAt");
+            var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/inspections/{flow.Id}/observations") { Content = form };
+            m.Headers.Add("Idempotency-Key", "post-repair-1");
+            return m;
+        }
+
+        // The photo is recorded, then the analysis is interrupted before its result is recorded.
+        f.FakeSam.Throw = new NotSupportedException("interrupted");
+        try { Assert.False((await flow.Http.SendAsync(Upload())).IsSuccessStatusCode); } catch (NotSupportedException) { }
+        var state = await flow.State();
+        var pending = state.GetProperty("photos").EnumerateArray().Last().GetProperty("evidenceId").GetString()!;
+        Assert.Equal(JsonValueKind.Null, state.GetProperty("acceptedPostRepairPhotoId").ValueKind);
+        var review = await flow.Http.PostAsJsonAsync($"/v1/inspections/{flow.Id}/checklist", new { requirementId = Mandatory[0], status = "Satisfied", photoEvidenceId = pending });
+        Assert.Equal(HttpStatusCode.Conflict, review.StatusCode);
+        Assert.Equal(InspectionErrorCodes.ChangeAnalysisPending, (await Flow.Json(review)).GetProperty("code").GetString());
+
+        // The retry answers for the recorded photo, finishes its analysis and keeps no second copy.
+        f.FakeSam.Throw = null;
+        f.FakeSam.Queued.Enqueue([Cable(300, 600)]);
+        var retry = await Flow.Json(await flow.Http.SendAsync(Upload()));
+        Assert.Equal(pending, retry.GetProperty("evidenceId").GetString());
+        Assert.Equal("Changed", retry.GetProperty("changeAnalysis").GetProperty("verdict").GetString());
+        Assert.Equal(pending, retry.GetProperty("state").GetProperty("acceptedPostRepairPhotoId").GetString());
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(f.DataDir, "evidence", flow.Id)).Count(p => Path.GetFileName(p).StartsWith("photo-")));
+    }
+
+    [Fact]
+    public async Task A_numeric_checklist_status_is_refused()
+    {
+        using var f = new FieldOpsApiFactory();
+        var flow = new Flow(f);
+        await flow.ToClaim(TestImages.Png(640, 480, salt: 1), preMask: null);
+        var post = (await flow.Upload(TestImages.Png(640, 480, salt: 2))).GetProperty("evidenceId").GetString();
+        var r = await flow.Http.PostAsync($"/v1/inspections/{flow.Id}/checklist",
+            new StringContent($$"""{"requirementId":"{{Mandatory[0]}}","status":999,"photoEvidenceId":"{{post}}"}""", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Empty((await flow.State()).GetProperty("checklist").EnumerateArray());
     }
 
     [Fact]

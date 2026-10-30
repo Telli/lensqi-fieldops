@@ -52,6 +52,9 @@ public static class TaskEndpoints
                 if (body is null) return ApiResults.BadRequest("A JSON body or multipart form is required");
                 (mode, goal, details, fixtureId, assetId) = (body.Mode, body.Goal, body.Details, body.FixtureId, body.AssetId);
             }
+            // GT-R01.5: a repeated creation key returns the task it made, with no new task, photos or plan call.
+            var creationKey = http.Headers.TryGetValue("Idempotency-Key", out var k) && !string.IsNullOrWhiteSpace(k) ? "create:" + k : null;
+            if (store.FindCreated(creationKey) is { } earlier) return Results.Ok(new { task = View(earlier), planError = (PlanError?)null, replayed = true });
             if (!Enum.TryParse<TaskMode>(mode, ignoreCase: true, out var taskMode)) return ApiResults.BadRequest("invalid_mode", "mode must be Diy, Technician or Freeform");
             SiteLink? site = null;
             PlanSiteContext? siteContext = null;
@@ -65,8 +68,9 @@ public static class TaskEndpoints
             }
             return await GuardAsync(async () =>
             {
-                var task = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow());
+                var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey);
                 var id = task.State.TaskId;
+                if (!created) return Results.Ok(new { task = View(task), planError = (PlanError?)null, replayed = true });
                 var manualIds = new List<string>();
                 foreach (var m in manuals)
                 {

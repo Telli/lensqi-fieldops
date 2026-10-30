@@ -105,9 +105,21 @@ public sealed record InspectionState
     public bool IsPostClaim(PhotoEvidence p) =>
         RepairClaimedAt is { } at && (p.RecordedAt ?? p.ObservedAt) > at && p.ObservedAt >= at - PhotoClockSkewTolerance;
 
-    /// <summary>Newest photo taken after the current claim that change analysis has not rejected (DuplicateImage, NoVisualChange).</summary>
+    /// <summary>
+    /// Newest photo taken after the current claim whose change analysis is recorded and did not reject it (DuplicateImage,
+    /// NoVisualChange). A photo still being analysed is not post-repair evidence yet.
+    /// </summary>
     public PhotoEvidence? LatestPostRepairPhoto =>
-        RepairClaimedAt is null ? null : Photos.Where(p => IsPostClaim(p) && !IsRejectedForCurrentClaim(p.EvidenceId)).OrderByDescending(p => p.RecordedAt ?? p.ObservedAt).FirstOrDefault();
+        RepairClaimedAt is null ? null : Photos.Where(p => IsPostClaim(p) && IsAnalysedForCurrentClaim(p.EvidenceId) && !IsRejectedForCurrentClaim(p.EvidenceId))
+            .OrderByDescending(p => p.RecordedAt ?? p.ObservedAt).FirstOrDefault();
+
+    /// <summary>Change analysis of this photo is recorded under the current claim.</summary>
+    public bool IsAnalysedForCurrentClaim(string photoEvidenceId) =>
+        CurrentClaimId is not null && ChangeAnalyses.Any(a => a.ClaimId == CurrentClaimId && a.PhotoEvidenceId == photoEvidenceId);
+
+    /// <summary>A post-claim photo whose change analysis has not been recorded yet.</summary>
+    public bool IsAwaitingAnalysis(string photoEvidenceId) =>
+        Photos.FirstOrDefault(p => p.EvidenceId == photoEvidenceId) is { } p && CurrentClaimId is not null && IsPostClaim(p) && !IsAnalysedForCurrentClaim(photoEvidenceId);
 
     /// <summary>The latest change analysis of this photo under the current claim rejected it as post-repair evidence.</summary>
     public bool IsRejectedForCurrentClaim(string photoEvidenceId) =>

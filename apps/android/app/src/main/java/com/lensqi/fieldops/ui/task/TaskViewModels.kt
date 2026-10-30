@@ -11,6 +11,7 @@ import com.lensqi.fieldops.data.api.TaskMode
 import com.lensqi.fieldops.data.api.TaskSummary
 import com.lensqi.fieldops.data.api.TaskView
 import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.api.retryable
 import com.lensqi.fieldops.domain.live.LiveResponse
 import com.lensqi.fieldops.ui.common.friendly
 import com.lensqi.fieldops.voice.Speaker
@@ -56,10 +57,16 @@ class TaskListViewModel @Inject constructor(private val api: FieldOpsApi) : View
     /** Free-form help: straight to the camera, no goal or plan. */
     fun justAsk(onCreated: (String) -> Unit) = create(TaskMode.Freeform, "", null, null, null, emptyList(), onCreated)
 
+    // A retried create reuses its key so the server returns the task it already made instead of making another.
+    private val createKeys = mutableMapOf<String, String>()
+
     fun create(mode: TaskMode, goal: String, details: String?, fixtureId: String?, assetId: String?, manuals: List<File>, onCreated: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(creating = true, error = null) }
         val parts = manuals.take(3).map { MultipartBody.Part.createFormData("manual", it.name, it.asRequestBody("image/jpeg".toMediaType())) }
-        val r = apiCall { api.createTask(key(), text(mode.name), text(goal.trim()), details?.takeIf { it.isNotBlank() }?.let(::text), fixtureId?.let(::text), assetId?.let(::text), parts) }
+        val action = "${mode.name}:${goal.trim()}"
+        val k = createKeys.getOrPut(action) { key() }
+        val r = apiCall { api.createTask(k, text(mode.name), text(goal.trim()), details?.takeIf { it.isNotBlank() }?.let(::text), fixtureId?.let(::text), assetId?.let(::text), parts) }
+        if (!r.retryable) createKeys.remove(action)
         _state.update { it.copy(creating = false, error = r.errorText()) }
         if (r is ApiOutcome.Ok) { refresh(); onCreated(r.value.task.taskId) }
     }
@@ -89,12 +96,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 
-    // One idempotency key per pending action: a retry after a lost response replays the server's outcome instead of being
-    // refused. The key is dropped once the server answered, either way.
+    // One idempotency key per pending action: a retry after a lost response, a server error or a failed model call replays
+    // the server's outcome (or reuses the photo it saved) instead of acting twice. A refusal drops the key.
     private val keys = mutableMapOf<String, String>()
     private fun keyFor(action: String) = keys.getOrPut(action) { key() }
     private fun <T> settle(action: String, r: ApiOutcome<T>) {
-        if (r !is ApiOutcome.Unreachable) keys.remove(action)
+        if (!r.retryable) keys.remove(action)
         // A refusal means the server's state moved on (for example the step was already done): show it.
         if (r is ApiOutcome.Rejected) refresh()
     }

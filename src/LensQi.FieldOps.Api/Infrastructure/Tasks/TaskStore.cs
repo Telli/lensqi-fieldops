@@ -12,6 +12,9 @@ namespace LensQi.FieldOps.Api.Infrastructure.Tasks;
 public sealed class TaskStore
 {
     private readonly ConcurrentDictionary<string, Entry> _tasks = new(StringComparer.Ordinal);
+    // Creation request key → task id, so a retried create returns the task it made (rebuilt from TaskCreated on load).
+    private readonly ConcurrentDictionary<string, string> _created = new(StringComparer.Ordinal);
+    private readonly Lock _createLock = new();
     private readonly string _root;
 
     private sealed class Entry(TaskSession session)
@@ -48,6 +51,7 @@ public sealed class TaskStore
                 if (created.TaskId + ".jsonl" != file) { skipped.Add(new(file, $"file name does not match {created.TaskId}")); continue; }
                 if (events.Select((e, i) => e.Sequence == i + 1 && e.TaskId == created.TaskId).Any(ok => !ok)) { skipped.Add(new(file, "sequence is not contiguous from 1 or mixes tasks")); continue; }
                 _tasks[created.TaskId] = new Entry(TaskSession.Rehydrate(events)) { PersistedCount = events.Count };
+                if (created.RequestId is { } key) _created[key] = created.TaskId;
             }
             catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or TaskConflictException)
             {
@@ -57,13 +61,23 @@ public sealed class TaskStore
         return skipped;
     }
 
-    public TaskSession Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now)
+    /// <summary>The task an earlier creation request with this key made, if any.</summary>
+    public TaskSession? FindCreated(string? requestKey) =>
+        requestKey is not null && _created.TryGetValue(requestKey, out var id) ? Find(id) : null;
+
+    /// <summary>Creates a task, or returns the one an earlier request with the same key created (<c>Created</c> false).</summary>
+    public (TaskSession Session, bool Created) Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestKey = null)
     {
-        var id = "T-" + Guid.NewGuid().ToString("N")[..12];
-        var entry = new Entry(TaskSession.Create(id, mode, goal, details, site, now));
-        _tasks[id] = entry;
-        Persist(entry);
-        return entry.Session;
+        lock (_createLock)
+        {
+            if (FindCreated(requestKey) is { } earlier) return (earlier, false);
+            var id = "T-" + Guid.NewGuid().ToString("N")[..12];
+            var entry = new Entry(TaskSession.Create(id, mode, goal, details, site, now, requestKey));
+            Persist(entry);
+            _tasks[id] = entry;
+            if (requestKey is not null) _created[requestKey] = id;
+            return (entry.Session, true);
+        }
     }
 
     /// <summary>Runs one command under the task's lock and appends any new events to its log.</summary>

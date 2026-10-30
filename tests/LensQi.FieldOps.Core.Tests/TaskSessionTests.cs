@@ -234,8 +234,22 @@ public class TaskSessionTests
     [InlineData("Disconnect the gas line and have a plumber inspect it.", true)]
     [InlineData("Call an electrician, then remove the panel cover.", true)]
     [InlineData("Have the electrician obtain permits, coordinate the utility, replace the panel and test it.", false)]
+    [InlineData("Call a qualified electrician for advice and remove the panel cover.", true)]
+    [InlineData("Ask an electrician about it and disconnect the gas line.", true)]
+    [InlineData("Call a licensed electrician to replace the breaker.", false)]
+    [InlineData("Hire a plumber to disconnect the gas line.", false)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
+
+    [Fact]
+    public void Contacting_a_professional_does_not_excuse_a_later_hands_on_step_in_a_restricted_plan()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Diy, "Replace my main electrical panel", null, null, T0);
+        var plan = Plan(RiskLevel.High, RestrictedCategory.MainsElectrical, true,
+            new TaskStep("s1", "Get advice", "Call a qualified electrician for advice and remove the panel cover.", false, [], [new Caution(CautionKind.Electrical, "Live parts")], [], null));
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => s.ProposePlan("a", plan, "muse", "p", "r", [], T0)).Code);
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(s.State, "Call a qualified electrician for advice and remove the panel cover."));
+    }
 
     [Fact]
     public void Restricted_steps_are_judged_by_their_words_not_only_the_models_label()

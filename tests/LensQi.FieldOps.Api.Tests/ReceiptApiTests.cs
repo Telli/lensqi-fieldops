@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Core.Receipts;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LensQi.FieldOps.Tests;
 
@@ -43,5 +45,28 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         var v = ReceiptVerifier.Verify(bundle);
         Assert.False(v.IsValid);
         Assert.Contains(v.Failures, f => f.Contains("file was altered"));
+        var endpoint = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt/verify")).RootElement;
+        Assert.False(endpoint.GetProperty("isValid").GetBoolean());
+        Assert.Contains(endpoint.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains("file was altered"));
+
+        // Reissuing the receipt keeps the recorded digest, so the altered copy still fails rather than being re-certified.
+        var reissued = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt")).RootElement;
+        Assert.Equal(_factory.Services.GetRequiredService<InspectionStore>().Find(id)!.State.Photos[0].ArtifactSha256,
+            reissued.GetProperty("artifacts")[0].GetProperty("sha256").GetString());
+        Assert.False(ReceiptVerifier.Verify(bundle).IsValid);
+
+        // Rewriting the manifest to match the altered file passes the bundle check but not the inspection record.
+        var receiptPath = Path.Combine(bundle, "receipt.json");
+        var node = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(receiptPath))!;
+        node["artifacts"]![0]!["sha256"] = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        node["manifestSha256"] = null;
+        var digest = CanonicalJson.Sha256(CanonicalJson.Serialize(node.AsObject()));
+        node["manifestSha256"] = digest;
+        File.WriteAllText(receiptPath, node.ToJsonString());
+        File.WriteAllText(Path.Combine(bundle, "receipt.html"), digest);
+        Assert.True(ReceiptVerifier.Verify(bundle).IsValid);
+        var forged = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt/verify")).RootElement;
+        Assert.False(forged.GetProperty("isValid").GetBoolean());
+        Assert.Contains(forged.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains("differs from the inspection record"));
     }
 }

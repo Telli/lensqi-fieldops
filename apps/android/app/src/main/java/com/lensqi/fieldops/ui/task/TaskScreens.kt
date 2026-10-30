@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -357,6 +358,9 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     LaunchedEffect(current?.id) { viewingId = null }
     val step = steps.firstOrNull { it.id == viewingId } ?: current
     val reviewing = step != null && current != null && step.id != current.id
+    // The server coaches and answers for its current step, so while an earlier step is on screen questions are off and
+    // live guidance is not spoken, rather than talk about a different step than the one shown.
+    val reviewingNow by rememberUpdatedState(reviewing)
     val n = steps.indexOfFirst { it.id == step?.id }
     // Not state: the camera hands this over on every composition, and voice commands only read it.
     val camera = remember { HandleRef() }
@@ -378,7 +382,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
             VoiceCommand.Repeat -> vm.speaker.speak("${current.title}. ${current.instruction}", force = true)
             VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
             VoiceCommand.Unmute -> vm.speaker.enabled = true
-            null -> vm.ask(said, camera.value?.latestFrame?.invoke())
+            null -> if (reviewingNow) vm.speaker.speak("Questions are about the current step. Say next to go to it.", force = true)
+                else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
     if (t == null || step == null) { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
@@ -389,11 +394,11 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
         header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,
-        onGuidance = { vm.speaker.speak(it) },
+        onGuidance = { if (!reviewingNow) vm.speaker.speak(it) },
         details = { StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error) },
         controls = { handle ->
             camera.value = handle
-            QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, "Ask about this step…",
+            QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
                 // LensQi stops talking while it listens, so it never hears itself as the question.
                 onMic = { if (voice.listening) voice.stop() else { vm.speaker.stop(); voice.start() } },
                 onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
@@ -421,20 +426,20 @@ private class HandleRef { var value: CameraHandle? = null }
 /** Ask by voice or by typing: both are always offered, so a missing microphone or a noisy room never blocks a question. */
 @Composable
 private fun QuestionRow(typed: String, onTyped: (String) -> Unit, voiceSupported: Boolean, listening: Boolean, asking: Boolean, enabled: Boolean, hint: String,
-                        onMic: () -> Unit, onSend: () -> Unit) {
+                        onMic: () -> Unit, onSend: () -> Unit, typingEnabled: Boolean = enabled) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (voiceSupported) Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(if (listening) FoDark.Primary else Color.Black.copy(alpha = .4f))
             .border(1.dp, FoDark.Border, RoundedCornerShape(16.dp)).clickable(enabled = enabled && !asking, onClick = onMic), contentAlignment = Alignment.Center) {
             Icon(if (listening) Icons.Outlined.Stop else Icons.Outlined.Mic, if (listening) "Stop listening" else "Ask or say a command", tint = FoDark.Foreground)
         }
-        OutlinedTextField(typed, onTyped, Modifier.weight(1f), enabled = enabled && !asking, singleLine = true,
+        OutlinedTextField(typed, onTyped, Modifier.weight(1f), enabled = typingEnabled && !asking, singleLine = true,
             placeholder = { Text(if (asking) "Thinking…" else hint) },
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = FoDark.Foreground, unfocusedTextColor = FoDark.Foreground, disabledTextColor = FoDark.Muted,
                 focusedPlaceholderColor = FoDark.Muted, unfocusedPlaceholderColor = FoDark.Muted, disabledPlaceholderColor = FoDark.Muted,
                 focusedBorderColor = FoDark.Primary, unfocusedBorderColor = FoDark.Border, disabledBorderColor = FoDark.Border, cursorColor = FoDark.Primary,
                 focusedContainerColor = Color.Black.copy(alpha = .4f), unfocusedContainerColor = Color.Black.copy(alpha = .4f), disabledContainerColor = Color.Black.copy(alpha = .4f)))
         if (asking || typed.isNotBlank()) Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .4f)).border(1.dp, FoDark.Border, RoundedCornerShape(16.dp))
-            .clickable(enabled = enabled && !asking && typed.isNotBlank(), onClick = onSend), contentAlignment = Alignment.Center) {
+            .clickable(enabled = typingEnabled && !asking && typed.isNotBlank(), onClick = onSend), contentAlignment = Alignment.Center) {
             if (asking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Outlined.Send, "Ask", tint = FoDark.Foreground)
         }
     }

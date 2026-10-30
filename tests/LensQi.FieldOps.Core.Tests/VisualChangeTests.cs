@@ -88,6 +88,7 @@ public class VisualChangeTests
         Assert.False(tiny.RejectsPhoto);
     }
 
+    /// <summary>A claim plus a post-claim photo whose change analysis is not recorded yet.</summary>
     private static (InspectionTestKit Kit, string PostPhoto) ClaimWithPostPhoto(string sha = "post-sha")
     {
         var k = new InspectionTestKit();
@@ -117,10 +118,12 @@ public class VisualChangeTests
         k.Tick();
         k.Session.RecordPhoto("rp2", "photo-new", EvidenceOrigin.Phone, "new-sha", k.Now, 1600, 1000, k.Now, null, "ffffffffffffff00");
         Assert.Equal(InspectionStage.ReadyToVerify, k.Session.State.Stage);
+        Assert.Null(k.Session.State.LatestPostRepairPhoto); // not evidence until its analysis is recorded
+        k.Analyse("photo-new");
         Assert.Equal("photo-new", k.Session.State.LatestPostRepairPhoto!.EvidenceId);
         var replayed = InspectionState.Replay(k.Session.Events);
         Assert.Equal(k.Session.State.Stage, replayed.Stage);
-        Assert.Equal(dup, replayed.ChangeAnalyses.Single());
+        Assert.Equal(dup, replayed.ChangeAnalyses.First());
         Assert.True(replayed.IsRejectedForCurrentClaim(post));
     }
 
@@ -138,6 +141,40 @@ public class VisualChangeTests
         k.Session.RecordVisualChange("n", noChange, k.Now);
         Assert.Equal(InspectionStage.NeedsEvidence, k.Session.State.Stage);
         Assert.True(k.Session.State.IsRejectedForCurrentClaim(post));
+    }
+
+    [Fact]
+    public void A_photo_awaiting_change_analysis_cannot_be_reviewed_or_verified()
+    {
+        var (k, post) = ClaimWithPostPhoto();
+        Assert.True(k.Session.State.IsAwaitingAnalysis(post));
+        Assert.Null(k.Session.State.LatestPostRepairPhoto);
+        var pending = Assert.Throws<InspectionConflictException>(() => k.Session.ReviewChecklist("rv", "switch_chassis_visible", ChecklistStatus.Satisfied, post, k.Now));
+        Assert.Equal(InspectionErrorCodes.ChangeAnalysisPending, pending.Code);
+        k.Session.Acknowledge("ack", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        var d = VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now);
+        Assert.NotEqual(VerificationResult.Verified, d.Result);
+        Assert.Contains("still being compared", d.Reasons[0]);
+    }
+
+    [Fact]
+    public void Only_an_explicit_satisfied_review_meets_a_requirement()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        k.Tick(); var p = k.Photo();
+        Assert.Throws<InspectionConflictException>(() => k.Session.ReviewChecklist("rv", "switch_chassis_visible", (ChecklistStatus)999, p, k.Now));
+        Assert.Empty(k.Session.State.Checklist);
+
+        // An undefined value that reached the state anyway (an old log) still does not satisfy the policy.
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("rv-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, p, k.Now);
+        k.Session.Acknowledge("ack", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        Assert.Equal(VerificationResult.Verified, VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now).Result);
+        var forged = k.Session.State with { Checklist = k.Session.State.Checklist.ToDictionary(e => e.Key, e => e.Value with { Status = (ChecklistStatus)999 }) };
+        Assert.Equal(VerificationResult.Denied, VerificationPolicyEvaluator.Evaluate(forged, k.Twin, k.Now).Result);
     }
 
     [Fact]
@@ -161,6 +198,7 @@ public class VisualChangeTests
         k.Tick(5);
         // device clock truncated to the second (or a few seconds behind): still the post-repair photo
         k.Session.RecordPhoto("r1", "photo-skewed", EvidenceOrigin.Phone, "sha-1", claimedAt.AddSeconds(-3), 1600, 1000, k.Now, null, "0000000000000001");
+        k.Analyse("photo-skewed");
         Assert.Equal("photo-skewed", k.Session.State.LatestPostRepairPhoto!.EvidenceId);
         Assert.Equal(k.Now, k.Session.State.Photos.Last().RecordedAt);
 
@@ -179,18 +217,20 @@ public class VisualChangeTests
     public void Policy_denies_a_checklist_reviewed_against_a_photo_that_was_later_rejected()
     {
         var (k, post) = ClaimWithPostPhoto();
+        k.Analyse(post);
         foreach (var req in k.Twin.Twin.MandatoryRequirements)
             k.Session.ReviewChecklist("rv-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, post, k.Now);
         k.Session.Acknowledge("ack", k.Now);
         k.Tick();
         // a second, accepted post-claim photo exists, but the reviews still cite the rejected one
         k.Session.RecordPhoto("rp2", "photo-ok", EvidenceOrigin.Phone, "ok-sha", k.Now, 1600, 1000, k.Now, null, "ffffffffffffff00");
+        k.Analyse("photo-ok");
         var photo = k.Session.State.Photos.Single(p => p.EvidenceId == post);
         k.Session.RecordVisualChange("rc", VisualChangeAnalyzer.Duplicate(k.Session.State.CurrentClaimId!, photo, k.Session.State.Photos[0].EvidenceId, 0, T), k.Now);
         k.Tick(); k.RecordProbe(k.Probe(true));
         var d = VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now);
         Assert.Equal(VerificationResult.Denied, d.Result);
         Assert.Contains("change analysis rejected", d.Reasons[0]);
-        Assert.Equal("fieldproof-policy/1.2", d.PolicyVersion);
+        Assert.Equal(VerificationPolicyEvaluator.PolicyVersion, d.PolicyVersion);
     }
 }

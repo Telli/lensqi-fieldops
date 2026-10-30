@@ -201,7 +201,11 @@ public sealed class InspectionSession
         {
             Require(_twin.Twin.VisualRequirements.Any(v => v.RequirementId == requirementId), $"Unknown visual requirement '{requirementId}'");
             Require(State.RepairClaimedAt is not null, "Checklist review applies after a repair claim");
+            Require(Enum.IsDefined(status), $"Unknown checklist status '{status}'");
             Require(State.Photos.Any(p => p.EvidenceId == reviewedByEvidenceId), "Review must cite a photo in this inspection");
+            if (State.IsAwaitingAnalysis(reviewedByEvidenceId))
+                throw new InspectionConflictException(InspectionErrorCodes.ChangeAnalysisPending,
+                    $"Photo '{reviewedByEvidenceId}' is still being compared with the earlier view; review it once change analysis is recorded");
             if (State.IsRejectedForCurrentClaim(reviewedByEvidenceId))
                 throw new InspectionConflictException(InspectionErrorCodes.ChangeEvidenceRejected,
                     $"Photo '{reviewedByEvidenceId}' was rejected by change analysis ({State.ChangeAnalyses.Last(a => a.PhotoEvidenceId == reviewedByEvidenceId).Verdict}); capture a new post-repair view");

@@ -77,6 +77,8 @@ public static class InspectionErrorCodes
     public const string DuplicateEvidence = "duplicate_evidence";
     /// <summary>The cited photo was rejected by change analysis (DuplicateImage or NoVisualChange) for the current claim.</summary>
     public const string ChangeEvidenceRejected = "change_evidence_rejected";
+    /// <summary>The cited post-repair photo has no change analysis for the current claim yet.</summary>
+    public const string ChangeAnalysisPending = "change_analysis_pending";
     public const string PredictionLate = "prediction_late";
 }
 

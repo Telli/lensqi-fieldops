@@ -118,10 +118,11 @@ public static class TaskSafety
     private const string Pro = @"(licensed |qualified |certified |a |an |the |your )*(electrician|plumber|professional|pro|technician|installer|contractor|engineer|dealer|mechanic|gas company|utility)";
     // "Do not open the panel", "never disconnect…": a negation within three words before the action.
     private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+(\S+\s+){0,2}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    // "Have a licensed electrician replace…", "a plumber should disconnect…": the action belongs to someone else, but only
-    // when the delegation comes before it in the same clause. "Remove the cover, and call an electrician" and "call an
-    // electrician, then remove the cover" still tell the person to act.
-    private static readonly Regex Delegated = new($@"((have|let|ask|call|get|hire|book)\s+{Pro}|{Pro}\s+(should|will|can|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // "Have a licensed electrician replace…", "ask a plumber to disconnect…", "a plumber should disconnect…": the action
+    // belongs to someone else, but only when the delegation comes before it in the same clause. Merely contacting a
+    // professional hands nothing over: "call an electrician for advice and remove the cover", "remove the cover, and call
+    // an electrician" and "call an electrician, then remove the cover" all still tell the person to act.
+    private static readonly Regex Delegated = new($@"((have|let)\s+{Pro}|(ask|call|get|hire|book|pay)\s+{Pro}\s+to(?![a-z])|{Pro}\s+(should|will|can|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex ClauseBreak = new(@"(?<![a-z])then(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 

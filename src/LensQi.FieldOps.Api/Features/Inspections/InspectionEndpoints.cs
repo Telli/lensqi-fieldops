@@ -102,20 +102,33 @@ public static class InspectionEndpoints
             {
                 var events = await store.ExecuteAsync(id, s => Task.FromResult(
                     s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), measured?.Quality, measured?.PerceptualHash)), ct);
-                // VK-T26: a photo taken after the current claim gets change evidence before anyone can review or verify it.
-                // A replayed Idempotency-Key returns the earlier events and records no new photo, so nothing is analysed twice.
+                // A replayed Idempotency-Key returns the earlier events and records no new photo: the answer is about the photo
+                // recorded the first time, and the copy this attempt saved is dropped.
+                if (events.OfType<PhotoRecorded>().FirstOrDefault() is { } recorded && recorded.EvidenceId != evidenceId)
+                {
+                    File.Delete(artifactPath);
+                    evidenceId = recorded.EvidenceId;
+                    artifactPath = Directory.EnumerateFiles(Path.Combine(files.DataDirectoryPath, "evidence", id))
+                        .First(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal));
+                }
+                // VK-T26: a photo taken after the current claim gets change evidence before anyone can review or verify it,
+                // and is not post-repair evidence until then. A retry finishes an analysis an earlier attempt did not record.
                 VisualChangeAnalysis? analysis = null;
                 var session = store.Find(id)!;
                 if (session.State.Photos.FirstOrDefault(p => p.EvidenceId == evidenceId) is { } photo && ChangeEvidenceService.Applies(session.State, photo))
                 {
-                    var result = await change.AnalyzeAsync(session.State, photo, artifactPath, ct);
-                    analysis = result.Analysis;
-                    await store.ExecuteAsync(id, s =>
+                    analysis = session.State.ChangeAnalyses.LastOrDefault(a => a.ClaimId == session.State.CurrentClaimId && a.PhotoEvidenceId == photo.EvidenceId);
+                    if (analysis is null)
                     {
-                        if (result.AfterSegmentation is { } seg)
-                            s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow());
-                        return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
-                    }, ct);
+                        var result = await change.AnalyzeAsync(session.State, photo, artifactPath, ct);
+                        analysis = result.Analysis;
+                        await store.ExecuteAsync(id, s =>
+                        {
+                            if (result.AfterSegmentation is { } seg)
+                                s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow());
+                            return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
+                        }, ct);
+                    }
                 }
                 var st = store.Find(id)!;
                 return Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = measured?.Quality, perceptualHash = measured?.PerceptualHash,
