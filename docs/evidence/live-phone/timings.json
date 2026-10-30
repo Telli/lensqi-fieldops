@@ -1,0 +1,87 @@
+{
+  "inspectionId": "I-6fc49ada4523",
+  "recordedOn": "2026-10-30",
+  "label": "LIVE_LOCAL_PROBE (loopback) \u00b7 phone camera photos of a synthetic render on a monitor",
+  "clock": {
+    "phoneMinusMacMs": 31.5,
+    "uncertaintyMs": 15.9,
+    "method": "best round trip of 15 `adb shell date +%s.%N` samples"
+  },
+  "photos": [
+    {
+      "evidenceId": "photo-3970a2c72c",
+      "origin": "Phone",
+      "size": "1080x1920",
+      "shutterToRecordedMs": 168,
+      "shutterToComparisonVerdictMs": null,
+      "verdict": "not compared (taken before the repair claim)"
+    },
+    {
+      "evidenceId": "photo-e7931d6f8d",
+      "origin": "Phone",
+      "size": "1080x1920",
+      "shutterToRecordedMs": 168,
+      "shutterToComparisonVerdictMs": 2762,
+      "verdict": "Changed"
+    },
+    {
+      "evidenceId": "photo-dff625d0b1",
+      "origin": "Phone",
+      "size": "1080x1920",
+      "shutterToRecordedMs": 169,
+      "shutterToComparisonVerdictMs": 2069,
+      "verdict": "Changed"
+    }
+  ],
+  "serverRequestMs": {
+    "note": "ASP.NET Core hosting log, request start to response end on the server; not the phone's round trip",
+    "beforePhotoUpload": 138.3,
+    "museInvestigate": 7715.4,
+    "samSegment": [
+      1297.5,
+      2183.4
+    ],
+    "afterPhotoUploadWithSamComparison": [
+      2746.5,
+      2053.0
+    ],
+    "checklistAnswer": [
+      10.2,
+      2.0,
+      1.7,
+      1.8,
+      1.8,
+      1.8
+    ],
+    "acknowledge": [
+      4.2,
+      1.5
+    ],
+    "verifyIncludingLiveHttpProbe": [
+      14.8,
+      6.8
+    ]
+  },
+  "verifications": [
+    {
+      "probe": "verify-diag-ea015626a6",
+      "source": "LiveLocal",
+      "passed": false,
+      "result": "Denied",
+      "outcomeKind": null,
+      "policyVersion": "fieldproof-policy/1.4"
+    },
+    {
+      "probe": "verify-diag-324bac97cd",
+      "source": "LiveLocal",
+      "passed": true,
+      "result": "Verified",
+      "outcomeKind": "VerifiedCompleteLive",
+      "policyVersion": "fieldproof-policy/1.4"
+    }
+  ],
+  "notMeasured": [
+    "time from the server's response to the result appearing on the phone screen (no client-side instrumentation)",
+    "verify tap to result on screen"
+  ]
+}
