@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-30",
+  "device": "Samsung Galaxy S23 Ultra (SM-S918U1), Android 16; API on the Mac over USB (adb reverse).",
+  "build": "10b16f7 + ec58b78 (one label per part, collapsed camera panels, person and access steps; the Plan it crash fix).",
+  "task": "T-154aa74839df 'Test ceiling smoke detector', created on the phone with the Profile height 6'2\" (188 cm, estimated standing reach 250 cm). Genuine Muse plan.",
+  "observed": [
+    "The plan fitted the person: no ladder or step-stool step; step 1 reads 'Stand under the ceiling smoke detector where you can reach it comfortably standing. You can reach it without a ladder.' (4, task-events.json).",
+    "Camera panels sit in the lower half; the instruction stops at three lines; the step's safety notes collapse to '⚠ Stop if detector is hanging loose or damaged · more' (1).",
+    "A tap on the picture hid the panels, leaving the view clear with Live AR · ARCore tracking + depth (3).",
+    "One label on the real smoke detector, 'Smoke detector', on a dark pill above the part (2). It showed no distance, so it was a live 2D track; no ARCore distance or floor height appeared in the captured frames.",
+    "Step 1 was marked done and the task was stopped about 50 s after the plan was accepted, so this is a short run: label stability over minutes, the reach note and 'Skip this step: not needed' (no access step in this plan) were not exercised."
+  ],
+  "earlierInRun": "The first attempt crashed on Plan it (Retrofit rejected the tools list type); fixed in ec58b78 with TaskWireTest."
+}
