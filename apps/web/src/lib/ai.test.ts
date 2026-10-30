@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Assessment, Hypothesis } from "./api";
-import { assetMatch } from "./ai";
+import type { Assessment, Hypothesis, Inspection } from "./api";
+import { aiSummary, assetMatch } from "./ai";
 
 const assessment = (assetId: string, ...hs: [string, Hypothesis["status"]][]): Assessment =>
   ({ assetId, hypotheses: hs.map(([featureId, status]) => ({ featureId, status, reason: "reason", evidenceIds: [] })), nextAction: "RequestView", modelId: "m", schemaVersion: "1" }) as Assessment;
@@ -16,4 +16,12 @@ describe("assetMatch", () => {
   it("is a mismatch when equipment was seen under another asset id", () =>
     expect(assetMatch(assessment("LAB-NODE-A", ["switch_chassis_visible", "Suspected"]), "LAB-SW-01")).toBe("mismatch"));
   it("has no answer before LensQi has looked", () => expect(assetMatch(undefined, "LAB-SW-01")).toBeNull());
+});
+
+it("never says it compared a repair photo the server could not score", () => {
+  const change = (verdict: string) => ({ claimId: "c1", photoEvidenceId: "p2", verdict, reason: "" });
+  const base = { stage: "ReadyToVerify", currentClaimId: "c1", acceptedPostRepairPhotoId: "p2", photos: [], checklist: [] } as unknown as Inspection;
+  expect(aiSummary({ ...base, changeAnalyses: [change("Unscorable")] } as unknown as Inspection)).toContain("couldn't compare");
+  expect(aiSummary({ ...base, changeAnalyses: [change("Changed")] } as unknown as Inspection)).toContain("accepted it");
+  expect(aiSummary({ ...base, stage: "VerifiedComplete", changeAnalyses: [change("Unscorable")] } as unknown as Inspection)).toMatch(/^Your review of the new photo/);
 });

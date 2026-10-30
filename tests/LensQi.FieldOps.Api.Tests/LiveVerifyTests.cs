@@ -107,6 +107,9 @@ public class LiveVerifyTests
         Assert.Equal("Denied", failed.GetProperty("decision").GetProperty("result").GetString());
         Assert.Equal("VerificationFailed", failed.GetProperty("state").GetProperty("stage").GetString());
         Assert.Equal(before + 1, await Probes(c, id));
+        var ids = (await State(c, id)).GetProperty("diagnostics").EnumerateArray().Select(d => d.GetProperty("evidenceId").GetString()!).ToList();
+        Assert.StartsWith("verify-diag-", ids[^1]);                            // measured by verify itself
+        Assert.StartsWith("diag-", ids[^2]);                                   // the manual run before it
 
         // The retry returns the recorded decision and measures nothing, even though the endpoint now answers.
         await SetEndpoint(c, true);

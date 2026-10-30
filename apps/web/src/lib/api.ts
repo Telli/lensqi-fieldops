@@ -135,12 +135,13 @@ export const api = {
   events: (id: string) => request<EventRecord[]>("GET", `${I(id)}/events`),
   artifacts: (id: string) => request<string[]>("GET", `${I(id)}/artifacts`),
   geometry: (id: string, segmentationId: string) => request<SegmentationGeometry>("GET", `${I(id)}/artifacts/${segmentationId}.json`),
-  upload: (id: string, file: Blob, name: string, source: Origin) => {
+  /** With a key, a retry of the same capture is recognised by the server instead of recording a second photo. */
+  upload: (id: string, file: Blob, name: string, source: Origin, key?: string, observedAt?: string) => {
     const f = new FormData();
     f.append("image", file, name);
     f.append("source", source);
-    f.append("observedAt", new Date().toISOString());
-    return request<ObservationResponse>("POST", `${I(id)}/observations`, undefined, f);
+    f.append("observedAt", observedAt ?? new Date().toISOString());
+    return request<ObservationResponse>("POST", `${I(id)}/observations`, undefined, f, key);
   },
   investigate: (id: string) => request<InvestigateResponse>("POST", `${I(id)}/investigate`),
   segment: (id: string, concept?: string, photoEvidenceId?: string) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, { concept, photoEvidenceId }),
