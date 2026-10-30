@@ -103,6 +103,10 @@ export const sentence = (t?: string | null) => (t ? t.charAt(0).toUpperCase() + 
 /** A probe value from the closed prediction sets, in words: "Reachable" → "reachable", "LinkReportedUp" → "link reported up". */
 export const probeValue = (v?: string | null) => (v ? v.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase() : "—");
 
+/** What a check measured: the status a server answered with, else the closed-set value. */
+export const measuredValue = (r: { normalizedValue?: string | null; httpStatus?: number | null }) =>
+  r.httpStatus != null ? `HTTP ${r.httpStatus}` : probeValue(r.normalizedValue);
+
 export const predictionOutcome: Record<string, { label: string; state: EvidenceState }> = {
   Confirmed: { label: "Prediction confirmed", state: "verified" },
   Falsified: { label: "Prediction falsified", state: "failed" },
