@@ -266,7 +266,8 @@ public static class InspectionEndpoints
                 {
                     var traceId = Guid.NewGuid().ToString("N");
                     var result = await dispatcher.RunAsync(twin, d.DiagnosticId, traceId, ct);
-                    s.RecordDiagnostic("verify-diag:" + traceId, "diag-" + traceId[..10], result, clock.GetUtcNow());
+                    // The evidence id marks a measurement taken by verify, so clients can show which checks a decision used.
+                    s.RecordDiagnostic("verify-diag:" + traceId, VerifyDiagnosticPrefix + traceId[..10], result, clock.GetUtcNow());
                 }
                 var decision = s.Verify(requestId, clock.GetUtcNow());
                 return Results.Ok(new { decision, state = View(s), replayed = false });
@@ -275,6 +276,9 @@ public static class InspectionEndpoints
 
         return app;
     }
+
+    /// <summary>Evidence ids of diagnostics the verify call ran itself start with this; a manual run's start with "diag-".</summary>
+    public const string VerifyDiagnosticPrefix = "verify-diag-";
 
     public sealed record InspectionSummary(string InspectionId, string FixtureId, string AssetId, string Stage, string? OutcomeKind,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, int Photos, int Diagnostics, string? LastDecision, string? LatestChange,
