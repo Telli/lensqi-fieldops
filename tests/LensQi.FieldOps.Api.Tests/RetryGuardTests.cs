@@ -50,14 +50,21 @@ public class RetryGuardTests
     private static async Task<string[]> Kinds(HttpClient c, string id) =>
         (await Json(await c.GetAsync($"/v1/inspections/{id}/events"))).EnumerateArray().Select(e => e.GetProperty("kind").GetString()!).ToArray();
 
-    /// <summary>A failed probe confirms the fault; a work order and a claim then make the inspection ready to verify.</summary>
-    private static async Task ReadyToVerify(HttpClient c, string id)
+    /// <summary>A failed probe confirms the fault; a work order and a claim follow. With <paramref name="evidence"/>, a
+    /// post-repair photo, a satisfied checklist and the acknowledgement complete everything but the fresh diagnostic.</summary>
+    private static async Task ReadyToVerify(HttpClient c, string id, bool evidence = true)
     {
         await Post(c, "/v1/simulation/diagnostics/NODE-A-HEALTH", new { passed = false });
         Assert.Equal("FaultConfirmed", (await Post(c, $"/v1/inspections/{id}/diagnostics/NODE-A-HEALTH:run")).GetProperty("state").GetProperty("stage").GetString());
         await Post(c, $"/v1/inspections/{id}/work-order", new { summary = "Reseat the cable" });
         Assert.Equal("ReadyToVerify", (await Post(c, $"/v1/inspections/{id}/repair-claims", new { description = "Reseated" })).GetProperty("state").GetProperty("stage").GetString());
         await Post(c, "/v1/simulation/diagnostics/NODE-A-HEALTH", new { passed = true });
+        if (!evidence) return;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(640, 480, salt: 9)), "image", "after.png" }, { new StringContent("Phone"), "source" } };
+        var photo = (await Json(await c.PostAsync($"/v1/inspections/{id}/observations", form))).GetProperty("evidenceId").GetString();
+        foreach (var requirement in new[] { "switch_chassis_visible", "yellow_cable_near_end_visible", "post_repair_view_captured" })
+            await Post(c, $"/v1/inspections/{id}/checklist", new { requirementId = requirement, status = "Satisfied", photoEvidenceId = photo });
+        await Post(c, $"/v1/inspections/{id}/acknowledge");
     }
 
     [Fact]
@@ -94,6 +101,60 @@ public class RetryGuardTests
         var refused = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
         Assert.Equal(InspectionErrorCodes.InvalidState, (await Json(refused)).GetProperty("code").GetString());
         Assert.Single(await Kinds(c, plain), k => k == "VerificationEvaluated");
+
+        // Missing photo, review and acknowledgement decide the outcome on their own: no probe is spent on it.
+        var early = await NewInspection(c);
+        await ReadyToVerify(c, early, evidence: false);
+        before = probe.Calls;
+        var premature = await Post(c, $"/v1/inspections/{early}/verify");
+        Assert.Equal("Denied", premature.GetProperty("decision").GetProperty("result").GetString());
+        Assert.Equal(before, probe.Calls);
+    }
+
+    [Fact]
+    public async Task A_retried_diagnostic_or_claim_returns_what_was_recorded()
+    {
+        using var f = new FieldOpsApiFactory();
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        await Post(c, "/v1/simulation/diagnostics/NODE-A-HEALTH", new { passed = false });
+        var first = await Post(c, $"/v1/inspections/{id}/diagnostics/NODE-A-HEALTH:run", key: "probe-1");
+        await Post(c, "/v1/simulation/diagnostics/NODE-A-HEALTH", new { passed = true });
+        var retry = await Post(c, $"/v1/inspections/{id}/diagnostics/NODE-A-HEALTH:run", key: "probe-1");
+        Assert.True(retry.GetProperty("replayed").GetBoolean());
+        Assert.Equal(first.GetProperty("evidenceId").GetString(), retry.GetProperty("evidenceId").GetString());
+        Assert.False(retry.GetProperty("result").GetProperty("passed").GetBoolean());   // the recorded failure, not a new pass
+        Assert.Single(await Kinds(c, id), k => k == "DiagnosticCompleted");
+
+        await Post(c, $"/v1/inspections/{id}/work-order", new { summary = "Reseat the cable" });
+        var claim = await Post(c, $"/v1/inspections/{id}/repair-claims", new { description = "Reseated" }, "claim-1");
+        var again = await Post(c, $"/v1/inspections/{id}/repair-claims", new { description = "Reseated" }, "claim-1");
+        Assert.Equal(claim.GetProperty("claimId").GetString(), again.GetProperty("claimId").GetString());
+        Assert.Equal(claim.GetProperty("claimId").GetString(), again.GetProperty("state").GetProperty("currentClaimId").GetString());
+    }
+
+    [Fact]
+    public async Task Overlapping_requests_with_one_key_make_one_model_call()
+    {
+        using var f = new FieldOpsApiFactory();
+        f.FakeChat.Delay = TimeSpan.FromMilliseconds(300);
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        var photo = (await Json(await c.GetAsync($"/v1/inspections/{id}"))).GetProperty("photos")[0].GetProperty("evidenceId").GetString();
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new
+        {
+            assetId = "LAB-SW-01",
+            hypotheses = new[] { new { featureId = "yellow_cable_near_end_visible", status = "Unknown", reason = "occluded", evidenceIds = new[] { photo } } },
+            nextAction = "RequestView", requestedView = "Show the yellow cable connector", requestedSegmentationConcept = (string?)null,
+        });
+        var both = await Task.WhenAll(Post(c, $"/v1/inspections/{id}/investigate", key: "inv-x"), Post(c, $"/v1/inspections/{id}/investigate", key: "inv-x"));
+        Assert.Equal(1, f.FakeChat.Calls);
+        Assert.Single(both, r => r.GetProperty("replayed").GetBoolean());
+        Assert.Equal(both[0].GetProperty("evidenceId").GetString(), both[1].GetProperty("evidenceId").GetString());
+
+        var segments = await Task.WhenAll(Post(c, $"/v1/inspections/{id}/segment", new { concept = "cable" }, "seg-x"), Post(c, $"/v1/inspections/{id}/segment", new { concept = "cable" }, "seg-x"));
+        Assert.Equal(1, f.FakeSam.Calls);
+        Assert.Equal(segments[0].GetProperty("segmentation").GetProperty("segmentationId").GetString(), segments[1].GetProperty("segmentation").GetProperty("segmentationId").GetString());
     }
 
     [Fact]

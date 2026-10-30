@@ -69,4 +69,54 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.False(forged.GetProperty("isValid").GetBoolean());
         Assert.Contains(forged.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains("differs from the inspection record"));
     }
+
+    private async Task<JsonElement> Check(string id) => JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt/verify")).RootElement;
+
+    [Fact]
+    public async Task A_damaged_or_rewritten_receipt_fails_and_viewing_or_checking_it_never_repairs_it()
+    {
+        var create = await _client.PostAsJsonAsync("/v1/inspections", new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("inspectionId").GetString()!;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(800, 600, salt: 7)), "image", "f.png" } };
+        Assert.True((await _client.PostAsync($"/v1/inspections/{id}/observations", form)).IsSuccessStatusCode);
+        var first = await Check(id);
+        Assert.True(first.GetProperty("isValid").GetBoolean());
+        var bundle = first.GetProperty("bundle").GetString()!;
+        var receiptPath = Path.Combine(bundle, "receipt.json");
+        var issued = File.ReadAllText(receiptPath);
+        var manifest = first.GetProperty("issued").GetProperty("manifestSha256").GetString();
+
+        // Viewing the receipt again serves the issued one and leaves the bundle alone.
+        var served = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt")).RootElement;
+        Assert.Equal(manifest, served.GetProperty("manifestSha256").GetString());
+        Assert.Equal(issued, File.ReadAllText(receiptPath));
+
+        // A corrupt receipt.json stays corrupt and fails, however often it is viewed or checked.
+        File.WriteAllText(receiptPath, "{");
+        await _client.GetStringAsync($"/v1/inspections/{id}/receipt");
+        await _client.GetStringAsync($"/v1/inspections/{id}/receipt.html");
+        Assert.False((await Check(id)).GetProperty("isValid").GetBoolean());
+        Assert.False((await Check(id)).GetProperty("isValid").GetBoolean());
+        Assert.Equal("{", File.ReadAllText(receiptPath));
+
+        // Events removed and the manifest recomputed: consistent on its own, but not the receipt the server issued.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(issued)!;
+        node["events"]!.AsArray().RemoveAt(node["events"]!.AsArray().Count - 1);
+        node["manifestSha256"] = null;
+        var digest = CanonicalJson.Sha256(CanonicalJson.Serialize(node.AsObject()));
+        node["manifestSha256"] = digest;
+        File.WriteAllText(receiptPath, node.ToJsonString());
+        File.WriteAllText(Path.Combine(bundle, "receipt.html"), digest);
+        Assert.True(ReceiptVerifier.Verify(bundle).IsValid);
+        var forged = await Check(id);
+        Assert.False(forged.GetProperty("isValid").GetBoolean());
+        Assert.Contains(forged.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains("not the receipt issued"));
+
+        // New events issue a new version; the issuance record keeps both.
+        await _client.PostAsync($"/v1/inspections/{id}/diagnostics/NODE-A-HEALTH:run", null);
+        var next = await Check(id);
+        Assert.True(next.GetProperty("isValid").GetBoolean());
+        Assert.NotEqual(manifest, next.GetProperty("issued").GetProperty("manifestSha256").GetString());
+        Assert.Equal(2, File.ReadAllLines(Path.Combine(_factory.DataDir, "receipts", id + ".issued.jsonl")).Length);
+    }
 }

@@ -367,9 +367,10 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     LaunchedEffect(current?.id) { viewingId = null }
     val step = steps.firstOrNull { it.id == viewingId } ?: current
     val reviewing = step != null && current != null && step.id != current.id
-    // The server coaches and answers for its current step, so while an earlier step is on screen questions are off and
-    // live guidance is not spoken, rather than talk about a different step than the one shown.
+    // The server coaches and answers for its current step, so while an earlier step is on screen questions and live
+    // assist are off, rather than show or say advice about a different step than the one shown. Repeat reads what is shown.
     val reviewingNow by rememberUpdatedState(reviewing)
+    val shown by rememberUpdatedState(step)
     val n = steps.indexOfFirst { it.id == step?.id }
     // Not state: the camera hands this over on every composition, and voice commands only read it.
     val camera = remember { HandleRef() }
@@ -389,7 +390,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
             VoiceCommand.Skip -> if (idle && viewingId == null) vm.skip(current.id) {}
             VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id }
             VoiceCommand.Check -> camera.value?.capture?.invoke()
-            VoiceCommand.Repeat -> vm.speaker.speak("${current.title}. ${current.instruction}", force = true)
+            VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak("${it.title}. ${it.instruction}", force = true) }
             VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
             VoiceCommand.Unmute -> vm.speaker.enabled = true
             VoiceCommand.Pause -> pace.pause(camera.value)
@@ -404,6 +405,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         prompt = step.instruction,
         analyzeLive = vm::analyzeLiveFrame,
         targetConcept = step.lookFor.firstOrNull(),
+        liveAllowed = !reviewing,
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
         header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,

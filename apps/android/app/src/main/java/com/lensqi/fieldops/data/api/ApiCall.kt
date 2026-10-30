@@ -13,12 +13,13 @@ sealed interface ApiOutcome<out T> {
 }
 
 /**
- * Whether a retry should reuse the request's Idempotency-Key: the server was unreachable, failed, or its model call
- * failed, so the command may have been applied or its photo saved. A refusal is final and a retry is a new request.
+ * Whether a retry should reuse the request's Idempotency-Key: the server was unreachable, failed, timed out, asked to slow
+ * down, or its model call failed, so the command may have been applied or its photo saved. A refusal is final and a retry
+ * is a new request.
  */
 val ApiOutcome<*>.retryable: Boolean
     get() = this is ApiOutcome.Unreachable ||
-        this is ApiOutcome.Rejected && (httpStatus >= 500 || code == "provider_unavailable" || code == "invalid_model_output")
+        this is ApiOutcome.Rejected && (httpStatus >= 500 || httpStatus == 408 || httpStatus == 429 || code == "provider_unavailable" || code == "invalid_model_output")
 
 private val errorJson = Json { ignoreUnknownKeys = true }
 

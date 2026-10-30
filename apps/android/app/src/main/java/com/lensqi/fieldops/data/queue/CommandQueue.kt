@@ -11,6 +11,7 @@ import com.lensqi.fieldops.data.InspectionCache
 import com.lensqi.fieldops.data.api.ApiOutcome
 import com.lensqi.fieldops.data.api.FieldOpsApi
 import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.api.retryable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
@@ -29,6 +30,15 @@ import javax.inject.Singleton
 
 /** Result of draining the queue once. */
 enum class DrainResult { Empty, Offline }
+
+/** What the queue does with one send: keep a command (and its photo) after a transient failure, drop it only once refused. */
+enum class Disposition { Sent, RetryLater, Refused }
+
+fun dispositionOf(outcome: ApiOutcome<*>): Disposition = when {
+    outcome is ApiOutcome.Ok -> Disposition.Sent
+    outcome.retryable -> Disposition.RetryLater
+    else -> Disposition.Refused
+}
 
 /**
  * Offline-first command queue (Track B day 2): inspection photos, and task step-check photos taken while the API was
@@ -91,13 +101,16 @@ class CommandQueue @Inject constructor(
         var next = dao.nextPending()
         while (next != null) {
             dao.countAttempt(next.id)
-            when (val outcome = send(next)) {
-                is ApiOutcome.Ok -> {
+            val outcome = send(next)
+            when (dispositionOf(outcome)) {
+                Disposition.Sent -> {
                     dao.delete(next.id)
                     next.filePath?.let { File(it).delete() }
                 }
-                is ApiOutcome.Rejected -> dao.reject(next.id, outcome.code, outcome.message)
-                is ApiOutcome.Unreachable -> return@withLock DrainResult.Offline
+                // A server error, rate limit or failed model call is not a refusal: the photo stays on the phone and
+                // WorkManager retries later with the same key, so the server replays rather than acting twice.
+                Disposition.RetryLater -> return@withLock DrainResult.Offline
+                Disposition.Refused -> (outcome as ApiOutcome.Rejected).let { dao.reject(next.id, it.code, it.message) }
             }
             next = dao.nextPending()
         }

@@ -52,6 +52,7 @@ builder.Services.AddSingleton(sp => new KnowledgeResolverOptions
     MaxFacts = sp.GetRequiredService<IOptions<KnowledgeOptions>>().Value.MaxFacts,
 });
 builder.Services.AddSingleton<IVendorKnowledgeResolver, KnowledgeResolver>();
+builder.Services.AddSingleton<LensQi.FieldOps.Api.Infrastructure.Hardening.KeyedGate>();
 
 // Server-owned probe registry (VK-R06.1). P0 registers only the simulated lab health probe.
 builder.Services.AddSingleton<IDiagnosticRegistry>(new InMemoryDiagnosticRegistry([

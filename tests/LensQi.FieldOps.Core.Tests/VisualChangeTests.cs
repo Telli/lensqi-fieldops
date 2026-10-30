@@ -227,6 +227,7 @@ public class VisualChangeTests
         k.Analyse("photo-ok");
         var photo = k.Session.State.Photos.Single(p => p.EvidenceId == post);
         k.Session.RecordVisualChange("rc", VisualChangeAnalyzer.Duplicate(k.Session.State.CurrentClaimId!, photo, k.Session.State.Photos[0].EvidenceId, 0, T), k.Now);
+        k.Session.Acknowledge("ack-2", k.Now);   // the new photo needs a fresh acknowledgement
         k.Tick(); k.RecordProbe(k.Probe(true));
         var d = VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now);
         Assert.Equal(VerificationResult.Denied, d.Result);

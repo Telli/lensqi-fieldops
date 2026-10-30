@@ -59,8 +59,10 @@ public sealed record InspectionState
     {
         var next = e switch
         {
+            // New evidence or a changed review needs a fresh acknowledgement: the technician confirms what is there now.
             PhotoRecorded p => this with
             {
+                TechnicianAcknowledged = false,
                 Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt)],
                 EvidenceRequests = [.. EvidenceRequests.Select(r => r.AnsweredByPhotoId is null ? r with { AnsweredByPhotoId = p.EvidenceId, AnsweredAt = p.OccurredAt } : r)],
             },
@@ -81,7 +83,7 @@ public sealed record InspectionState
                 CurrentClaimId = r.ClaimId, RepairClaimedAt = r.OccurredAt, TechnicianAcknowledged = false,
                 Checklist = new Dictionary<string, ChecklistEntry>(), // a new claim invalidates earlier post-repair review
             },
-            ChecklistReviewed c => this with { Checklist = new Dictionary<string, ChecklistEntry>(Checklist) { [c.RequirementId] = new(c.RequirementId, c.Status, c.OccurredAt, c.ReviewedByEvidenceId) } },
+            ChecklistReviewed c => this with { TechnicianAcknowledged = false, Checklist = new Dictionary<string, ChecklistEntry>(Checklist) { [c.RequirementId] = new(c.RequirementId, c.Status, c.OccurredAt, c.ReviewedByEvidenceId) } },
             TechnicianAcknowledged t => this with { TechnicianAcknowledged = t.ClaimId == CurrentClaimId },
             VerificationEvaluated v => this with
             {

@@ -21,12 +21,13 @@ public static class SegmentationEndpoints
 
     public static IEndpointRouteBuilder MapSegmentation(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/inspections/{id}/segment", async (string id, SegmentRequest? req, HttpRequest http, InspectionStore store, EvidenceFileStore files, ISegmenter segmenter, IRoiCropper cropper, SamOptions sam, TimeProvider clock, CancellationToken ct) =>
+        app.MapPost("/v1/inspections/{id}/segment", async (string id, SegmentRequest? req, HttpRequest http, InspectionStore store, EvidenceFileStore files, ISegmenter segmenter, IRoiCropper cropper, SamOptions sam, KeyedGate gate, TimeProvider clock, CancellationToken ct) =>
         {
             var session = store.Find(id);
             if (session is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             // A retried key returns the recorded segmentation instead of a second SAM call whose result would not be recorded.
             var key = Features.Inspections.InspectionEndpoints.Key(http);
+            using var _ = await gate.EnterAsync(id, key, ct);   // an overlapping retry waits, then replays
             if (key is not null && session.Recorded(key) is { } done)
             {
                 var earlier = done.OfType<SegmentationRecorded>().FirstOrDefault();
