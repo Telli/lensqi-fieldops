@@ -14,6 +14,8 @@ namespace LensQi.FieldOps.Core.Inspection;
 [JsonDerivedType(typeof(AssessmentRecorded), "AssessmentRecorded")]
 [JsonDerivedType(typeof(ViewRequested), "ViewRequested")]
 [JsonDerivedType(typeof(ViewDeclined), "ViewDeclined")]
+[JsonDerivedType(typeof(KnowledgeProposalAccepted), "KnowledgeProposalAccepted")]
+[JsonDerivedType(typeof(KnowledgeProposalRejected), "KnowledgeProposalRejected")]
 [JsonDerivedType(typeof(PredictionRegistered), "PredictionRegistered")]
 [JsonDerivedType(typeof(DiagnosticCompleted), "DiagnosticCompleted")]
 [JsonDerivedType(typeof(PredictionScored), "PredictionScored")]
@@ -54,8 +56,19 @@ public sealed record ViewRequested(long Sequence, string InspectionId, DateTimeO
 public sealed record ViewDeclined(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     int RequestNumber) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
+/// <summary>VK-T06: a grounded proposal the validator accepted, with the model call that produced it. Never changes the stage.</summary>
+public sealed record KnowledgeProposalAccepted(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
+    string ProposalId, string ModelId, string PromptDigest, string ResponseDigest, VendorGroundedProposal Proposal) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+
+/// <summary>VK-T06: a proposal refused by the validator or the session, with every reason. Nothing it asked for was run.</summary>
+public sealed record KnowledgeProposalRejected(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
+    string ProposalId, string ModelId, string PromptDigest, string ResponseDigest, string? NextAction, IReadOnlyList<ProposalRejection> Rejections) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+
+/// <summary>A prediction on the log before its probe runs. <see cref="PredictionDigest"/> covers the canonical prediction JSON;
+/// <see cref="ProposalId"/> names the accepted proposal it came from, if any.</summary>
 public sealed record PredictionRegistered(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string PredictionId, string DiagnosticId, string PredictedValue, IReadOnlyList<string> BasedOnFactIds) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string PredictionId, string DiagnosticId, string PredictedValue, IReadOnlyList<string> BasedOnFactIds,
+    string? PredictionDigest = null, string? ProposalId = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record DiagnosticCompleted(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string EvidenceId, DiagnosticResult Result) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
