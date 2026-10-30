@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -297,7 +298,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
     val t = s.task
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("Back", color = Fo.Muted) }; Text(if (t?.mode == TaskMode.Technician) "Job plan" else "Your plan", style = MaterialTheme.typography.titleLarge) } }
-        if (t == null) { item { CircularProgressIndicator() }; return@LazyColumn }
+        if (t == null) { item { TaskLoading(s.error, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
         val plan = t.plan
         if (plan == null) {
             item {
@@ -400,7 +401,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    if (t == null || step == null) { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; return }
+    if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     CameraScreen(
         prompt = step.instruction,
@@ -441,6 +442,21 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             }
         },
     )
+}
+
+/**
+ * A task that has not loaded: a spinner while it loads, and when it could not (the server out of reach, say) the reason
+ * and a retry, rather than a spinner that never ends.
+ */
+@Composable
+private fun TaskLoading(error: String?, errorColor: Color, onRetry: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (error == null) CircularProgressIndicator()
+        else {
+            Text(error, color = errorColor, textAlign = TextAlign.Center)
+            PrimaryButton("Try again", onRetry, Modifier.fillMaxWidth())
+        }
+    }
 }
 
 /** Stopping a task that is not finished, after a confirmation. */
@@ -569,7 +585,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
     val plan = t?.plan
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onHome) { Text("Home", color = Fo.Muted) }; Text("Summary", style = MaterialTheme.typography.titleLarge) } }
-        if (t == null || plan == null) { item { CircularProgressIndicator() }; return@LazyColumn }
+        if (t == null || plan == null) { item { TaskLoading(if (t == null) s.error else null, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
         val skipped = plan.steps.count { it.status == StepStatus.Skipped }
         item {
             AiCard(plan.title, if (t.phase != TaskPhase.Completed) "In progress" else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",

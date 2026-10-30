@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-30",
+  "device": "Samsung Galaxy S23 Ultra (SM-S918U1), Android 16, ARCore APK 262640093 (SDK 1.46). LensQi debug build. API on the Mac reached over USB with adb reverse tcp:5199.",
+  "task": "T-4fa5a945c1d1 'Replace smoke detector batteries', opened at step 6 of 7.",
+  "observed": [
+    "First attempt: the phone's USB mode changed to USB tethering, which reset the USB link and dropped the port forward. The task screens then showed an endless spinner with no reason or retry (1-tunnel-dropped-endless-spinner.jpg). Fixed in this commit: they now show the reason and 'Try again'.",
+    "Second attempt: step 6 opened with '3D AR: On' (2-step6-3d-ar-ready.jpg). Live assist created a real ARCore session (arcore-session.log) and the screen showed 'Live AR · ARCore tracking + depth' at 9 tracking updates per second (3, 4).",
+    "No part was detected or outlined and no distance was shown: the status stayed 'Tracking lost · finding parts again' while the camera faced the room and a desk (4).",
+    "The camera header was clipped to 'Step 2 of' on this screen size (3). Fixed in this commit: the header wraps to two lines with an ellipsis; not yet seen on the phone.",
+    "Steps 6, 7, 1 and 2 were marked done with the Done button within 42 seconds, then the task was stopped from the plan screen (5). The task record is kept as Abandoned.",
+    "The phone was on silent (status bar), so whether the step was read aloud could not be heard."
+  ],
+  "notShown": "ARCore anchors and distance on a real part, a voice question answered from the camera view, 'next step' by voice, and a full-resolution step photo check. GT-T25 stays open."
+}
