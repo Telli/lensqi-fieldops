@@ -88,12 +88,19 @@ public static class LiveVisionEndpoints
         {
             var task = store.Find(id);
             if (task is null) return ApiResults.NotFound("Task not found");
-            if (task.State.IsClosed || (task.State.Plan is null && task.State.Mode != TaskMode.Freeform))
-                return ApiResults.Conflict("task_not_active", "Live assistance runs on an open task with a plan, or free-form help");
+            // Coaching needs an accepted plan (its safety notes) or free-form help, both of which are in progress.
+            if (task.State.Phase != TaskPhase.InProgress)
+                return ApiResults.Conflict("task_not_active", "Live assistance runs on a started task, or free-form help");
             // The current step's parts lead; what the latest guidance named follows.
             var stepParts = task.State.CurrentStep?.LookFor ?? [];
             return await RunLive(context, id, kind, sam, gate, options, focus => [.. stepParts, .. focus],
-                async (bytes, mediaType, token) => { var o = await coach.GuideAsync(task.State, bytes, mediaType, token); return new Guidance(o.Value, o.Error, o.ModelId, o.PromptDigest, o.ResponseDigest); }, ct);
+                async (bytes, mediaType, token) =>
+                {
+                    var o = await coach.GuideAsync(task.State, bytes, mediaType, token);
+                    // In professionals-only work a hands-on recommendation is replaced by the referral before anyone hears it.
+                    var scene = o.Value is { } v ? v with { Recommendation = TaskSafety.Guard(task.State, v.Recommendation) } : null;
+                    return new Guidance(scene, o.Error, o.ModelId, o.PromptDigest, o.ResponseDigest);
+                }, ct);
         }).DisableAntiforgery().RequireRateLimiting("live-vision").WithMetadata(FrameLimits);
         return app;
     }

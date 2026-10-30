@@ -7,7 +7,8 @@ namespace LensQi.FieldOps.Tests;
 
 public class TaskApiTests
 {
-    internal static string PlanJson(bool handsOn = true, string restricted = "None", bool professional = false, string risk = "Moderate", bool checkRequired = true, string summary = "Drain the old oil, replace the filter, refill.") =>
+    internal static string PlanJson(bool handsOn = true, string restricted = "None", bool professional = false, string risk = "Moderate", bool checkRequired = true, string summary = "Drain the old oil, replace the filter, refill.",
+        string instruction = "Loosen the drain plug with the socket.", string title = "Remove the drain plug") =>
         JsonSerializer.Serialize(new
         {
             title = "Change the engine oil", summary, risk, estimatedMinutes = 45, restricted, professionalRequired = professional,
@@ -17,7 +18,7 @@ public class TaskApiTests
             {
                 new { title = "Let the engine cool", instruction = "Wait 30 minutes after driving.", handsOn = false, lookFor = Array.Empty<string>(),
                     cautions = new[] { new { kind = "Hot", text = "Oil and exhaust can burn you" } }, stopIf = Array.Empty<string>(), check = new { required = false, whatDoneLooksLike = "" } },
-                new { title = "Remove the drain plug", instruction = "Loosen the drain plug with the socket.", handsOn, lookFor = new[] { "oil drain plug" },
+                new { title, instruction, handsOn, lookFor = new[] { "oil drain plug" },
                     cautions = new[] { new { kind = "Hot", text = "Oil may still be warm" } }, stopIf = new[] { "the plug threads are stripped" },
                     check = new { required = checkRequired, whatDoneLooksLike = "The plug is back in and dry" } },
             },
@@ -69,7 +70,8 @@ public class TaskApiTests
         Assert.Equal("unsafe_plan", created.GetProperty("planError").GetProperty("code").GetString());
         Assert.Equal(JsonValueKind.Null, created.GetProperty("task").GetProperty("plan").ValueKind);
 
-        f.FakeChat.CannedResponse = PlanJson(handsOn: false, restricted: "MainsElectrical", professional: true, risk: "High", checkRequired: false);
+        f.FakeChat.CannedResponse = PlanJson(handsOn: false, restricted: "MainsElectrical", professional: true, risk: "High", checkRequired: false,
+            instruction: "Photograph the panel label and have a licensed electrician do the work.", title: "Document the panel");
         var replanned = await Body(await c.PostAsync($"/v1/tasks/{id}/plan", null));
         Assert.True(replanned.GetProperty("plan").GetProperty("professionalRequired").GetBoolean());
         Assert.All(replanned.GetProperty("plan").GetProperty("steps").EnumerateArray(), s => Assert.False(s.GetProperty("handsOn").GetBoolean()));
@@ -215,6 +217,7 @@ public class TaskApiTests
     {
         using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
         var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
         // A file where the task's evidence folder should be makes saving the question frame fail with an IOException.
         Directory.CreateDirectory(Path.Combine(f.DataDir, "evidence"));
         File.WriteAllText(Path.Combine(f.DataDir, "evidence", id), "not a folder");
@@ -289,5 +292,57 @@ public class TaskApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/plan", null)).StatusCode);
         Assert.Equal("Completed", (await Body(await c.PostAsync($"/v1/tasks/{id}/finish", null))).GetProperty("phase").GetString());
+    }
+
+    [Fact]
+    public async Task A_hands_on_answer_in_restricted_work_is_replaced_by_the_referral()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Freeform" });
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "No professional needed: unscrew the panel cover and remove the old breaker.", focus = Array.Empty<string>() });
+        var q = new MultipartFormDataContent { { new StringContent("How do I replace a circuit breaker?"), "question" } };
+        Assert.Equal(TaskEndpoints.Referral, (await Body(await c.PostAsync($"/v1/tasks/{id}/ask", q))).GetProperty("answer").GetString());
+    }
+
+    [Fact]
+    public async Task A_retried_question_returns_the_recorded_answer_without_another_model_call()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Freeform" });
+        f.FakeChat.Responses.Enqueue(JsonSerializer.Serialize(new { answer = "First answer.", focus = Array.Empty<string>() }));
+        f.FakeChat.Responses.Enqueue(JsonSerializer.Serialize(new { answer = "Second answer.", focus = Array.Empty<string>() }));
+        HttpRequestMessage Ask() { var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/tasks/{id}/ask") { Content = new MultipartFormDataContent { { new StringContent("What is this?"), "question" } } }; m.Headers.Add("Idempotency-Key", "ask-1"); return m; }
+        Assert.Equal("First answer.", (await Body(await c.SendAsync(Ask()))).GetProperty("answer").GetString());
+        Assert.Equal("First answer.", (await Body(await c.SendAsync(Ask()))).GetProperty("answer").GetString());
+        Assert.Equal(1, f.FakeChat.Calls);
+    }
+
+    [Fact]
+    public async Task Bad_create_requests_are_400_and_a_repeated_manual_page_counts_once()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.PostAsync("/v1/tasks", new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"))).StatusCode);
+        var form = Image("manual"); form.Add(new ByteArrayContent(TestImages.Png(640, 480)), "manual", "again.png");
+        form.Add(new StringContent("Diy"), "mode"); form.Add(new StringContent("Change the oil in my 2025 Civic"), "goal");
+        var r = await c.PostAsync("/v1/tasks", form);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        var task = (await Body(r)).GetProperty("task");
+        Assert.Single(task.GetProperty("photos").EnumerateArray());
+        Assert.Equal(JsonValueKind.Object, task.GetProperty("plan").ValueKind);
+    }
+
+    [Fact]
+    public async Task Live_coaching_is_given_the_current_step_and_waits_for_the_safety_notes()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        HttpContent Frame(string n) { var x = Image(); x.Add(new StringContent(n), "frameId"); return x; }
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/live/guide", Frame("frame-0"))).StatusCode);
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        await c.PostAsync($"/v1/tasks/{id}/steps/s1:complete", null);
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { seen = "A car.", screenText = (string?)null, recommendation = "Find the plug.", focus = Array.Empty<string>(), expectedEquipmentInView = true });
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsync($"/v1/tasks/{id}/live/guide", Frame("frame-1"))).StatusCode);
+        Assert.Contains("Remove the drain plug", f.FakeChat.LastText);
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{id}/steps/s1:start", null)).StatusCode);
     }
 }

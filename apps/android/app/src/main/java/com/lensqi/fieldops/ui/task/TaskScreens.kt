@@ -38,6 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -141,7 +146,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
                     if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
                 }
                 voice.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
-                if (planning) s.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
+                if (!s.creating) s.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 PrimaryButton(if (writing) "Writing your plan…" else "Plan it", { planning = true; onPlan(goal.trim()) }, Modifier.fillMaxWidth(), enabled = goal.trim().length >= 3 && !s.creating, icon = Icons.Outlined.AutoAwesome, busy = writing)
                 if (writing) Text("This takes up to half a minute; the plan is checked for safety before you see it.", color = FoDark.Muted, fontSize = 12.sp)
                 else TextButton(onClick = { onDetails(goal.trim()) }) { Text("Add details or a manual photo", color = FoDark.Primary, fontSize = 12.sp) }
@@ -196,11 +201,23 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
     var asset by remember { mutableStateOf<Pair<String, String>?>(null) }
     val manuals = remember { mutableStateListOf<File>() }
     val voice = rememberVoiceInput { goal = it }
+    val scope = rememberCoroutineScope()
+    var pickError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { vm.clearError() }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val f = File(context.cacheDir, "manual-${System.currentTimeMillis()}.jpg")
-        context.contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
-        if (manuals.size < 3) manuals.add(f)
+        // Copy and convert off the main thread: any image the phone can open becomes an upright JPEG the server accepts.
+        scope.launch {
+            val f = withContext(Dispatchers.IO) {
+                runCatching {
+                    val raw = File(context.cacheDir, "manual-raw-${System.currentTimeMillis()}")
+                    context.contentResolver.openInputStream(uri)?.use { input -> raw.outputStream().use { input.copyTo(it) } }
+                    val jpeg = downscaledJpeg(raw, 2400).also { raw.delete() } ?: return@runCatching null
+                    File(context.cacheDir, "manual-${System.currentTimeMillis()}.jpg").apply { writeBytes(jpeg) }
+                }.getOrNull()
+            }
+            if (f == null) pickError = "That image couldn't be read. Try a JPEG or PNG photo." else { pickError = null; if (manuals.size < 3) manuals.add(f) }
+        }
     }
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("Back", color = Fo.Muted) }; Text("New task", style = MaterialTheme.typography.titleLarge) } }
@@ -234,6 +251,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
                 Text("Manual photos (optional, up to 3)", fontWeight = FontWeight.Medium)
                 manuals.forEachIndexed { i, f -> Row(verticalAlignment = Alignment.CenterVertically) { Text(f.name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)); TextButton(onClick = { manuals.removeAt(i) }) { Text("Remove") } } }
                 if (manuals.size < 3) TextButton(onClick = { pick.launch("image/*") }) { Text("Add a manual page or label") }
+                pickError?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 Text("A photo of the owner's manual or product label lets LensQi use its exact specs.", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -266,6 +284,8 @@ private fun StepRow(step: TaskStep, n: Int) {
 @Composable
 fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
+    // Step statuses change in the step runner; reload when coming back.
+    LifecycleResumeEffect(Unit) { vm.refresh(); onPauseOrDispose { } }
     val t = s.task
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("Back", color = Fo.Muted) }; Text(if (t?.mode == TaskMode.Technician) "Job plan" else "Your plan", style = MaterialTheme.typography.titleLarge) } }
@@ -315,7 +335,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
                     Text("This plan is AI-written, not a safety certification. Check specs in your manual and stop if anything looks different.", style = MaterialTheme.typography.bodySmall)
                 }
                 // Starting is the acknowledgement: the notes sit right above the button that says so.
-                PrimaryButton(if (plan.needsSafetyAck) "I've read the safety notes · Start" else "Start step 1", { vm.accept(true, onStep) }, Modifier.fillMaxWidth(), busy = s.busy == "accept")
+                PrimaryButton(if (plan.needsSafetyAck) "I've read the safety notes · Start" else "Start step 1", { vm.accept(plan.needsSafetyAck, onStep) }, Modifier.fillMaxWidth(), busy = s.busy == "accept")
             }
         }
         item { Text("Plan by ${plan.modelId ?: "AI"} · AI inference", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 24.dp)) }
@@ -330,8 +350,13 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
 fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val t = s.task
-    val step = t?.currentStep
+    val current = t?.currentStep
     val steps = t?.plan?.steps.orEmpty()
+    // Back shows an earlier step read-only; it never restarts a finished step (the server refuses that).
+    var viewingId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(current?.id) { viewingId = null }
+    val step = steps.firstOrNull { it.id == viewingId } ?: current
+    val reviewing = step != null && current != null && step.id != current.id
     val n = steps.indexOfFirst { it.id == step?.id }
     // Not state: the camera hands this over on every composition, and voice commands only read it.
     val camera = remember { HandleRef() }
@@ -342,11 +367,13 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
     }
     var typed by remember { mutableStateOf("") }
     val voice = rememberVoiceInput { said ->
-        val current = vm.state.value.task?.currentStep ?: return@rememberVoiceInput
+        val now = vm.state.value
+        val current = now.task?.currentStep ?: return@rememberVoiceInput
+        val idle = now.busy == null
         when (parseCommand(said)) {
-            VoiceCommand.Next -> vm.complete(current.id) {}
-            VoiceCommand.Skip -> vm.skip(current.id) {}
-            VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { vm.start(it.id) }
+            VoiceCommand.Next -> if (viewingId != null) viewingId = null else if (idle) vm.complete(current.id) {}
+            VoiceCommand.Skip -> if (idle && viewingId == null) vm.skip(current.id) {}
+            VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id }
             VoiceCommand.Check -> camera.value?.capture?.invoke()
             VoiceCommand.Repeat -> vm.speaker.speak("${current.title}. ${current.instruction}", force = true)
             VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
@@ -361,28 +388,29 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit) {
         analyzeLive = vm::analyzeLiveFrame,
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
-        header = "Step ${n + 1} of ${steps.size} · ${step.title}",
+        header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,
         onGuidance = { vm.speaker.speak(it) },
         details = { StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error) },
         controls = { handle ->
             camera.value = handle
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, "Ask about this step…",
-                onMic = { if (voice.listening) voice.stop() else voice.start() },
+                // LensQi stops talking while it listens, so it never hears itself as the question.
+                onMic = { if (voice.listening) voice.stop() else { vm.speaker.stop(); voice.start() } },
                 onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { vm.start(it.id) } }
+                StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { viewingId = it.id } }
                 StepButton(Icons.Outlined.CameraAlt, "Check this step with a photo", enabled = !handle.capturing && s.busy == null, highlight = needsCheck, busy = handle.capturing || s.busy == "check") { handle.capture() }
                 Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (s.busy != null) FoDark.Primary.copy(alpha = .4f) else FoDark.Primary)
-                    .clickable(enabled = s.busy == null) { vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    .clickable(enabled = s.busy == null) { if (reviewing) viewingId = null else vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (s.busy == "move") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = FoDark.Background) else Icon(Icons.Outlined.Check, null, tint = FoDark.Background)
-                        Text("Done", color = FoDark.Background, fontWeight = FontWeight.SemiBold)
+                        Text(if (reviewing) "Current step" else "Done", color = FoDark.Background, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (needsCheck) "Tip: a quick check photo can confirm this step." else if (voice.supported) "Say “next”, “repeat”, “check this”, or ask a question." else "", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
+                if (!reviewing) TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },
     )
@@ -439,6 +467,8 @@ private fun ColumnScope.StepDetails(step: TaskStep, answer: Pair<String, String>
 @Composable
 fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
+    // Back from the FieldProof inspection: reload so the linked stage and outcome are current.
+    LifecycleResumeEffect(Unit) { vm.refresh(); onPauseOrDispose { } }
     val t = s.task
     val plan = t?.plan
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

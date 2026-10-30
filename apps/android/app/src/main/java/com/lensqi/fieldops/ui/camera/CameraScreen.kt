@@ -313,7 +313,8 @@ private fun CameraContent(
                     capturing = true
                     status = null
                     if (arActive) pendingCapture = true else takePhoto()
-                    liveEnabled = false
+                    // ARCore must hand the camera back for the photo; with CameraX, an embedding screen keeps its live coaching.
+                    if (arActive || controls == null) liveEnabled = false
                 }
             }
             if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled))

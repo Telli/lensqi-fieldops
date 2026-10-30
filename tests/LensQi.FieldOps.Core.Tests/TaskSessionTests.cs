@@ -201,4 +201,50 @@ public class TaskSessionTests
         Assert.Throws<TaskConflictException>(() => s.RecordAnswer("q2", null, "More?", "No.", null, "muse", T0));
         Assert.Throws<TaskConflictException>(() => Started().Finish("x", T0));
     }
+
+    [Fact]
+    public void A_finished_step_is_not_restarted_so_the_task_can_always_move_on()
+    {
+        var s = Started();
+        s.CompleteStep("c1", "s1", T0);
+        Assert.Throws<TaskConflictException>(() => s.StartStep("back", "s1", T0));
+        Assert.Equal("s2", s.State.CurrentStepId);
+    }
+
+    [Fact]
+    public void Coaching_waits_for_the_safety_notes_to_be_accepted()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Diy, "Change the oil", null, null, T0);
+        s.ProposePlan("plan", Plan(), "muse", "p", "r", [], T0);
+        Assert.Throws<TaskConflictException>(() => s.RecordAnswer("q", null, "Where is the plug?", "Under the pan.", null, "muse", T0));
+    }
+
+    [Theory]
+    [InlineData("Disconnect the gas line at the valve.", true)]
+    [InlineData("Unscrew the panel cover and check the breakers.", true)]
+    [InlineData("Do not open the panel. Take a photo of the label.", false)]
+    [InlineData("Have a licensed electrician replace the breaker.", false)]
+    [InlineData("Write down the model number and call a plumber.", false)]
+    [InlineData("No professional needed: unscrew the cover and remove the breaker.", true)]
+    [InlineData("You do not need an electrician; just remove the cover.", true)]
+    public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
+        Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
+
+    [Fact]
+    public void Restricted_steps_are_judged_by_their_words_not_only_the_models_label()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Diy, "Move my gas stove", null, null, T0);
+        var mislabelled = Plan(RiskLevel.High, RestrictedCategory.GasLinesOrAppliances, true,
+            new TaskStep("s1", "Free the stove", "Close the valve and disconnect the gas line.", false, [], [new Caution(CautionKind.Other, "Gas")], [], null));
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => s.ProposePlan("a", mislabelled, "muse", "p", "r", [], T0)).Code);
+        var unlabelledButProfessional = Plan(RiskLevel.High, RestrictedCategory.None, true, Step("s1", cautions: new Caution(CautionKind.Other, "Careful")));
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => s.ProposePlan("b", unlabelledButProfessional, "muse", "p", "r", [], T0)).Code);
+    }
+
+    [Theory]
+    [InlineData("Replace a circuit breaker in the garage", RestrictedCategory.MainsElectrical)]
+    [InlineData("Recharge my car’s AC", RestrictedCategory.Refrigerant)]
+    [InlineData("Relight my gas fireplace", RestrictedCategory.GasLinesOrAppliances)]
+    public void More_restricted_topics_are_recognised(string goal, RestrictedCategory expected) =>
+        Assert.Equal(expected, RestrictedTopics.Classify(goal));
 }

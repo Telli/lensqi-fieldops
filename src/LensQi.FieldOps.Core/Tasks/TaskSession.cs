@@ -80,6 +80,8 @@ public sealed class TaskSession
         {
             RequireInProgress();
             Step(stepId);
+            // A finished step is looked at, not restarted: making it current would leave nothing to press but Abandon.
+            Require(!State.IsFinished(stepId), $"Step {stepId} is already finished");
             return State.CurrentStepId == stepId ? [] : Commit([new StepStarted(0, State.TaskId, now, stepId)]);
         });
 
@@ -97,7 +99,8 @@ public sealed class TaskSession
     public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
-            Require((State.Plan is not null || State.Mode == TaskMode.Freeform) && !State.IsClosed, "Questions need an open task with a plan, or free-form help");
+            // Coaching starts only once the plan's safety notes are accepted (free-form help is in progress from the start).
+            Require(State.Phase == TaskPhase.InProgress, "Questions need a started task, or free-form help");
             if (stepId is not null) Step(stepId);
             if (photoId is not null) Require(State.Photos.Any(p => p.EvidenceId == photoId), $"Photo '{photoId}' is not part of this task");
             if (string.IsNullOrWhiteSpace(question) || question.Length > 500) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Questions are 1 to 500 characters");

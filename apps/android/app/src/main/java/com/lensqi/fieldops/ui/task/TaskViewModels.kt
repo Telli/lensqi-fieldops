@@ -51,6 +51,8 @@ class TaskListViewModel @Inject constructor(private val api: FieldOpsApi) : View
         (apiCall { api.tasks() } as? ApiOutcome.Ok)?.value?.let { list -> _state.update { it.copy(tasks = list) } }
     }
 
+    fun clearError() = _state.update { it.copy(error = null) }
+
     /** Free-form help: straight to the camera, no goal or plan. */
     fun justAsk(onCreated: (String) -> Unit) = create(TaskMode.Freeform, "", null, null, null, emptyList(), onCreated)
 
@@ -87,24 +89,40 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 
-    private fun act(label: String, block: suspend () -> TaskView, after: (TaskView) -> Unit = {}) = viewModelScope.launch {
+    // One idempotency key per pending action: a retry after a lost response replays the server's outcome instead of being
+    // refused. The key is dropped once the server answered, either way.
+    private val keys = mutableMapOf<String, String>()
+    private fun keyFor(action: String) = keys.getOrPut(action) { key() }
+    private fun <T> settle(action: String, r: ApiOutcome<T>) {
+        if (r !is ApiOutcome.Unreachable) keys.remove(action)
+        // A refusal means the server's state moved on (for example the step was already done): show it.
+        if (r is ApiOutcome.Rejected) refresh()
+    }
+
+    private fun act(label: String, action: String, block: suspend (String) -> TaskView, after: (TaskView) -> Unit = {}) = viewModelScope.launch {
         _state.update { it.copy(busy = label, error = null) }
-        val r = apiCall { block() }
+        val r = apiCall { block(keyFor(action)) }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
+        settle(action, r)
         if (r is ApiOutcome.Ok) after(r.value)
     }
 
-    fun replan() = act("plan", { api.replan(taskId, key()) })
-    fun accept(acknowledged: Boolean, onStarted: () -> Unit) = act("accept", { api.acceptPlan(taskId, key(), AcceptRequest(acknowledged)) }) { onStarted() }
-    fun start(stepId: String) = act("start", { api.stepAction(taskId, stepId, "start", key()) })
-    fun complete(stepId: String, onMoved: (TaskView) -> Unit) = act("move", { api.stepAction(taskId, stepId, "complete", key()) }, onMoved)
-    fun skip(stepId: String, onMoved: (TaskView) -> Unit) = act("move", { api.stepAction(taskId, stepId, "skip", key()) }, onMoved)
+    fun replan() = act("plan", "plan", { k -> api.replan(taskId, k) })
+    fun accept(acknowledged: Boolean, onStarted: () -> Unit) = act("accept", "accept", { k -> api.acceptPlan(taskId, k, AcceptRequest(acknowledged)) }) { onStarted() }
+    fun complete(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "complete:$stepId", { k -> api.stepAction(taskId, stepId, "complete", k) }, onMoved)
+    fun skip(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "skip:$stepId", { k -> api.stepAction(taskId, stepId, "skip", k) }, onMoved)
+    fun clearError() = _state.update { it.copy(error = null) }
 
     /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */
     fun check(stepId: String, photo: File) = viewModelScope.launch {
         _state.update { it.copy(busy = "check", error = null) }
-        val r = apiCall { api.checkStep(taskId, stepId, key(), MultipartBody.Part.createFormData("image", photo.name, photo.asRequestBody("image/jpeg".toMediaType()))) }
+        // Upright pixels (EXIF rotation applied) so the model never judges a sideways photo.
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { downscaledJpeg(photo, 2400) }
+        val part = if (bytes != null) jpeg("image", bytes) else MultipartBody.Part.createFormData("image", photo.name, photo.asRequestBody("image/jpeg".toMediaType()))
+        val action = "check:$stepId"
+        val r = apiCall { api.checkStep(taskId, stepId, keyFor(action), part) }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
+        settle(action, r)
         (r as? ApiOutcome.Ok)?.value?.check?.let { c -> speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
@@ -112,7 +130,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun ask(question: String, frame: ByteArray?) = viewModelScope.launch {
         if (question.isBlank()) return@launch
         _state.update { it.copy(busy = "ask", error = null) }
-        val r = apiCall { api.ask(taskId, key(), text(question.trim()), frame?.let { jpeg("image", it) }) }
+        val action = "ask:${question.trim()}"
+        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }) }
+        settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
         _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer) }
         answer?.let { speaker.speak(it, force = true) }
@@ -123,7 +143,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun clearAnswer() = _state.update { it.copy(answer = null) }
 
     /** Ends free-form help. */
-    fun finish(onDone: () -> Unit) = act("finish", { api.finishTask(taskId, key()) }) { onDone() }
+    fun finish(onDone: () -> Unit) = act("finish", "finish", { k -> api.finishTask(taskId, k) }) { onDone() }
 
     /** Asks about a full-resolution shutter photo, reduced to at most 1600 px on its long side before upload. */
     fun askAboutPhoto(question: String, photo: File) = viewModelScope.launch {
@@ -142,7 +162,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         api.taskLiveFrame(taskId, kind, jpeg("image", bytes), text(frameId))
 }
 
-private fun downscaledJpeg(file: File, maxSide: Int): ByteArray? {
+/** A JPEG of the photo, upright (EXIF rotation applied) and at most [maxSide] pixels on its long side. */
+internal fun downscaledJpeg(file: File, maxSide: Int): ByteArray? {
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
     android.graphics.BitmapFactory.decodeFile(file.path, bounds)
     var sample = 1
@@ -155,6 +176,8 @@ private fun downscaledJpeg(file: File, maxSide: Int): ByteArray? {
         android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
         else -> 0f
     }
-    val bitmap = if (degrees == 0f) decoded else android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, android.graphics.Matrix().apply { postRotate(degrees) }, true).also { if (it !== decoded) decoded.recycle() }
+    val fit = minOf(1f, maxSide.toFloat() / maxOf(decoded.width, decoded.height))
+    val matrix = android.graphics.Matrix().apply { postScale(fit, fit); postRotate(degrees) }
+    val bitmap = if (degrees == 0f && fit == 1f) decoded else android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { if (it !== decoded) decoded.recycle() }
     return java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it); bitmap.recycle() }.toByteArray()
 }

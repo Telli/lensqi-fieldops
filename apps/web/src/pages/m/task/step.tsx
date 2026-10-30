@@ -64,7 +64,9 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (t.phase === "Completed") { nav(`/m/t/${id}/done`, { replace: true }); return; }
     if (t.phase === "Planned") { nav(`/m/t/${id}`, { replace: true }); return; }
     if (!stepId && t.currentStepId) { nav(`/m/t/${id}/step/${t.currentStepId}`, { replace: true }); return; }
-    if (open && stepId && t.currentStepId !== stepId && steps.some((s) => s.id === stepId)) tasks.start(id, stepId).then(save).catch(() => undefined);
+    // Only an unfinished step becomes current; a finished one is shown read-only with a way back to the current step.
+    const routed = steps.find((s) => s.id === stepId);
+    if (open && routed && t.currentStepId !== stepId && routed.status !== "Done" && routed.status !== "Skipped") tasks.start(id, routed.id).then(save).catch(() => undefined);
   }, [t?.phase, t?.currentStepId, stepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const readStep = (force = false) => step && speech.speak(`Step ${n + 1}. ${step.title}. ${step.instruction} ${step.cautions.map((c) => c.text).join(". ")}`, force);
@@ -113,7 +115,10 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       case "next": return void move("complete");
       case "back": return void move("back");
       case "skip": return void move("skip");
-      case "check": return void check();
+      case "check":
+        // A voice command is not a tap, so the browser would block opening the photo picker.
+        if (live !== "on") { toast.info("Turn the camera on, or tap the camera button to add a photo."); return; }
+        return void check();
       case "repeat": return void readStep(true);
       case "mute": return speech.toggle(false);
       case "unmute": return speech.toggle(true);
@@ -155,6 +160,11 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
         </div>
         {step.cautions.length > 0 && <div className="flex flex-wrap gap-1.5">{step.cautions.map((c, k) => <span key={k} className="rounded-full border border-warning/50 bg-warning/15 px-2 py-0.5 text-[11px] text-warning">{cautionLabel[c.kind]} · {c.text}</span>)}</div>}
         {step.stopIf.length > 0 && <p className="text-xs text-failure">Stop if {step.stopIf.join("; ")}.</p>}
+        {finished && open && t.currentStepId && t.currentStepId !== step.id && (
+          <Link href={`/m/t/${id}/step/${t.currentStepId}`} className="flex min-h-11 items-center justify-between rounded-2xl border border-primary/40 px-3 text-sm text-primary">
+            This step is {step.status === "Done" ? "done" : "skipped"}. Go to the current step <ChevronRight className="size-4" />
+          </Link>
+        )}
         {step.lookFor.length > 0 && <p className="text-xs opacity-70">Look for: {step.lookFor.join(", ")}</p>}
 
         {assist.enabled ? (
