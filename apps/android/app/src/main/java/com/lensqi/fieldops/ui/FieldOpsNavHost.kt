@@ -56,16 +56,28 @@ import com.lensqi.fieldops.ui.inspection.InspectionScreen
 import com.lensqi.fieldops.ui.inspection.InspectionViewModel
 import com.lensqi.fieldops.ui.inspection.ReviewScreen
 import com.lensqi.fieldops.ui.receipt.ReceiptScreen
+import com.lensqi.fieldops.data.api.TaskMode
+import com.lensqi.fieldops.data.api.TaskPhase
+import com.lensqi.fieldops.ui.task.FreeformScreen
+import com.lensqi.fieldops.ui.task.NewTaskScreen
+import com.lensqi.fieldops.ui.task.PlanScreen
+import com.lensqi.fieldops.ui.task.StepScreen
+import com.lensqi.fieldops.ui.task.TaskDoneScreen
+import com.lensqi.fieldops.ui.task.TaskHomeScreen
+import com.lensqi.fieldops.ui.task.TaskListViewModel
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Build
 import com.lensqi.fieldops.ui.theme.Fo
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
-// Three destinations: today's work, the camera, the equipment. Profile and the full list open from Today.
+// Three destinations: home (DIY and recent tasks), a new task, technician work. Assets and inspections open from Technician.
 private val tabs = listOf(
-    Tab("home", "Today", Icons.Outlined.Home),
-    Tab("start", "Scan", Icons.Outlined.QrCodeScanner),
-    Tab("assets", "Assets", Icons.Outlined.Inventory2),
+    Tab("taskHome", "Home", Icons.Outlined.Home),
+    Tab("newTask", "New task", Icons.Outlined.Add),
+    Tab("home", "Technician", Icons.Outlined.Build),
 )
-private val withBar = setOf("home", "start", "assets", "inspections", "profile")
+private const val NEW_TASK = "newTask?mode={mode}&goal={goal}"
+private val withBar = setOf("taskHome", NEW_TASK, "home", "start", "assets", "inspections", "profile")
 
 @Composable
 fun FieldOpsNavHost(modifier: Modifier = Modifier) {
@@ -73,17 +85,54 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val home: HomeViewModel = hiltViewModel()
+    val taskList: TaskListViewModel = hiltViewModel()
     val openInspection: (String) -> Unit = { id -> nav.navigate("inspection/$id") }
     val goTab: (String) -> Unit = { r ->
         if (r == "home" || r == "inspections") home.refresh()
-        nav.navigate(r) { popUpTo(nav.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true }
+        if (r == "taskHome") taskList.refresh()
+        // The start tab is the root: return to it. Restoring its saved stack would reopen whatever was pushed on it (Profile).
+        if (r == "taskHome") nav.popBackStack("taskHome", inclusive = false)
+        else nav.navigate(r) { popUpTo(nav.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true }
     }
     Column(modifier) {
         Box(Modifier.weight(1f)) {
-            NavHost(nav, startDestination = "home") {
+            NavHost(nav, startDestination = "taskHome") {
+                composable("taskHome") {
+                    TaskHomeScreen(taskList,
+                        // One step from goal to plan; details and manual photos stay optional on the full form.
+                        onPlan = { goal -> taskList.create(TaskMode.Diy, goal, null, null, null, emptyList()) { id -> nav.navigate("task/$id") } },
+                        onDetails = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") },
+                        onJustAsk = { taskList.justAsk { id -> nav.navigate("task/$id/live") } },
+                        onTechnician = { goTab("home") },
+                        onOpen = { t -> nav.navigate(if (t.mode == TaskMode.Freeform) "task/${t.taskId}/live" else when (t.phase) { TaskPhase.InProgress -> "task/${t.taskId}/step"; TaskPhase.Completed -> "task/${t.taskId}/done"; else -> "task/${t.taskId}" }) },
+                        onProfile = { nav.navigate("profile") })
+                }
+                composable(NEW_TASK, arguments = listOf(
+                    navArgument("mode") { type = NavType.StringType; defaultValue = "Diy" },
+                    navArgument("goal") { type = NavType.StringType; defaultValue = "" },
+                )) { e ->
+                    val fixtures = home.state.collectAsStateWithLifecycle().value.fixtures
+                    NewTaskScreen(taskList, fixtures, if (e.arguments?.getString("mode") == "Technician") TaskMode.Technician else TaskMode.Diy, e.arguments?.getString("goal").orEmpty(),
+                        onBack = { nav.popBackStack() }, onCreated = { id -> nav.navigate("task/$id") { popUpTo("taskHome") } })
+                }
+                composable("task/{taskId}", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
+                    val id = requireNotNull(e.arguments?.getString("taskId"))
+                    PlanScreen(hiltViewModel(), onBack = { taskList.refresh(); nav.popBackStack() }, onStep = { nav.navigate("task/$id/step") }, onDone = { nav.navigate("task/$id/done") })
+                }
+                composable("task/{taskId}/step", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
+                    val id = requireNotNull(e.arguments?.getString("taskId"))
+                    StepScreen(hiltViewModel(), onClose = { nav.popBackStack() }, onDone = { nav.navigate("task/$id/done") { popUpTo("task/{taskId}/step") { inclusive = true } } })
+                }
+                composable("task/{taskId}/live", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
+                    FreeformScreen(hiltViewModel(), onClose = { taskList.refresh(); nav.popBackStack() },
+                        onPlan = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") })
+                }
+                composable("task/{taskId}/done", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
+                    TaskDoneScreen(hiltViewModel(), onHome = { goTab("taskHome") }, onInspection = openInspection)
+                }
                 composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
-                composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("home") } ; nav.navigate("camera") } }
+                composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("start") { inclusive = true } } ; nav.navigate("camera") } }
                 composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }
                 composable("asset/{assetId}", arguments = listOf(navArgument("assetId") { type = NavType.StringType })) { e ->
                     AssetDetailScreen(
@@ -108,6 +157,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val vm: InspectionViewModel = hiltViewModel(parent)
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
+                        analyzeLive = vm::analyzeLiveFrame,
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
                             vm.captureForReview(file, origin = "Phone")
@@ -126,6 +176,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val vm: InspectionViewModel = hiltViewModel(parent)
                     val stage = vm.state.collectAsStateWithLifecycle().value.view?.stage
                     GlassesScreen(
+                        inspectionId = vm.inspectionId,
                         prompt = vm.cameraPrompt(),
                         status = stage?.let { stageLabel(it) },
                         onClose = { nav.popBackStack() },
@@ -153,11 +204,11 @@ private fun BottomBar(current: String?, onSelect: (String) -> Unit) {
             tabs.forEach { t ->
                 val active = t.route == current
                 Column(Modifier.weight(1f).clickable { onSelect(t.route) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (t.route == "start") {
+                    if (t.route == "newTask") {
                         Box(
                             Modifier.offset(y = (-20).dp).size(64.dp).border(6.dp, Fo.Background, CircleShape).padding(6.dp).background(Fo.Primary, CircleShape),
                             contentAlignment = Alignment.Center,
-                        ) { Icon(t.icon, "Start an inspection", tint = Fo.OnPrimary, modifier = Modifier.size(26.dp)) }
+                        ) { Icon(t.icon, "Start a new task", tint = Fo.OnPrimary, modifier = Modifier.size(26.dp)) }
                         Text(t.label, color = Fo.Primary, fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.offset(y = (-14).dp))
                     } else {
                         Icon(t.icon, t.label, tint = if (active) Fo.Foreground else Fo.Muted, modifier = Modifier.size(22.dp))

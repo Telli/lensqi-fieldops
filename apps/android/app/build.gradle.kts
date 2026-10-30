@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.mwdat.inputs)
     debugImplementation(libs.mwdat.mockdevice)
     implementation(libs.androidx.exifinterface)
+    implementation(libs.google.ar.core)
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

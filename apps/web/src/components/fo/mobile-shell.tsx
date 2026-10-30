@@ -1,24 +1,25 @@
 import { Link, useLocation } from "wouter";
-import { Home, ScanLine, Boxes, ChevronLeft, Wifi, WifiOff, LayoutDashboard } from "lucide-react";
+import { Home, Plus, Wrench, ChevronLeft, Wifi, WifiOff, LayoutDashboard } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-// Three destinations: today's work, the camera, the equipment. Profile sits behind the avatar on Today.
+// Three destinations: home (DIY and recent tasks), a new task, technician work. Profile sits behind the avatar on Home.
 const tabs = [
-  { to: "/m", label: "Today", Icon: Home },
-  { to: "/m/start", label: "Scan", Icon: ScanLine },
-  { to: "/m/assets", label: "Assets", Icon: Boxes },
+  { to: "/m", label: "Home", Icon: Home },
+  { to: "/m/new", label: "New task", Icon: Plus },
+  { to: "/m/tech", label: "Technician", Icon: Wrench },
 ] as const;
+const technicianPaths = ["/m/tech", "/m/i/", "/m/start", "/m/assets", "/m/inspections"];
 
 export function BottomNav() {
   const [path] = useLocation();
   return (
     <nav className="sticky bottom-0 z-20 grid grid-cols-3 items-end border-t border-border/60 bg-background/80 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
       {tabs.map(({ to, label, Icon }) => {
-        const active = to === "/m" ? path === "/m" || path === "/m/" : path.startsWith(to);
-        if (to === "/m/start")
+        const active = to === "/m" ? path === "/m" || path === "/m/" || path.startsWith("/m/t/") : to === "/m/tech" ? technicianPaths.some((p) => path.startsWith(p)) : path.startsWith(to);
+        if (to === "/m/new")
           return (
-            <Link key={to} href={to} className="flex flex-col items-center gap-1" aria-label="Start an inspection">
+            <Link key={to} href={to} className="flex flex-col items-center gap-1" aria-label="Start a new task">
               <span className="-mt-8 grid size-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 ring-[6px] ring-background">
                 <Icon className="size-6" />
               </span>

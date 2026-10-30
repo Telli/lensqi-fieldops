@@ -17,6 +17,11 @@ import retrofit2.http.Path
  * including one replayed from the offline queue, is applied once by the server.
  */
 interface FieldOpsApi {
+    @Multipart
+    @POST("v1/inspections/{id}/live/{kind}")
+    suspend fun liveFrame(@Path("id") id: String, @Path("kind") kind: String, @Part image: MultipartBody.Part,
+        @Part("frameId") frameId: RequestBody): com.lensqi.fieldops.domain.live.LiveResponse
+
     @GET("health")
     suspend fun health(): Health
 
@@ -90,6 +95,48 @@ interface FieldOpsApi {
     /** Demo-only control, refused by the server unless diagnostics run in Simulated mode. */
     @POST("v1/simulation/diagnostics/{diagnosticId}")
     suspend fun setSimulatedOutcome(@Path("diagnosticId") diagnosticId: String, @Body body: SimulationRequest): SimulationResponse
+
+    // ---- guided tasks (DIY and technician) ----
+
+    @GET("v1/tasks")
+    suspend fun tasks(): List<TaskSummary>
+
+    @GET("v1/tasks/{id}")
+    suspend fun task(@Path("id") id: String): TaskView
+
+    @Multipart
+    @POST("v1/tasks")
+    suspend fun createTask(@Header(IDEMPOTENCY_KEY) key: String, @Part("mode") mode: RequestBody, @Part("goal") goal: RequestBody,
+        @Part("details") details: RequestBody?, @Part("fixtureId") fixtureId: RequestBody?, @Part("assetId") assetId: RequestBody?,
+        @Part manual: List<MultipartBody.Part>): CreateTaskResponse
+
+    @POST("v1/tasks/{id}/plan")
+    suspend fun replan(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
+
+    @POST("v1/tasks/{id}/accept")
+    suspend fun acceptPlan(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: AcceptRequest): TaskView
+
+    @POST("v1/tasks/{id}/steps/{stepId}:{action}")
+    suspend fun stepAction(@Path("id") id: String, @Path("stepId") stepId: String, @Path("action") action: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
+
+    @Multipart
+    @POST("v1/tasks/{id}/steps/{stepId}/check")
+    suspend fun checkStep(@Path("id") id: String, @Path("stepId") stepId: String, @Header(IDEMPOTENCY_KEY) key: String, @Part image: MultipartBody.Part): StepCheckResponse
+
+    @Multipart
+    @POST("v1/tasks/{id}/ask")
+    suspend fun ask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part("question") question: RequestBody, @Part image: MultipartBody.Part?): AskResponse
+
+    @POST("v1/tasks/{id}/finish")
+    suspend fun finishTask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): TaskView
+
+    @POST("v1/tasks/{id}/link-inspection")
+    suspend fun linkInspection(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): LinkInspectionResponse
+
+    @Multipart
+    @POST("v1/tasks/{id}/live/{kind}")
+    suspend fun taskLiveFrame(@Path("id") id: String, @Path("kind") kind: String, @Part image: MultipartBody.Part,
+        @Part("frameId") frameId: RequestBody): com.lensqi.fieldops.domain.live.LiveResponse
 
     companion object {
         const val IDEMPOTENCY_KEY = "Idempotency-Key"

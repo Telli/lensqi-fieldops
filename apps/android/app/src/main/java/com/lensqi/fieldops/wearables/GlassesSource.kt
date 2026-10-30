@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.view.Surface
 import android.view.View
+import android.graphics.Bitmap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -38,6 +39,9 @@ interface GlassesSource {
     fun stopStreaming()
 
     fun setPreviewSurface(surface: Surface?)
+
+    /** Decoded live frames, independent of the phone preview. Borrowed Bitmap; do not retain or recycle it. */
+    fun setFrameConsumer(consumer: ((Bitmap) -> Unit)?)
 
     /** Captures from the active stream; throws with the SDK's description on failure. */
     suspend fun capturePhoto(): GlassesPhoto

@@ -1,7 +1,10 @@
 package com.lensqi.fieldops.wearables
 
 import android.media.MediaCodec
+import android.media.MediaCodecInfo
 import android.media.MediaFormat
+import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 
@@ -34,6 +37,9 @@ fun isParameterSetsOnly(bytes: ByteArray): Boolean = annexBNals(bytes).let { nal
 
 private val PARAMETER_OR_SEI = setOf(32, 33, 34, 39, 40)
 
+/** True when [bytes] holds an intra random access picture (HEVC NAL types 16..21), where decoding can restart cleanly. */
+fun hasRandomAccessPicture(bytes: ByteArray): Boolean = annexBNals(bytes).any { hevcNalType(it) in 16..21 }
+
 /**
  * Keeps the latest VPS, SPS and PPS seen on the stream. The glasses send the VPS once at stream start, so a decoder created
  * later (the preview surface arrived late, or was recreated) must be primed with the remembered set.
@@ -64,7 +70,7 @@ class HevcParameterSets {
  * requested compressed because the uncompressed path hands over YUV in the phone decoder's own layout, which this code
  * cannot verify on real hardware; HEVC is a standard bitstream and renders the same on the mock and on glasses.
  */
-class HevcPreview {
+class HevcPreview(private val decodeImages: Boolean = false) {
     private val lock = Any()
     private val params = HevcParameterSets()
     private var surface: Surface? = null
@@ -72,6 +78,20 @@ class HevcPreview {
     private var size = 0 to 0
     private var fed = 0
     private var rendered = 0
+    private var consumer: ((Bitmap) -> Unit)? = null
+    private var lastImage = 0L
+    private var failures = 0
+    private var retryAt = 0L
+    @Volatile private var gap = false
+
+    /** Frames were dropped before reaching this decoder: skip until the next keyframe instead of decoding garbage. */
+    fun markGap() { gap = true }
+
+    /** Borrowed pixels are valid only during this callback. Keep the decoder primed until the camera stops:
+     * DAT cannot request a keyframe, and a late consumer may otherwise see only undecodable inter frames. */
+    fun setFrameConsumer(value: ((Bitmap) -> Unit)?) = synchronized(lock) {
+        consumer = value; lastImage = 0
+    }
 
     fun setSurface(value: Surface?) = synchronized(lock) {
         if (value !== surface) { stopCodec(); surface = value }
@@ -82,14 +102,24 @@ class HevcPreview {
         if (bytes.isEmpty()) return@synchronized
         params.offer(bytes)
         if (fed++ == 0) Log.i(TAG, "first frame: ${raw.size} bytes, NAL types ${annexBNals(bytes).map(::hevcNalType)}")
-        val target = surface ?: return@synchronized
+        val target = surface
+        if (!decodeImages && target == null) return@synchronized
+        if (gap) {
+            if (!hasRandomAccessPicture(bytes)) { stopCodec(); return@synchronized }
+            gap = false
+        }
+        // A decoder that failed (for example, no free hardware HEVC decoder) is retried with backoff, not on every frame.
+        if (codec == null && SystemClock.elapsedRealtime() < retryAt) return@synchronized
         try {
             if (codec != null && size != width to height) stopCodec()
             val fresh = codec == null
             if (fresh) {
                 val csd = params.complete() ?: return@synchronized
                 codec = MediaCodec.createDecoderByType(MIME).apply {
-                    val format = MediaFormat.createVideoFormat(MIME, width, height).apply { setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, width * height) }
+                    val format = MediaFormat.createVideoFormat(MIME, width, height).apply {
+                        setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, width * height)
+                        if (decodeImages) setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+                    }
                     configure(format, target, null, 0)
                     start()
                 }
@@ -102,8 +132,11 @@ class HevcPreview {
             if (configOnly && fresh) return@synchronized
             queue(bytes, presentationTimeUs, if (configOnly) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
             drain()
+            failures = 0
         } catch (e: Exception) {
-            Log.w(TAG, "Preview decode failed; restarting on the next frame", e)
+            failures++
+            retryAt = SystemClock.elapsedRealtime() + minOf(8_000L, 250L shl minOf(failures, 5))
+            Log.w(TAG, "Decode failed ($failures); retrying in ${retryAt - SystemClock.elapsedRealtime()} ms", e)
             stopCodec()
         }
     }
@@ -126,7 +159,22 @@ class HevcPreview {
         while (true) {
             val index = c.dequeueOutputBuffer(info, 0)
             when {
-                index >= 0 -> { c.releaseOutputBuffer(index, true); if (rendered++ == 0) Log.i(TAG, "first preview frame rendered") }
+                index >= 0 -> {
+                    try {
+                        if (decodeImages && consumer != null && SystemClock.elapsedRealtime() - lastImage >= 100) {
+                            c.getOutputImage(index)?.use { image ->
+                                val f = c.outputFormat
+                                val bitmap = image.analysisBitmap(
+                                    f.getInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED) == MediaFormat.COLOR_RANGE_FULL,
+                                    f.getInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT601_NTSC) == MediaFormat.COLOR_STANDARD_BT709)
+                                try { consumer?.invoke(bitmap); lastImage = SystemClock.elapsedRealtime() }
+                                finally { bitmap.recycle() }
+                                if (rendered++ == 0) Log.i(TAG, "first analysis frame decoded")
+                            }
+                        }
+                    } finally { c.releaseOutputBuffer(index, !decodeImages) }
+                    if (!decodeImages && rendered++ == 0) Log.i(TAG, "first preview frame rendered")
+                }
                 index == MediaCodec.INFO_TRY_AGAIN_LATER -> return
                 else -> Unit // format or buffers changed; keep draining
             }

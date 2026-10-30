@@ -1,5 +1,7 @@
 # Three-Minute Demo, Evaluation and Proof Scope
 
+> **Scope note (October 29, 2026).** This is the v1.1 kit's demo and evaluation plan for the FieldProof inspection loop. The current video plan, which opens with guided tasks, is `docs/DEMO_STORYBOARD.md`; the guided-task evaluation targets are in `PRD.md` §11.
+
 ## What is new
 
 All showcased UI/API/state/verification functionality should be newly written during the competition build period. Do not demonstrate older LensIQ heritage features as competition contributions.

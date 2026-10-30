@@ -1,0 +1,67 @@
+{
+  "detect": {
+    "status": 200,
+    "elapsedSeconds": 1.39,
+    "body": {
+      "frameId": "probe-frame-1",
+      "width": 640,
+      "height": 400,
+      "objects": [
+        {
+          "id": "1-0",
+          "concept": "yellow ethernet cable",
+          "label": "yellow ethernet cable",
+          "box": {
+            "left": 0.1890625,
+            "top": 0.5075,
+            "right": 0.3984375,
+            "bottom": 0.97
+          },
+          "confidence": 0.8358974456787109
+        }
+      ],
+      "models": [
+        "sam-3.1"
+      ],
+      "inferenceMs": 1372,
+      "refreshAfterMs": 4000,
+      "source": "AI inference"
+    }
+  },
+  "guide": {
+    "status": 200,
+    "elapsedSeconds": 3.134,
+    "body": {
+      "frameId": "probe-frame-1",
+      "recommendation": "Capture this view, then run the approved equipment check.",
+      "findings": [
+        {
+          "featureId": "switch_chassis_visible",
+          "status": "Observed",
+          "reason": "Gray switch chassis with SW01 and LAB-SW-01 labels and ports P1-P8 clearly visible in frame."
+        },
+        {
+          "featureId": "yellow_cable_near_end_visible",
+          "status": "Observed",
+          "reason": "Yellow cable with white connector inserted in port between P1 and P3, consistent with P2 position, near end visible."
+        },
+        {
+          "featureId": "post_repair_view_captured",
+          "status": "Unknown",
+          "reason": "Stage is InitialScan and single photo cannot confirm post-repair status; no repair context visible."
+        }
+      ],
+      "modelId": "muse-spark-1.3",
+      "promptDigest": "36f8c8fa7f26f86b7ac4faf6d68227ce77adfac610ff0268b783a86e02eabf54",
+      "responseDigest": "fa9993abc8ffb171886d0ba17dbff39058f12cfe7dcec79ad8a24527ff7c3cfe",
+      "inferenceMs": 3118,
+      "refreshAfterMs": 12000,
+      "source": "AI inference"
+    }
+  },
+  "inspectionId": "I-f10dd2551366",
+  "label": "LIVE_META",
+  "input": "repository synthetic lab photo, resized to 640x400",
+  "fixturePreviewOnly": true,
+  "eventsAfter": 1
+}

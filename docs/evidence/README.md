@@ -10,6 +10,7 @@ labels, and nothing is described more strongly than its label allows.
 | `SIMULATED_PROBE` | The demo's simulated endpoint. Every verification that relies on it is `VerifiedCompleteSimulated`, never live. |
 | `SYNTHETIC_IMAGE` | A Pillow render of a fictional switch (`tools/sam-parser/render_fixture.py`). No photographs of real equipment are included yet. |
 | `EMULATOR` | The Android client running on the Android emulator (Medium Phone, API 36.1) on this Mac. Not a physical phone. |
+| `FAKE_MODELS` | An automated test run with fake Muse and SAM (`FakeVisionChat`, `FakeSegmenter`). Exercises the real API, stores and gate; no model was called. |
 
 ## Meta model calls
 
@@ -107,6 +108,26 @@ any artifact or field fails it. A digest proves bundle integrity only, never who
 
 All evaluation runs use `SYNTHETIC_IMAGE` inputs, `LIVE_META` model calls and the `SIMULATED_PROBE`.
 
+## Guided tasks (`tasks/`)
+
+Indexed in detail in [tasks/README.md](tasks/README.md).
+
+| Files | What it shows | Labels |
+|---|---|---|
+| `tasks/plan-oil.json`, `plan-cam.json`, `plan-panel.json`, `plan-technician.json` | Genuine plans: oil change, IP camera, a restricted breaker-panel goal (referral only, no hands-on step), a site-aware technician job on `LAB-SW-01` | `LIVE_META` |
+| `tasks/ask-oil.json`, `check-oil.json` | A typed question during a step and a `CantTell` step check on an unrelated photo | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `tasks/freeform-session.json`, `ask-freeform-gas.json` | Free-form help: a router question and a gas-line question answered with a referral | `LIVE_META` |
+| `tasks/android-*.png` | Plan, step runner, step check, live coaching and free-form help on the emulator | `LIVE_META`, `EMULATOR` |
+| `tasks/technician-journey.md`, `technician-journey-fakes/`, `technician-journey-test-results.json` | Linked technician task: fake fix denied, `VerifiedCompleteSimulated`, offline receipt verification and tamper rejection | `FAKE_MODELS`, `SIMULATED_PROBE` |
+| `tasks/open-model-feasibility.md` | Muse Spark Open review: deferred, no call made | — |
+
+No voice recognition, spoken question or phone run of the task flow is recorded.
+
+## Live camera assistance (`live-ar/`, `live-glasses/`, `ar-ux/`)
+
+Each folder has its own README. The Galaxy S23 Ultra ARCore live-assist run is described in `docs/LIVE_AR.md`; no
+artifact from that run is committed, and it produced no anchor or distance.
+
 ## API contract recordings (`fixtures/api-recordings/`)
 
 37 responses captured by `scripts/record_api.py` from the running API (investigate and segment are `LIVE_META`;
@@ -116,4 +137,6 @@ diagnostics are `SIMULATED_PROBE`). The Android contract tests decode every one 
 
 - A live measurement of owned lab hardware (`receipt-live/`), produced by the owner with `docs/LIVE_PROBE_RUNBOOK.md`.
 - Photographs of real equipment (`fixtures/telecom-lab/images/real/`).
-- A physical-phone run of the Android client.
+- A physical-phone run of the Android inspection or guided-task flow (the only phone run so far is the ARCore live-assist check above, without a committed artifact).
+- A spoken question through real speech recognition, and SAM outlines on a real step part.
+- ARCore anchors or measured distance on real equipment.

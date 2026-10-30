@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import android.view.Surface
 import android.view.View
+import android.graphics.Bitmap
 import com.meta.wearable.dat.camera.Stream
 import com.meta.wearable.dat.camera.addCamera
 import com.meta.wearable.dat.camera.types.StreamConfiguration
@@ -39,6 +40,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,7 +64,11 @@ class DatGlassesSource @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     @OptIn(ExperimentalCoroutinesApi::class)
     private val frameDispatcher = Dispatchers.Default.limitedParallelism(1)
+    // Analysis decodes and converts on its own thread so live assist never delays the preview decoder.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val analysisDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val preview = HevcPreview()
+    private val analysis = HevcPreview(decodeImages = true)
 
     private val _state = MutableStateFlow(GlassesState(mockAvailable = mock.available))
     override val state: StateFlow<GlassesState> = _state.asStateFlow()
@@ -158,13 +164,19 @@ class DatGlassesSource @Inject constructor(
             onSuccess = { camera ->
                 val st = camera.stream
                 stream = st
+                val toAnalysis = Channel<AnalysisInput>(capacity = 8)
+                conn.launch(analysisDispatcher) { for (f in toAnalysis) analysis.feed(f.bytes, f.width, f.height, f.ptsUs, f.config) }
                 conn.launch(frameDispatcher) {
                     var logged = false
                     st.videoStream.collect { frame ->
                         val buffer = frame.buffer.duplicate()
                         val bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
                         if (!logged) { logged = true; Log.i(TAG, "first frame ${frame.width}x${frame.height} compressed=${frame.isCompressed} config=${frame.isCodecConfig} ${bytes.size} bytes") }
-                        if (frame.isCompressed) preview.feed(bytes, frame.width, frame.height, frame.presentationTimeUs, frame.isCodecConfig)
+                        if (frame.isCompressed) {
+                            preview.feed(bytes, frame.width, frame.height, frame.presentationTimeUs, frame.isCodecConfig)
+                            // A full queue drops this frame; the analysis decoder then waits for the next keyframe.
+                            if (toAnalysis.trySend(AnalysisInput(bytes, frame.width, frame.height, frame.presentationTimeUs, frame.isCodecConfig)).isFailure) analysis.markGap()
+                        }
                         if (!frame.isCodecConfig && (_state.value.frameWidth != frame.width || _state.value.frameHeight != frame.height)) {
                             _state.update { it.copy(frameWidth = frame.width, frameHeight = frame.height) }
                         }
@@ -226,8 +238,13 @@ class DatGlassesSource @Inject constructor(
                     button("Capture", style = ButtonStyle.PRIMARY, onClick = { _shutter.tryEmit(Unit) })
                 }
             }.fold(
-                onSuccess = { _state.update { it.copy(displayActive = true) } },
-                onFailure = { error, _ -> _state.update { it.copy(displayActive = false) }; reportError("Glasses display: ${error.description}") },
+                onSuccess = { if (display === d && d.state.value == DisplayState.STARTED) _state.update { it.copy(displayActive = true) } },
+                onFailure = { error, _ ->
+                    // A HUD update completing after camera teardown is not a new display failure.
+                    if (display === d && d.state.value == DisplayState.STARTED) {
+                        _state.update { it.copy(displayActive = false) }; reportError("Glasses display: ${error.description}")
+                    }
+                },
             )
         }
     }
@@ -244,10 +261,12 @@ class DatGlassesSource @Inject constructor(
         display = null
         session = null
         preview.release()
+        analysis.release()
         _state.update { it.copy(session = null, stream = null, displayActive = false, glassesButtonActive = false, capturing = false) }
     }
 
     override fun setPreviewSurface(surface: Surface?) = preview.setSurface(surface)
+    override fun setFrameConsumer(consumer: ((Bitmap) -> Unit)?) = analysis.setFrameConsumer(consumer)
 
     override suspend fun capturePhoto(): GlassesPhoto {
         val st = stream ?: error("Start the glasses camera first")
@@ -307,3 +326,5 @@ class DatGlassesSource @Inject constructor(
         const val FRAME_RATE = 24
     }
 }
+
+private class AnalysisInput(val bytes: ByteArray, val width: Int, val height: Int, val ptsUs: Long, val config: Boolean)

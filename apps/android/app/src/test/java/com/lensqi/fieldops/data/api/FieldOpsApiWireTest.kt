@@ -80,6 +80,17 @@ class FieldOpsApiWireTest {
     }
 
     @Test
+    fun live_frames_use_ephemeral_routes_and_keep_their_frame_identity() = runTest {
+        server.enqueue(MockResponse().setBody("""{"frameId":"live-123","objects":[{"id":"part","concept":"cable","label":"cable","box":{"left":0.1,"top":0.2,"right":0.4,"bottom":0.8},"confidence":0.9}],"refreshAfterMs":4000,"inferenceMs":800}"""))
+        val value = api.liveFrame(id, "detect", MultipartBody.Part.createFormData("image", "preview.jpg", byteArrayOf(1, 2).toRequestBody("image/jpeg".toMediaType())), "live-123".toRequestBody())
+        val request = server.takeRequest()
+        assertEquals("/v1/inspections/$id/live/detect", request.path)
+        assertTrue(request.body.readUtf8().contains("live-123"))
+        assertEquals("live-123", value.frameId)
+        assertEquals(0.1, value.objects.single().box.left)
+    }
+
+    @Test
     fun photo_upload_is_multipart_with_the_original_bytes_source_and_device_time() = runTest {
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
         val (_, req) = exchange("observation-initial") {

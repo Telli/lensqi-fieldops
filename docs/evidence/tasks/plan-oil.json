@@ -1,0 +1,269 @@
+{
+    "task": {
+        "taskId": "T-8762066729dd",
+        "mode": "Diy",
+        "goal": "Change the engine oil in my 2025 Honda Civic",
+        "details": "1.5L turbo, I have a socket set and a drain pan",
+        "site": null,
+        "phase": "Planned",
+        "currentStepId": null,
+        "inspectionId": null,
+        "createdAt": "2026-10-29T00:58:18.373525+00:00",
+        "updatedAt": "2026-10-29T00:58:27.557922+00:00",
+        "safetyAcknowledged": false,
+        "abandonReason": null,
+        "plan": {
+            "title": "Change engine oil 2025 Honda Civic 1.5L turbo",
+            "summary": "Drain old oil, replace filter, refill to manual spec and check for leaks.",
+            "risk": "Moderate",
+            "estimatedMinutes": 45,
+            "restricted": "None",
+            "professionalRequired": false,
+            "professionalReason": null,
+            "tools": [
+                "socket set",
+                "drain pan",
+                "jack stands",
+                "wheel chocks",
+                "oil filter wrench",
+                "funnel",
+                "gloves",
+                "eye protection"
+            ],
+            "parts": [
+                "engine oil",
+                "oil filter",
+                "drain plug washer"
+            ],
+            "sourceNote": "AI-written plan \u00b7 check your owner's manual",
+            "modelId": "muse-spark-1.3",
+            "source": "AI inference",
+            "needsSafetyAck": true,
+            "steps": [
+                {
+                    "id": "s1",
+                    "title": "Prepare car and confirm specs",
+                    "instruction": "Park on level ground, set parking brake, turn engine off. Confirm oil grade, capacity, and filter type in your owners manual. Put on gloves and eye protection.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Hot",
+                            "text": "Let engine cool at least 30 minutes to avoid burns."
+                        },
+                        {
+                            "kind": "Other",
+                            "text": "Work on level ground with parking brake on."
+                        }
+                    ],
+                    "stopIf": [
+                        "the car is not on level ground",
+                        "you do not have correct oil and filter"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s2",
+                    "title": "Lift and secure car",
+                    "instruction": "Chock rear wheels, jack up front and place on jack stands. Shake car gently to confirm it is stable.",
+                    "handsOn": true,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Lifting",
+                            "text": "Never work under a car held by jack alone, use jack stands."
+                        },
+                        {
+                            "kind": "Other",
+                            "text": "Chock rear wheels and confirm car is stable."
+                        }
+                    ],
+                    "stopIf": [
+                        "you have no jack stands",
+                        "the car feels unstable"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s3",
+                    "title": "Locate drain plug",
+                    "instruction": "Slide under front, find engine oil pan and drain plug. Place drain pan centered under plug.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "oil drain plug",
+                        "drain pan",
+                        "engine oil pan"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Hot",
+                            "text": "Oil may still be warm, keep hands and face clear."
+                        },
+                        {
+                            "kind": "Chemical",
+                            "text": "Wear gloves and eye protection, avoid skin contact with oil."
+                        }
+                    ],
+                    "stopIf": [
+                        "you cannot identify drain plug",
+                        "drain plug threads look damaged"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s4",
+                    "title": "Drain old oil",
+                    "instruction": "Use socket set to loosen drain plug counterclockwise, finish by hand and let oil drain fully into pan for 10 minutes.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "oil drain plug",
+                        "drain pan"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Hot",
+                            "text": "Hot oil will flow fast, keep hands to side of plug."
+                        },
+                        {
+                            "kind": "Chemical",
+                            "text": "Do not breathe fumes, wipe spills immediately."
+                        }
+                    ],
+                    "stopIf": [
+                        "plug is stripped or will not loosen",
+                        "oil looks milky or has metal chips"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s5",
+                    "title": "Replace oil filter",
+                    "instruction": "Move drain pan under oil filter, unscrew old filter counterclockwise, let it drain. Lightly oil new filter gasket with fingertip and screw on hand tight per manual.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "oil filter"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Hot",
+                            "text": "Filter and nearby parts may be hot."
+                        },
+                        {
+                            "kind": "Sharp",
+                            "text": "Wipe sharp edges around underbody before gripping filter."
+                        }
+                    ],
+                    "stopIf": [
+                        "old gasket stuck to engine",
+                        "new filter does not match old filter"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s6",
+                    "title": "Reinstall drain plug",
+                    "instruction": "Wipe pan surface clean, fit new drain plug washer, reinstall plug by hand then snug with socket. Confirm torque in owners manual.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "oil drain plug"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Do not overtighten plug to avoid stripping threads."
+                        }
+                    ],
+                    "stopIf": [
+                        "plug will not thread smoothly by hand",
+                        "washer is missing or damaged"
+                    ],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Drain plug installed with new washer, no gap or drip"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s7",
+                    "title": "Add new oil",
+                    "instruction": "Lower car off stands to level ground. Open hood, remove oil filler cap, insert funnel and pour in amount from owners manual, then replace cap.",
+                    "handsOn": true,
+                    "lookFor": [
+                        "oil filler cap",
+                        "funnel"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Chemical",
+                            "text": "Avoid spilling oil on engine or hoses."
+                        }
+                    ],
+                    "stopIf": [
+                        "filler cap is missing or broken"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s8",
+                    "title": "Check level and leaks",
+                    "instruction": "Wait 2 minutes, pull dipstick, wipe, reinsert, pull again to check level. Start engine 30 seconds, look under car and filter for leaks, then turn off.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "oil dipstick",
+                        "oil filter",
+                        "oil drain plug"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Keep clear of moving belts and fans when engine runs."
+                        }
+                    ],
+                    "stopIf": [
+                        "oil level far above or below marks",
+                        "oil is leaking from plug or filter"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s9",
+                    "title": "Reset reminder and recycle",
+                    "instruction": "Top up to correct level if needed, reset oil maintenance minder per owners manual. Pour used oil and filter into sealed containers for recycling.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Chemical",
+                            "text": "Do not pour used oil in trash or drain, seal containers."
+                        }
+                    ],
+                    "stopIf": [
+                        "warning light stays on after reset",
+                        "engine sounds abnormal"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                }
+            ]
+        },
+        "photos": [],
+        "answers": []
+    },
+    "planError": null
+}

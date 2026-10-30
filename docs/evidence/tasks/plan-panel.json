@@ -1,0 +1,160 @@
+{
+    "task": {
+        "taskId": "T-4dca47f8576f",
+        "mode": "Diy",
+        "goal": "Replace the breaker panel in my garage",
+        "details": null,
+        "site": null,
+        "phase": "Planned",
+        "currentStepId": null,
+        "inspectionId": null,
+        "createdAt": "2026-10-29T00:58:18.373522+00:00",
+        "updatedAt": "2026-10-29T00:58:26.71423+00:00",
+        "safetyAcknowledged": false,
+        "abandonReason": null,
+        "plan": {
+            "title": "Do not replace garage breaker panel yourself",
+            "summary": "Breaker panel replacement involves mains electrical and must not be done DIY. Observe safely, document, and hire a licensed electrician.",
+            "risk": "High",
+            "estimatedMinutes": 20,
+            "restricted": "MainsElectrical",
+            "professionalRequired": true,
+            "professionalReason": "Replacing a breaker panel involves live mains wiring and the main electrical panel. This work can cause electrocution, fire, and code violations and must be done by a licensed electrician.",
+            "tools": [
+                "flashlight",
+                "phone camera"
+            ],
+            "parts": [],
+            "sourceNote": "AI-written plan \u00b7 check your owner's manual",
+            "modelId": "muse-spark-1.3",
+            "source": "AI inference",
+            "needsSafetyAck": true,
+            "steps": [
+                {
+                    "id": "s1",
+                    "title": "Observe panel safely from distance",
+                    "instruction": "Stand back and look at the garage breaker panel. Do not touch it or remove the cover. Note any burning smell, buzzing, heat, or scorch marks from a safe distance.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "breaker panel",
+                        "warning label"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Do not touch breakers, wires, or panel cover. Risk of electrocution even with breakers off."
+                        }
+                    ],
+                    "stopIf": [
+                        "you smell burning or see smoke or sparks",
+                        "panel is hot buzzing or damaged"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s2",
+                    "title": "Read outside labels only",
+                    "instruction": "If the outer door is already closed and safe to view, read the labels on the outside only. Note brand, amperage, and any warning stickers for the electrician.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "panel door",
+                        "main breaker",
+                        "warning label"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Keep hands and metal objects away from panel. Do not open door if damaged."
+                        }
+                    ],
+                    "stopIf": [
+                        "door is open with exposed wires",
+                        "cover is missing or loose"
+                    ],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s3",
+                    "title": "Document panel condition",
+                    "instruction": "Take photos of the full panel exterior, any labels, and the surrounding wall area to share with the electrician. Do not remove cover for photos.",
+                    "handsOn": false,
+                    "lookFor": [
+                        "breaker panel",
+                        "panel door"
+                    ],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Do not operate breakers repeatedly if they are tripping. Leave as is for professional."
+                        }
+                    ],
+                    "stopIf": [],
+                    "check": {
+                        "required": true,
+                        "whatDoneLooksLike": "Clear photo shows full panel exterior and labels"
+                    },
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s4",
+                    "title": "Leave wiring untouched",
+                    "instruction": "Leave all breakers as they are. Do not switch off main, pull breakers, or unscrew panel. Confirm in your home manual where your main disconnect is located, but do not operate it.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Do not attempt to turn off main or remove breakers yourself. Mains stay live."
+                        }
+                    ],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s5",
+                    "title": "Prepare notes for electrician",
+                    "instruction": "Write down why you want replacement, panel age, tripping issues, and garage loads. Confirm exact replacement size and type from electrician and permit requirements.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Other",
+                            "text": "Provide clear information to get correct permit and replacement panel."
+                        }
+                    ],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                },
+                {
+                    "id": "s6",
+                    "title": "Call licensed electrician",
+                    "instruction": "Contact a licensed electrician to inspect and replace the garage breaker panel. Share your photos and notes and ask about permits and power shutoff.",
+                    "handsOn": false,
+                    "lookFor": [],
+                    "cautions": [
+                        {
+                            "kind": "Electrical",
+                            "text": "Only a licensed electrician should replace the panel and handle utility disconnect."
+                        }
+                    ],
+                    "stopIf": [],
+                    "check": null,
+                    "status": "Todo",
+                    "lastCheck": null
+                }
+            ]
+        },
+        "photos": [],
+        "answers": []
+    },
+    "planError": null
+}

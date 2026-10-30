@@ -1,7 +1,11 @@
 using LensQi.FieldOps.Api.Features.Inspections;
+using LensQi.FieldOps.Api.Features.LiveVision;
 using LensQi.FieldOps.Api.Features.Receipts;
 using LensQi.FieldOps.Api.Features.Segmentation;
 using LensQi.FieldOps.Api.Features.Simulation;
+using LensQi.FieldOps.Api.Features.Tasks;
+using LensQi.FieldOps.Api.Infrastructure.Tasks;
+using LensQi.FieldOps.Meta.Tasks;
 using LensQi.FieldOps.Api.Features.VendorKnowledge;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Fixtures;
@@ -12,6 +16,7 @@ using LensQi.FieldOps.Meta.Knowledge;
 using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Vision;
 using LensQi.FieldOps.Api.Infrastructure.Knowledge;
+using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Diagnostics;
 using LensQi.FieldOps.Core.Knowledge;
 using LensQi.FieldOps.Meta.Muse;
@@ -92,6 +97,18 @@ builder.Services.AddSingleton(sp =>
 {
     var o = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
     var dir = Path.IsPathRooted(o.DataDirectory) ? o.DataDirectory : Path.Combine(builder.Environment.ContentRootPath, o.DataDirectory);
+    var store = new TaskStore(dir);
+    // Guided tasks survive a restart the same way inspections do: replayed from their logs, fail closed per file.
+    var skipped = store.LoadPersisted();
+    var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("TaskStore");
+    log.LogInformation("Rehydrated {Count} task(s) from {Dir}", store.All.Count(), dir);
+    foreach (var s in skipped) log.LogWarning("Left task log {File} on disk: {Reason}", s.File, s.Reason);
+    return store;
+});
+builder.Services.AddSingleton(sp =>
+{
+    var o = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
+    var dir = Path.IsPathRooted(o.DataDirectory) ? o.DataDirectory : Path.Combine(builder.Environment.ContentRootPath, o.DataDirectory);
     return new EvidenceFileStore(dir);
 });
 builder.Services.AddSingleton(TimeProvider.System);
@@ -110,6 +127,9 @@ builder.Services.AddSingleton<IDiagnosticProbe>(sp => new RecordedReplayProbe(sp
 builder.Services.AddSingleton<IDiagnosticProbe>(sp => new LiveLocalHttpHealthProbe(LiveLocalHttpHealthProbe.CreateClient(), sp.GetRequiredService<DiagnosticsOptions>(), sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<DiagnosticDispatcher>();
 builder.Services.AddSingleton<VisualAssessmentService>();
+builder.Services.AddSingleton<LiveSceneService>();
+builder.Services.AddSingleton<TaskPlanner>();
+builder.Services.AddSingleton<StepCoach>();
 builder.Services.AddSingleton<ReceiptService>();
 builder.Services.AddSingleton<GroundedProposalService>();
 
@@ -135,6 +155,7 @@ builder.Services.AddSingleton<ISegmenter>(sp => new SamSegmentationClient(sp.Get
 
 // T6.1: request timeouts and rate limits on the endpoints that spend Meta Model API calls.
 builder.Services.AddModelCallLimits(builder.Configuration);
+builder.Services.AddLiveVision(builder.Configuration);
 
 var app = builder.Build();
 
@@ -143,6 +164,14 @@ _ = app.Services.GetRequiredService<IKnowledgePackStore>();
 _ = app.Services.GetRequiredService<IReadOnlyList<FixtureKnowledgeBinding>>();
 _ = app.Services.GetRequiredService<ExpectedTwinStore>();
 _ = app.Services.GetRequiredService<InspectionStore>();
+_ = app.Services.GetRequiredService<TaskStore>();
+
+// An unexpected exception is logged by the middleware; the client gets the error shape without its type or message.
+app.UseExceptionHandler(error => error.Run(async context =>
+{
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new ApiError("internal", "Unexpected server error"));
+}));
 
 app.UseModelCallLimits();
 
@@ -153,6 +182,8 @@ app.MapSimulation();
 app.MapReceipts();
 app.MapInspectionKnowledge();
 app.MapSegmentation();
+app.MapLiveVision();
+app.MapTasks();
 
 // Technician app and operations dashboard: a single-page app built from apps/web into wwwroot (no Node at runtime).
 app.UseDefaultFiles();

@@ -85,15 +85,15 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
     val local = remember(r.file) { runCatching { BitmapFactory.decodeFile(r.file.path, BitmapFactory.Options().apply { inSampleSize = 2 }) }.getOrNull() }
     val outlinesReady = r.done && s.outlinePhotoId == r.photoId && s.outlineImage != null
     val change = view?.changeAnalyses?.lastOrNull { it.photoEvidenceId == r.photoId }
-    val assessment = if (r.afterRepair) null else s.latestAssessment
+    val assessment = if (r.afterRepair) null else assessmentForPhoto(s.latestAssessment, r.photoId)
     val tags = if (outlinesReady) arTags(s.fixture, assessment, s.outlines, change) else emptyList()
     val target = if (outlinesReady) targetConcept(s.fixture, assessment) else null
     val rejected = change?.verdict == VisualChangeVerdict.DuplicateImage || change?.verdict == VisualChangeVerdict.NoVisualChange
     val expected = s.fixture?.assets?.firstOrNull { it.assetId == view?.assetId }?.displayName ?: view?.assetId.orEmpty()
     val glass = Color(0xCC0B0F14)
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButton(onClick = { vm.closeReview(); onContinue() }, modifier = Modifier.clip(CircleShape).background(glass)) { Icon(Icons.Outlined.Close, "Close", tint = FoDark.Foreground) }
                 Row(
@@ -132,9 +132,8 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
         }
 
         Column(
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
-                .clip(RoundedCornerShape(26.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(26.dp)).padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+            Modifier.padding(12.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(26.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(26.dp)).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // LensQi's read of the photo and the next move, from the server's assessment and change check.
@@ -196,10 +195,13 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                     if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
                 }
             }
-            if (rejected) PrimaryButton("Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
-            else if (r.done || r.awaitingUpload)
+            if (rejected || target != null) {
+                PrimaryButton(if (target != null) "Capture the requested view" else "Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+                if (!rejected) SecondaryButton("Continue", { vm.closeReview(); onContinue() }, Modifier.fillMaxWidth())
+            } else if (r.done || r.awaitingUpload) {
                 PrimaryButton(if (r.afterRepair) "Continue to verification" else "Continue", { vm.closeReview(); onContinue() }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward)
-            else SecondaryButton("Cancel", { vm.cancel(); vm.closeReview(); onContinue() }, Modifier.fillMaxWidth())
+                SecondaryButton("Take another photo", { vm.closeReview(); onRetake() }, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+            } else SecondaryButton("Cancel", { vm.cancel(); vm.closeReview(); onContinue() }, Modifier.fillMaxWidth())
         }
     }
 }
