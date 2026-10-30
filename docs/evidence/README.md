@@ -97,6 +97,7 @@ any artifact or field fails it. A digest proves bundle integrity only, never who
 |---|---|---|
 | `receipt-sample/` | First issued receipt: fake fix denied then real fix `VerifiedCompleteSimulated` (policy 1.1, before change evidence). | `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
 | `receipt-loopback/` | Live probe end to end: fault measured as a 404 FAIL, repair measured as 200, `VerifiedCompleteLive`, change evidence `Changed`; `RUN.md` also records the `UNAVAILABLE` result with the server stopped. See `docs/LIVE_PROBE_RUNBOOK.md`. | `LIVE_LOCAL_PROBE (loopback)`, `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `live-phone/` | The verify screen on a real phone camera (S23 Ultra, Chrome over `adb reverse`): fake fix denied on a fresh 404, real fix `VerifiedCompleteLive` on a fresh 200, receipt valid, measured timings. Subject is the synthetic render on a monitor. | `LIVE_LOCAL_PROBE (loopback)`, `LIVE_META`, `PHONE_PHOTO_OF_SYNTHETIC_RENDER` |
 
 ## Evaluation reports (`docs/evaluation/`)
 

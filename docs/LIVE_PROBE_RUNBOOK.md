@@ -45,3 +45,9 @@ The `fieldops-api-live-loopback` launch configuration (`.claude/launch.json`) ru
 `--replug-cmd` moving the health file and stopping/starting the local `http.server`. Result: fault measured as FAIL
 (404) → FaultConfirmed; post-repair photo `Changed`; verify `Verified` / `VerifiedCompleteLive`; second inspection with
 the server stopped → `UNAVAILABLE`; receipt bundle `RECEIPT INTEGRITY: PASS`.
+
+## Phone run (2026-10-30)
+
+The same loopback setup driven from a phone: Chrome on an S23 Ultra over `adb reverse tcp:5202`, photos from the phone
+camera of the synthetic renders on the Mac's monitor, genuine Muse and SAM. Fake fix denied on a fresh 404, real fix
+`VerifiedCompleteLive` on a fresh 200, receipt valid, with timings. See `docs/evidence/live-phone/`.
