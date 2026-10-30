@@ -227,6 +227,9 @@ public class TaskSessionTests
     [InlineData("Write down the model number and call a plumber.", false)]
     [InlineData("No professional needed: unscrew the cover and remove the breaker.", true)]
     [InlineData("You do not need an electrician; just remove the cover.", true)]
+    [InlineData("Remove boxes and clutter blocking access to the panel.", false)]
+    [InlineData("Unplug sensitive electronics in the garage.", false)]
+    [InlineData("Replace the old breaker with a new one.", true)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
 
