@@ -83,6 +83,7 @@ as implementation commits land.
 | 2026-10-30T00:14:27-07:00 | `32144ee` | GT-T15 TaskViewModel tests; GT-T19 queue sessionId, 1->2 migration test, glasses LiveSession for tasks | Android testDebugUnitTest 118 (new: TaskViewModelTest 5, QueueMigrationTest, LiveSessionTest) + assembleDebug; emulator: task glasses route with Mock Device Kit, genuine Muse/SAM step coaching; secret scan PASS; no real glasses or phone | None |
 | 2026-10-30T00:35:18-07:00 | `977a95c` | S23 Ultra run 1: ARCore tracking+depth on phone; fixed endless task spinner and clipped header | Android testDebugUnitTest + assembleDebug; installed on SM-S918U1; ARCore session log and screenshots in docs/evidence/tasks/s23-phone-run-1; header fix not yet seen on the phone; GT-T25 partial | None |
 | 2026-10-30T00:43:35-07:00 | `e327640` | S23 Ultra run 2 evidence: ARCore anchors and distance on a real smoke detector; voice question answered from the camera view | docs/evidence/tasks/s23-phone-run-2 (screenshots, task events with genuine Muse plan and answer); GT-T25 still partial | None |
+| 2026-10-30T01:15:52-07:00 | `2063639` | One label per part, clear camera view, plans fitted to the person and room (10b16f7, ec58b78) | dotnet test: Core 148, Meta 18, Api 126; Android 127 (TaskWireTest catches the Plan it crash); web 31 + tsc + build; S23 Ultra run 3: one 'Smoke detector' label, panels in lower half and tap-to-hide, plan with no ladder for 188 cm; reach note not exercised | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
