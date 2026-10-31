@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.Image
+import android.graphics.BitmapFactory
 import com.google.ar.core.Anchor
+import com.google.ar.core.AugmentedImage
+import com.google.ar.core.AugmentedImageDatabase
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
 import com.google.ar.core.Coordinates2d
@@ -41,17 +44,26 @@ object ArCore {
         ArCoreApk.getInstance().requestInstall(activity, true) == ArCoreApk.InstallStatus.INSTALLED
     }.getOrDefault(false)
 
-    /** A session with motion tracking, vertical and horizontal planes, and the Depth API when the device has it. */
-    fun openSession(context: Context): Pair<Session, Boolean> {
+    /**
+     * A session with motion tracking, vertical and horizontal planes, the Depth API when the device has it, and the
+     * registration marker as an Augmented Image of its printed width. Returns the session, whether depth is on, and
+     * whether the marker could be loaded (without it, equipment registration is unavailable).
+     */
+    fun openSession(context: Context): Triple<Session, Boolean, Boolean> {
         val session = Session(context)
         val depth = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+        val markers = runCatching {
+            val bitmap = context.assets.open(RegistrationMarker.ASSET).use { BitmapFactory.decodeStream(it) }
+            AugmentedImageDatabase(session).apply { addImage(RegistrationMarker.ID, bitmap, RegistrationMarker.WIDTH_M.toFloat()) }
+        }.getOrNull()
         session.configure(session.config.apply {
             focusMode = Config.FocusMode.AUTO
             updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             depthMode = if (depth) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
+            markers?.let { augmentedImageDatabase = it }
         })
-        return session to depth
+        return Triple(session, depth, markers != null)
     }
 }
 
@@ -62,9 +74,45 @@ class ArCoreAnchor(private val anchor: Anchor) : WorldAnchor {
     override fun detach() = anchor.detach()
 }
 
+/**
+ * An anchor at a world point. When the point lies on a plane ARCore tracks, the anchor is attached to that plane, so it
+ * moves with ARCore's corrections to the plane instead of floating free.
+ */
 fun Session.anchorAt(p: DoubleArray): WorldAnchor? = runCatching {
-    ArCoreAnchor(createAnchor(Pose(floatArrayOf(p[0].toFloat(), p[1].toFloat(), p[2].toFloat()), floatArrayOf(0f, 0f, 0f, 1f))))
+    val pose = Pose(floatArrayOf(p[0].toFloat(), p[1].toFloat(), p[2].toFloat()), floatArrayOf(0f, 0f, 0f, 1f))
+    val plane = getAllTrackables(Plane::class.java).firstOrNull { it.trackingState == TrackingState.TRACKING && it.subsumedBy == null && it.holds(pose) }
+    ArCoreAnchor(plane?.createAnchor(pose) ?: createAnchor(pose))
 }.getOrNull()
+
+/** The registration marker's pose and how ARCore follows it: in view, at its last seen position, or not at all. */
+fun Session.marker(): Pair<MarkerTracking, RigidPose?> {
+    val image = getAllTrackables(AugmentedImage::class.java).firstOrNull { it.name == RegistrationMarker.ID && it.trackingState == TrackingState.TRACKING }
+        ?: return MarkerTracking.None to null
+    val tracking = when (image.trackingMethod) {
+        AugmentedImage.TrackingMethod.FULL_TRACKING -> MarkerTracking.Full
+        AugmentedImage.TrackingMethod.LAST_KNOWN_POSE -> MarkerTracking.LastKnown
+        else -> return MarkerTracking.None to null
+    }
+    val m = FloatArray(16); image.centerPose.toMatrix(m, 0)
+    return tracking to RigidPose.of(m)
+}
+
+/** The world point on a surface ARCore tracks under view pixel ([x], [y]): a plane, a feature point or a depth point. */
+fun Frame.surfaceAt(x: Float, y: Float): DoubleArray? =
+    hitTest(x, y).firstOrNull { h ->
+        when (val t = h.trackable) {
+            is Plane -> t.isPoseInPolygon(h.hitPose)
+            is Point, is DepthPoint -> true
+            else -> false
+        }
+    }?.hitPose?.let { doubleArrayOf(it.tx().toDouble(), it.ty().toDouble(), it.tz().toDouble()) }
+
+/** True when [pose] lies within 3 cm of the plane's surface and inside its outline. */
+private fun Plane.holds(pose: Pose): Boolean {
+    val c = centerPose; val n = c.yAxis
+    val off = (pose.tx() - c.tx()) * n[0] + (pose.ty() - c.ty()) * n[1] + (pose.tz() - c.tz()) * n[2]
+    return abs(off) < 0.03f && isPoseInPolygon(pose)
+}
 
 /** Clockwise rotation (0, 90, 180, 270) that makes the CPU camera image upright in the view. */
 fun Frame.imageRotation(): Int {
@@ -93,15 +141,14 @@ fun Frame.cameraView(map: ViewMap): ArCameraView? {
 }
 
 /**
- * The floor's height in world metres (ARCore's Y axis points up): the lowest upward-facing plane ARCore tracks at least
- * 30 cm below the camera, so a table top or shelf in view is not taken for the floor. Null until one is found.
+ * The floor's height in world metres (ARCore's Y axis points up) where the technician tapped the view at pixel ([x], [y]):
+ * an upward-facing plane ARCore tracks, at least 30 cm below the camera so a table top tapped by mistake is refused.
+ * Null when the tap found no such plane.
  */
-fun Session.floorY(cameraY: Double): Double? =
-    getAllTrackables(Plane::class.java)
-        .filter { it.trackingState == TrackingState.TRACKING && it.type == Plane.Type.HORIZONTAL_UPWARD_FACING && it.subsumedBy == null }
-        .map { it.centerPose.ty().toDouble() }
-        .filter { it < cameraY - 0.3 }
-        .minOrNull()
+fun Frame.floorAt(x: Float, y: Float, cameraY: Double): Double? =
+    hitTest(x, y).firstOrNull { h ->
+        (h.trackable as? Plane)?.let { it.type == Plane.Type.HORIZONTAL_UPWARD_FACING && it.isPoseInPolygon(h.hitPose) } == true
+    }?.hitPose?.ty()?.toDouble()?.takeIf { it < cameraY - 0.3 }
 
 /** What the technician sees about ARCore's state; tracking failures name the fix. */
 fun Frame.trackingLabel(depth: Boolean): String = when (camera.trackingState) {

@@ -412,6 +412,9 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         analyzeLive = vm::analyzeLiveFrame,
         targetConcept = step.accessFor ?: step.lookFor.firstOrNull(),
         liveAllowed = !reviewing,
+        // The current step, not the one being reviewed: looking back at an earlier step keeps the confirmed part.
+        scopeKey = current?.id ?: step.id,
+        targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
         showDetails = s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || reach?.canSkip == true,
         onObjects = { measured = it; vm.measured = it },

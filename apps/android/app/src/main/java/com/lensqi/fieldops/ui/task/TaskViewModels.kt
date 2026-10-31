@@ -153,6 +153,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     /** What ARCore measured on the step screen; it goes with live frames and questions so the coach can use real numbers. */
     @Volatile var measured: List<com.lensqi.fieldops.domain.live.LiveObject> = emptyList()
+    /** The part confirmed on the camera, kept while the step stays the same. */
+    val spatialTarget = com.lensqi.fieldops.ui.camera.TargetMemory()
     fun clearError() = _state.update { it.copy(error = null) }
 
     /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */

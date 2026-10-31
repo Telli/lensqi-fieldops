@@ -3,6 +3,11 @@ package com.lensqi.fieldops.domain
 import com.lensqi.fieldops.data.api.ChecklistStatus
 import com.lensqi.fieldops.data.api.DiagnosticResult
 import com.lensqi.fieldops.data.api.DiagnosticSource
+import com.lensqi.fieldops.data.api.EvidenceOrigin
+import com.lensqi.fieldops.data.api.PhotoEvidence
+import com.lensqi.fieldops.data.api.SegmentationRef
+import com.lensqi.fieldops.data.api.VisualChangeAnalysis
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.Readiness
@@ -124,5 +129,32 @@ class VerifyFlowTest {
         assertEquals("unreachable", measuredValue(r))
         assertEquals("HTTP 503", measuredValue(r.copy(httpStatus = 503)))
         assertEquals("—", measuredValue(r.copy(normalizedValue = null)))
+    }
+
+    @Test
+    fun capture_help_comes_only_on_the_capture_step_and_follows_the_servers_reference() {
+        val base = NetworkModule.json().decodeFromString(InspectionView.serializer(), Recordings.text("inspection")).copy(
+            stage = InspectionStage.NeedsEvidence, currentClaimId = "c2", acceptedPostRepairPhotoId = null, awaitingAnalysis = emptyList(),
+            photos = listOf("before", "older", "after1").map { PhotoEvidence(it, EvidenceOrigin.Phone, "sha-$it", "2026-10-31T10:00:00Z") },
+            segmentations = listOf(
+                SegmentationRef("s0", "older", "patch cable", matched = true),
+                SegmentationRef("s1", "before", "yellow cable at port 2", matched = true),
+                SegmentationRef("s2", "before", "chassis", matched = false),
+                // The change check's own outline of an earlier claim's post-repair photo is never a reference.
+                SegmentationRef("s3", "after1", "yellow cable at port 2", matched = true),
+            ),
+            changeAnalyses = listOf(VisualChangeAnalysis("c1", "after1", "before", "yellow cable at port 2", verdict = VisualChangeVerdict.NoVisualChange, reason = "", thresholdsVersion = "t1")),
+            readiness = Readiness(ready = false, next = "CapturePhoto", blocking = emptyList()),
+        )
+        // Before this claim has a change analysis: the newest matched outline of a photo from before any claim.
+        assertEquals(CaptureGuide("before", "yellow cable at port 2"), captureGuide(base))
+        // Once the server names the reference for this claim, that is the one.
+        val named = base.copy(changeAnalyses = base.changeAnalyses + VisualChangeAnalysis("c2", "after2", "older", "patch cable", verdict = VisualChangeVerdict.DuplicateImage, reason = "", thresholdsVersion = "t1"))
+        assertEquals(CaptureGuide("older", "patch cable"), captureGuide(named))
+        // Any other next step, or no claim yet, gets no capture help.
+        for (next in listOf("ClaimRepair", "WaitForAnalysis", "ReviewChecklist", "Acknowledge", "Verify", "None"))
+            assertNull(captureGuide(base.copy(readiness = Readiness(ready = false, next = next, blocking = emptyList()))), next)
+        assertNull(captureGuide(base.copy(currentClaimId = null)))
+        assertNull(captureGuide(base.copy(segmentations = base.segmentations.filter { it.sourcePhotoEvidenceId == "after1" })))
     }
 }

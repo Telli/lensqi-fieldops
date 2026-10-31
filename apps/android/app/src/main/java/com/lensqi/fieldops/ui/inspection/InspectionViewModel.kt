@@ -126,6 +126,8 @@ class InspectionViewModel @Inject constructor(
     private val json: Json,
 ) : ViewModel() {
     val inspectionId: String = checkNotNull(savedState["inspectionId"])
+    /** The part confirmed on the camera, kept across captures and retakes for this inspection. */
+    val spatialTarget = com.lensqi.fieldops.ui.camera.TargetMemory()
     suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): com.lensqi.fieldops.domain.live.LiveResponse {
         return api.liveFrame(inspectionId, kind,
             okhttp3.MultipartBody.Part.createFormData("image", "preview.jpg", bytes.toRequestBody("image/jpeg".toMediaType())),
@@ -247,7 +249,9 @@ class InspectionViewModel @Inject constructor(
         local.update { it.copy(error = null, review = Review(file, origin, afterRepair, labels.mapIndexed { i, l -> ReviewStep(l, if (i == 0) StepState.Doing else StepState.Todo) })) }
         running?.cancel()
         running = viewModelScope.launch {
-            runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }
+            // observedAt is when the file was written at the shutter, not when the technician confirmed the photo.
+            val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
+            runCatching { queue.enqueuePhoto(inspectionId, file, origin, shotAt) }.onFailure { e -> local.update { it.copy(error = e.message) } }
             var photo: PhotoEvidence? = null
             withTimeoutOrNull(45_000) {
                 while (photo == null) {
@@ -363,6 +367,14 @@ class InspectionViewModel @Inject constructor(
 
     private val viewKey get() = "inspection-"
     private val knowledgeKey get() = "knowledge-"
+
+    /** A stored photo for display on the camera (the before photo as a framing aid), upright and downscaled; null offline. */
+    suspend fun photoForDisplay(evidenceId: String): Bitmap? {
+        val name = artifactFor(evidenceId) ?: (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value
+            ?.also { names -> local.update { it.copy(artifacts = names) } }?.firstOrNull { it.startsWith("$evidenceId-") } ?: return null
+        val body = (apiCall { api.artifact(inspectionId, name) } as? ApiOutcome.Ok)?.value ?: return null
+        return withContext(Dispatchers.IO) { body.byteStream().use { com.lensqi.fieldops.ui.camera.uprightBitmap(it.readBytes(), 1600) } }
+    }
 
     private suspend fun loadArtifactBitmap(evidenceId: String): Bitmap? {
         val names = (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value ?: return null

@@ -16,8 +16,16 @@ import kotlin.math.*
     /** Set only when the box comes from a world anchor with no live 2D track: seconds since a detection confirmed it. */
     val seenSecondsAgo: Int? = null,
     val depthSource: String? = null,
-    /** Height above the floor plane ARCore found, from the part's anchor; null until the floor is found. Measured. */
+    /** Height above the floor the technician set, from the part's anchor; null until the floor is set. Measured. */
     val heightAboveFloorCm: Int? = null,
+    /** The world anchor holding this part, which the technician can confirm as the target. */
+    val anchorId: String? = null,
+    /** The part the technician confirmed. */
+    val target: Boolean = false,
+    /** The confirmed part has not been matched lately or was missed when looked at; no distance is coached on it. */
+    val uncertain: Boolean = false,
+    /** Height of the part's anchor above (positive) or below the camera, from ARCore's pose; needs no floor. */
+    val aboveCameraCm: Int? = null,
 )
 @Serializable data class LiveFinding(val featureId: String, val status: String, val reason: String)
 @Serializable data class LiveResponse(val frameId: String, val objects: List<LiveObject> = emptyList(), val recommendation: String? = null,
@@ -101,6 +109,8 @@ class LiveTracker {
         for (n in index + 1 until frames.size) tracked = advance(frames[n - 1], frames[n], tracked)
         objects = tracked; return true
     }
+    /** Forgets every frame and track, so a response to an earlier frame finds nothing to apply to. */
+    fun clear() { frames.clear(); objects = emptyList(); detectedAt = 0 }
     private fun advance(a: GrayFrame, b: GrayFrame, objects: List<LiveObject>) = objects.mapNotNull { o -> trackBox(a, b, o.box)?.let { o.copy(box = it) } }
     fun current(id: String): Boolean {
         val reference = frames.firstOrNull { it.id == id } ?: return false; val last = frames.lastOrNull() ?: return false

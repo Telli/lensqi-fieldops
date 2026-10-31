@@ -81,6 +81,19 @@ fun targetConcept(fixture: Fixture?, assessment: VisualAssessment?): String? {
     return fixture?.visualRequirements?.firstOrNull { it.requirementId == unclear?.featureId }?.segmentationPrompt
 }
 
+/**
+ * The equipment to register on the camera: the inspection's asset as the site record names it, and the port its
+ * documented connection uses. The connection is documentation of intent, so the port is where to look, not proof of
+ * what is plugged in. Null without a fixture or an asset the fixture knows.
+ */
+fun registrationSubject(fixture: Fixture?, assetId: String?): com.lensqi.fieldops.arcore.RegistrationSubject? {
+    val asset = fixture?.assets?.firstOrNull { it.assetId == assetId } ?: return null
+    return com.lensqi.fieldops.arcore.RegistrationSubject(
+        fixture.fixtureId, fixture.fixtureRevision, asset.assetId, asset.displayName, asset.kind,
+        port = fixture.connections.firstOrNull { it.fromAssetId == asset.assetId }?.fromPortLabel,
+    )
+}
+
 /** One tag per outline: the AI's finding for the matching checklist item, or the change verdict after a repair. */
 fun arTags(fixture: Fixture?, assessment: VisualAssessment?, outlines: List<Segmentation>, change: VisualChangeAnalysis? = null): List<ArTag> =
     outlines.mapNotNull { g ->
