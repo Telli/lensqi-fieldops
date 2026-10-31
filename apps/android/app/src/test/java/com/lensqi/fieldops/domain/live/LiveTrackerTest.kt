@@ -26,6 +26,10 @@ class LiveTrackerTest {
         val t = LiveTracker(); t.push(frame(1)); assertTrue(t.objects.isEmpty()); t.seed("f-1", listOf(part))
         for (n in 2..205) t.push(frame(n)); assertTrue(t.objects.isEmpty())
     }
+    @Test fun `a cleared tracker drops a detection for a frame from before`() {
+        val t = LiveTracker(); t.push(frame(1)); t.seed("f-1", listOf(part)); t.clear()
+        assertTrue(t.objects.isEmpty()); t.push(frame(2)); assertFalse(t.seed("f-1", listOf(part))); assertFalse(t.current("f-1"))
+    }
     @Test fun `guidance expires on scene change and darkness is measured`() {
         val t = LiveTracker(); t.push(frame(1)); t.push(frame(2, blank = true)); assertFalse(t.current("f-1")); assertEquals(24.0, frameQuality(frame(1, blank = true)).brightness)
     }

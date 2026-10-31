@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -178,9 +179,21 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     // previous entry changes and has no inspection id.
                     val parent = remember(e) { nav.previousBackStackEntry } ?: return@composable
                     val vm: InspectionViewModel = hiltViewModel(parent)
+                    val ui = vm.state.collectAsStateWithLifecycle().value
+                    // Capture help for the post-repair photo comes only on the server's CapturePhoto step: the part it
+                    // compares and its before photo as a framing aid. Before a repair, the part the AI asked to see.
+                    val guide = com.lensqi.fieldops.domain.captureGuide(ui.view)
+                    val reference by produceState<android.graphics.Bitmap?>(null, guide?.referencePhotoId) { value = guide?.referencePhotoId?.let { vm.photoForDisplay(it) } }
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
                         analyzeLive = vm::analyzeLiveFrame,
+                        // The confirmed part is remembered across captures and retakes.
+                        targetConcept = guide?.concept ?: com.lensqi.fieldops.ui.inspection.targetConcept(ui.fixture, ui.latestAssessment),
+                        capturePart = guide?.concept,
+                        reference = reference,
+                        registration = remember(ui.fixture, ui.view?.assetId) { com.lensqi.fieldops.ui.inspection.registrationSubject(ui.fixture, ui.view?.assetId) },
+                        scopeKey = vm.inspectionId,
+                        targetMemory = vm.spatialTarget,
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
                             vm.captureForReview(file, origin = "Phone")

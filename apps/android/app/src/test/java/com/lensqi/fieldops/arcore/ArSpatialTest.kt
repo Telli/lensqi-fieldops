@@ -109,18 +109,33 @@ class ArSpatialTest {
         assertEquals(3, fuseTracks(emptyList(), listOf(anchored)).single().seenSecondsAgo)
     }
 
-    @Test fun `coaching uses the measured distance and stays silent without one`() {
+    @Test fun `coaching uses the measured distance against the task's range and stays silent without one`() {
         val near = LiveObject("w", "c", "Yellow cable", centre, distanceCm = 72, spatialAnchored = true)
-        assertEquals("Move about 42 cm closer to the yellow cable (about 72 cm away).", distanceAdvice(listOf(near)))
-        assertNull(distanceAdvice(listOf(near.copy(distanceCm = null, spatialAnchored = false))))
+        assertEquals("Move about 37 cm closer to the yellow cable (estimated 72 cm away).", distanceAdvice(listOf(near), framingCm = 25..45))
+        assertNull(distanceAdvice(listOf(near.copy(distanceCm = null, spatialAnchored = false)), framingCm = 25..45))
+        // Without a range only the lens's near limit is coached: no universal "30 cm".
+        assertNull(distanceAdvice(listOf(near)))
+        assertEquals("Move back about 10 cm from the yellow cable so the lens can focus (estimated 12 cm away).", distanceAdvice(listOf(near.copy(distanceCm = 12))))
     }
 
     @Test fun `a step's target part is coached on, not a nearer one`() {
         val plug = LiveObject("p", "drain plug", "Drain plug", centre, distanceCm = 60, spatialAnchored = true)
         val pan = LiveObject("q", "oil pan", "Oil pan", centre, distanceCm = 20, spatialAnchored = true)
-        assertEquals("Move about 30 cm closer to the drain plug (about 60 cm away).", distanceAdvice(listOf(pan, plug), "Drain Plug"))
-        assertEquals("Good distance from the oil pan (about 20 cm). Capture when ready.", distanceAdvice(listOf(pan, plug)))
-        assertNull(distanceAdvice(listOf(pan), "drain plug"))
+        assertEquals("Move about 25 cm closer to the drain plug (estimated 60 cm away).", distanceAdvice(listOf(pan, plug), "Drain Plug", 20..50))
+        assertEquals("Good distance from the oil pan (estimated 20 cm). Capture when ready.", distanceAdvice(listOf(pan, plug), framingCm = 15..30))
+        assertNull(distanceAdvice(listOf(pan), "drain plug", 20..50))
+    }
+
+    @Test fun `no distance is coached for a part overhead, far away or uncertain`() {
+        // Phone run 2: "Move about 250 cm closer to the ceiling detector" for a part 2.8 m away on the ceiling.
+        val ceiling = LiveObject("d", "smoke detector", "Ceiling detector", centre, distanceCm = 280, spatialAnchored = true, aboveCameraCm = 120)
+        assertNull(distanceAdvice(listOf(ceiling), "smoke detector", 25..45))
+        assertNull(distanceAdvice(listOf(ceiling.copy(distanceCm = 60)), "smoke detector", 25..45))
+        assertNull(distanceAdvice(listOf(ceiling.copy(aboveCameraCm = 0)), "smoke detector", 25..45))
+        val plug = LiveObject("p", "drain plug", "Drain plug", centre, distanceCm = 60, spatialAnchored = true, target = true, uncertain = true)
+        val pan = LiveObject("q", "oil pan", "Oil pan", centre, distanceCm = 60, spatialAnchored = true)
+        // An uncertain confirmed part silences coaching rather than handing it to another part.
+        assertNull(distanceAdvice(listOf(plug, pan), framingCm = 20..50))
     }
 
     @Test fun `upright image points map back to the sensor image`() {
@@ -168,6 +183,93 @@ class ArSpatialTest {
         val (shown, more) = partsToShow(objects, "smoke detector")
         assertEquals(listOf("b", "a"), shown.map { it.id })
         assertEquals(2, more)
+    }
+
+    @Test fun `a confirmed part covered by a hand is uncertain, not removed, and comes back when seen`() {
+        val anchors = SpatialAnchors()
+        anchors.seed(view(), depthEverywhere(0.5), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        val id = anchors.visible(view(), 0).single().anchorId!!
+        assertTrue(anchors.confirm(id, 1000))
+        assertEquals(TargetState.Tracking, anchors.target(view(), 1000)!!.state)
+        // Looked straight at it and nothing found: an unconfirmed part would be removed here.
+        anchors.seed(view(), depthEverywhere(0.5), emptyList(), 4000) { FakeAnchor(it) }
+        assertEquals(1, anchors.size)
+        assertEquals(TargetState.Uncertain, anchors.target(view(), 4000)!!.state)
+        assertTrue(anchors.visible(view(), 4000).single().uncertain)
+        anchors.seed(view(), depthEverywhere(0.5), listOf(part("b", centre)), 8000) { FakeAnchor(it) }
+        assertEquals(TargetState.Tracking, anchors.target(view(), 8000)!!.state)
+        assertEquals(id, anchors.target(view(), 8000)!!.id)
+    }
+
+    @Test fun `a confirmed part not matched for a minute is lost and must be confirmed again`() {
+        val anchors = SpatialAnchors(uncertainMs = 12_000, lostMs = 60_000)
+        anchors.seed(view(), depthEverywhere(0.5), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        anchors.confirm(anchors.visible(view(), 0).single().anchorId!!, 0)
+        // Outlives the 20 s expiry of unconfirmed labels, faded once it is not matched.
+        assertEquals(TargetState.Uncertain, anchors.target(view(), 30_000)!!.state)
+        assertEquals(TargetState.Lost, anchors.target(view(), 60_001)!!.state)
+        assertEquals(0, anchors.size)
+        // While ARCore is not tracking the camera, a target is uncertain, never shown as tracked.
+        val again = SpatialAnchors()
+        again.seed(view(), depthEverywhere(0.5), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        again.confirm(again.visible(view(), 0).single().anchorId!!, 0)
+        assertEquals(TargetState.Uncertain, again.target(null, 100)!!.state)
+    }
+
+    @Test fun `two boxes of the target's name around it ask the technician instead of picking one`() {
+        val anchors = SpatialAnchors()
+        anchors.seed(view(), depthEverywhere(0.5), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        anchors.confirm(anchors.visible(view(), 0).single().anchorId!!, 0)
+        val before = anchors.target(view(), 0)!!
+        // Two identical cables side by side whose boxes both reach over the target's position.
+        val left = LiveBox(0.30, 0.40, 0.52, 0.60); val right = LiveBox(0.48, 0.40, 0.70, 0.60)
+        anchors.seed(view(), depthEverywhere(0.5), listOf(part("l", left), part("r", right)), 4000) { FakeAnchor(it) }
+        val after = anchors.target(view(), 4000)!!
+        assertTrue(after.ambiguous)
+        assertEquals(before.id, after.id)
+        // Confirming one of them settles it.
+        val pick = anchors.visible(view(), 4000).first { !it.target }.anchorId!!
+        anchors.confirm(pick, 5000)
+        assertEquals(pick, anchors.target(view(), 5000)!!.id); assertTrue(!anchors.target(view(), 5000)!!.ambiguous)
+    }
+
+    @Test fun `noisy depth on the confirmed part neither splits it nor replaces its anchor`() {
+        // Phone run 2 showed one ceiling detector as three labels at 280, 320 and 385 cm.
+        var made = 0
+        val anchors = SpatialAnchors()
+        anchors.seed(view(), depthEverywhere(2.8), listOf(part("a", centre, "smoke detector")), 0) { made++; FakeAnchor(it) }
+        anchors.confirm(anchors.visible(view(), 0).single().anchorId!!, 0)
+        anchors.seed(view(), depthEverywhere(2.9), listOf(part("b", LiveBox(0.41, 0.4, 0.61, 0.6), "smoke detector")), 4000) { made++; FakeAnchor(it) }
+        assertEquals(1, made, "a small shift moves the label, not the anchor")
+        // Same name, beside the target, and the target is matched by the first box: the second is the same part split.
+        anchors.seed(view(), depthEverywhere(3.2), listOf(part("c", centre, "smoke detector"), part("d", LiveBox(0.62, 0.40, 0.70, 0.48), "smoke detector")), 8000) { made++; FakeAnchor(it) }
+        assertEquals(1, anchors.visible(view(), 8000).size)
+    }
+
+    @Test fun `the way back points to the side the part is on, and says turn around when it is behind`() {
+        val anchors = SpatialAnchors()
+        anchors.seed(view(), depthEverywhere(1.0), listOf(part("a", centre)), 0) { FakeAnchor(it) }
+        anchors.confirm(anchors.visible(view(), 0).single().anchorId!!, 0)
+        assertNull(anchors.target(view(), 0)!!.cue)
+        // Turned 60° left (counter-clockwise about +Y): the part is ahead but off the right edge.
+        val right = anchors.target(view(yawDeg = 60.0), 0)!!.cue!!
+        assertTrue(right.dx > 0 && !right.behind, "$right")
+        val behind = anchors.target(view(yawDeg = 180.0), 0)!!.cue!!
+        assertTrue(behind.behind, "$behind")
+    }
+
+    @Test fun `the floor is forgotten when tracking stays lost`() {
+        val floor = FloorReference(graceMs = 3000)
+        floor.set(0.0)
+        floor.tracking(false, 1000); floor.tracking(false, 3500); assertEquals(0.0, floor.y)
+        floor.tracking(true, 3600); floor.tracking(false, 4000); floor.tracking(false, 7001); assertNull(floor.y)
+    }
+
+    @Test fun `a live 2D track keeps the anchor's height and identity`() {
+        val anchored = LiveObject("w", "smoke detector", "Smoke detector", LiveBox(0.40, 0.40, 0.60, 0.60), distanceCm = 120, spatialAnchored = true,
+            heightAboveFloorCm = 238, anchorId = "w", target = true)
+        val fused = fuseTracks(listOf(LiveObject("t", "smoke detector", "Smoke detector", LiveBox(0.41, 0.41, 0.61, 0.61))), listOf(anchored)).single()
+        assertEquals(238, fused.heightAboveFloorCm); assertEquals("w", fused.anchorId); assertTrue(fused.target)
     }
 
     @Test fun `height above the floor comes from the anchor and the floor plane`() {

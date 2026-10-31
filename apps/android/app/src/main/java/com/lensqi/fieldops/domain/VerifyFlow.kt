@@ -42,6 +42,27 @@ fun verifyCard(v: InspectionView): VerifyCard {
     }
 }
 
+/**
+ * What the camera can help with for the post-repair photo: the before photo the server compares against and the part
+ * it compares. Only while the server's next step is CapturePhoto for a claim; any other step gets no capture help.
+ */
+data class CaptureGuide(val referencePhotoId: String, val concept: String?)
+
+/**
+ * The server names the reference in a change analysis once one exists for this claim. Before that, this is the client's
+ * reading of the server's rule (the newest matched segmentation of a photo from before the claim); the guide is only a
+ * framing aid, so a wrong guess costs the technician a less useful overlay, never a decision.
+ */
+fun captureGuide(v: InspectionView?): CaptureGuide? {
+    if (v?.currentClaimId == null || verifyCard(v) != VerifyCard.Photo) return null
+    v.changeAnalyses.lastOrNull { it.claimId == v.currentClaimId && it.referencePhotoEvidenceId != null }
+        ?.let { return CaptureGuide(it.referencePhotoEvidenceId!!, it.targetPrompt) }
+    val afterClaim = v.changeAnalyses.map { it.photoEvidenceId }.toSet() + v.awaitingAnalysis + listOfNotNull(v.acceptedPostRepairPhotoId)
+    val reference = v.segmentations.lastOrNull { s -> s.matched && s.sourcePhotoEvidenceId !in afterClaim && v.photos.any { it.evidenceId == s.sourcePhotoEvidenceId } }
+        ?: return null
+    return CaptureGuide(reference.sourcePhotoEvidenceId, reference.concept)
+}
+
 data class AttemptReview(val requirementId: String, val status: ChecklistStatus, val photoEvidenceId: String?)
 
 /** One verify call as the event log recorded it: the decision, what the person had confirmed, and what was measured. */

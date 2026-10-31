@@ -1,7 +1,11 @@
 package com.lensqi.fieldops.ui.camera
 
+import com.lensqi.fieldops.arcore.RegistrationView
+
 import android.graphics.Bitmap
 import android.os.SystemClock
+import com.lensqi.fieldops.arcore.FloorStatus
+import com.lensqi.fieldops.arcore.TargetView
 import com.lensqi.fieldops.arcore.distanceAdvice
 import com.lensqi.fieldops.arcore.fuseTracks
 import com.lensqi.fieldops.domain.live.*
@@ -30,6 +34,13 @@ data class LiveCameraState(
     val brightness: Double = 100.0,
     val sharpness: Double = 10.0,
     val motion: Double = 0.0,
+    /** The part the technician confirmed, while AR runs. */
+    val target: TargetView? = null,
+    val floor: FloorStatus? = null,
+    /** Camera frames drawn per second while AR runs; [fps] counts tracking updates, which are sampled at most 10 a second. */
+    val renderFps: Int = 0,
+    /** The registered equipment and the step's port, while AR runs on an inspection with a documented asset. */
+    val registration: RegistrationView? = null,
 )
 
 /** What ARCore contributes to one analysed frame: where image boxes land on screen, and the parts it holds in the world. */
@@ -38,6 +49,10 @@ class SpatialFrame(
     val anchored: List<LiveObject>,
     val offscreen: Int,
     val tracking: String,
+    val target: TargetView? = null,
+    val floor: FloorStatus? = null,
+    val renderFps: Int = 0,
+    val registration: RegistrationView? = null,
 )
 
 /** One session owns its frames, tracker and cancellable requests. No preview frame enters the evidence queue. */
@@ -46,6 +61,8 @@ class LiveCameraSession(
     @Volatile var onDetection: (String, List<LiveObject>) -> Unit = { _, _ -> },
     /** The part distance coaching is about (a task step's main `lookFor`); null means the nearest measured part. */
     @Volatile var targetConcept: String? = null,
+    /** The distance range the task or view request asks for, in cm; without one, distance coaching only covers focus. */
+    @Volatile var framingCm: IntRange? = null,
     private val analyze: suspend (String, ByteArray, String) -> LiveResponse,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -63,6 +80,14 @@ class LiveCameraSession(
         closed = true
         scope.cancel()
         synchronized(lock) { tracker.frames.clear() }
+    }
+
+    /**
+     * A new step, task or inspection. Tracks, guidance and screen text from the last one go, and so do the frames, so a
+     * response still in flight for one of them matches no frame and is dropped.
+     */
+    fun reset() = synchronized(lock) {
+        tracker.clear(); guidance = ""; screenText = null; guidanceFrame = ""; guidanceAt = 0; detected = false; scanned = false
     }
 
     fun nextFrameId(): String = synchronized(lock) { "live-$prefix-${++sequence}" }
@@ -107,7 +132,7 @@ class LiveCameraSession(
 
             if (guidance.isNotEmpty() && !tracker.current(guidanceFrame)) { guidance = ""; screenText = null; guidanceAt = 0 }
             val quality = frameQuality(frame)
-            val distance = spatial?.let { distanceAdvice(objects, targetConcept) }
+            val distance = spatial?.let { distanceAdvice(objects, targetConcept, framingCm) }
             val advice = when {
                 quality.brightness < 35 && guidance.isEmpty() -> "Add light so the parts and labels are visible."
                 motion > 32 -> "Move more slowly so I can keep track of the connection."
@@ -134,6 +159,7 @@ class LiveCameraSession(
                 guidanceAge = guidanceAt.takeIf { it > 0 }?.let { (now - it) / 1000 }, fps = fps,
                 viewSpace = spatial != null, tracking = spatial?.tracking, screenText = screenText,
                 brightness = quality.brightness, sharpness = quality.sharpness, motion = motion,
+                target = spatial?.target, floor = spatial?.floor, renderFps = spatial?.renderFps ?: 0, registration = spatial?.registration,
             )
             KINDS.filter { it !in busy && now >= (due[it] ?: 0) }.also { busy.addAll(it) }
         }
