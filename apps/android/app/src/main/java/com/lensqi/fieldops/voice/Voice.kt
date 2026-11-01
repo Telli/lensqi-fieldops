@@ -70,9 +70,10 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
     private var last = ""
 
     override fun speak(text: String, force: Boolean) {
-        if (!enabled || held || !ready || text.isBlank() || (!force && text == last)) return
-        last = text
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "lensqi-${text.hashCode()}")
+        val spoken = com.lensqi.fieldops.ui.common.TechnicianText.guidance(text)
+        if (!enabled || held || !ready || text.isBlank() || (!force && spoken == last)) return
+        last = spoken
+        tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "lensqi-${text.hashCode()}")
     }
 
     override fun stop() { tts.stop() }

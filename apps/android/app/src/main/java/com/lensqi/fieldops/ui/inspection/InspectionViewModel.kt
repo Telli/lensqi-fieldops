@@ -251,7 +251,7 @@ class InspectionViewModel @Inject constructor(
         running = viewModelScope.launch {
             // observedAt is when the file was written at the shutter, not when the technician confirmed the photo.
             val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
-            runCatching { queue.enqueuePhoto(inspectionId, file, origin, shotAt) }.onFailure { e -> local.update { it.copy(error = e.message) } }
+            runCatching { queue.enqueuePhoto(inspectionId, file, origin, shotAt) }.onFailure { e -> local.update { it.copy(error = com.lensqi.fieldops.ui.common.friendly("local_save_failed", "")) } }
             var photo: PhotoEvidence? = null
             withTimeoutOrNull(45_000) {
                 while (photo == null) {
@@ -299,7 +299,7 @@ class InspectionViewModel @Inject constructor(
     fun onClaimChanged(value: String) = local.update { it.copy(claimText = value) }
 
     fun queuePhoto(file: File, origin: String) = viewModelScope.launch {
-        runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = e.message) } }
+        runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = com.lensqi.fieldops.ui.common.friendly("local_save_failed", "")) } }
     }
 
     fun syncNow() = viewModelScope.launch { queue.drain(); refresh() }
@@ -399,8 +399,8 @@ class InspectionViewModel @Inject constructor(
 
     private fun report(outcome: ApiOutcome<*>) = local.update {
         it.copy(error = when (outcome) {
-            is ApiOutcome.Rejected -> "${outcome.code}: ${outcome.message}"
-            is ApiOutcome.Unreachable -> "API unreachable: ${outcome.message}"
+            is ApiOutcome.Rejected -> com.lensqi.fieldops.ui.common.friendly(outcome.code, outcome.message)
+            is ApiOutcome.Unreachable -> com.lensqi.fieldops.ui.common.friendly("offline", outcome.message)
             is ApiOutcome.Ok -> null
         })
     }

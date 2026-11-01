@@ -1,5 +1,7 @@
 package com.lensqi.fieldops.ui.inspection
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -108,17 +110,17 @@ fun arTags(fixture: Fixture?, assessment: VisualAssessment?, outlines: List<Segm
                 VisualChangeVerdict.Unscorable -> Fo.Warning to "not compared"
                 else -> Fo.Failure to "no change"
             }
-            return@mapNotNull ArTag(g.concept, "$name · $status", tone, change.reason, box, cropFile)
+            return@mapNotNull ArTag(g.concept, "$name · $status", tone, com.lensqi.fieldops.ui.common.changeText(change.verdict).detail, box, cropFile)
         }
         val h = assessment?.hypotheses?.firstOrNull { it.featureId == req?.requirementId && (it.evidenceIds.isEmpty() || g.photoEvidenceId in it.evidenceIds) }
-            ?: return@mapNotNull ArTag(g.concept, "$name · AI outline", Fo.Primary, "SAM outlined the ${g.concept}. This is the model's interpretation, not a measurement.", box, cropFile)
+            ?: return@mapNotNull ArTag(g.concept, "$name · AI outline", Fo.Primary, "The camera assessment outlined the ${g.concept}. This is inferred guidance, not a measurement.", box, cropFile)
         val (tone, status) = when (h.status) {
             ObservationStatus.Observed -> Fo.Primary to "AI: visible"
             ObservationStatus.Suspected -> Fo.Primary to "AI: likely"
             ObservationStatus.Unknown -> Fo.Warning to "not clear"
             ObservationStatus.Conflicting -> Fo.Failure to "conflicting"
         }
-        ArTag(g.concept, "$name · $status", tone, h.reason, box, cropFile)
+        ArTag(g.concept, "$name · $status", tone, TechnicianText.guidance(h.reason), box, cropFile)
     }
 
 /**

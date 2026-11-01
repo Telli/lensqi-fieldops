@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -157,17 +158,18 @@ fun CheckRow(label: String, detail: String, pass: Boolean?, running: Boolean = f
 
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null, busy: Boolean = false) {
-    Button(onClick, modifier.fillMaxWidth().height(50.dp), enabled = enabled && !busy, shape = RoundedCornerShape(12.dp),
+    Button(onClick, modifier.fillMaxWidth().heightIn(min = 50.dp), enabled = enabled && !busy, shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Fo.Primary, contentColor = Fo.OnPrimary, disabledContainerColor = Fo.Primary.copy(alpha = 0.35f), disabledContentColor = Fo.OnPrimary.copy(alpha = 0.7f))) {
         if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = Fo.OnPrimary, strokeWidth = 2.dp)
         else icon?.let { Icon(it, null, Modifier.size(18.dp)) }
-        Spacer(Modifier.width(8.dp)); Text(text, fontWeight = FontWeight.Medium)
+        if (busy || icon != null) Spacer(Modifier.width(8.dp))
+        Text(text, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null) {
-    OutlinedButton(onClick, modifier.fillMaxWidth().height(46.dp), enabled = enabled, shape = RoundedCornerShape(12.dp),
+    OutlinedButton(onClick, modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = enabled, shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, Fo.Border), colors = ButtonDefaults.outlinedButtonColors(contentColor = Fo.Foreground)) {
         icon?.let { Icon(it, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
         Text(text)
@@ -177,9 +179,10 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
 /** Identifiers, digests and policy text, kept out of the technician's way until asked for. */
 @Composable
 fun TechDetails(rows: List<Pair<String, String>>, title: String = "Technical details") {
+    if (!LocalDiagnostics.current) return
     var open by remember { mutableStateOf(false) }
     Panel(padding = 0) {
-        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Hide details" else "Show details") { open = !open }.heightIn(min = 48.dp).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = Fo.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Icon(Icons.Outlined.ExpandMore, null, tint = Fo.Muted, modifier = Modifier.rotate(if (open) 180f else 0f))
         }
@@ -200,7 +203,7 @@ fun TechDetails(rows: List<Pair<String, String>>, title: String = "Technical det
 fun Expandable(title: String, content: @Composable ColumnScope.() -> Unit) {
     var open by remember { mutableStateOf(false) }
     Panel(padding = 0) {
-        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Hide details" else "Show details") { open = !open }.heightIn(min = 48.dp).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Icon(Icons.Outlined.ExpandMore, null, tint = Fo.Muted, modifier = Modifier.rotate(if (open) 180f else 0f))
         }

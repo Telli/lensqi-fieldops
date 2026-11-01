@@ -1,6 +1,7 @@
 package com.lensqi.fieldops.data.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -20,6 +21,8 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
+const val DIAGNOSTICS_DEFAULT = false
+
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 /** Device preferences: the API base URL and the appearance. Never something the server or a model supplies. */
@@ -29,6 +32,10 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     private val current = AtomicReference(DEFAULT_BASE.toHttpUrlOrNull()!!)
 
     val apiBase: Flow<String> = context.dataStore.data.map { it[key] ?: DEFAULT_BASE }
+
+    private val diagnosticsKey = booleanPreferencesKey("diagnostic_overlays")
+    val diagnostics: Flow<Boolean> = context.dataStore.data.map { it[diagnosticsKey] ?: DIAGNOSTICS_DEFAULT }
+    suspend fun setDiagnostics(enabled: Boolean) { context.dataStore.edit { it[diagnosticsKey] = enabled } }
 
     private val appearanceKey = stringPreferencesKey("appearance")
     val appearance: Flow<Appearance> = context.dataStore.data.map { p -> Appearance.entries.firstOrNull { it.name == p[appearanceKey] } ?: Appearance.System }

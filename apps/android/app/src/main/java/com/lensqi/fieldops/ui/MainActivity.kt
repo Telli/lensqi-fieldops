@@ -9,6 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.CompositionLocalProvider
+import com.lensqi.fieldops.ui.common.LocalDiagnostics
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -29,14 +31,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val appearance by settings.appearance.collectAsStateWithLifecycle(Appearance.System)
-            FieldOpsTheme(appearance) {
-                // Status and navigation bar icons follow the app's appearance, not only the phone's.
-                val dark = Fo.isDark
-                LaunchedEffect(dark) {
-                    val bars = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-                    enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+            val diagnostics by settings.diagnostics.collectAsStateWithLifecycle(false)
+            CompositionLocalProvider(LocalDiagnostics provides diagnostics) {
+                FieldOpsTheme(appearance) {
+                    // Status and navigation bar icons follow the app's appearance, not only the phone's.
+                    val dark = Fo.isDark
+                    LaunchedEffect(dark) {
+                        val bars = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+                    }
+                    Scaffold(Modifier.fillMaxSize()) { padding -> FieldOpsNavHost(Modifier.padding(padding)) }
                 }
-                Scaffold(Modifier.fillMaxSize()) { padding -> FieldOpsNavHost(Modifier.padding(padding)) }
             }
         }
     }

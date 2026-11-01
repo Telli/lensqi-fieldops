@@ -1,5 +1,8 @@
 package com.lensqi.fieldops.ui.camera
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+import com.lensqi.fieldops.data.diagnostics.DiagnosticHistory
+
 import com.lensqi.fieldops.arcore.RegistrationView
 
 import android.graphics.Bitmap
@@ -87,7 +90,7 @@ class LiveCameraSession(
      * response still in flight for one of them matches no frame and is dropped.
      */
     fun reset() = synchronized(lock) {
-        tracker.clear(); guidance = ""; screenText = null; guidanceFrame = ""; guidanceAt = 0; detected = false; scanned = false
+        tracker.clear(); error = ""; guidance = ""; screenText = null; guidanceFrame = ""; guidanceAt = 0; detected = false; scanned = false
     }
 
     fun nextFrameId(): String = synchronized(lock) { "live-$prefix-${++sequence}" }
@@ -142,22 +145,17 @@ class LiveCameraSession(
                 objects.isNotEmpty() -> "Keep the connection visible. Capture a photo when ready."
                 else -> "Aim at the equipment and hold steady for detection."
             }
-            val anchoredCount = objects.count { it.spatialAnchored }
-            val statusText = error.ifBlank {
-                when {
-                    objects.isNotEmpty() -> "Tracking ${objects.size} part${if (objects.size == 1) "" else "s"}" +
-                        if (anchoredCount > 0) " · $anchoredCount held in place by ARCore" else ""
-                    spatial != null && spatial.offscreen > 0 -> "${spatial.offscreen} part${if (spatial.offscreen == 1) "" else "s"} off screen · turn back to see ${if (spatial.offscreen == 1) "it" else "them"}"
-                    "detect" in busy -> "Finding parts…"
-                    detected -> "Tracking lost · finding parts again"
-                    scanned -> "No parts found · keep scanning"
-                    else -> "Looking for equipment…"
-                }
-            }
+            val lost = (detected && objects.isEmpty()) || spatial?.target?.let {
+                it.state != com.lensqi.fieldops.arcore.TargetState.Tracking || it.ambiguous
+            } == true
+            val statusText = TechnicianText.cameraStatus(
+                selectedAndTracked = spatial?.target?.let { it.state == com.lensqi.fieldops.arcore.TargetState.Tracking && !it.ambiguous } == true,
+                lost = lost, paused = error.isNotBlank(), hasObjects = objects.isNotEmpty(),
+            )
             mutable.value = LiveCameraState(
-                objects = objects, status = statusText, recommendation = advice, width = width, height = height,
+                objects = objects, status = statusText, recommendation = TechnicianText.cameraAdvice(advice, lost), width = width, height = height,
                 guidanceAge = guidanceAt.takeIf { it > 0 }?.let { (now - it) / 1000 }, fps = fps,
-                viewSpace = spatial != null, tracking = spatial?.tracking, screenText = screenText,
+                viewSpace = spatial != null, tracking = spatial?.tracking, screenText = if (lost) null else screenText,
                 brightness = quality.brightness, sharpness = quality.sharpness, motion = motion,
                 target = spatial?.target, floor = spatial?.floor, renderFps = spatial?.renderFps ?: 0, registration = spatial?.registration,
             )
@@ -187,10 +185,12 @@ class LiveCameraSession(
                 if (accepted) onDetection(frame.id, result.objects)
             } catch (e: CancellationException) {
                 if (e !is TimeoutCancellationException) throw e
-                synchronized(lock) { error = "AI timed out · retrying"; due[kind] = SystemClock.elapsedRealtime() + 5000 }
+                DiagnosticHistory.record("camera", "analysis_timeout")
+                synchronized(lock) { error = "analysis_timeout"; due[kind] = SystemClock.elapsedRealtime() + 5000 }
             } catch (e: Exception) {
+                DiagnosticHistory.record("camera", "analysis_unavailable", (e as? HttpException)?.code())
                 val retry = (e as? HttpException)?.response()?.headers()?.get("Retry-After")?.toLongOrNull()?.times(1000) ?: 5000
-                synchronized(lock) { error = if (e is HttpException && e.code() == 429) "AI cooling down · local tracking continues" else "AI unavailable · retrying"; due[kind] = SystemClock.elapsedRealtime() + retry.coerceAtLeast(1000) }
+                synchronized(lock) { error = if (e is HttpException && e.code() == 429) "rate_limited" else "analysis_unavailable"; due[kind] = SystemClock.elapsedRealtime() + retry.coerceAtLeast(1000) }
             } finally { synchronized(lock) { busy.remove(kind) } }
         }
     }

@@ -87,7 +87,8 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
                         Text(asset?.displayName ?: "Not in the site record", style = MaterialTheme.typography.headlineSmall)
-                        asset?.let { Text("$assetId · ${it.kind.replace('_', ' ')} · ${fixture.fixtureId}", style = MaterialTheme.typography.bodySmall) }
+                        asset?.let { Text(it.kind.replace('_', ' '), style = MaterialTheme.typography.bodySmall)
+                            com.lensqi.fieldops.ui.common.TechDetails(listOf("Asset" to assetId, "Fixture" to fixture.fixtureId)) }
                     }
                     history.firstOrNull()?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage)) }
                 }
@@ -108,7 +109,7 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
                                     if (outgoing) "Port ${c.fromPortLabel} → ${vm.assetName(c.toAssetId) ?: c.toAssetId}" else "From ${vm.assetName(c.fromAssetId) ?: c.fromAssetId} port ${c.fromPortLabel}",
                                     fontWeight = FontWeight.Medium,
                                 )
-                                Text("Cable label ${c.cableLabel} · ${c.connectionId}", style = MaterialTheme.typography.bodySmall)
+                                Text("Cable label ${c.cableLabel}", style = MaterialTheme.typography.bodySmall)
                             }
                             Tag(c.expectedState.replaceFirstChar { it.uppercase() }, Fo.Muted)
                         }

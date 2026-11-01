@@ -94,6 +94,8 @@ From the code review of `044c906`. None breaks the FieldProof gate; the first th
 
 - [x] **GT-T37 — Remove UX blockers for simple tasks.** *(done Oct 29, web and Android: one tap from the home goal box to a plan; one "I've read the safety notes · Start" button; Done never blocked by a suggested photo check; typing next to the mic everywhere; the speech-provider notice shown once, before first use. Checked in the browser at phone size with one genuine plan; Android built and unit-tested, not re-run on the emulator)*
 
+- [x] **UX-T01 — Polish the Android technician experience.** *(done 2026-10-31: task-language camera/inspection/voice guidance, readable inspection records, Details and opt-in Diagnostics; 169 Android and 303 .NET tests pass, emulator evidence in `docs/evidence/android/ux-polish/`; lint compatibility and physical S23 acceptance remain outstanding as documented)*
+
 ## Cutlines
 
 - If the contract is not frozen by end of Oct 29, Android ships the step runner only and the web flow is the guaranteed surface.

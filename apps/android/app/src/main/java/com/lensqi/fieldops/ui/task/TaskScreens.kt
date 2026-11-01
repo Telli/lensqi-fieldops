@@ -1,5 +1,7 @@
 package com.lensqi.fieldops.ui.task
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+
 import com.lensqi.fieldops.wearables.SpokenFeedbackGate
 import com.lensqi.fieldops.voice.SpeechOutput
 import kotlinx.coroutines.delay
@@ -135,7 +137,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
         item {
             Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("What are we doing today?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onProfile) { Text("Profile", color = Fo.Muted) }
+                TextButton(onClick = onProfile) { Text("Settings", color = Fo.Muted) }
             }
         }
         item {
@@ -182,7 +184,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
                     Box(Modifier.size(44.dp).background(Fo.Warning.copy(alpha = .14f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Build, null, tint = Fo.Warning) }
                     Column(Modifier.weight(1f)) {
                         Text("Technician", fontWeight = FontWeight.SemiBold)
-                        Text("Installs and repairs on site records, equipment checks and FieldProof receipts.", style = MaterialTheme.typography.bodySmall)
+                        Text("Installs and repairs on site records, equipment checks and inspection records.", style = MaterialTheme.typography.bodySmall)
                     }
                     Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
                 }
@@ -283,7 +285,7 @@ private fun StepRow(step: TaskStep, n: Int) {
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(step.title + if (step.handsOn) " · hands-on" else "", fontWeight = FontWeight.Medium)
-            Text(step.instruction, style = MaterialTheme.typography.bodySmall)
+            Text(TechnicianText.guidance(step.instruction), style = MaterialTheme.typography.bodySmall)
             step.cautions.forEach { Text("${it.kind} · ${it.text}", color = Fo.Warning, fontSize = 12.sp) }
             if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = Fo.Failure, fontSize = 12.sp)
         }
@@ -416,7 +418,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || reach?.canSkip == true,
+        showDetails = step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || reach?.canSkip == true,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -584,13 +586,13 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 @Composable
 private fun ColumnScope.StepDetails(step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp, maxLines = 3)
-        if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp, maxLines = 2)
+        if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
+        if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
         step.lastCheck?.let { c ->
-            Text("AI check: ${verdictText(c.verdict)} · ${c.reason}", color = verdictColor(c.verdict), fontSize = 12.sp, maxLines = 3)
+            Text(TechnicianText.guidance("Camera check: ${verdictText(c.verdict)} · ${c.reason}"), color = verdictColor(c.verdict), fontSize = 12.sp)
             Text("A suggestion. You decide when the step is done.", color = FoDark.Muted, fontSize = 10.sp)
         }
-        answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(a, color = FoDark.Foreground, fontSize = 13.sp, maxLines = 5) }
+        answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
     }
@@ -618,7 +620,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                         Text("FieldProof: " + if (verified && i.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated) "Verified complete · simulated check" else stageLabel(i.stage),
                             color = if (verified) Fo.Success else if (i.stage == InspectionStage.VerificationFailed) Fo.Failure else Fo.Muted, fontWeight = FontWeight.Medium)
                     }
-                    if (t.inspectionId != null) PrimaryButton(if (s.linked?.stage == InspectionStage.VerifiedComplete) "See the FieldProof receipt" else "Open the FieldProof inspection", { onInspection(t.inspectionId) }, Modifier.fillMaxWidth())
+                    if (t.inspectionId != null) PrimaryButton(if (s.linked?.stage == InspectionStage.VerifiedComplete) "View inspection record" else "Open inspection", { onInspection(t.inspectionId) }, Modifier.fillMaxWidth())
                     else PrimaryButton("Verify with FieldProof", { vm.linkInspection(onInspection) }, Modifier.fillMaxWidth(), busy = s.busy == "link")
                 }
             }
@@ -629,13 +631,13 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                     if (i > 0) HorizontalDivider(color = Fo.Border)
                     Column(Modifier.padding(14.dp)) {
                         Text("${i + 1}. ${step.title}", fontWeight = FontWeight.Medium, color = if (step.status == StepStatus.Done) Fo.Foreground else Fo.Muted)
-                        step.lastCheck?.let { Text("AI check: ${verdictText(it.verdict)} · ${it.reason}", color = verdictColor(it.verdict), fontSize = 12.sp) }
+                        step.lastCheck?.let { Text(TechnicianText.guidance("Camera check: ${verdictText(it.verdict)} · ${it.reason}"), color = verdictColor(it.verdict), fontSize = 12.sp) }
                     }
                 }
             }
         }
         if (t.answers.isNotEmpty()) item {
-            Panel { Text("Your questions", fontWeight = FontWeight.Medium); t.answers.forEach { a -> Text(a.question, style = MaterialTheme.typography.bodySmall); Text(a.answer, fontSize = 13.sp) } }
+            Panel { Text("Your questions", fontWeight = FontWeight.Medium); t.answers.forEach { a -> Text(a.question, style = MaterialTheme.typography.bodySmall); Text(TechnicianText.guidance(a.answer), fontSize = 13.sp) } }
         }
         item { Box(Modifier.height(24.dp)) }
     }
@@ -668,11 +670,11 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         }
     }
     CameraScreen(
-        prompt = answers.firstOrNull()?.answer ?: "Point at anything and ask: an error on a screen, a part you don't recognise, a quick fix.",
+        prompt = answers.firstOrNull()?.answer ?: "Point at the equipment and ask a question.",
         analyzeLive = vm::analyzeLiveFrame,
         onClose = onClose,
         onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
-        header = "Just ask · no plan",
+        header = "Camera assistant",
         onGuidance = pace::guidance,
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }

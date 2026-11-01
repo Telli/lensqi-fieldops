@@ -61,6 +61,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -136,7 +138,7 @@ fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit,
                 }
                 ConnBadge(s.reachable)
                 Box(Modifier.size(38.dp).clip(CircleShape).background(Fo.Surface).border(1.dp, Fo.Border, CircleShape).clickable(onClick = onProfile), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Outlined.Person, "Profile", modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Person, "Settings", modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -265,7 +267,7 @@ fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
                 }
             }
         }
-        if (s.fixtures.isEmpty()) item { Panel { Text(if (s.reachable == false) "The server is unreachable, so assets can't be loaded. Check the connection in Profile." else "Loading assets…", style = MaterialTheme.typography.bodySmall) } }
+        if (s.fixtures.isEmpty()) item { Panel { Text(if (s.reachable == false) "The server is unreachable, so assets can't be loaded. Check the connection in Settings." else "Loading assets…", style = MaterialTheme.typography.bodySmall) } }
     }
 }
 
@@ -339,13 +341,13 @@ fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
     var existing by rememberSaveable { mutableStateOf("") }
     val field = OutlinedTextFieldDefaults.colors(focusedBorderColor = Fo.Primary, unfocusedBorderColor = Fo.Border)
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Profile", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
+        item { Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
         item {
             Panel {
                 Row(verticalAlignment = Alignment.CenterVertically) { Text("Inspection server", modifier = Modifier.weight(1f), color = Fo.Muted); ConnBadge(s.reachable) }
                 s.health?.let { h ->
                     Row(verticalAlignment = Alignment.CenterVertically) { Text("Equipment checks", modifier = Modifier.weight(1f), color = Fo.Muted); SourceBadge(h.diagnosticsMode) }
-                    Text("${h.fixtures} site · ${h.packs} knowledge packs", style = MaterialTheme.typography.bodySmall)
+
                 }
             }
         }
@@ -354,6 +356,23 @@ fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
         }
         item { PrimaryButton("Save and check connection", { vm.saveBase() }, busy = s.loading) }
         item { AboutYou(vm, field) }
+        item {
+            com.lensqi.fieldops.ui.common.Expandable("Diagnostics") {
+                val enabled by vm.diagnostics.collectAsStateWithLifecycle(false)
+                val history by com.lensqi.fieldops.data.diagnostics.DiagnosticHistory.entries.collectAsStateWithLifecycle()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Show technical details", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(enabled, vm::setDiagnostics,
+                        modifier = Modifier.semantics { contentDescription = "Show technical details" })
+                }
+                Text("Off by default. Shows camera performance and technical details on this device. Does not change checks or upload anything.", style = MaterialTheme.typography.bodySmall)
+                s.health?.let { h -> Text("${h.fixtures} fixtures · ${h.packs} knowledge packs", style = MaterialTheme.typography.bodySmall) }
+                Text("Recent operations", style = MaterialTheme.typography.titleSmall)
+                if (history.isEmpty()) Text("No diagnostic errors recorded this session.")
+                history.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                androidx.compose.material3.TextButton(onClick = com.lensqi.fieldops.data.diagnostics.DiagnosticHistory::clear) { Text("Clear diagnostic history") }
+            }
+        }
         item { SectionTitle("Appearance") }
         item {
             val current by vm.appearance.collectAsStateWithLifecycle(Appearance.System)

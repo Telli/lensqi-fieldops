@@ -1,0 +1,6 @@
+Command: ./gradlew --offline :app:lintDebug
+
+Lint analysis crashed in AndroidX NonNullableMutableLiveDataDetector while analyzing FieldOpsApplication.kt (and unit test analysis).
+IncompatibleClassChangeError: Found class org.jetbrains.kotlin.analysis.api.resolution.KaCallableMemberCall, but interface was expected.
+
+No lint rules were disabled and no dependencies were changed. Full lint acceptance remains blocked by this toolchain mismatch.

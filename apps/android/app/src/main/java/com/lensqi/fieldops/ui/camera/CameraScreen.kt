@@ -1,5 +1,9 @@
 package com.lensqi.fieldops.ui.camera
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+import com.lensqi.fieldops.ui.common.LocalDiagnostics
+import com.lensqi.fieldops.data.diagnostics.DiagnosticHistory
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,6 +32,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import com.lensqi.fieldops.arcore.partsToShow
 import com.lensqi.fieldops.domain.live.LiveObject
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -74,6 +80,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -155,6 +163,7 @@ fun CameraScreen(
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
 class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {})
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CameraContent(
     prompt: String, analyzeLive: suspend (String, ByteArray, String) -> LiveResponse, onClose: () -> Unit, onCaptured: (File) -> Unit,
@@ -233,7 +242,7 @@ private fun CameraContent(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) { capturing = false; if (stillPart != null) still = file.path else onCaptured(file) }
-                override fun onError(exception: ImageCaptureException) { capturing = false; status = "Capture failed: ${exception.message}" }
+                override fun onError(exception: ImageCaptureException) { capturing = false; DiagnosticHistory.record("capture", "capture_failed", exception.imageCaptureError); status = "The photo couldn’t be taken. Hold steady and try again." }
             },
         )
     }
@@ -241,7 +250,7 @@ private fun CameraContent(
     LaunchedEffect(pendingCapture, streaming, arActive) { if (pendingCapture && streaming && !arActive) { pendingCapture = false; takePhoto() } }
     // If CameraX doesn't come back after AR hands the camera over, say so and let the technician press again.
     LaunchedEffect(pendingCapture) {
-        if (pendingCapture) { delay(8_000); pendingCapture = false; capturing = false; status = "The camera didn't come back from 3D AR. Press the shutter again." }
+        if (pendingCapture) { delay(8_000); pendingCapture = false; capturing = false; status = "The camera isn't ready. Press the shutter again." }
     }
     fun retake() {
         still?.let { File(it).delete() }
@@ -284,7 +293,7 @@ private fun CameraContent(
     var markLabel by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     // New AI guidance (its age resets to 0), not the local light and focus hints that change every frame.
-    LaunchedEffect(feedback.guidanceAge) { if (liveEnabled && feedback.guidanceAge == 0L) onGuidance(feedback.recommendation) }
+    LaunchedEffect(feedback.recommendation, liveEnabled) { onGuidance(if (liveEnabled) feedback.recommendation else "") }
     DisposableEffect(session) { onDispose { session?.close() } }
     DisposableEffect(controller, session, arActive) {
         if (session != null && !arActive) controller.setImageAnalysisAnalyzer(executor) { image ->
@@ -345,7 +354,7 @@ private fun CameraContent(
             }
         })
 
-        if (liveEnabled && (feedback.viewSpace || feedback.width > 0)) Canvas(Modifier.fillMaxSize()) {
+        if (liveEnabled && (feedback.viewSpace || feedback.width > 0)) Canvas(Modifier.fillMaxSize().semantics { contentDescription = shown.first.joinToString(". ") { (if (it.target) "Selected equipment: " else "Camera suggestion: ") + it.label + if (it.uncertain || it.seenSecondsAgo != null) ", last seen; confirm again" else "" } }) {
             // ARCore draws the camera across the whole view; CameraX letterboxes the image inside it.
             val scale = if (feedback.viewSpace) 1f else min(size.width / feedback.width, size.height / feedback.height)
             val w = if (feedback.viewSpace) size.width else feedback.width * scale
@@ -379,11 +388,11 @@ private fun CameraContent(
                 // Distances are estimates (the median depth in the box) and are left off while the target is uncertain.
                 val text = (if (part.target) "◎ " else "") + part.label.replaceFirstChar { it.uppercase() } +
                     part.distanceCm?.takeUnless { part.uncertain }?.let { " · est. ${metres(it)} away" }.orEmpty() +
-                    part.heightAboveFloorCm?.let { " · ${metres(it)} up" }.orEmpty() + part.seenSecondsAgo?.let { " · seen ${it}s ago" }.orEmpty()
+                    part.heightAboveFloorCm?.let { " · ${metres(it)} up" }.orEmpty() + part.seenSecondsAgo?.let { " · last seen" }.orEmpty()
                 val pad = 6.dp.toPx(); val tw = paint.measureText(text); val th = paint.textSize
                 val above = y - pad * 2 - th >= oy + 4.dp.toPx()
                 val ty = if (above) y - pad * 2 else y + bh + pad + th
-                val tx = (x).coerceIn(ox + pad, ox + w - tw - pad * 3)
+                val tx = (x).coerceIn(ox + pad, maxOf(ox + pad, ox + w - tw - pad * 3))
                 drawRoundRect(Color.Black.copy(alpha = 0.62f), Offset(tx - pad, ty - th - pad / 2), Size(tw + pad * 2, th + pad * 1.5f), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
                 drawContext.canvas.nativeCanvas.drawText(text, tx, ty, paint)
             }
@@ -416,8 +425,8 @@ private fun CameraContent(
                 Text(
                     when {
                         !liveEnabled -> "Camera ready"
-                        arActive -> feedback.tracking ?: "Live AR · starting"
-                        else -> "Live 2D assistance · AI inferred"
+                        arActive -> "Spatial guidance"
+                        else -> "Camera assistance"
                     },
                     fontSize = 11.sp, color = FoDark.Foreground,
                 )
@@ -435,7 +444,7 @@ private fun CameraContent(
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 12.sp.toPx() }
             fun pill(text: String, x: Float, y: Float) {
                 val pad = 6.dp.toPx(); val tw = paint.measureText(text); val th = paint.textSize
-                val left = (x - tw / 2).coerceIn(pad, size.width - tw - pad); val base = y.coerceIn(th + pad, size.height - pad)
+                val left = (x - tw / 2).coerceIn(pad, maxOf(pad, size.width - tw - pad)); val base = y.coerceIn(th + pad, size.height - pad)
                 drawRoundRect(Color.Black.copy(alpha = 0.62f), Offset(left - pad, base - th - pad / 2), Size(tw + pad * 2, th + pad * 1.5f), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
                 drawContext.canvas.nativeCanvas.drawText(text, left, base, paint)
             }
@@ -466,7 +475,7 @@ private fun CameraContent(
         }
 
         // Below the header: the target's state or the question to hold a tapped part, and the floor control.
-        if (arActive && !hideChrome) Column(
+        if (arActive && (!hideChrome || target?.state == TargetState.Lost || registered?.guidance?.level == GuideLevel.Refused)) Column(
             Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.7f),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -476,7 +485,7 @@ private fun CameraContent(
                 TextButton(onClick = { pick.anchorId?.let(spatial::confirm); candidate = null }) { Text("Confirm", color = FoDark.Primary, fontSize = 12.sp) }
                 TextButton(onClick = { candidate = null }) { Text("Cancel", color = FoDark.Muted, fontSize = 12.sp) }
             }
-            else targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })?.let {
+            else targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })?.takeUnless { target?.state == TargetState.Tracking && !target.ambiguous }?.let {
                 Text(it, color = if (target?.state == TargetState.Tracking || target == null) FoDark.Foreground else FoDark.Warning, fontSize = 12.sp,
                     modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 12.dp, vertical = 6.dp))
             }
@@ -484,7 +493,7 @@ private fun CameraContent(
             if (registered != null && registrationSubject != null) {
                 val g = registered.guidance
                 Column(Modifier.clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Text(g.text, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis,
+                    Text(TechnicianText.guidance(g.text), fontSize = 12.sp, lineHeight = 16.sp,
                         color = when (g.level) { GuideLevel.Refused -> FoDark.Warning; GuideLevel.Port -> FoDark.Primary; else -> FoDark.Foreground })
                     when (g.level) {
                         GuideLevel.ConfirmAsset -> Row {
@@ -514,10 +523,11 @@ private fun CameraContent(
                         }
                     }
                     if (checking) Text("Tap where ${registrationSubject.port} really is. LensQi measures how far that is from your mark.", fontSize = 11.sp, color = FoDark.Muted)
-                    registered.note?.let { Text(it, fontSize = 11.sp, color = FoDark.Muted) }
+                    registered.note?.let { Text(TechnicianText.guidance(it), fontSize = 11.sp, color = FoDark.Muted) }
                 }
             }
             val floor = feedback.floor
+            if (expanded || pickingFloor) {
             Text(
                 when {
                     pickingFloor -> "Tap the floor in the picture · tap here to cancel"
@@ -534,10 +544,11 @@ private fun CameraContent(
                 }.padding(horizontal = 10.dp, vertical = 4.dp),
             )
             floor?.note?.let { Text(it, color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(glass).padding(horizontal = 10.dp, vertical = 4.dp)) }
+            }
         }
 
         // Kept below the header; when the panels are taller than the room left, the details scroll and the controls stay.
-        if (shown.second > 0 && !hideChrome) Text("+${shown.second} more part${if (shown.second == 1) "" else "s"} found", color = FoDark.Foreground, fontSize = 11.sp,
+        if (LocalDiagnostics.current && shown.second > 0 && !hideChrome) Text("+${shown.second} more part${if (shown.second == 1) "" else "s"} found", color = FoDark.Foreground, fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 64.dp, end = 12.dp).clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 10.dp, vertical = 4.dp))
 
         // Panels sit in the bottom part of the screen only, so the middle of the picture (where the part usually is)
@@ -548,7 +559,7 @@ private fun CameraContent(
                 .navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 28.dp, bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          if (!hideChrome) {
+          if (!hideChrome || showDetails) {
             if (referenceImage != null) Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(glass).clickable { ghost = !ghost }.padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -559,43 +570,50 @@ private fun CameraContent(
                     Text(FRAMING_AID_NOTE, fontSize = 11.sp, lineHeight = 14.sp, color = FoDark.Muted)
                 }
             }
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (liveEnabled) feedback.status else "Live camera assistance", color = FoDark.Primary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(glass).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(if (liveEnabled) feedback.status else "Camera assistance paused", color = FoDark.Primary, fontSize = 12.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     when (arAvailability) {
                         ArAvailability.Ready -> TextButton(onClick = { spatialEnabled = !spatialEnabled; arFailure = null }) {
-                            Text(if (spatialEnabled) "3D AR: On" else "3D AR: Off", color = if (spatialEnabled) FoDark.Primary else FoDark.Muted, fontSize = 11.sp)
+                            Text(if (spatialEnabled) "Spatial guidance: On" else "Spatial guidance: Off", color = if (spatialEnabled) FoDark.Primary else FoDark.Muted, fontSize = 11.sp)
                         }
                         ArAvailability.NeedsInstall -> TextButton(onClick = { context.findActivity()?.let { if (ArCore.requestInstall(it)) arAvailability = ArAvailability.Ready } }) {
-                            Text("Get 3D AR", color = FoDark.Primary, fontSize = 11.sp)
+                            Text("Enable spatial guidance", color = FoDark.Primary, fontSize = 11.sp)
                         }
                         else -> Unit
                     }
                     TextButton(onClick = { liveEnabled = !liveEnabled }, enabled = liveAllowed) {
-                        Text(if (!liveAllowed) "Live assist: current step only" else if (liveEnabled) "Pause live assist" else "Start live assist", color = if (liveAllowed) FoDark.Foreground else FoDark.Muted)
+                        Text(if (!liveAllowed) "Current step only" else if (liveEnabled) "Pause" else "Start assistance", color = if (liveAllowed) FoDark.Foreground else FoDark.Muted)
                     }
                 }
-                if (!liveEnabled || expanded) Text(if (liveEnabled) "${if (arActive) "${feedback.renderFps} fps · " else ""}${feedback.fps} tracking updates/s · AI guidance ${feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}"
-                    else if (arAvailability == ArAvailability.Ready && spatialEnabled) "Sampled frames go to AI for guidance; ARCore measures distance on this phone. Only shutter photos are saved."
-                    else "Sampled frames go to AI for guidance. Only shutter photos are saved.", fontSize = 11.sp, color = FoDark.Muted, modifier = Modifier.padding(bottom = 6.dp))
+                if (LocalDiagnostics.current) Text(
+                    "${feedback.renderFps} FPS · ${feedback.fps} updates/s · guidance age ${feedback.guidanceAge ?: "—"}s · ${feedback.tracking.orEmpty()}",
+                    fontSize = 11.sp, color = FoDark.Muted)
+                if (expanded) Text(
+                    if (arActive) "Spatial guidance estimates position and distance. Camera guidance is inferred, not proof of repair. Only shutter photos are saved."
+                    else "Guidance is based on camera images; depth is not measured. Images are sent for analysis. Only shutter photos are saved.",
+                    fontSize = 12.sp, color = FoDark.Foreground)
+
             }
             // LensQi's ask: the view the server needs next.
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(glass).border(1.dp, FoDark.Border, RoundedCornerShape(18.dp))
-                    .clickable { expanded = !expanded }.padding(12.dp),
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Show or hide details") { expanded = !expanded }.padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 LensQiMark(24)
                 Column(Modifier.weight(1f)) {
-                    Text(if (liveEnabled) feedback.recommendation else prompt, fontSize = 15.sp, lineHeight = 20.sp, color = FoDark.Foreground,
-                        maxLines = if (expanded) 8 else 3, overflow = TextOverflow.Ellipsis)
-                    if (liveEnabled) feedback.screenText?.let { Text("On screen: “$it”", fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted, maxLines = 3) }
+                    Text(TechnicianText.guidance(if (liveEnabled) feedback.recommendation else prompt), fontSize = 15.sp, lineHeight = 20.sp, color = FoDark.Foreground,
+                        maxLines = Int.MAX_VALUE)
+                    Text(if (expanded) "Hide details" else "Details", fontSize = 12.sp, color = FoDark.Primary)
+                    if (liveEnabled && expanded) feedback.screenText?.let { Text("On screen: “$it”", fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted, maxLines = 3) }
                     (status ?: arFailure)?.let { Text(it, color = FoDark.Failure, fontSize = 13.sp) }
                 }
             }
+            }
             details?.let { d ->
                 if (expanded || showDetails) Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { d() }
-                else Text(detailsSummary?.let { "⚠ $it · more" } ?: "Safety notes and details · more", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                else if (detailsSummary != null) Text("⚠ $detailsSummary",
                     color = if (detailsSummary != null) FoDark.Warning else FoDark.Muted, fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(glass).clickable { expanded = true }.padding(horizontal = 12.dp, vertical = 8.dp))
             }
@@ -613,7 +631,7 @@ private fun CameraContent(
             }
             if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled, { liveEnabled = it && liveAllowed }))
             else Box(
-                Modifier.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
+                Modifier.semantics { contentDescription = if (capturing) "Taking photo" else "Take photo" }.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
                     .background(if (capturing) FoDark.Primary else FoDark.Foreground)
                     .clickable(enabled = !capturing, onClick = shutter),
                 contentAlignment = Alignment.Center,
@@ -670,13 +688,13 @@ private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, onFai
     }
     val started = host.getOrNull()
     LaunchedEffect(host) {
-        if (started == null) { onFailure("3D AR couldn't start (${host.exceptionOrNull()?.javaClass?.simpleName}). Using 2D tracking."); return@LaunchedEffect }
+        if (started == null) { onFailure("Spatial guidance is unavailable. Camera assistance is still available."); return@LaunchedEffect }
         val (session, _, view) = started
         // CameraX releases the camera asynchronously; ARCore can open it once it is free.
         repeat(20) {
             try { session.resume(); view.onResume(); return@LaunchedEffect } catch (_: CameraNotAvailableException) { delay(250) }
         }
-        onFailure("The camera stayed busy, so 3D AR couldn't start. Using 2D tracking.")
+        onFailure("Spatial guidance couldn’t start. Continue with camera assistance or reopen the camera.")
     }
     if (started == null) return
     DisposableEffect(started) {
@@ -717,7 +735,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.edgeArrow(cue: com.
         (px - ux * (back + 8.dp.toPx())) to (py - uy * (back + 8.dp.toPx()))
     } else size.width / 2 to size.height / 2
     val pad = 6.dp.toPx(); val tw = paint.measureText(text); val th = paint.textSize
-    val left = (tx - tw / 2).coerceIn(pad, size.width - tw - pad); val base = (ty + th / 2).coerceIn(th + pad, size.height - pad)
+    val left = (tx - tw / 2).coerceIn(pad, maxOf(pad, size.width - tw - pad)); val base = (ty + th / 2).coerceIn(th + pad, size.height - pad)
     drawRoundRect(Color.Black.copy(alpha = 0.62f), Offset(left - pad, base - th - pad / 2), Size(tw + pad * 2, th + pad * 1.5f), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
     drawContext.canvas.nativeCanvas.drawText(text, left, base, paint)
 }
