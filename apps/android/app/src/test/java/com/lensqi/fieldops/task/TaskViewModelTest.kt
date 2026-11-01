@@ -58,7 +58,7 @@ class TaskViewModelTest {
         override var held = false
         override var listening = false
         override val busy get() = held || listening
-        override fun speak(text: String, force: Boolean) { spoken += text }
+        override fun speak(text: String, force: Boolean, replace: Boolean) { spoken += text }
         override fun stop() {}
     }
 

@@ -57,36 +57,56 @@ interface SpeechOutput {
     var enabled: Boolean
     /** Held while the person said "pause": nothing is spoken, without turning the voice off. */
     var held: Boolean
-    /** Set while the microphone listens: nothing is spoken, so LensQi never hears itself as the question. */
+    /**
+     * Set while the microphone listens: nothing is spoken, so LensQi never hears itself as the question. Forced lines
+     * cut off or arriving meanwhile are read once it is cleared.
+     */
     var listening: Boolean
     /** True while a hint would be dropped: held, listening, or a step, answer or check result still being read. */
     val busy: Boolean
-    /** [force] marks a line that must be heard in full (a step, an answer, a check result, an error); a hint never cuts it off. */
-    fun speak(text: String, force: Boolean = false)
+    /**
+     * [force] marks a line that must be heard in full (a step, an answer, a check result, an error): a hint never cuts it
+     * off, and another forced line plays after it. [replace] (a new step, "repeat", "mute") cuts off the forced lines
+     * playing or waiting, which are out of date.
+     */
+    fun speak(text: String, force: Boolean = false, replace: Boolean = false)
     fun stop()
 }
 
 /** "Mute" and "unmute" by voice, said aloud so a hands-free user knows it took. */
-fun SpeechOutput.mute() { speak("Voice off. Say unmute to turn it back on.", force = true); enabled = false }
+fun SpeechOutput.mute() { speak("Voice off. Say unmute to turn it back on.", force = true, replace = true); enabled = false }
 fun SpeechOutput.unmute() { enabled = true; speak("Voice on.", force = true) }
 
+enum class Play { Now, After, Drop }
+
 /**
- * Which line plays: a forced line runs to its end and a hint arriving meanwhile is dropped (the screen's gate offers it
- * again once [playing] is false). The TTS engine reports the end; [maxMsPerChar] caps the wait if it never does.
+ * Which line plays. A forced line runs to its end: a hint arriving meanwhile is dropped (the screen's gate offers it
+ * again once [playing] is false) and another forced line plays after it. The TTS engine reports each end;
+ * [maxMsPerChar] caps the wait if it never does. While the microphone listens, forced lines wait in order until [release].
  */
 class SpeechTurns(private val clock: () -> Long, private val maxMsPerChar: Long = 90) {
-    private var priority: String? = null
+    /** Forced lines playing or queued, by utterance id, in play order. */
+    private val forced = LinkedHashMap<String, String>()
     private var until = 0L
-    val playing get() = priority != null && clock() < until
-    /** Whether [text] may play now under [id]; a forced line always may, and replaces any line still playing. */
-    fun begin(id: String, text: String, force: Boolean): Boolean {
-        if (!force && playing) return false
-        priority = if (force) id else null
-        until = if (force) clock() + 3000 + maxMsPerChar * text.length else 0
-        return true
+    private val waiting = mutableListOf<String>()
+    val playing get() = forced.isNotEmpty() && clock() < until
+
+    fun begin(id: String, text: String, force: Boolean, replace: Boolean = false): Play {
+        val after = playing && !replace
+        if (!force) return if (after) Play.Drop else { forced.clear(); Play.Now }
+        if (!after) forced.clear()
+        forced[id] = text
+        until = (if (after) until else clock()) + 3000 + maxMsPerChar * text.length
+        return if (after) Play.After else Play.Now
     }
-    fun finished(id: String) { if (id == priority) priority = null }
-    fun clear() { priority = null }
+    fun finished(id: String) { forced.remove(id) }
+    fun clear() { forced.clear() }
+
+    /** The microphone opens: forced lines still to be heard wait and are read again from their start. */
+    fun hold() { if (playing) waiting += forced.values; forced.clear() }
+    /** A forced line arriving while the microphone listens; [replace] drops the ones it makes out of date. */
+    fun hold(text: String, replace: Boolean) { if (replace) waiting.clear(); waiting += text }
+    fun release(): List<String> = waiting.toList().also { waiting.clear() }
 }
 
 /** Text-to-speech for guidance, shared by every screen. A new line interrupts the previous one, unless that one is forced. */
@@ -99,7 +119,11 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
     @Volatile override var held = false
         set(value) { field = value; if (value) stop() }
     @Volatile override var listening = false
-        set(value) { field = value; if (value) stop() }
+        set(value) {
+            field = value
+            if (value) { synchronized(turns) { turns.hold() }; tts.stop() }
+            else synchronized(turns) { turns.release() }.forEach { play(it, force = true, replace = false) }
+        }
     override val busy get() = held || listening || synchronized(turns) { turns.playing }
     private var last = ""
     private var count = 0
@@ -114,12 +138,18 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
         })
     }
 
-    override fun speak(text: String, force: Boolean) {
-        val spoken = com.lensqi.fieldops.ui.common.TechnicianText.guidance(text)
-        if (!enabled || held || listening || !ready || text.isBlank() || (!force && spoken == last)) return
-        val id = synchronized(turns) { "lensqi-${++count}".takeIf { turns.begin(it, spoken, force) } } ?: return
+    override fun speak(text: String, force: Boolean, replace: Boolean) =
+        play(com.lensqi.fieldops.ui.common.TechnicianText.guidance(text), force, replace)
+
+    private fun play(spoken: String, force: Boolean, replace: Boolean) {
+        if (!enabled || held || !ready || spoken.isBlank()) return
+        if (listening) { if (force) synchronized(turns) { turns.hold(spoken, replace) }; return }
+        if (!force && spoken == last) return
+        val id: String; val play: Play
+        synchronized(turns) { id = "lensqi-${++count}"; play = turns.begin(id, spoken, force, replace) }
+        if (play == Play.Drop) return
         last = spoken
-        tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, id)
+        tts.speak(spoken, if (play == Play.After) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
     override fun stop() { synchronized(turns) { turns.clear() }; tts.stop() }

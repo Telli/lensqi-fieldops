@@ -6,6 +6,7 @@ import com.lensqi.fieldops.ui.common.TechnicianText
 import com.lensqi.fieldops.ui.task.VoicePace
 import com.lensqi.fieldops.ui.task.stepSpeech
 import com.lensqi.fieldops.voice.ListeningHold
+import com.lensqi.fieldops.voice.Play
 import com.lensqi.fieldops.voice.SpeechOutput
 import com.lensqi.fieldops.voice.SpeechTurns
 import com.lensqi.fieldops.voice.mute
@@ -27,7 +28,7 @@ class VoiceSpeechTest {
         override var listening = false
             set(value) { field = value; if (value) stop() }
         override val busy get() = held || listening || reading
-        override fun speak(text: String, force: Boolean) {
+        override fun speak(text: String, force: Boolean, replace: Boolean) {
             if (!enabled || held || listening || (!force && reading)) return
             spoken += text; reading = force
         }
@@ -35,22 +36,49 @@ class VoiceSpeechTest {
         fun finish() { reading = false }
     }
 
-    @Test fun `a forced line is never cut off by a hint, and the engine's end or the time cap frees the speaker`() {
+    @Test fun `a forced line is never cut off by a hint or by another forced line, unless that one replaces it`() {
         var now = 0L
         val turns = SpeechTurns({ now }, maxMsPerChar = 10)
-        assertTrue(turns.begin("1", "Step 1. Drain the oil.", force = true))
+        assertEquals(Play.Now, turns.begin("1", "Step 1. Drain the oil. Stop if the oil is hot.", force = true))
         assertTrue(turns.playing)
-        assertFalse(turns.begin("2", "Move closer to the plug.", force = false))
-        // A newer forced line (the next step, an answer) replaces it; the old line's end no longer frees the speaker.
-        assertTrue(turns.begin("3", "The plug is the bolt under the pan.", force = true))
+        assertEquals(Play.Drop, turns.begin("2", "Move closer to the plug.", force = false))
+        // A check result arriving during the step plays after it, so the stop conditions are heard.
+        assertEquals(Play.After, turns.begin("3", "Looks right. The plug is out.", force = true))
         turns.finished("1"); assertTrue(turns.playing)
         turns.finished("3"); assertFalse(turns.playing)
-        assertTrue(turns.begin("4", "Move closer to the plug.", force = false))
-        // If the engine never reports the end, the cap (3 s + 10 ms a character here) frees it.
-        turns.begin("5", "x".repeat(100), force = true)
-        now = 3999; assertTrue(turns.playing)
-        now = 4001; assertFalse(turns.playing)
-        turns.begin("6", "Stop if the oil is hot.", force = true); turns.clear(); assertFalse(turns.playing)
+        assertEquals(Play.Now, turns.begin("4", "Move closer to the plug.", force = false))
+        // A new step replaces what is still being read about the old one.
+        turns.begin("5", "Step 1. Drain the oil.", force = true)
+        assertEquals(Play.Now, turns.begin("6", "Step 2. Fit the filter.", force = true, replace = true))
+        turns.finished("5"); assertTrue(turns.playing)
+        turns.finished("6"); assertFalse(turns.playing)
+        // If the engine never reports the end, the cap (3 s + 10 ms a character here, summed over queued lines) frees it.
+        now = 10_000
+        turns.begin("7", "x".repeat(100), force = true); turns.begin("8", "y".repeat(100), force = true)
+        now = 17_999; assertTrue(turns.playing)
+        now = 18_001; assertFalse(turns.playing)
+        turns.begin("9", "Stop if the oil is hot.", force = true); turns.clear(); assertFalse(turns.playing)
+    }
+
+    @Test fun `forced lines cut off or arriving while the mic listens are read afterwards, in order`() {
+        val turns = SpeechTurns({ 0L })
+        turns.begin("1", "Step 1. Drain the oil. Stop if the oil is hot.", force = true)
+        turns.begin("2", "Looks right.", force = true)
+        // The mic opens mid-step: both lines wait, the step from its start.
+        turns.hold()
+        assertFalse(turns.playing)
+        turns.hold("I didn't catch that.", replace = false)
+        assertEquals(listOf("Step 1. Drain the oil. Stop if the oil is hot.", "Looks right.", "I didn't catch that."), turns.release())
+        assertTrue(turns.release().isEmpty())
+        // The step changes while listening: the old step's lines are out of date, the new step is read.
+        turns.hold("Step 1. Drain the oil.", replace = true)
+        turns.hold("Looks right.", replace = false)
+        turns.hold("Step 2. Fit the filter. Stop if the seal is torn.", replace = true)
+        assertEquals(listOf("Step 2. Fit the filter. Stop if the seal is torn."), turns.release())
+        // Only lines still playing wait: one that finished isn't read again.
+        turns.begin("3", "Step 2. Fit the filter.", force = true); turns.finished("3")
+        turns.hold()
+        assertTrue(turns.release().isEmpty())
     }
 
     @Test fun `live hints wait while a step is read or the mic listens, then play`() {

@@ -384,7 +384,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     LaunchedEffect(t?.phase) { if (t?.phase == TaskPhase.Completed) onDone() }
     LaunchedEffect(step?.id) {
         vm.clearAnswer()
-        step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true) }
+        step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true, replace = true) }
     }
     var typed by remember { mutableStateOf("") }
     val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
@@ -399,7 +399,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else if (idle) vm.skip(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
             VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id } ?: vm.speaker.speak("This is the first step.", force = true)
             VoiceCommand.Check -> camera.value?.capture?.invoke()
-            VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak(stepSpeech(it), force = true) }
+            VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak(stepSpeech(it), force = true, replace = true) }
             VoiceCommand.Mute -> vm.speaker.mute()
             VoiceCommand.Unmute -> vm.speaker.unmute()
             VoiceCommand.Pause -> pace.pause(camera.value)
@@ -439,8 +439,9 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         controls = { handle ->
             camera.value = handle
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
-                // LensQi stops talking while it listens, so it never hears itself as the question.
-                onMic = { if (voice.listening) voice.stop() else { vm.speaker.stop(); voice.start() } },
+                // LensQi stops talking while it listens, so it never hears itself as the question; the voice input's hold
+                // does that and reads a cut-off step again afterwards.
+                onMic = { if (voice.listening) voice.stop() else voice.start() },
                 onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { viewingId = it.id } }
@@ -697,7 +698,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         when (parseCommand(said)) {
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
-            VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) } ?: vm.speaker.speak("There's no answer yet. Ask a question.", force = true)
+            VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true, replace = true) } ?: vm.speaker.speak("There's no answer yet. Ask a question.", force = true)
             VoiceCommand.Mute -> vm.speaker.mute()
             VoiceCommand.Unmute -> vm.speaker.unmute()
             VoiceCommand.Check -> camera.value?.capture?.invoke()
@@ -727,7 +728,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",
-                        onMic = { if (voice.listening) voice.stop() else { vm.speaker.stop(); voice.start() } },
+                        onMic = { if (voice.listening) voice.stop() else voice.start() },
                         onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
                 }
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
