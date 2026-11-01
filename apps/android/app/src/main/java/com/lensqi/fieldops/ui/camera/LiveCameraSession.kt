@@ -145,15 +145,17 @@ class LiveCameraSession(
                 objects.isNotEmpty() -> "Keep the connection visible. Capture a photo when ready."
                 else -> "Aim at the equipment and hold steady for detection."
             }
-            val lost = (detected && objects.isEmpty()) || spatial?.target?.let {
+            // While analysis is failing, detections expire without new ones: that is not the technician losing the part.
+            val paused = error.isNotBlank()
+            val lost = (detected && objects.isEmpty() && !paused) || spatial?.target?.let {
                 it.state != com.lensqi.fieldops.arcore.TargetState.Tracking || it.ambiguous
             } == true
             val statusText = TechnicianText.cameraStatus(
                 selectedAndTracked = spatial?.target?.let { it.state == com.lensqi.fieldops.arcore.TargetState.Tracking && !it.ambiguous } == true,
-                lost = lost, paused = error.isNotBlank(), hasObjects = objects.isNotEmpty(),
+                lost = lost, paused = paused, hasObjects = objects.isNotEmpty(),
             )
             mutable.value = LiveCameraState(
-                objects = objects, status = statusText, recommendation = TechnicianText.cameraAdvice(advice, lost), width = width, height = height,
+                objects = objects, status = statusText, recommendation = TechnicianText.cameraAdvice(advice, lost, paused), width = width, height = height,
                 guidanceAge = guidanceAt.takeIf { it > 0 }?.let { (now - it) / 1000 }, fps = fps,
                 viewSpace = spatial != null, tracking = spatial?.tracking, screenText = if (lost) null else screenText,
                 brightness = quality.brightness, sharpness = quality.sharpness, motion = motion,

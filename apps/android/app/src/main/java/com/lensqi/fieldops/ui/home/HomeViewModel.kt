@@ -52,7 +52,12 @@ class HomeViewModel @Inject constructor(
     private val snapshots: SnapshotStore,
 ) : ViewModel() {
     val diagnostics = settings.diagnostics
-    fun setDiagnostics(enabled: Boolean) = viewModelScope.launch { settings.setDiagnostics(enabled) }
+    /** A failed preference write (DataStore throws IOException) is reported on Settings instead of crashing the app. */
+    fun setDiagnostics(enabled: Boolean) = viewModelScope.launch {
+        try { settings.setDiagnostics(enabled) } catch (e: java.io.IOException) {
+            _state.update { it.copy(error = "The diagnostics setting couldn't be saved. Try again.") }
+        }
+    }
     val appearance = settings.appearance
     val person = settings.person
     /** Saves height (as typed: 6'2", 188 cm…) and tools; false when the height can't be read. */

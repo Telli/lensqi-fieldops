@@ -56,7 +56,6 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
             Text("Inspection record", style = MaterialTheme.typography.titleMedium)
         }
         HorizontalDivider(color = Fo.Border)
-        error?.let { Text("The inspection record couldn’t load. Check your connection, then reopen it.", color = Fo.Failure, modifier = Modifier.padding(16.dp)) }
         if (!technical) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.loading) Text("Loading inspection record…")
             state.error?.let {
@@ -80,11 +79,13 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
                     }
                     Text("Record generated ${recordTime(record.generated)}", style = MaterialTheme.typography.bodySmall)
                     Text("The full record retains the original evidence, identifiers and verification details.", style = MaterialTheme.typography.bodySmall)
-                    SecondaryButton("Open technical record", { technical = true })
+                    // Each opening loads the page again, so an earlier failure must not outlive it.
+                    SecondaryButton("Open technical record", { error = null; technical = true })
                 }
             }
         } else {
         androidx.compose.material3.TextButton(onClick = { technical = false }) { Text("Back to summary") }
+        error?.let { Text("The technical record couldn’t load. Check your connection, then open it again.", color = Fo.Failure, modifier = Modifier.padding(16.dp)) }
         AndroidView(
             factory = { context ->
                 WebView(context).apply {

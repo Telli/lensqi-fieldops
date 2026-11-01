@@ -156,13 +156,15 @@ fun GlassesScreen(
     val pickMockImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setMockCapturedImage(uri) }
     val pickMockVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setMockVideoFeed(uri) }
 
-    LaunchedEffect(prompt, status, live.enabled) { if (!live.enabled) vm.showHud(prompt, status) }
+    // Formatted once, so the glasses show the same words they speak.
+    val readablePrompt = remember(prompt) { com.lensqi.fieldops.ui.common.TechnicianText.guidance(prompt) }
+    LaunchedEffect(readablePrompt, status, live.enabled) { if (!live.enabled) vm.showHud(readablePrompt, status) }
     LaunchedEffect(Unit) { vm.shutter.collect { capture() } }
 
     var muted by rememberSaveable { mutableStateOf(true) }
     val speaker = rememberSpeaker()
-    LaunchedEffect(prompt, speaker, muted, live.enabled) {
-        if (muted || live.enabled) speaker?.stop() else speaker?.speak(com.lensqi.fieldops.ui.common.TechnicianText.guidance(prompt), TextToSpeech.QUEUE_FLUSH, null, "glasses-prompt")
+    LaunchedEffect(readablePrompt, speaker, muted, live.enabled) {
+        if (muted || live.enabled) speaker?.stop() else speaker?.speak(readablePrompt, TextToSpeech.QUEUE_FLUSH, null, "glasses-prompt")
     }
 
     val mock = s.mode == GlassesMode.Mock
@@ -179,7 +181,8 @@ fun GlassesScreen(
             PreviewPanel(s, vm, if (live.enabled) live.feedback else null)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (live.enabled) {
-                    Text("Camera assistance", color = Fo.Primary, fontWeight = FontWeight.Medium)
+                    // The session's status says when guidance has stalled (no fresh frames, analysis paused).
+                    Text(live.feedback.status, color = Fo.Primary, fontWeight = FontWeight.Medium)
                     if (com.lensqi.fieldops.ui.common.LocalDiagnostics.current) Text("${live.feedback.fps} tracking updates/s · AI guidance ${live.feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}", style = MaterialTheme.typography.bodySmall)
                     SecondaryButton("Pause live assist", vm::pauseLive, Modifier.fillMaxWidth())
                     Text("Active with the phone locked. Stop the camera from its notification.", style = MaterialTheme.typography.bodySmall)
@@ -189,8 +192,8 @@ fun GlassesScreen(
                 }
                 live.audioNote?.let { Text(it, color = Fo.Warning, style = MaterialTheme.typography.bodySmall) }
             }
-            HudPanel(com.lensqi.fieldops.ui.common.TechnicianText.guidance(if (live.enabled) live.feedback.recommendation else prompt),
-                if (live.enabled) "Camera assistance" else status, s, if (live.enabled) live.muted else muted) {
+            HudPanel(if (live.enabled) com.lensqi.fieldops.ui.common.TechnicianText.guidance(live.feedback.recommendation) else readablePrompt,
+                if (live.enabled) "Camera guidance · inferred" else status, s, if (live.enabled) live.muted else muted) {
                 if (live.enabled) vm.muteLive() else muted = !muted
             }
             s.error?.let { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) }

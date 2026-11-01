@@ -42,6 +42,14 @@ class TechnicianTextTest {
         assertTrue(text.contains("Stop if the cable is hot. Do not remove the cover."), text)
         assertEquals("Do not remove the grounding wire.", TechnicianText.guidance("Do not remove the grounding wire."))
         assertEquals("point the camera at the same equipment again", TechnicianText.guidance("reacquire target"))
+        // The label is translated after the metric goes, so neither the number nor the warning is lost.
+        val low = TechnicianText.guidance("Port label read with low confidence: 0.42, check it by eye")
+        assertFalse(low.contains("0.42"), low)
+        assertTrue(low.contains("uncertain"), low)
+    }
+    @Test fun `an already-done step is not told to complete checks, a not-ready verify is`() {
+        assertFalse(friendly("invalid_state", "The step is already done").contains("complete the required checks"))
+        assertTrue(friendly("verification_not_ready", "").contains("complete the required checks"))
     }
     @Test fun `camera only describes a selected target when actually tracked`() {
         assertEquals("Equipment in view", TechnicianText.cameraStatus(false, false, false, true))
@@ -53,6 +61,9 @@ class TechnicianTextTest {
         assertFalse(TechnicianText.cameraAdvice("Remove the plug", true).contains("Remove"))
         assertTrue(TechnicianText.cameraAdvice("Remove the plug", true).contains("same equipment"))
         assertEquals("Keep the label visible", TechnicianText.cameraAdvice("Keep the label visible", false))
+        // Paused analysis keeps no earlier part-specific instruction and asks for no repositioning.
+        val paused = TechnicianText.cameraAdvice("Remove the plug", lost = false, paused = true)
+        assertFalse(paused.contains("Remove"), paused); assertFalse(paused.contains("Point the camera"), paused)
     }
     @Test fun `diagnostics default off and history never retains raw error payloads`() {
         assertFalse(DIAGNOSTICS_DEFAULT)

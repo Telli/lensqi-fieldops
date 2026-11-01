@@ -25,6 +25,12 @@ class RecordSummaryTest {
         }
         assertEquals(before, record.toString())
     }
+    @Test fun `check history is earliest first, with untimed checks last in their recorded order`() {
+        fun check(passed: Boolean, at: String?) = """{"result":{"passed":$passed,"source":"Simulated"${at?.let { ",\"completedAt\":\"$it\"" } ?: ""}}}"""
+        val raw = """{"diagnostics":[${check(true, "2026-10-31T10:05:00Z")},${check(false, null)},${check(false, "2026-10-31T09:00:00-02:00")},${check(true, "2026-10-31T10:01:00Z")},${check(true, "garbage")}]}"""
+        val at = recordSummary(Json.parseToJsonElement(raw).jsonObject).checks.map { it.at to it.passed }
+        assertEquals(listOf("2026-10-31T10:01:00Z" to true, "2026-10-31T10:05:00Z" to true, "2026-10-31T09:00:00-02:00" to false, "" to false, "garbage" to true), at)
+    }
     @Test fun `invalid record timestamps do not echo internal text`() {
         assertEquals("Time unavailable", recordTime("internal_error"))
     }
