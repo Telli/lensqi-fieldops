@@ -4,6 +4,8 @@ import com.lensqi.fieldops.ui.common.TechnicianText
 
 import com.lensqi.fieldops.wearables.SpokenFeedbackGate
 import com.lensqi.fieldops.voice.SpeechOutput
+import com.lensqi.fieldops.voice.mute
+import com.lensqi.fieldops.voice.unmute
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.DisposableEffect
 import android.os.SystemClock
@@ -48,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
@@ -382,7 +385,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     LaunchedEffect(t?.phase) { if (t?.phase == TaskPhase.Completed) onDone() }
     LaunchedEffect(step?.id) {
         vm.clearAnswer()
-        step?.let { vm.speaker.speak("Step ${n + 1}. ${it.title}. ${it.instruction} ${it.cautions.joinToString(". ") { c -> c.text }}", force = true) }
+        step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true) }
     }
     var typed by remember { mutableStateOf("") }
     val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
@@ -390,20 +393,23 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         val now = vm.state.value
         val current = now.task?.currentStep ?: return@rememberVoiceInput
         val idle = now.busy == null
+        // A command that can't run now says why; one that runs is heard through the next step being read.
         when (parseCommand(said)) {
-            VoiceCommand.Next -> if (viewingId != null) viewingId = null else if (idle) vm.complete(current.id) {}
-            VoiceCommand.Skip -> if (idle && viewingId == null) vm.skip(current.id) {}
-            VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id }
+            VoiceCommand.Next -> if (viewingId != null) viewingId = null else if (idle) vm.complete(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
+            VoiceCommand.Skip -> if (viewingId != null) vm.speaker.speak("Go to the current step to skip it. Say next to go there.", force = true)
+                else if (idle) vm.skip(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
+            VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id } ?: vm.speaker.speak("This is the first step.", force = true)
             VoiceCommand.Check -> camera.value?.capture?.invoke()
-            VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak("${it.title}. ${it.instruction}", force = true) }
-            VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
-            VoiceCommand.Unmute -> vm.speaker.enabled = true
+            VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak(stepSpeech(it), force = true) }
+            VoiceCommand.Mute -> vm.speaker.mute()
+            VoiceCommand.Unmute -> vm.speaker.unmute()
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
             null -> if (reviewingNow) vm.speaker.speak("Questions are about the current step. Say next to go to it.", force = true)
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
+    SpeechAroundVoice(vm.speaker, voice.listening, s.error, voice.error)
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
@@ -499,11 +505,33 @@ private fun StopTask(phase: TaskPhase, busy: Boolean, onStop: () -> Unit) {
 
 private class HandleRef { var value: CameraHandle? = null }
 
+private const val STILL_WORKING = "One moment, LensQi is still working on the last request."
+
+/** What is read aloud for a step: the instruction, then each caution and stop condition the screen shows. */
+internal fun stepSpeech(step: TaskStep, number: Int? = null): String {
+    fun sentence(s: String) = s.trim().let { if (it.isEmpty() || it.last() in ".!?") it else "$it." }
+    return (listOfNotNull(number?.let { "Step $it" }, step.title, step.instruction) + step.cautions.map { it.text } + step.stopIf.map { "Stop if $it" })
+        .map(::sentence).filter { it.isNotEmpty() }.joinToString(" ")
+}
+
+/**
+ * While the microphone listens nothing is spoken. Errors are read aloud, so a hands-free user hears why a command
+ * didn't work. SideEffect sets the hold before any effect speaks the error the recognizer just reported.
+ */
+@Composable
+private fun SpeechAroundVoice(speaker: SpeechOutput, listening: Boolean, error: String?, voiceError: String?) {
+    SideEffect { speaker.listening = listening }
+    DisposableEffect(speaker) { onDispose { speaker.listening = false } }
+    LaunchedEffect(error) { error?.let { speaker.speak(it, force = true) } }
+    LaunchedEffect(voiceError) { voiceError?.let { speaker.speak(it, force = true) } }
+}
+
 /**
  * Spoken live guidance and the pause command for one camera screen. Guidance goes through [SpokenFeedbackGate], so
- * unchanged advice is not repeated and lines are spaced; "pause" holds speech and live coaching until "resume".
+ * unchanged advice is not repeated and lines are spaced; "pause" holds speech and live coaching until "resume". A hint
+ * waits while the speaker is busy (a step, answer or check result being read, or the microphone listening).
  */
-private class VoicePace(private val speaker: SpeechOutput) {
+internal class VoicePace(private val speaker: SpeechOutput) {
     var paused by mutableStateOf(false)
         private set
     private var wasLive = false
@@ -511,17 +539,18 @@ private class VoicePace(private val speaker: SpeechOutput) {
     private var latest = ""
 
     /**
-     * Losing the target cuts off a part-specific line still being spoken and drops the gate's spacing, so the
-     * recovery advice follows at once instead of up to eight seconds later.
+     * Losing the target cuts off a part-specific hint still being spoken and drops the gate's spacing, so the
+     * recovery advice follows at once instead of up to eight seconds later. A step, answer or check result is never cut off.
      */
     fun guidance(text: String) {
-        if (text.startsWith(TechnicianText.LOST_ADVICE) && !latest.startsWith(TechnicianText.LOST_ADVICE)) { speaker.stop(); gate = SpokenFeedbackGate() }
+        if (text.startsWith(TechnicianText.LOST_ADVICE) && !latest.startsWith(TechnicianText.LOST_ADVICE)) { if (!speaker.busy) speaker.stop(); gate = SpokenFeedbackGate() }
         latest = text
     }
 
     /** Called on a short timer; speaks the latest guidance when the gate allows it. */
     fun tick(now: Long, allowed: Boolean) {
-        if (!paused && allowed) gate.next(latest, now)?.let { speaker.speak(it) }
+        // Busy: the gate isn't asked, so the hint stays pending and plays 1.5 s after the speaker is free.
+        if (!paused && allowed && !speaker.busy) gate.next(latest, now)?.let { speaker.speak(it) }
     }
 
     fun pause(camera: CameraHandle?) {
@@ -669,13 +698,14 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         when (parseCommand(said)) {
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
-            VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) }
-            VoiceCommand.Mute -> { vm.speaker.enabled = false; vm.speaker.stop() }
-            VoiceCommand.Unmute -> vm.speaker.enabled = true
+            VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true) } ?: vm.speaker.speak("There's no answer yet. Ask a question.", force = true)
+            VoiceCommand.Mute -> vm.speaker.mute()
+            VoiceCommand.Unmute -> vm.speaker.unmute()
             VoiceCommand.Check -> camera.value?.capture?.invoke()
             else -> vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
+    SpeechAroundVoice(vm.speaker, voice.listening, s.error, voice.error)
     CameraScreen(
         prompt = answers.firstOrNull()?.answer ?: "Point at the equipment and ask a question.",
         analyzeLive = vm::analyzeLiveFrame,

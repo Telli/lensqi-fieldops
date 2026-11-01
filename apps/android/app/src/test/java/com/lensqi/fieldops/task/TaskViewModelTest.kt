@@ -56,6 +56,8 @@ class TaskViewModelTest {
         val spoken: MutableList<String> = Collections.synchronizedList(mutableListOf())
         override var enabled = true
         override var held = false
+        override var listening = false
+        override val busy get() = held || listening
         override fun speak(text: String, force: Boolean) { spoken += text }
         override fun stop() {}
     }
