@@ -421,7 +421,8 @@ private fun LazyListScope.attemptItems(
             }
 
             Part(Icons.Outlined.Speed, "What was measured", "Equipment check · measured",
-                pass = if (a.measured.isEmpty()) null else a.measured.all { it.passed == true }) {
+                // Failed only when a check failed; a check with no measurement is unavailable, not a failure.
+                pass = when { a.measured.any { it.passed == false } -> false; a.measured.isEmpty() || a.measured.any { it.passed == null } -> null; else -> true }) {
                 if (a.measured.isEmpty()) Muted("No check ran: the photo, review or confirmation decided first.")
                 a.measured.forEach { m ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -630,7 +631,7 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
         if (s.diagnosticsMode == DiagnosticSource.Simulated) {
             Row(Modifier.fillMaxWidth().border(1.dp, Fo.Border, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Demo: connection available", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Text(if (s.simUp == false) "Demo: connection down" else "Demo: connection available", fontWeight = FontWeight.Medium, fontSize = 13.sp)
                     Muted("Demo result only; this does not measure the equipment.")
                 }
                 Switch(s.simUp == true, { vm.setSimulated(c.diagnosticId, it) }, enabled = s.busy == null, colors = SwitchDefaults.colors(checkedTrackColor = Fo.Primary, checkedThumbColor = Fo.OnPrimary))

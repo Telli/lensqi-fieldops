@@ -17,11 +17,13 @@ fun recordSummary(record: JsonObject): RecordSummary {
     val result = VerificationResult.entries.firstOrNull { it.name == decision?.text("result") }
     val inspection = record["inspection"] as? JsonObject
     val kind = VerificationOutcomeKind.entries.firstOrNull { it.name == inspection?.text("outcomeKind") }
+    // Shown earliest first. The record keeps event order and completion times come from wall clocks, so sort by time;
+    // the sort is stable, so checks with no readable time keep their recorded order, after the timed ones.
     val checks = (record["diagnostics"] as? JsonArray).orEmpty().mapNotNull { item ->
         val value = (item as? JsonObject)?.get("result") as? JsonObject ?: return@mapNotNull null
         RecordCheck((value["passed"] as? JsonPrimitive)?.booleanOrNull,
             DiagnosticSource.entries.firstOrNull { it.name == value.text("source") }, value.text("completedAt").orEmpty())
-    }
+    }.sortedWith(compareBy(nullsLast()) { c: RecordCheck -> runCatching { java.time.OffsetDateTime.parse(c.at).toInstant() }.getOrNull() })
     return RecordSummary(TechnicianText.outcome(result, kind),
         (decision?.get("reasons") as? JsonArray).orEmpty().map { plainReason((it as? JsonPrimitive)?.contentOrNull.orEmpty()) }.distinct(),
         checks, (record["artifacts"] as? JsonArray).orEmpty().count { (it as? JsonObject)?.text("kind") == "photo" },

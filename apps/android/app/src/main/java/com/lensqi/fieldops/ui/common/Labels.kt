@@ -95,7 +95,9 @@ fun friendly(code: String, message: String): String = when (code) {
     "change_evidence_rejected" -> "The repair photo wasn't accepted. Take a fresh photo after the repair."
     "unsafe_plan", "safety_restricted" -> "This task needs qualified help. Stop and review the safety instructions."
     "client_contract_mismatch" -> "This response couldn't be read. Refresh, or check for an app update."
-    "invalid_state", "stale_evidence", "verification_not_ready" -> "This action isn't available yet. Refresh and complete the required checks."
+    // invalid_state also covers work that is already done, so it doesn't presume a check is missing.
+    "invalid_state" -> "This action doesn't fit the current state. Refresh and review where things stand."
+    "stale_evidence", "verification_not_ready" -> "This action isn't available yet. Refresh and complete the required checks."
     "local_save_failed" -> "The photo couldn't be saved. Check free space, then take it again."
     else -> "This action couldn't be completed. Refresh to check its status before trying again."
 }

@@ -292,7 +292,8 @@ private fun CameraContent(
     // While marking, a tap marks the chosen port; while checking, a tap says where the step's port really is.
     var markLabel by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
-    // New AI guidance (its age resets to 0), not the local light and focus hints that change every frame.
+    // The latest advice, local hints and tracking-loss advice included, for the voice pacer, which speaks it through
+    // its SpokenFeedbackGate; cleared while live assist is off.
     LaunchedEffect(feedback.recommendation, liveEnabled) { onGuidance(if (liveEnabled) feedback.recommendation else "") }
     DisposableEffect(session) { onDispose { session?.close() } }
     DisposableEffect(controller, session, arActive) {

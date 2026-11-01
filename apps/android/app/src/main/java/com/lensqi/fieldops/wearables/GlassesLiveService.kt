@@ -116,11 +116,14 @@ class GlassesLiveService : Service() {
     private fun deliverFeedback(now: Long) {
         val state = store.state.value
         val f = state.feedback
-        val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · simulated" else "Glasses assistance"
-        val hud = f.recommendation to "$badge · ${f.status}"
+        // The recommendation is inferred from camera frames, mock or not; the HUD says so even with the phone locked.
+        val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · simulated · inferred" else "Glasses assistance · inferred"
+        // Formatted once, so the HUD shows the words that are spoken.
+        val advice = com.lensqi.fieldops.ui.common.TechnicianText.guidance(f.recommendation)
+        val hud = advice to "$badge · ${f.status}"
         if (hud != lastHud && now - lastHudAt >= 2000) { source.showHud(hud.first, hud.second); lastHud = hud; lastHudAt = now }
-        if (!state.muted && speechReady) speechGate.next(f.recommendation, now)?.let { text ->
-            speaker?.speak(com.lensqi.fieldops.ui.common.TechnicianText.guidance(text), TextToSpeech.QUEUE_FLUSH, null, "glasses-live-guidance")
+        if (!state.muted && speechReady) speechGate.next(advice, now)?.let { text ->
+            speaker?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "glasses-live-guidance")
         }
     }
 
