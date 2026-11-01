@@ -38,6 +38,7 @@ class GlassesLiveService : Service() {
     private var speechGate = SpokenFeedbackGate()
     private var lastHud: Pair<String, String>? = null
     private var lastHudAt = 0L
+    private var lastSpokenLost = false
     private var wake: PowerManager.WakeLock? = null
     private var keepPreviewOnStop = false
 
@@ -118,11 +119,16 @@ class GlassesLiveService : Service() {
         val f = state.feedback
         // The recommendation is inferred from camera frames, mock or not; the HUD says so even with the phone locked.
         val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · simulated · inferred" else "Glasses assistance · inferred"
-        // Formatted once, so the HUD shows the words that are spoken.
+        // Formatted once, so the HUD shows the words that are spoken (speech leaves out the changing distance numbers).
         val advice = com.lensqi.fieldops.ui.common.TechnicianText.guidance(f.recommendation)
+        val spoken = com.lensqi.fieldops.ui.common.TechnicianText.guidance(f.spoken)
         val hud = advice to "$badge · ${f.status}"
         if (hud != lastHud && now - lastHudAt >= 2000) { source.showHud(hud.first, hud.second); lastHud = hud; lastHudAt = now }
-        if (!state.muted && speechReady) speechGate.next(advice, now)?.let { text ->
+        // Losing the target cuts off a part-specific line still being spoken; the recovery advice follows at once.
+        val lost = spoken.startsWith(com.lensqi.fieldops.ui.common.TechnicianText.LOST_ADVICE)
+        if (lost && !lastSpokenLost) { speaker?.stop(); speechGate = SpokenFeedbackGate() }
+        lastSpokenLost = lost
+        if (!state.muted && speechReady) speechGate.next(spoken, now)?.let { text ->
             speaker?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "glasses-live-guidance")
         }
     }

@@ -24,6 +24,8 @@ data class LiveCameraState(
     val objects: List<LiveObject> = emptyList(),
     val status: String = "Looking for equipment…",
     val recommendation: String = "Aim at the equipment and hold steady for detection.",
+    /** [recommendation] as it is spoken: without the frame-to-frame distance estimate. */
+    val spoken: String = recommendation,
     val width: Int = 0,
     val height: Int = 0,
     val guidanceAge: Long? = null,
@@ -147,15 +149,15 @@ class LiveCameraSession(
             }
             // While analysis is failing, detections expire without new ones: that is not the technician losing the part.
             val paused = error.isNotBlank()
-            val lost = (detected && objects.isEmpty() && !paused) || spatial?.target?.let {
-                it.state != com.lensqi.fieldops.arcore.TargetState.Tracking || it.ambiguous
-            } == true
+            // A confirmed target can still be Tracking while off screen (its cue is set): it isn't in view either.
+            val inView = spatial?.target?.let { it.state == com.lensqi.fieldops.arcore.TargetState.Tracking && !it.ambiguous && it.cue == null }
+            val lost = (detected && objects.isEmpty() && !paused) || inView == false
             val statusText = TechnicianText.cameraStatus(
-                selectedAndTracked = spatial?.target?.let { it.state == com.lensqi.fieldops.arcore.TargetState.Tracking && !it.ambiguous } == true,
-                lost = lost, paused = paused, hasObjects = objects.isNotEmpty(),
+                selectedAndTracked = inView == true, lost = lost, paused = paused, hasObjects = objects.isNotEmpty(),
             )
+            val recommendation = TechnicianText.cameraAdvice(advice, lost, paused)
             mutable.value = LiveCameraState(
-                objects = objects, status = statusText, recommendation = TechnicianText.cameraAdvice(advice, lost, paused), width = width, height = height,
+                objects = objects, status = statusText, recommendation = recommendation, spoken = TechnicianText.spoken(recommendation), width = width, height = height,
                 guidanceAge = guidanceAt.takeIf { it > 0 }?.let { (now - it) / 1000 }, fps = fps,
                 viewSpace = spatial != null, tracking = spatial?.tracking, screenText = if (lost) null else screenText,
                 brightness = quality.brightness, sharpness = quality.sharpness, motion = motion,

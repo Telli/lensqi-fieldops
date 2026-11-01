@@ -507,10 +507,17 @@ private class VoicePace(private val speaker: SpeechOutput) {
     var paused by mutableStateOf(false)
         private set
     private var wasLive = false
-    private val gate = SpokenFeedbackGate()
+    private var gate = SpokenFeedbackGate()
     private var latest = ""
 
-    fun guidance(text: String) { latest = text }
+    /**
+     * Losing the target cuts off a part-specific line still being spoken and drops the gate's spacing, so the
+     * recovery advice follows at once instead of up to eight seconds later.
+     */
+    fun guidance(text: String) {
+        if (text.startsWith(TechnicianText.LOST_ADVICE) && !latest.startsWith(TechnicianText.LOST_ADVICE)) { speaker.stop(); gate = SpokenFeedbackGate() }
+        latest = text
+    }
 
     /** Called on a short timer; speaks the latest guidance when the gate allows it. */
     fun tick(now: Long, allowed: Boolean) {

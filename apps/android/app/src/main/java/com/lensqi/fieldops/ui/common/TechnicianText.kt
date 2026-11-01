@@ -35,12 +35,33 @@ object TechnicianText {
         return readable.replace(Regex("[ \t]{2,}"), " ").trim(' ', '·', ';', ',').ifBlank { "Review the equipment before continuing." }
     }
 
-    /** Lost tracking or paused analysis replaces the advice: earlier part-specific guidance may no longer apply. */
-    fun cameraAdvice(advice: String, lost: Boolean, paused: Boolean = false): String = when {
-        lost -> "Point the camera at the same equipment again before continuing."
-        paused -> "Guidance will resume shortly. Keep the equipment in view."
-        else -> guidance(advice)
+    const val LOST_ADVICE = "Point the camera at the same equipment again before continuing."
+
+    /**
+     * Lost tracking or paused analysis replaces the advice: earlier part-specific guidance may no longer apply. Safety
+     * warnings in it are kept, since the task's own cautions need not include a hazard the camera just pointed out.
+     */
+    fun cameraAdvice(advice: String, lost: Boolean, paused: Boolean = false): String {
+        val replaced = when {
+            lost -> LOST_ADVICE
+            paused -> "Guidance will resume shortly. Keep the equipment in view."
+            else -> return guidance(advice)
+        }
+        return (listOf(replaced) + safetyWarnings(advice).map(::guidance)).joinToString(" ")
     }
+
+    private val warning = Regex("(?i)\\b(stop|do not|don't|never|warning|caution|danger|unsafe|hazard)\\b")
+    private fun safetyWarnings(text: String) = text.split(Regex("(?<=[.!?])\\s+")).map { it.trim() }.filter { it.isNotEmpty() && warning.containsMatchIn(it) }
+
+    /**
+     * What is spoken: the advice without its distance estimate, which changes from frame to frame and would otherwise
+     * restart the speech gate's settling time on every sample ("Move about 12 cm closer to the switch (estimated
+     * 60 cm away)." is spoken as "Move closer to the switch."). The screen keeps the numbers.
+     */
+    fun spoken(advice: String): String = advice
+        .replace(Regex("\\s*\\(estimated \\d+ cm(?: away)?\\)"), "")
+        .replace(Regex("\\s+about \\d+ cm"), "")
+        .replace(Regex("[ \t]{2,}"), " ").trim()
 
     fun cameraStatus(selectedAndTracked: Boolean, lost: Boolean, paused: Boolean, hasObjects: Boolean): String = when {
         lost -> "Point the camera back at the equipment"

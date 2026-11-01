@@ -11,6 +11,16 @@ class RecordSummaryTest {
         assertEquals("I-abcd", recordInspectionId("http://localhost:5201/m/i/I-abcd/receipt?embed=1&theme=dark"))
         assertEquals("I-abcd", recordInspectionId("http://localhost:5201/v1/inspections/I-abcd/receipt.html"))
         assertNull(recordInspectionId("http://localhost:5201/unrecognized"))
+        // A server base URL with a path prefix keeps working.
+        assertEquals("I-abcd", recordInspectionId("https://host/fieldops/m/i/I-abcd/receipt"))
+        assertEquals("I-abcd", recordInspectionId("https://host/fieldops/v1/inspections/I-abcd/receipt.html"))
+        assertNull(recordInspectionId("https://host/fieldops/m/i/I-abcd/other"))
+    }
+    @Test fun `the summary says what the recorded check proves and keeps the record's limits`() {
+        val summary = recordSummary(com.lensqi.fieldops.data.api.Recordings.obj("receipt"))
+        assertTrue(summary.proves.single().contains("not physical port identity"), summary.proves.toString())
+        assertTrue(summary.limits.any { it.contains("not a safety, compliance or electrical certification") }, summary.limits.toString())
+        assertTrue(summary.limits.any { it.contains("never yield VerifiedCompleteLive") }, summary.limits.toString())
     }
     @Test fun `record summary preserves simulation and never changes original audit data`() {
         val raw = """{"inspection":{"outcomeKind":"VerifiedCompleteSimulated"},"decision":{"result":"Verified","reasons":[]},"artifacts":[{"kind":"photo"}],"diagnostics":[{"result":{"passed":true,"source":"Simulated"}}]}"""
