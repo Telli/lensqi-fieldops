@@ -8,11 +8,16 @@ import com.lensqi.fieldops.ui.common.plainReason
 import kotlinx.serialization.json.*
 
 data class RecordCheck(val passed: Boolean?, val source: DiagnosticSource?, val at: String)
-data class RecordSummary(val title: String, val reasons: List<String>, val checks: List<RecordCheck>, val photos: Int, val generated: String)
+data class RecordSummary(
+    val title: String, val reasons: List<String>, val checks: List<RecordCheck>, val photos: Int, val generated: String,
+    /** What the recorded checks prove (`decision.verifiedClaims`), and the record's own limits (`disclaimers`), as written. */
+    val proves: List<String> = emptyList(), val limits: List<String> = emptyList(),
+)
 
 /** Read-only projection of the existing receipt. Unknown values never become a successful result. */
 fun recordSummary(record: JsonObject): RecordSummary {
     fun JsonObject.text(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
+    fun JsonObject?.texts(key: String) = (this?.get(key) as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank) }
     val decision = record["decision"] as? JsonObject
     val result = VerificationResult.entries.firstOrNull { it.name == decision?.text("result") }
     val inspection = record["inspection"] as? JsonObject
@@ -27,12 +32,16 @@ fun recordSummary(record: JsonObject): RecordSummary {
     return RecordSummary(TechnicianText.outcome(result, kind),
         (decision?.get("reasons") as? JsonArray).orEmpty().map { plainReason((it as? JsonPrimitive)?.contentOrNull.orEmpty()) }.distinct(),
         checks, (record["artifacts"] as? JsonArray).orEmpty().count { (it as? JsonObject)?.text("kind") == "photo" },
-        record.text("generatedAt").orEmpty())
+        record.text("generatedAt").orEmpty(),
+        decision.texts("verifiedClaims").map(TechnicianText::guidance), record.texts("disclaimers").map(TechnicianText::guidance))
 }
 
-/** Both the app record route and the downloadable document carry the same inspection identifier. */
+/**
+ * Both the app record route and the downloadable document carry the same inspection identifier. Only the route's last
+ * four segments are matched: a server base URL may have a path prefix (https://host/fieldops/m/i/I-abcd/receipt).
+ */
 fun recordInspectionId(url: String): String? = runCatching {
-    val parts = java.net.URI(url).path.split('/').filter { it.isNotBlank() }
+    val parts = java.net.URI(url).path.split('/').filter { it.isNotBlank() }.takeLast(4)
     when {
         parts.size == 4 && parts[0] == "m" && parts[1] == "i" && parts[3] == "receipt" -> parts[2]
         parts.size == 4 && parts[0] == "v1" && parts[1] == "inspections" && parts[3] in setOf("receipt", "receipt.html") -> parts[2]

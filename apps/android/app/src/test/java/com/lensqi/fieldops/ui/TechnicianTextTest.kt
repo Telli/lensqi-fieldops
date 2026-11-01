@@ -65,6 +65,19 @@ class TechnicianTextTest {
         val paused = TechnicianText.cameraAdvice("Remove the plug", lost = false, paused = true)
         assertFalse(paused.contains("Remove"), paused); assertFalse(paused.contains("Point the camera"), paused)
     }
+    @Test fun `tracking loss drops the stale action but keeps a safety warning the camera gave`() {
+        val lost = TechnicianText.cameraAdvice("Unplug the cable from P2. Stop if the cable is hot.", lost = true)
+        assertTrue(lost.startsWith(TechnicianText.LOST_ADVICE), lost)
+        assertFalse(lost.contains("Unplug"), lost)
+        assertTrue(lost.contains("Stop if the cable is hot."), lost)
+        assertEquals(TechnicianText.LOST_ADVICE, TechnicianText.cameraAdvice("Unplug the cable from P2.", lost = true))
+    }
+    @Test fun `spoken advice leaves out the distance estimate so it stays the same between frames`() {
+        assertEquals("Move closer to the switch.", TechnicianText.spoken("Move about 12 cm closer to the switch (estimated 60 cm away)."))
+        assertEquals(TechnicianText.spoken("Check the label. Good distance from the switch (estimated 45 cm). Capture when ready."),
+            TechnicianText.spoken("Check the label. Good distance from the switch (estimated 46 cm). Capture when ready."))
+        assertEquals("Keep the label visible", TechnicianText.spoken("Keep the label visible"))
+    }
     @Test fun `diagnostics default off and history never retains raw error payloads`() {
         assertFalse(DIAGNOSTICS_DEFAULT)
     }

@@ -68,7 +68,16 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
                     if (source != null) SourceBadge(source) else Text("Check source unavailable", color = Fo.Warning)
                 }
                 record.reasons.forEach { Text(it) }
+                if (record.proves.isNotEmpty()) {
+                    Text("What the check proves", style = MaterialTheme.typography.titleSmall)
+                    record.proves.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                }
                 Text("${record.photos} evidence photos", style = MaterialTheme.typography.bodyMedium)
+                // The record's limits stay on the summary: a verified result means only what these allow.
+                if (record.limits.isNotEmpty()) {
+                    Text("Limits of this record", style = MaterialTheme.typography.titleSmall)
+                    record.limits.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
                 Expandable("Details") {
                     Text("Check history · earliest first", style = MaterialTheme.typography.titleSmall)
                     Text("Includes earlier attempts. The result above is the recorded final decision.", style = MaterialTheme.typography.bodySmall)
