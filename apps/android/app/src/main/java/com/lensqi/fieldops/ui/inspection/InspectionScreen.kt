@@ -1,5 +1,7 @@
 package com.lensqi.fieldops.ui.inspection
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.outlined.AutoAwesome
 import com.lensqi.fieldops.ui.common.AiCard
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -172,14 +175,14 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Outlined.CloudOff, null, tint = Fo.Warning, modifier = Modifier.size(16.dp))
-                        Text("Offline · showing the server's view from ${whenText(at)}. Nothing new is decided until it answers.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
+                        Text("Offline · last updated ${whenText(at)}. Reconnect to verify new work.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
             s.busy?.let { label ->
                 item {
                     Column {
-                        Text(label, style = MaterialTheme.typography.bodySmall)
+                        Text(TechnicianText.guidance(label), style = MaterialTheme.typography.bodySmall)
                         LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 4.dp), color = Fo.Primary, trackColor = Fo.Border)
                         TextButton(onClick = vm::cancel) { Text("Cancel") }
                     }
@@ -307,7 +310,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     }
     val claimAgain: @Composable () -> Unit = {
         Field(s.claimText, vm::onClaimChanged, "What did you do this time?")
-        PrimaryButton("Fixed it again", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
+        PrimaryButton("Record the repair", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
     }
 
     item(key = HERO_KEY) { VerifyHero(s, vm, before, after, camera = card != VerifyCard.Closed, onCapture) }
@@ -357,12 +360,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     item { ProgressSegments(if (attempt?.decision?.result == VerificationResult.Verified) 4 else card.step, verifySteps) }
     if (attempt == null && accepted != null && (card == VerifyCard.Confirm || card == VerifyCard.Run)) item { Expandable("Your review · ${required.size} items") { reviewRows() } }
     if (s.attempts.isNotEmpty()) item {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
-            Muted("Attempts")
-            s.attempts.forEach { Box(Modifier.size(8.dp).background(if (it == VerificationResult.Verified) Fo.Success else Fo.Failure, CircleShape)) }
-            Spacer(Modifier.weight(1f))
-            Muted("all kept in the record")
-        }
+        Muted("${s.attempts.size} attempts kept in the inspection record.")
     }
     if (view.stage != InspectionStage.VerifiedComplete) item { Expandable("Equipment check") { EquipmentCheck(s, vm, view) } }
 }
@@ -381,70 +379,72 @@ private fun LazyListScope.attemptItems(
     val photoId = a.review.firstOrNull()?.photoEvidenceId ?: view.acceptedPostRepairPhotoId
     val change = photoId?.let { id -> view.changeAnalyses.lastOrNull { it.photoEvidenceId == id } }
     val tone = when (d.result) { VerificationResult.Verified -> Fo.Success; VerificationResult.NeedsHumanReview -> Fo.Warning; else -> Fo.Failure }
-    val title = when (d.result) {
-        VerificationResult.Verified -> if (d.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated) "Verified complete · simulated check" else "Verified complete"
-        VerificationResult.NeedsHumanReview -> "Held: needs new evidence"
-        VerificationResult.Denied -> "Not verified"
-    }
-    fun target(diagnosticId: String) = s.fixture?.diagnostics?.firstOrNull { it.diagnosticId == diagnosticId }?.targetAlias
+    val title = TechnicianText.outcome(d.result, d.outcomeKind)
 
     item(key = NEXT_STEP_KEY) {
         AiCard(
-            if (verified) aiSummary(view, null) else plainReason(d.reasons.firstOrNull().orEmpty()), title,
-            when { verified -> "Every required check passed."; card == VerifyCard.Photo -> "Take a new photo to try again. This attempt stays in the record."; else -> "This attempt stays in the record." },
+            if (verified) null else plainReason(d.reasons.firstOrNull().orEmpty()), title,
+            when { verified -> "Your inspection record is ready."; card == VerifyCard.Photo -> "Take a new photo to try again. This attempt stays in the record."; else -> "This attempt stays in the record." },
             tone = tone,
         ) {
             if (simulated && a.measured.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SourceBadge(a.measured.first().source); Muted("The equipment check was simulated, not a live measurement.")
-            }
-            if (verified) {
-                PrimaryButton("View FieldProof receipt", { onOpenReceipt(vm.receiptUrl()) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Receipt)
-                SecondaryButton("Check receipt integrity", vm::checkReceipt, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Fingerprint)
-                s.receiptCheck?.let { r ->
-                    Text(if (r.isValid) "Intact · ${r.checks.size} checks passed" else "Tampered: ${r.failures.joinToString()}", color = if (r.isValid) Fo.Success else Fo.Failure, style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    a.measured.map { it.source }.distinct().forEach { SourceBadge(it) }
+                    Muted("This result does not verify live equipment.")
                 }
+            }
+            if (s.receiptCheck?.isValid == false) Muted("The inspection record could not be verified. Review Details before relying on it.")
+            if (verified) {
+                PrimaryButton("View inspection record", { onOpenReceipt(vm.receiptUrl()) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Receipt)
+
             }
             if (card == VerifyCard.Photo) PrimaryButton("Take a new photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             if (card == VerifyCard.Claim) claimAgain()
         }
     }
     item {
-        Part(Icons.Outlined.Visibility, "What the photo showed", "Change check · inferred",
-            pass = when (change?.verdict) { null, VisualChangeVerdict.Unscorable -> null; VisualChangeVerdict.Changed -> true; else -> false }) {
-            if (change != null) {
-                val c = changeText(change.verdict)
-                EvidenceBadge(c.state, c.label)
-                Muted(if (change.verdict == VisualChangeVerdict.Unscorable) "No visual change could be established; the visual part rests on your review." else change.reason)
-            } else Muted("No accepted photo for this claim.")
-        }
-    }
-    item {
-        Part(Icons.Outlined.HowToReg, "What you confirmed", "Your review",
-            pass = if (a.review.isEmpty() || a.acknowledgedAt == null) false else if (a.review.all { it.status == ChecklistStatus.Satisfied }) true else null) {
-            if (a.review.isEmpty()) Muted("Nothing reviewed for this claim.")
-            a.review.forEach { r -> Muted("${featureName(r.requirementId)}: ${checklistLabel(r.status)}") }
-            Muted(a.acknowledgedAt?.let { "Confirmed by you · ${whenText(it)}" } ?: "Not confirmed by you.")
-        }
-    }
-    item {
-        Part(Icons.Outlined.Speed, "What was measured", "Equipment check · measured",
-            pass = if (a.measured.isEmpty()) null else a.measured.all { it.passed == true }) {
-            if (a.measured.isEmpty()) Muted("No check ran: the photo, review or confirmation decided first.")
-            a.measured.forEach { m ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(target(m.diagnosticId) ?: m.targetAlias, fontWeight = FontWeight.Medium, fontSize = 13.sp); SourceBadge(m.source)
+        Expandable("Details · checks and inspection record") {
+            Part(Icons.Outlined.Visibility, "What the photo showed", "Camera assessment · inferred",
+                pass = when (change?.verdict) { null, VisualChangeVerdict.Unscorable -> null; VisualChangeVerdict.Changed -> true; else -> false }) {
+                if (change != null) {
+                    val c = changeText(change.verdict)
+                    EvidenceBadge(c.state, c.label)
+                    Muted(if (change.verdict == VisualChangeVerdict.Unscorable) "No visual change could be established; the visual part rests on your review." else changeText(change.verdict).detail)
+                } else Muted("No accepted photo for this claim.")
+            }
+
+            Part(Icons.Outlined.HowToReg, "What you confirmed", "Your review",
+                pass = if (a.review.isEmpty() || a.acknowledgedAt == null) false else if (a.review.all { it.status == ChecklistStatus.Satisfied }) true else null) {
+                if (a.review.isEmpty()) Muted("Nothing reviewed for this claim.")
+                a.review.forEach { r -> Muted("${featureName(r.requirementId)}: ${checklistLabel(r.status)}") }
+                Muted(a.acknowledgedAt?.let { "Confirmed by you · ${whenText(it)}" } ?: "Not confirmed by you.")
+            }
+
+            Part(Icons.Outlined.Speed, "What was measured", "Equipment check · measured",
+                pass = if (a.measured.isEmpty()) null else a.measured.all { it.passed == true }) {
+                if (a.measured.isEmpty()) Muted("No check ran: the photo, review or confirmation decided first.")
+                a.measured.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Connection check", fontWeight = FontWeight.Medium, fontSize = 13.sp); SourceBadge(m.source)
+                    }
+                    Muted("${TechnicianText.connection(m.passed)} · ${whenText(m.completedAt)}")
+                    TechDetails(listOf("Measurement" to measuredValue(m)))
                 }
-                Muted("${if (m.passed == null) "Unavailable: no measurement" else "${measuredValue(m)} · ${if (m.passed) "passed" else "failed"}"} · ${whenText(m.completedAt)}")
             }
-        }
-    }
-    item {
-        Panel {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("DECISION · ${d.policyVersion}", style = Eyebrow, color = Fo.Muted, modifier = Modifier.weight(1f))
-                Text(if (d.result == VerificationResult.NeedsHumanReview) "Held" else d.result.name, color = tone, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+
+            Panel {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Decision", style = Eyebrow, color = Fo.Muted)
+                    Text(TechnicianText.outcome(d.result, d.outcomeKind), color = tone, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                }
+                d.reasons.map(::plainReason).distinct().forEach { Muted("· $it") }
+                TechDetails(listOf("Policy" to d.policyVersion, "Reasons" to d.reasons.joinToString("\n")) + listOfNotNull(change?.let { "Change analysis" to it.reason }))
             }
-            d.reasons.forEach { Muted("· $it") }
+
+            SecondaryButton("Verify record", vm::checkReceipt, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.Fingerprint)
+            s.receiptCheck?.let { r ->
+                Text(if (r.isValid) "Record verified" else "Record could not be verified. Do not rely on it until reviewed.", color = if (r.isValid) Fo.Success else Fo.Failure, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -547,7 +547,7 @@ private fun ReviewRows(requirements: List<String>, current: (String) -> Checklis
                     val tone = when (st) { ChecklistStatus.Satisfied -> Fo.Success; ChecklistStatus.NotSatisfied -> Fo.Failure; else -> Fo.Warning }
                     val on = cur == st
                     Box(
-                        Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp))
+                        Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
                             .background(if (on) tone.copy(alpha = 0.15f) else Color.Transparent)
                             .border(1.dp, if (on) tone.copy(alpha = 0.5f) else Fo.Border, RoundedCornerShape(12.dp))
                             .clickable(enabled = enabled) { onPick(req, st) },
@@ -560,7 +560,7 @@ private fun ReviewRows(requirements: List<String>, current: (String) -> Checklis
 }
 
 @Composable
-private fun Muted(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
+private fun Muted(text: String) = Text(TechnicianText.guidance(text), style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
 
 @Composable
 private fun Outcome(color: Color, icon: ImageVector, title: String, body: String, content: @Composable () -> Unit) {
@@ -596,7 +596,7 @@ private fun PendingUploads(s: InspectionUi) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Dot(if (rejected) Fo.Failure else Fo.Warning)
             Text(
-                if (rejected) "Not uploaded: ${c.errorMessage}" else "Awaiting upload · saved on this phone",
+                if (rejected) "Not uploaded. ${com.lensqi.fieldops.ui.common.friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())}" else "Awaiting upload · saved on this phone",
                 color = if (rejected) Fo.Failure else Fo.Warning, style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -609,9 +609,9 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
     val r = view.diagnostics.lastOrNull()?.result
     if (r != null) {
         val (color, icon, text) = when (r.passed) {
-            true -> Triple(Fo.Success, Icons.Outlined.CheckCircle, "Pass — endpoint reachable")
-            false -> Triple(Fo.Failure, Icons.Outlined.HighlightOff, "Fail — ${r.httpStatus?.let { "answered HTTP $it" } ?: "endpoint unreachable"}")
-            null -> Triple(Fo.Warning, Icons.Outlined.RadioButtonUnchecked, "No answer — check unavailable")
+            true -> Triple(Fo.Success, Icons.Outlined.CheckCircle, "Connection check passed")
+            false -> Triple(Fo.Failure, Icons.Outlined.HighlightOff, "Connection check failed")
+            null -> Triple(Fo.Warning, Icons.Outlined.RadioButtonUnchecked, "Connection check unavailable")
         }
         Panel(border = color.copy(alpha = 0.4f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -619,7 +619,8 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
                 Text(text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 SourceBadge(r.source)
             }
-            Muted("${whenText(r.completedAt)} · ${measuredValue(r)}")
+            Muted("Checked ${whenText(r.completedAt)}")
+            TechDetails(listOf("Measurement" to measuredValue(r), "HTTP status" to (r.httpStatus?.toString() ?: "Unavailable")))
             check?.claimVerified?.let { Muted("What a pass proves: $it") }
         }
     } else Muted("Run the approved check to confirm the fault.")
@@ -629,8 +630,8 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
         if (s.diagnosticsMode == DiagnosticSource.Simulated) {
             Row(Modifier.fillMaxWidth().border(1.dp, Fo.Border, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Demo: simulated endpoint reachable", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Muted("Stands in for the lab endpoint; its results are always labelled Simulated.")
+                    Text("Demo: connection available", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Muted("Demo result only; this does not measure the equipment.")
                 }
                 Switch(s.simUp == true, { vm.setSimulated(c.diagnosticId, it) }, enabled = s.busy == null, colors = SwitchDefaults.colors(checkedTrackColor = Fo.Primary, checkedThumbColor = Fo.OnPrimary))
             }
@@ -646,7 +647,7 @@ private fun Knowledge(s: InspectionUi) {
             if (s.knowledgeCachedAt != null) Tag("CACHED", Fo.Warning)
             Muted(if (k.packId != null) "${k.facts.size} sourced facts" else "No documentation pack for this equipment")
         }
-        s.knowledgeCachedAt?.let { Muted("Copy saved on this phone at ${whenText(it)} · pack ${k.packSha256?.take(12)}…") }
+        s.knowledgeCachedAt?.let { Muted("Copy saved on this phone at ${whenText(it)}") }
         Muted("Guidance with sources. Documentation never proves a repair worked.")
         k.facts.forEach { f ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

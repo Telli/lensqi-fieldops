@@ -51,7 +51,7 @@ class GlassesViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { source.capturePhoto() }
                 .onSuccess(onCaptured)
-                .onFailure { source.reportError("Capture failed: ${it.message}") }
+                .onFailure { source.reportError("The photo couldn’t be taken. Check the glasses connection and try again.") }
         }
     }
 
@@ -75,7 +75,7 @@ class GlassesViewModel @Inject constructor(
                 }
             }
         }.onSuccess { use(Uri.fromFile(it)) }
-            .onFailure { source.reportError("Could not read that file: ${it.message}") }
+            .onFailure { source.reportError("This file couldn’t be opened. Choose another photo or video.") }
     }
 
     override fun onCleared() {

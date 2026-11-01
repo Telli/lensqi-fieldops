@@ -47,7 +47,7 @@ fun nextMove(v: InspectionView?, a: VisualAssessment?): Move? {
     if (v == null) return null
     val asked = v.evidenceRequests.firstOrNull { it.answeredByPhotoId == null }
     when (v.stage) {
-        InspectionStage.VerifiedComplete -> return Move(MoveKind.Receipt, "Verified complete", "The FieldProof receipt is ready.")
+        InspectionStage.VerifiedComplete -> return Move(MoveKind.Receipt, "Verified complete", "Your inspection record is ready.")
         InspectionStage.VerificationFailed -> return Move(MoveKind.Retry, "Still failing", "Check the connection again, then verify.")
         InspectionStage.AwaitingRepair -> return Move(MoveKind.Repair, "Do the repair", "Then tell me what you did.")
         InspectionStage.ReadyToVerify -> return Move(MoveKind.Verify, if (v.acceptedPostRepairPhotoId != null) "Review and verify" else "Photograph the repair", "A new photo and a fresh check both have to pass.")

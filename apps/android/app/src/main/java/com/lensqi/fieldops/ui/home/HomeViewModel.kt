@@ -51,6 +51,8 @@ class HomeViewModel @Inject constructor(
     private val cache: InspectionCache,
     private val snapshots: SnapshotStore,
 ) : ViewModel() {
+    val diagnostics = settings.diagnostics
+    fun setDiagnostics(enabled: Boolean) = viewModelScope.launch { settings.setDiagnostics(enabled) }
     val appearance = settings.appearance
     val person = settings.person
     /** Saves height (as typed: 6'2", 188 cm…) and tools; false when the height can't be read. */

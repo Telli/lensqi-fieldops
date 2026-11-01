@@ -167,7 +167,7 @@ class TaskViewModelTest {
         queue.commands.value = listOf(check("b"))
         until { gets() > loads }
         queue.commands.value = listOf(check("b", CommandState.Rejected, "The step is already done"))
-        assertTrue(await(vm) { it.error?.contains("The step is already done") == true }.queuedChecks == 0)
+        assertTrue(await(vm) { it.error?.contains("Refresh and complete the required checks") == true }.queuedChecks == 0)
         until { queue.dismissed == listOf("b") }
     }
 

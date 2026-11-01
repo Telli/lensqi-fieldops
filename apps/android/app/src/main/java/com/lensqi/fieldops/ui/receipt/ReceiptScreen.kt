@@ -18,6 +18,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import com.lensqi.fieldops.ui.common.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,16 +43,48 @@ import com.lensqi.fieldops.ui.theme.Fo
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun ReceiptScreen(url: String, onBack: () -> Unit) {
+fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val id = remember(url) { recordInspectionId(url) }
+    LaunchedEffect(id) { vm.load(id) }
+    var technical by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val background = Fo.Background.toArgb()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
-            Text("FieldProof receipt", style = MaterialTheme.typography.titleMedium)
+            Text("Inspection record", style = MaterialTheme.typography.titleMedium)
         }
         HorizontalDivider(color = Fo.Border)
-        error?.let { Text("Receipt could not load: $it", color = Fo.Failure, modifier = Modifier.padding(16.dp)) }
+        error?.let { Text("The inspection record couldn’t load. Check your connection, then reopen it.", color = Fo.Failure, modifier = Modifier.padding(16.dp)) }
+        if (!technical) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.loading) Text("Loading inspection record…")
+            state.error?.let {
+                Text(it, color = Fo.Failure)
+                SecondaryButton("Try again", { vm.load(id) })
+            }
+            state.summary?.let { record ->
+                Text(record.title, style = MaterialTheme.typography.headlineSmall)
+                record.checks.map { it.source }.distinct().forEach { source ->
+                    if (source != null) SourceBadge(source) else Text("Check source unavailable", color = Fo.Warning)
+                }
+                record.reasons.forEach { Text(it) }
+                Text("${record.photos} evidence photos", style = MaterialTheme.typography.bodyMedium)
+                Expandable("Details") {
+                    Text("Check history · earliest first", style = MaterialTheme.typography.titleSmall)
+                    Text("Includes earlier attempts. The result above is the recorded final decision.", style = MaterialTheme.typography.bodySmall)
+                    record.checks.forEach { check ->
+                        Text(TechnicianText.connection(check.passed))
+                        Text("Checked ${recordTime(check.at)}", style = MaterialTheme.typography.bodySmall)
+                        check.source?.let { SourceBadge(it) }
+                    }
+                    Text("Record generated ${recordTime(record.generated)}", style = MaterialTheme.typography.bodySmall)
+                    Text("The full record retains the original evidence, identifiers and verification details.", style = MaterialTheme.typography.bodySmall)
+                    SecondaryButton("Open technical record", { technical = true })
+                }
+            }
+        } else {
+        androidx.compose.material3.TextButton(onClick = { technical = false }) { Text("Back to summary") }
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
@@ -57,7 +96,10 @@ fun ReceiptScreen(url: String, onBack: () -> Unit) {
                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) =
                             !request.url.toString().startsWith(origin)
                         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
-                            if (request.isForMainFrame) error = "${e.errorCode} ${e.description}"
+                            if (request.isForMainFrame) {
+                                com.lensqi.fieldops.data.diagnostics.DiagnosticHistory.record("record", "load_failed", e.errorCode)
+                                error = "load_failed"
+                            }
                         }
                     }
                     loadUrl(url)
@@ -65,5 +107,6 @@ fun ReceiptScreen(url: String, onBack: () -> Unit) {
             },
             modifier = Modifier.fillMaxSize(),
         )
+        }
     }
 }

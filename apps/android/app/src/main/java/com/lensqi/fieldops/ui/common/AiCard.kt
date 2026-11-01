@@ -47,9 +47,9 @@ fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Mo
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             LensQiMark()
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                says?.let { Text(it, fontSize = 13.sp, lineHeight = 19.sp, color = Fo.Muted) }
-                title?.let { Text(it, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = tone ?: Color.Unspecified) }
-                hint?.let { Text(it, fontSize = 12.sp, color = Fo.Muted) }
+                says?.let { Text(TechnicianText.guidance(it), fontSize = 13.sp, lineHeight = 19.sp, color = Fo.Muted) }
+                title?.let { Text(TechnicianText.guidance(it), fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = tone ?: Color.Unspecified) }
+                hint?.let { Text(TechnicianText.guidance(it), fontSize = 12.sp, color = Fo.Muted) }
             }
         }
         actions?.let { Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = it) }

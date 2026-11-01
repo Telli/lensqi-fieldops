@@ -112,7 +112,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
                 waiting = pending
                 _state.update { it.copy(queuedChecks = pending) }
                 checks.filter { it.state == CommandState.Rejected }.forEach { c ->
-                    _state.update { it.copy(error = "A saved check photo was not checked: ${c.errorMessage ?: c.errorCode}") }
+                    _state.update { it.copy(error = friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())) }
                     queue.dismiss(c)
                 }
             }

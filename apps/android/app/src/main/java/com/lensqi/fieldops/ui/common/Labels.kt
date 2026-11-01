@@ -41,10 +41,10 @@ fun observationLabel(s: ObservationStatus) = when (s) {
 data class ChangeText(val label: String, val state: EvidenceState, val detail: String)
 
 fun changeText(v: VisualChangeVerdict) = when (v) {
-    VisualChangeVerdict.Changed -> ChangeText("Change detected", EvidenceState.HumanConfirmed, "Something in the target area changed since the earlier photo.")
+    VisualChangeVerdict.Changed -> ChangeText("Change detected", EvidenceState.Hypothesis, "Something in the target area changed since the earlier photo.")
     VisualChangeVerdict.NoVisualChange -> ChangeText("No change", EvidenceState.Failed, "The target area looks the same as before. Take a new photo after the repair.")
     VisualChangeVerdict.DuplicateImage -> ChangeText("Same photo", EvidenceState.Failed, "This is the same picture as an earlier one. Take a new photo after the repair.")
-    VisualChangeVerdict.Unscorable -> ChangeText("Not compared", EvidenceState.Unknown, "There was no earlier outline of the part to compare against. Your review decides.")
+    VisualChangeVerdict.Unscorable -> ChangeText("Not compared", EvidenceState.Unknown, "The photos could not establish a change. Review the evidence; this is not a visual pass.")
 }
 
 fun checklistLabel(s: ChecklistStatus) = when (s) {
@@ -64,25 +64,40 @@ fun sentence(t: String?) = t?.replaceFirstChar { it.uppercase() }.orEmpty()
 
 /** Short banner sentence for a policy reason; the full reason stays in the technical details. */
 fun plainReason(reason: String) = when {
+    reason == "Specified live fixture checks passed" -> "The required live equipment checks passed."
+    reason.startsWith("Qualifying ") && reason.endsWith("fixture checks passed; this is not a live measurement") -> "The required checks passed using a non-live source. This does not verify live equipment."
+    reason.startsWith("Expected-state version mismatch") -> "The site record has changed. Ask the site administrator to review this inspection."
+    reason == "No repair claim has been recorded" -> "Describe the repair before verifying it."
+    reason.contains("still being compared") -> "The photos are still being compared. Wait for the result before continuing."
+    reason.contains("latest photo was not accepted") || reason.startsWith("The last check sent the claim back") -> "A new repair photo is needed. Capture it before reviewing again."
+    reason.contains("unrecognised review status") -> "A review answer couldn't be read. Review that item again."
+    reason.startsWith("Fresh post-repair diagnostic") || reason.contains("is older than") -> "A fresh equipment check is required. Run verification again."
+    reason.contains("not allowed by the fixture policy") -> "This check source isn't approved for the equipment. Ask the site administrator to review it."
+    reason.contains("was run for fixture") -> "The check belongs to different equipment. Return to the correct inspection."
+    reason.startsWith("Fixture declares no diagnostic") -> "The equipment has no approved check configured. Ask the site administrator to add one."
     reason.startsWith("Diagnostic failed after the repair claim") -> "The equipment still fails its check after the repair."
     reason.contains("post-repair image") -> "A new photo taken after the repair is needed."
     reason.contains("acknowledged") -> "Confirm that you reviewed the evidence."
     reason.contains("has not been reviewed") -> "Review every checklist item against the new photo."
     reason.contains("not satisfied") -> "A checklist item is marked not right."
     reason.contains("remains unknown") || reason.contains("conflicting") -> "A checklist item needs a person to decide."
-    reason.contains("unavailable") -> "The equipment check could not reach the endpoint."
+    reason.contains("unavailable") -> "The equipment check is unavailable. Try it again when connected."
     reason.contains("change analysis rejected") -> "The reviewed photo was not accepted. Review against the new photo."
-    else -> reason
+    else -> "A required check is unresolved. Review the evidence and try again."
 }
 
-fun friendly(code: String, message: String) = when (code) {
-    "offline" -> "Can't reach the inspection server. Your work is safe; try again when connected."
-    "rate_limited" -> "Too many AI requests right now. Wait a minute and try again."
-    "model_timeout" -> "The AI took too long to answer. Try again."
-    "provider_unavailable" -> "The AI service is unavailable right now. Try again shortly."
-    "image_too_small" -> "That photo is too small. Move closer or use a higher resolution."
-    "change_evidence_rejected" -> "That photo wasn't accepted as post-repair evidence. Take a new one."
-    else -> message
+@Suppress("UNUSED_PARAMETER")
+fun friendly(code: String, message: String): String = when (code) {
+    "offline" -> "Can't connect. Reconnect, then refresh to check whether your last action was saved."
+    "rate_limited", "http_429" -> "Analysis paused briefly. Wait a moment, then try again."
+    "model_timeout", "provider_unavailable", "invalid_model_output" -> "Analysis couldn't finish. Try again shortly."
+    "image_too_small" -> "The photo needs more detail. Take a new photo at full resolution."
+    "change_evidence_rejected" -> "The repair photo wasn't accepted. Take a fresh photo after the repair."
+    "unsafe_plan", "safety_restricted" -> "This task needs qualified help. Stop and review the safety instructions."
+    "client_contract_mismatch" -> "This response couldn't be read. Refresh, or check for an app update."
+    "invalid_state", "stale_evidence", "verification_not_ready" -> "This action isn't available yet. Refresh and complete the required checks."
+    "local_save_failed" -> "The photo couldn't be saved. Check free space, then take it again."
+    else -> "This action couldn't be completed. Refresh to check its status before trying again."
 }
 
 /** Where a photo came from, as the technician reads it. Mock glasses are never called glasses. */

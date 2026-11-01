@@ -116,11 +116,11 @@ class GlassesLiveService : Service() {
     private fun deliverFeedback(now: Long) {
         val state = store.state.value
         val f = state.feedback
-        val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · AI inferred" else "Live glasses · AI inferred"
+        val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · simulated" else "Glasses assistance"
         val hud = f.recommendation to "$badge · ${f.status}"
         if (hud != lastHud && now - lastHudAt >= 2000) { source.showHud(hud.first, hud.second); lastHud = hud; lastHudAt = now }
         if (!state.muted && speechReady) speechGate.next(f.recommendation, now)?.let { text ->
-            speaker?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "glasses-live-guidance")
+            speaker?.speak(com.lensqi.fieldops.ui.common.TechnicianText.guidance(text), TextToSpeech.QUEUE_FLUSH, null, "glasses-live-guidance")
         }
     }
 

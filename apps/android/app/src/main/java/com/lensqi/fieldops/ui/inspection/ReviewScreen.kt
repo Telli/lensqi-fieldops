@@ -1,5 +1,7 @@
 package com.lensqi.fieldops.ui.inspection
 
+import com.lensqi.fieldops.ui.common.TechnicianText
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -181,14 +183,14 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                     change?.let { c ->
                         val t = changeText(c.verdict)
                         EvidenceBadge(t.state, t.label)
-                        Text(c.reason, fontSize = 12.sp, color = FoDark.Muted)
+                        Text(changeText(c.verdict).detail, fontSize = 12.sp, color = FoDark.Muted)
                     }
                     findings.forEach { h ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.padding(top = 5.dp).size(6.dp).background(when (h.status) { ObservationStatus.Observed -> FoDark.Primary; ObservationStatus.Conflicting -> FoDark.Failure; else -> FoDark.Warning }, CircleShape))
                             Column {
                                 Text("${featureName(h.featureId)} · ${observationLabel(h.status).second}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                Text(h.reason, fontSize = 12.sp, color = FoDark.Muted)
+                                Text(TechnicianText.guidance(h.reason), fontSize = 12.sp, color = FoDark.Muted)
                             }
                         }
                     }
