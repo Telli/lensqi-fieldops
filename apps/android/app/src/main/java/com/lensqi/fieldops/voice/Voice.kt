@@ -125,6 +125,17 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
     override fun stop() { synchronized(turns) { turns.clear() }; tts.stop() }
 }
 
+/**
+ * Keeps [speech] quiet exactly while the recognizer listens, so LensQi never hears itself. The hold is set before
+ * listening starts (which stops any line playing) and released before a result is delivered, so a command's spoken
+ * reply ("Voice on.", a repeated step) is heard.
+ */
+class ListeningHold(private val speech: SpeechOutput?) {
+    fun started() { speech?.listening = true }
+    fun ended() { speech?.listening = false }
+    fun result(text: String?, deliver: (String) -> Unit) { ended(); text?.takeIf { it.isNotBlank() }?.let(deliver) }
+}
+
 class VoiceInputState(val listening: Boolean, val heard: String, val error: String?, val supported: Boolean, val start: () -> Unit, val stop: () -> Unit)
 
 /**
@@ -132,8 +143,10 @@ class VoiceInputState(val listening: Boolean, val heard: String, val error: Stri
  * system recognizer, which may send audio to its provider. Only the final text reaches LensQi.
  */
 @Composable
-fun rememberVoiceInput(onFinal: (String) -> Unit): VoiceInputState {
+fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit): VoiceInputState {
     val context = LocalContext.current
+    val hold = remember(speech) { ListeningHold(speech) }
+    DisposableEffect(hold) { onDispose { hold.ended() } }
     val deliver by rememberUpdatedState(onFinal)
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
@@ -149,15 +162,15 @@ fun rememberVoiceInput(onFinal: (String) -> Unit): VoiceInputState {
     }
     DisposableEffect(recognizer) { onDispose { recognizer?.destroy() } }
     val begin = {
-        heard = ""; error = null; listening = true
+        heard = ""; error = null; listening = true; hold.started()
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onPartialResults(partial: Bundle?) { partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { heard = it } }
             override fun onResults(results: Bundle?) {
                 listening = false
-                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { heard = it; deliver(it) }
+                hold.result(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()) { heard = it; deliver(it) }
             }
             override fun onError(code: Int) {
-                listening = false
+                listening = false; hold.ended()
                 // 12/13: ERROR_LANGUAGE_NOT_SUPPORTED / ERROR_LANGUAGE_UNAVAILABLE (Android 12+), the on-device pack is missing.
                 if (onDevice && (code == 12 || code == 13)) { onDevice = false; error = "Switched to the phone's standard speech service. Tap the mic again."; return }
                 error = when (code) { SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "I didn't catch that."; SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."; else -> "Voice input stopped." }

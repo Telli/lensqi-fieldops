@@ -50,7 +50,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
@@ -389,7 +388,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     }
     var typed by remember { mutableStateOf("") }
     val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
-    val voice = rememberVoiceInput { said ->
+    val voice = rememberVoiceInput(vm.speaker) { said ->
         val now = vm.state.value
         val current = now.task?.currentStep ?: return@rememberVoiceInput
         val idle = now.busy == null
@@ -409,7 +408,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpeechAroundVoice(vm.speaker, voice.listening, s.error, voice.error)
+    SpokenErrors(vm.speaker, s.error, voice.error)
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
@@ -514,14 +513,9 @@ internal fun stepSpeech(step: TaskStep, number: Int? = null): String {
         .map(::sentence).filter { it.isNotEmpty() }.joinToString(" ")
 }
 
-/**
- * While the microphone listens nothing is spoken. Errors are read aloud, so a hands-free user hears why a command
- * didn't work. SideEffect sets the hold before any effect speaks the error the recognizer just reported.
- */
+/** Errors are read aloud, so a hands-free user hears why a command didn't work. */
 @Composable
-private fun SpeechAroundVoice(speaker: SpeechOutput, listening: Boolean, error: String?, voiceError: String?) {
-    SideEffect { speaker.listening = listening }
-    DisposableEffect(speaker) { onDispose { speaker.listening = false } }
+private fun SpokenErrors(speaker: SpeechOutput, error: String?, voiceError: String?) {
     LaunchedEffect(error) { error?.let { speaker.speak(it, force = true) } }
     LaunchedEffect(voiceError) { voiceError?.let { speaker.speak(it, force = true) } }
 }
@@ -537,6 +531,7 @@ internal class VoicePace(private val speaker: SpeechOutput) {
     private var wasLive = false
     private var gate = SpokenFeedbackGate()
     private var latest = ""
+    private var waited = false
 
     /**
      * Losing the target cuts off a part-specific hint still being spoken and drops the gate's spacing, so the
@@ -549,8 +544,12 @@ internal class VoicePace(private val speaker: SpeechOutput) {
 
     /** Called on a short timer; speaks the latest guidance when the gate allows it. */
     fun tick(now: Long, allowed: Boolean) {
-        // Busy: the gate isn't asked, so the hint stays pending and plays 1.5 s after the speaker is free.
-        if (!paused && allowed && !speaker.busy) gate.next(latest, now)?.let { speaker.speak(it) }
+        if (paused || !allowed) return
+        // Busy: the gate isn't asked, so the hint stays pending and plays 1.5 s after the speaker is free, however
+        // long it had settled before.
+        if (speaker.busy) { waited = true; return }
+        if (waited) { gate.restartSettle(); waited = false }
+        gate.next(latest, now)?.let { speaker.speak(it) }
     }
 
     fun pause(camera: CameraHandle?) {
@@ -694,7 +693,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     val answers = t?.answers.orEmpty().asReversed()
     var typed by remember { mutableStateOf("") }
     val pace = rememberVoicePace(vm.speaker, camera) { true }
-    val voice = rememberVoiceInput { said ->
+    val voice = rememberVoiceInput(vm.speaker) { said ->
         when (parseCommand(said)) {
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
@@ -705,7 +704,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             else -> vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpeechAroundVoice(vm.speaker, voice.listening, s.error, voice.error)
+    SpokenErrors(vm.speaker, s.error, voice.error)
     CameraScreen(
         prompt = answers.firstOrNull()?.answer ?: "Point at the equipment and ask a question.",
         analyzeLive = vm::analyzeLiveFrame,
@@ -728,7 +727,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",
-                        onMic = { if (voice.listening) voice.stop() else voice.start() },
+                        onMic = { if (voice.listening) voice.stop() else { vm.speaker.stop(); voice.start() } },
                         onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
                 }
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
