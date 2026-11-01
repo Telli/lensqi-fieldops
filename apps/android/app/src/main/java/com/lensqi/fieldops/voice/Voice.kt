@@ -6,10 +6,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -55,28 +57,72 @@ interface SpeechOutput {
     var enabled: Boolean
     /** Held while the person said "pause": nothing is spoken, without turning the voice off. */
     var held: Boolean
+    /** Set while the microphone listens: nothing is spoken, so LensQi never hears itself as the question. */
+    var listening: Boolean
+    /** True while a hint would be dropped: held, listening, or a step, answer or check result still being read. */
+    val busy: Boolean
+    /** [force] marks a line that must be heard in full (a step, an answer, a check result, an error); a hint never cuts it off. */
     fun speak(text: String, force: Boolean = false)
     fun stop()
 }
 
-/** Text-to-speech for guidance, shared by every screen. Speaking a new line interrupts the previous one. */
+/** "Mute" and "unmute" by voice, said aloud so a hands-free user knows it took. */
+fun SpeechOutput.mute() { speak("Voice off. Say unmute to turn it back on.", force = true); enabled = false }
+fun SpeechOutput.unmute() { enabled = true; speak("Voice on.", force = true) }
+
+/**
+ * Which line plays: a forced line runs to its end and a hint arriving meanwhile is dropped (the screen's gate offers it
+ * again once [playing] is false). The TTS engine reports the end; [maxMsPerChar] caps the wait if it never does.
+ */
+class SpeechTurns(private val clock: () -> Long, private val maxMsPerChar: Long = 90) {
+    private var priority: String? = null
+    private var until = 0L
+    val playing get() = priority != null && clock() < until
+    /** Whether [text] may play now under [id]; a forced line always may, and replaces any line still playing. */
+    fun begin(id: String, text: String, force: Boolean): Boolean {
+        if (!force && playing) return false
+        priority = if (force) id else null
+        until = if (force) clock() + 3000 + maxMsPerChar * text.length else 0
+        return true
+    }
+    fun finished(id: String) { if (id == priority) priority = null }
+    fun clear() { priority = null }
+}
+
+/** Text-to-speech for guidance, shared by every screen. A new line interrupts the previous one, unless that one is forced. */
 @Singleton
 class Speaker @Inject constructor(@ApplicationContext context: Context) : SpeechOutput {
     @Volatile private var ready = false
     private val tts = TextToSpeech(context) { status -> ready = status == TextToSpeech.SUCCESS }
+    private val turns = SpeechTurns(SystemClock::elapsedRealtime)
     @Volatile override var enabled = true
     @Volatile override var held = false
         set(value) { field = value; if (value) stop() }
+    @Volatile override var listening = false
+        set(value) { field = value; if (value) stop() }
+    override val busy get() = held || listening || synchronized(turns) { turns.playing }
     private var last = ""
+    private var count = 0
+
+    init {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) = Unit
+            override fun onDone(id: String?) { id?.let { synchronized(turns) { turns.finished(it) } } }
+            @Deprecated("Deprecated in Java") override fun onError(id: String?) { id?.let { synchronized(turns) { turns.finished(it) } } }
+            override fun onError(id: String?, errorCode: Int) { id?.let { synchronized(turns) { turns.finished(it) } } }
+            override fun onStop(id: String?, interrupted: Boolean) { id?.let { synchronized(turns) { turns.finished(it) } } }
+        })
+    }
 
     override fun speak(text: String, force: Boolean) {
         val spoken = com.lensqi.fieldops.ui.common.TechnicianText.guidance(text)
-        if (!enabled || held || !ready || text.isBlank() || (!force && spoken == last)) return
+        if (!enabled || held || listening || !ready || text.isBlank() || (!force && spoken == last)) return
+        val id = synchronized(turns) { "lensqi-${++count}".takeIf { turns.begin(it, spoken, force) } } ?: return
         last = spoken
-        tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "lensqi-${text.hashCode()}")
+        tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
-    override fun stop() { tts.stop() }
+    override fun stop() { synchronized(turns) { turns.clear() }; tts.stop() }
 }
 
 class VoiceInputState(val listening: Boolean, val heard: String, val error: String?, val supported: Boolean, val start: () -> Unit, val stop: () -> Unit)
