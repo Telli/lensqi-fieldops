@@ -12,4 +12,7 @@ class SpokenFeedbackGate {
         spoken = text; spokeAt = now
         return text
     }
+
+    /** The pending line settles again from the next call, as after a pause; what was spoken and its spacing are kept. */
+    fun restartSettle() { candidate = "" }
 }

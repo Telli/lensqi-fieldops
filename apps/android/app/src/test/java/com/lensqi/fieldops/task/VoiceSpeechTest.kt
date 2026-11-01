@@ -5,6 +5,7 @@ import com.lensqi.fieldops.data.api.TaskStep
 import com.lensqi.fieldops.ui.common.TechnicianText
 import com.lensqi.fieldops.ui.task.VoicePace
 import com.lensqi.fieldops.ui.task.stepSpeech
+import com.lensqi.fieldops.voice.ListeningHold
 import com.lensqi.fieldops.voice.SpeechOutput
 import com.lensqi.fieldops.voice.SpeechTurns
 import com.lensqi.fieldops.voice.mute
@@ -24,6 +25,7 @@ class VoiceSpeechTest {
         override var enabled = true
         override var held = false
         override var listening = false
+            set(value) { field = value; if (value) stop() }
         override val busy get() = held || listening || reading
         override fun speak(text: String, force: Boolean) {
             if (!enabled || held || listening || (!force && reading)) return
@@ -70,6 +72,35 @@ class VoiceSpeechTest {
         speaker.listening = false
         pace.tick(30_500, allowed = true); pace.tick(32_000, allowed = true)
         assertEquals("Hold the phone steady.", speaker.spoken.last())
+    }
+
+    @Test fun `a hint that settled before a step was read settles again once the step ends`() {
+        val speaker = FakeSpeaker()
+        val pace = VoicePace(speaker)
+        pace.guidance("Move closer to the drain plug.")
+        pace.tick(0, allowed = true)
+        speaker.speak("Step 1. Drain the oil.", force = true)
+        pace.tick(5000, allowed = true)
+        speaker.finish()
+        pace.tick(9000, allowed = true); assertEquals(1, speaker.spoken.size)
+        pace.tick(10_500, allowed = true)
+        assertEquals("Move closer to the drain plug.", speaker.spoken.last())
+    }
+
+    @Test fun `the mic's hold is released before a command runs, so its spoken reply is heard`() {
+        val speaker = FakeSpeaker()
+        speaker.speak("Step 1. Drain the oil.", force = true)
+        val hold = ListeningHold(speaker)
+        hold.started()
+        assertTrue(speaker.listening); assertEquals(1, speaker.stops)
+        speaker.speak("Move closer.", force = true); assertEquals(1, speaker.spoken.size)
+        hold.result("unmute") { speaker.unmute() }
+        assertFalse(speaker.listening)
+        assertEquals("Voice on.", speaker.spoken.last())
+        // Nothing heard: the hold is still released and nothing is delivered.
+        hold.started(); hold.result(" ") { error("delivered a blank result") }
+        assertFalse(speaker.listening)
+        hold.started(); hold.ended(); assertFalse(speaker.listening)
     }
 
     @Test fun `losing the target cuts off a hint but not a step being read`() {
