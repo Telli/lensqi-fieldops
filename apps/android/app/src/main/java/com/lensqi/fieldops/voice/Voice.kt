@@ -100,7 +100,8 @@ class SpeechTurns(private val clock: () -> Long, private val maxMsPerChar: Long 
         return if (after) Play.After else Play.Now
     }
     fun finished(id: String) { forced.remove(id) }
-    fun clear() { forced.clear() }
+    /** Speech was stopped: nothing playing, queued or waiting for the microphone is read. */
+    fun clear() { forced.clear(); waiting.clear() }
 
     /** The microphone opens: forced lines still to be heard wait and are read again from their start. */
     fun hold() { if (playing) waiting += forced.values; forced.clear() }
@@ -163,6 +164,8 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
 class ListeningHold(private val speech: SpeechOutput?) {
     fun started() { speech?.listening = true }
     fun ended() { speech?.listening = false }
+    /** The screen closed while listening: what waited for the microphone belongs to it and is never read elsewhere. */
+    fun cancel() { speech?.stop(); speech?.listening = false }
     fun result(text: String?, deliver: (String) -> Unit) { ended(); text?.takeIf { it.isNotBlank() }?.let(deliver) }
 }
 
@@ -176,7 +179,7 @@ class VoiceInputState(val listening: Boolean, val heard: String, val error: Stri
 fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit): VoiceInputState {
     val context = LocalContext.current
     val hold = remember(speech) { ListeningHold(speech) }
-    DisposableEffect(hold) { onDispose { hold.ended() } }
+    DisposableEffect(hold) { onDispose { hold.cancel() } }
     val deliver by rememberUpdatedState(onFinal)
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
