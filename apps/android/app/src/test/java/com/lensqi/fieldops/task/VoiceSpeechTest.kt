@@ -75,6 +75,9 @@ class VoiceSpeechTest {
         turns.hold("Looks right.", replace = false)
         turns.hold("Step 2. Fit the filter. Stop if the seal is torn.", replace = true)
         assertEquals(listOf("Step 2. Fit the filter. Stop if the seal is torn."), turns.release())
+        // Speech stopped (the screen closed): nothing waiting is read later on another screen.
+        turns.hold("Step 3. Refill the oil.", replace = true); turns.clear()
+        assertTrue(turns.release().isEmpty())
         // Only lines still playing wait: one that finished isn't read again.
         turns.begin("3", "Step 2. Fit the filter.", force = true); turns.finished("3")
         turns.hold()
@@ -129,6 +132,10 @@ class VoiceSpeechTest {
         hold.started(); hold.result(" ") { error("delivered a blank result") }
         assertFalse(speaker.listening)
         hold.started(); hold.ended(); assertFalse(speaker.listening)
+        // Closing the screen mid-listen stops speech before the hold is released, so held lines are dropped, not read.
+        hold.started(); val stopsBefore = speaker.stops
+        hold.cancel()
+        assertFalse(speaker.listening); assertEquals(stopsBefore + 1, speaker.stops)
     }
 
     @Test fun `losing the target cuts off a hint but not a step being read`() {
