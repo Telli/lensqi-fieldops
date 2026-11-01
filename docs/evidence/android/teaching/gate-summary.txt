@@ -1,0 +1,7 @@
+== summary
+  FAIL  15.468s  ['./gradlew', ':app:testDebugUnitTest', '--rerun', ':app:assembleDebug', ':app:assembleRelease', '--console=plain']
+  ERROR  8.004s  ['dotnet', 'test', '--nologo', '--logger', 'trx', '--results-directory', '{report_dir}']
+  PASS  0.14s  ['bash', 'scripts/secret_scan.sh']
+== vs baseline: UNKNOWN
+  android: failure equivalence unknown
+  dotnet: failure equivalence unknown

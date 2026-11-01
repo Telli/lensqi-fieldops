@@ -1,0 +1,50 @@
+{
+  "gates": [
+    {
+      "id": "android",
+      "cwd": "apps/android",
+      "command": [
+        "./gradlew",
+        ":app:testDebugUnitTest",
+        "--rerun",
+        ":app:assembleDebug",
+        ":app:assembleRelease",
+        "--console=plain"
+      ],
+      "kind": "test",
+      "timeout": 600,
+      "report": {
+        "format": "junit",
+        "path": "app/build/test-results/testDebugUnitTest/TEST-*.xml"
+      }
+    },
+    {
+      "id": "dotnet",
+      "command": [
+        "python3",
+        "scripts/test_dotnet_report.py",
+        "{report_dir}"
+      ],
+      "kind": "test",
+      "timeout": 600,
+      "report": {
+        "format": "junit",
+        "path": "{report_dir}/*.xml"
+      }
+    },
+    {
+      "id": "secrets",
+      "command": [
+        "bash",
+        "scripts/secret_scan.sh"
+      ]
+    },
+    {
+      "id": "report-adapter",
+      "command": [
+        "python3",
+        "scripts/test_report_adapter.py"
+      ]
+    }
+  ]
+}
