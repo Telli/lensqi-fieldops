@@ -96,6 +96,10 @@ From the code review of `044c906`. None breaks the FieldProof gate; the first th
 
 - [x] **UX-T01 — Polish the Android technician experience.** *(done 2026-10-31: task-language camera/inspection/voice guidance, readable inspection records, Details and opt-in Diagnostics; 169 Android and 303 .NET tests pass, emulator evidence in `docs/evidence/android/ux-polish/`; lint compatibility and physical S23 acceptance remain outstanding as documented)*
 
+## Added Nov 1: teaching recorder
+
+- [x] **TEACH-T01 — Record Android teaching demonstrations.** *(done 2026-11-01: local silent video, action/step annotations, corrections, separate training consent, reviewed ZIP exports with frame timestamps and hashes; 190 Android and 303 backend tests pass; emulator evidence and passing release/tooling checks in `docs/evidence/android/teaching/README.md`; physical-device and online-context acceptance remain outstanding)*
+
 ## Cutlines
 
 - If the contract is not frozen by end of Oct 29, Android ships the step runner only and the web flow is the guaranteed surface.

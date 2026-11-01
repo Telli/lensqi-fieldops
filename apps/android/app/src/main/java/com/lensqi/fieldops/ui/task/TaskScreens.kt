@@ -128,7 +128,7 @@ fun TaskRow(t: TaskSummary, onOpen: () -> Unit) {
 
 /** Two ways in: say what you want to do yourself, or go to technician work. */
 @Composable
-fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
+fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit, onTeaching: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
     var planning by remember { mutableStateOf(false) }
@@ -192,6 +192,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
                 }
             }
         }
+        item { TextButton(onClick = onTeaching) { Text("Teaching recordings") } }
         val recent = s.tasks.filter { it.phase != TaskPhase.Abandoned }.take(6)
         if (recent.isNotEmpty()) {
             item { SectionTitle("Your tasks") }
@@ -296,7 +297,7 @@ private fun StepRow(step: TaskStep, n: Int) {
 
 /** The AI-written plan, its risk and safety notes, before anything starts. */
 @Composable
-fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone: () -> Unit) {
+fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone: () -> Unit, onTeaching: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     // Step statuses change in the step runner; reload when coming back.
     LifecycleResumeEffect(Unit) { vm.refresh(); onPauseOrDispose { } }
@@ -354,6 +355,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
                 PrimaryButton(if (plan.needsSafetyAck) "I've read the safety notes · Start" else "Start step 1", { vm.accept(plan.needsSafetyAck, onStep) }, Modifier.fillMaxWidth(), busy = s.busy == "accept")
             }
         }
+        item { TextButton(onClick = onTeaching) { Text("Record a demonstration of this task") } }
         item { StopTask(t.phase, s.busy == "stop") { vm.abandon(onBack) } }
         item { Text("Plan by ${plan.modelId ?: "AI"} · AI inference", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 24.dp)) }
     }
