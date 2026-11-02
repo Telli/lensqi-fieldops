@@ -47,7 +47,9 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     private var recording: Recording? = null
     @Volatile private var activeId: String? = null
     private var foreground = false
-    private var stopReason = "User stopped recording."
+    // Main thread only. The first stop request wins; a stop the app makes (not the user) marks the recording Interrupted.
+    private var stopReason: String? = null
+    private var stopInterrupted = false
     private var lastSampleNs = 0L
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
@@ -57,7 +59,7 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
                 mutable.update { it.copy(busy = false, loading = false, error = e.message ?: "Could not save the recording.") }
             }
         }
-        work { store.recover(); refresh(); mutable.update { it.copy(loading = false) } }
+        work { store.recover { runCatching { inspectTeachingVideo(it) }.getOrNull() }; refresh(); mutable.update { it.copy(loading = false) } }
         if (taskId != null) viewModelScope.launch {
             try { val task = withTimeout(10_000) { api.task(taskId) }; mutable.update { it.copy(task = task) } }
             catch (e: CancellationException) { if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e; unavailableContext() }
@@ -66,8 +68,8 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     }
     private fun unavailableContext() { mutable.update { it.copy(message = "Task context is unavailable. You can still record locally.") } }
     private fun work(block: suspend () -> Unit) { commands.trySend(block) }
-    private fun refresh(id: String? = mutable.value.selected?.id) {
-        mutable.update { it.copy(records = store.list(), selected = id?.let(store::read), events = id?.let(store::events).orEmpty(), reviewed = id?.let(store::reviewed) ?: false) }
+    private fun refresh(id: String? = mutable.value.selected?.id, records: Boolean = true) {
+        mutable.update { it.copy(records = if (records) store.list() else it.records, selected = id?.let(store::read), events = id?.let(store::events).orEmpty(), reviewed = id?.let(store::reviewed) ?: false) }
     }
     fun foregroundChanged(value: Boolean) { foreground = value; if (!value) stop("App left the foreground.") }
     fun clearError() { mutable.update { it.copy(error = null, message = null) } }
@@ -84,7 +86,7 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
             require(root.walkTopDown().filter { it.isFile }.sumOf { it.length() } < 768L * 1024 * 1024) { "Export and delete older sessions before recording more." }
             val record = store.create(goal, equipment, demonstrator, TeachingConsent(permission, training, now), now, elapsed,
                 "${if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone") || Build.MODEL.contains("Emulator")) "Emulator" else "Phone camera"} · ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}", taskId)
-            activeId = record.id; stopReason = "User stopped recording."; lastSampleNs = 0
+            activeId = record.id; lastSampleNs = 0
             try {
                 // Snapshot the visible plan immediately; live frames, personal profiles and server audio are not uploaded.
                 mutable.value.task?.let { task -> store.context(record.id, buildJsonObject {
@@ -94,6 +96,7 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
                 refresh(record.id)
                 withContext(Dispatchers.Main) {
                     check(foreground) { "The recorder is no longer in the foreground." }
+                    stopReason = null; stopInterrupted = false
                     recording = controller.startRecording(FileOutputOptions.Builder(store.video(record.id))
                         .setFileSizeLimit(256L * 1024 * 1024).setDurationLimitMillis(10 * 60 * 1000L).build(),
                         AudioConfig.AUDIO_DISABLED, ContextCompat.getMainExecutor(getApplication()), ::onVideoEvent)
@@ -125,12 +128,18 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
             is VideoRecordEvent.Finalize -> {
                 recording = null
                 mutable.update { it.copy(busy = true) }
+                // The limits end a valid video, but the demonstration may be cut short, so it is not Complete.
+                val limit = when (event.error) {
+                    VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED -> "Stopped at the 10-minute limit; the demonstration may be cut short."
+                    VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> "Stopped at the 256 MB limit; the demonstration may be cut short."
+                    else -> null
+                }
+                val failure = if (event.hasError() && limit == null) "CameraX finalization code ${event.error}" else null
+                val reason = failure ?: limit ?: stopReason ?: "Recording ended without a stop request."
+                val interrupted = failure != null || limit != null || stopReason == null || stopInterrupted
                 work {
-                    val failure = if (event.hasError()) "CameraX finalization code ${event.error}" else null
-                    store.append(id, TeachingKind.RecordingEnded, now, TeachingSource.CaptureSystem, failure ?: stopReason, durationNs = duration)
                     val video = runCatching { inspectTeachingVideo(store.folder(id)) }.getOrNull()
-                    val status = when { video == null -> RecordingState.Failed; failure != null || stopReason != "User stopped recording." -> RecordingState.Interrupted; else -> RecordingState.Complete }
-                    store.save(store.read(id).copy(state = status, stopReason = failure ?: stopReason, video = video))
+                    store.finish(id, now, duration, reason, interrupted, video)
                     activeId = null
                     refresh(id)
                     mutable.update { it.copy(busy = false, message = if (video == null) "The video could not be finalized. The partial recording is kept on this phone." else "Saved on this phone. Review the video and annotations before exporting.") }
@@ -141,16 +150,17 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
         }
     }
 
-    /** Called before camera disposal and whenever the app leaves the foreground. */
-    fun stop(reason: String = "User stopped recording.") {
+    /** With no reason the user chose to stop; the app passes a reason when it stops on leaving the foreground or closing the camera. */
+    fun stop(reason: String? = null) {
         val id = activeId ?: return
-        if (recording == null) return
-        stopReason = reason
+        if (recording == null || stopReason != null) return
+        stopReason = reason ?: USER_STOP
+        stopInterrupted = reason != null
         val now = SystemClock.elapsedRealtimeNanos()
         mutable.update { it.copy(busy = true) }
         work {
             TeachingStore.openAction(store.events(id))?.let { store.append(id, TeachingKind.ActionEnd, now, TeachingSource.CaptureSystem, text = "Recording stopped; action may be incomplete.", refersTo = it.sequence) }
-            store.append(id, TeachingKind.StopRequested, now, TeachingSource.CaptureSystem, reason)
+            store.append(id, TeachingKind.StopRequested, now, TeachingSource.CaptureSystem, reason ?: USER_STOP)
         }
         recording?.stop()
     }
@@ -158,7 +168,7 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     fun annotate(kind: TeachingKind, text: String, stepId: String? = null, refersTo: Int? = null, source: TeachingSource = TeachingSource.User, actionType: String? = null, objectName: String? = null) {
         val id = mutable.value.selected?.id ?: return
         val now = SystemClock.elapsedRealtimeNanos()
-        work { store.append(id, kind, now, source, text.trim(), stepId, refersTo, actionType = actionType, objectName = objectName); refresh(id) }
+        work { store.append(id, kind, now, source, text.trim(), stepId, refersTo, actionType = actionType, objectName = objectName); refresh(id, records = false) }
     }
     fun delete(id: String) = work { require(id != activeId); store.delete(id); refresh(null) }
     fun export(open: () -> OutputStream?) {
@@ -185,6 +195,8 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
         } catch (e: CancellationException) { if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e }
         catch (_: Exception) { /* Local video remains useful offline; only the initial snapshot is available. */ }
     }
+
+    private companion object { const val USER_STOP = "User stopped recording." }
 
     override fun onCleared() { recording?.stop(); recording?.close(); commands.close(); super.onCleared() }
 }
