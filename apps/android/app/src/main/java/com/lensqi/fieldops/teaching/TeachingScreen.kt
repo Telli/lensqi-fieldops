@@ -1,6 +1,7 @@
 package com.lensqi.fieldops.teaching
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.widget.MediaController
 import android.widget.VideoView
@@ -30,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lensqi.fieldops.ui.camera.findActivity
 import com.lensqi.fieldops.voice.rememberVoiceInput
 
 /** A separate foreground camera session: exports contain the camera video without the application's overlays. */
@@ -41,7 +43,7 @@ fun TeachingScreen(vm: TeachingViewModel, onBack: () -> Unit) {
     var creating by rememberSaveable { mutableStateOf(false) }
     var deleteId by remember { mutableStateOf<String?>(null) }
     val active = ui.selected?.state in setOf(RecordingState.Preparing, RecordingState.Recording)
-    val close = { if (active) vm.stop("Recorder closed by user.") else if (!ui.busy) { if (ui.selected != null) vm.select(null) else if (creating) creating = false else onBack() } }
+    val close = { if (active) vm.stop() else if (!ui.busy) { if (ui.selected != null) vm.select(null) else if (creating) creating = false else onBack() } }
     BackHandler { close() }
     DisposableEffect(owner) {
         vm.foregroundChanged(owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
@@ -51,6 +53,13 @@ fun TeachingScreen(vm: TeachingViewModel, onBack: () -> Unit) {
         }
         owner.lifecycle.addObserver(observer)
         onDispose { vm.foregroundChanged(false); owner.lifecycle.removeObserver(observer) }
+    }
+    // Rotation recreates the activity, which closes the camera and ends the recording; hold the orientation while recording.
+    DisposableEffect(active) {
+        val activity = context.findActivity()
+        val previous = activity?.requestedOrientation
+        if (active) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        onDispose { if (active && previous != null) activity.requestedOrientation = previous }
     }
     LaunchedEffect(ui.selected?.id) { if (ui.selected != null) creating = false }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -211,7 +220,7 @@ private fun ReviewPanel(vm: TeachingViewModel, ui: TeachingUi, onExport: () -> U
         } }
         item { Text(if (record.consent.trainingAllowed) "Training permission granted by recorder." else "Training permission not granted.") }
         if (record.video != null) {
-            item { Text("Your assessment of this demonstration"); Row { listOf("Succeeded", "Failed", "Uncertain").forEach { result -> TextButton(onClick = { vm.annotate(TeachingKind.Outcome, result) }, enabled = !ui.busy) { Text(result) } } } }
+            item { Text("Your assessment of this demonstration"); Row { TeachingStore.outcomes.forEach { result -> TextButton(onClick = { vm.annotate(TeachingKind.Outcome, result) }, enabled = !ui.busy) { Text(result) } } } }
             item { Text("This is your assessment, separate from any AI suggestion or equipment diagnostic.", style = MaterialTheme.typography.bodySmall) }
         }
         items(ui.events.filter { it.kind in TeachingStore.editableKinds || it.kind == TeachingKind.Correction }, key = { it.sequence }) { event ->
@@ -220,7 +229,8 @@ private fun ReviewPanel(vm: TeachingViewModel, ui: TeachingUi, onExport: () -> U
                 event.videoOffsetEstimateNs?.let { Text("About ${it / 1_000_000_000}s into video", style = MaterialTheme.typography.bodySmall) }
                 Text(event.text)
                 if (event.kind == TeachingKind.Correction) Text("Corrects annotation #${event.refersTo}", style = MaterialTheme.typography.bodySmall)
-                else if (record.video != null) TextButton(onClick = { correction = event; replacement = event.text; correctedAction = event.actionType ?: "Inspect"; correctedObject = event.objectName.orEmpty() }, enabled = !ui.busy) { Text("Correct annotation") }
+                // A new outcome supersedes the old one, so outcomes are set again rather than corrected as free text.
+                else if (record.video != null && event.kind != TeachingKind.Outcome) TextButton(onClick = { correction = event; replacement = event.text; correctedAction = event.actionType ?: "Inspect"; correctedObject = event.objectName.orEmpty() }, enabled = !ui.busy) { Text("Correct annotation") }
             } }
         }
         if (record.video != null) {

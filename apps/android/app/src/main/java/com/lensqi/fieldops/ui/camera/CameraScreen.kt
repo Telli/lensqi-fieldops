@@ -708,7 +708,7 @@ private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, onFai
 @Suppress("DEPRECATION")
 private fun displayRotation(context: Context): Int = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

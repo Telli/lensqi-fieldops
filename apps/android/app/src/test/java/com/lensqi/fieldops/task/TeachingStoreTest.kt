@@ -109,6 +109,68 @@ class TeachingStoreTest {
         assertFalse(manifest(archive(store, record.id)).trainingEligible)
     }
 
+    private val details = VideoDetails(1280, 720, 0, 100_000, 3, 0, 66_666, 33_333, 33_333, 0, false)
+
+    @Test fun `only a stop the user chose finishes as complete and an open action is closed`() {
+        val store = store()
+        val user = create(store); start(store, user)
+        assertEquals(RecordingState.Complete, store.finish(user.id, 5_000, 3_000, "User stopped recording.", interrupted = false, video = details).state)
+        val limit = create(store); start(store, limit)
+        val action = store.append(limit.id, TeachingKind.ActionStart, 3_000, text = "Insert cable", actionType = "Insert", objectName = "cable")
+        val ended = store.finish(limit.id, 6_000, 4_000, "Stopped at the 10-minute limit; the demonstration may be cut short.", interrupted = true, video = details)
+        assertEquals(RecordingState.Interrupted, ended.state); assertEquals("Stopped at the 10-minute limit; the demonstration may be cut short.", ended.stopReason)
+        assertEquals(action.sequence, store.events(limit.id).single { it.kind == TeachingKind.ActionEnd }.refersTo)
+        assertNull(TeachingStore.openAction(store.events(limit.id)))
+        val broken = create(store); start(store, broken)
+        assertEquals(RecordingState.Failed, store.finish(broken.id, 5_000, 3_000, "User stopped recording.", interrupted = false, video = null).state)
+    }
+
+    @Test fun `capture events use their own recorded duration as the video offset`() {
+        val store = store(); val record = create(store); start(store, record)
+        assertEquals(4_000L, store.append(record.id, TeachingKind.ClockSample, 7_000, TeachingSource.CaptureSystem, durationNs = 4_000).videoOffsetEstimateNs)
+        assertEquals(5_000L, store.append(record.id, TeachingKind.Note, 8_000, text = "After the sample").videoOffsetEstimateNs)
+    }
+
+    @Test fun `outcome corrections are limited to the outcome values`() {
+        val store = store(); val record = create(store); start(store, record); finish(store, record)
+        val outcome = store.append(record.id, TeachingKind.Outcome, 4_000, text = "Succeeded")
+        assertThrows(IllegalArgumentException::class.java) { store.append(record.id, TeachingKind.Correction, 5_000, text = "mostly worked", refersTo = outcome.sequence) }
+        assertEquals("Failed", store.append(record.id, TeachingKind.Correction, 5_000, text = "Failed", refersTo = outcome.sequence).text)
+    }
+
+    @Test fun `action errors name the actual problem`() {
+        val store = store(); val record = create(store)
+        val early = assertThrows(IllegalArgumentException::class.java) { store.append(record.id, TeachingKind.ActionStart, 3_000, text = "Insert cable", actionType = "Insert", objectName = "cable") }
+        assertEquals("Start recording before adding annotations.", early.message)
+        start(store, record)
+        val label = assertThrows(IllegalArgumentException::class.java) { store.append(record.id, TeachingKind.ActionStart, 3_000, text = "Insert cable", actionType = "Insert", objectName = "c".repeat(201)) }
+        assertEquals("Choose an action type and name the object or tool (up to 200 characters).", label.message)
+    }
+
+    @Test fun `recovery keeps a video finalized after the app stopped listening`() {
+        val store = store(); val record = create(store, training = true); start(store, record)
+        store.video(record.id).writeBytes(byteArrayOf(1, 2, 3))
+        java.io.File(store.folder(record.id), "frames.csv").writeText("frame_index,presentation_time_us,relative_time_us\n0,0,0\n")
+        store.recover { details }
+        val recovered = store.read(record.id)
+        assertEquals(RecordingState.Interrupted, recovered.state); assertEquals(details, recovered.video)
+        store.append(record.id, TeachingKind.Outcome, 4_000, text = "Succeeded"); store.append(record.id, TeachingKind.Review, 5_000)
+        assertFalse(manifest(archive(store, record.id)).trainingEligible)
+    }
+
+    @Test fun `a timeline line cut off by a crash is ignored and repaired`() {
+        val store = store(); val record = create(store); start(store, record)
+        val timeline = java.io.File(store.folder(record.id), "timeline.jsonl")
+        timeline.appendText("{\"sequence\":2,\"kind\":\"No")
+        assertEquals(listOf(1), store.events(record.id).map { it.sequence })
+        store.append(record.id, TeachingKind.Note, 3_000, text = "After the crash")
+        assertEquals(listOf(1, 2), store.events(record.id).map { it.sequence })
+        assertTrue(timeline.readText().endsWith("\n"))
+        timeline.appendText("{\"torn")
+        store.recover()
+        assertEquals(2, timeline.readLines().size)
+    }
+
     @Test fun `export contains only allowlisted files and deletion is scoped to one recording`() {
         val store = store(); val record = create(store); start(store, record); finish(store, record)
         val other = create(store)
