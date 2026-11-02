@@ -164,7 +164,7 @@ public static class ReceiptEndpoints
                 || ReceiptService.AgainstRecord(bundle.BundleDir, ReceiptService.Expected(session.Events.Take(bundle.Issue.EventCount))).Any()
                 // The digest check alone passes an edited page that keeps the digest string; it must be the issued rendering.
                 || !File.Exists(Path.Combine(bundle.BundleDir, "receipt.html"))
-                || File.ReadAllText(Path.Combine(bundle.BundleDir, "receipt.html")) != ReceiptHtml.Render(bundle.Receipt))
+                || !ReceiptHtml.IsRenderingOf(File.ReadAllText(Path.Combine(bundle.BundleDir, "receipt.html")), bundle.Receipt))
                 return ApiResults.Conflict("receipt_invalid", "The issued record failed its integrity check; review it before exporting");
             var paths = new[] { "receipt.json", "receipt.html" }.Concat(bundle.Receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray();
             return Results.Stream(async output =>
