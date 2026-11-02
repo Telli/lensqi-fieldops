@@ -13,11 +13,12 @@ import javax.inject.Singleton
 class InspectionCache @Inject constructor() {
     private val views = MutableStateFlow<Map<String, InspectionView>>(emptyMap())
 
-    fun observe(id: String): Flow<InspectionView?> = views.map { it[id] }
+    fun observe(id: String, server: String = ""): Flow<InspectionView?> = views.map { it["$server|$id"] }
 
     /** Keeps the newest view: responses can arrive out of order when the queue and the screen both call the API. */
-    fun put(view: InspectionView) = views.update { current ->
-        val old = current[view.inspectionId]
-        if (old != null && old.lastSequence > view.lastSequence) current else current + (view.inspectionId to view)
+    fun put(view: InspectionView, server: String = "") = views.update { current ->
+        val key = "$server|${view.inspectionId}"
+        val old = current[key]
+        if (old != null && old.lastSequence > view.lastSequence) current else current + (key to view)
     }
 }

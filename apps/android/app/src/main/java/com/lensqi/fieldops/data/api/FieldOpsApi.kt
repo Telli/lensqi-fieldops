@@ -11,6 +11,7 @@ import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * The inspection API (PRD §9). Every POST carries a client-generated Idempotency-Key so a retried command,
@@ -48,7 +49,7 @@ interface FieldOpsApi {
     ): ObservationResponse
 
     @POST("v1/inspections/{id}/investigate")
-    suspend fun investigate(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): InvestigateResponse
+    suspend fun investigate(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Query("photoEvidenceId") photoEvidenceId: String? = null): InvestigateResponse
 
     @POST("v1/inspections/{id}/segment")
     suspend fun segment(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: SegmentRequest): SegmentResponse
@@ -76,6 +77,10 @@ interface FieldOpsApi {
 
     @GET("v1/inspections/{id}/receipt")
     suspend fun receipt(@Path("id") id: String): JsonObject
+
+    @retrofit2.http.Streaming
+    @GET("v1/inspections/{id}/receipt.zip")
+    suspend fun receiptBundle(@Path("id") id: String): ResponseBody
 
     @GET("v1/inspections/{id}/receipt/verify")
     suspend fun verifyReceipt(@Path("id") id: String): ReceiptVerification

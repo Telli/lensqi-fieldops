@@ -51,12 +51,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
@@ -126,6 +128,8 @@ class InspectionViewModel @Inject constructor(
     private val json: Json,
 ) : ViewModel() {
     val inspectionId: String = checkNotNull(savedState["inspectionId"])
+    private val serverBase = settings.currentBase().toString()
+    private fun cacheView(view: InspectionView) = cache.put(view, serverBase)
     /** The part confirmed on the camera, kept across captures and retakes for this inspection. */
     val spatialTarget = com.lensqi.fieldops.ui.camera.TargetMemory()
     suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): com.lensqi.fieldops.domain.live.LiveResponse {
@@ -135,50 +139,58 @@ class InspectionViewModel @Inject constructor(
     }
     private val local = MutableStateFlow(InspectionUi())
     private var running: Job? = null
+    private var reviewCommandId: String? = null
+    private var reviewJob: Job? = null
 
-    val state: StateFlow<InspectionUi> = combine(local, cache.observe(inspectionId), queue.observe(inspectionId)) { ui, view, pending ->
+    val state: StateFlow<InspectionUi> = combine(local, cache.observe(inspectionId, serverBase), queue.observe(inspectionId, serverBase)) { ui, view, pending ->
         ui.copy(view = view ?: ui.view, pending = pending)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InspectionUi())
 
     init {
         viewModelScope.launch {
             (apiCall { api.health() } as? ApiOutcome.Ok)?.let { h -> local.update { it.copy(diagnosticsMode = h.value.diagnosticsMode) } }
-            val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.also(cache::put)
+            val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.also(::cacheView)
             refresh()
             (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value?.firstOrNull { it.fixtureId == view?.fixtureId }?.let { f -> local.update { it.copy(fixture = f) } }
             loadKnowledge()
         }
         // A capture made while offline drains as soon as the screen opens with a connection.
         queue.requestSync()
+        viewModelScope.launch {
+            queue.observe(inspectionId, serverBase).collect { commands ->
+                if (reviewCommandId == null) commands.lastOrNull { it.kind == com.lensqi.fieldops.data.queue.CommandKind.UploadPhoto && it.state != com.lensqi.fieldops.data.queue.CommandState.Rejected }
+                    ?.let(::resumeReview)
+            }
+        }
         // Every server view is kept on the device so the screen still shows the last known state offline.
         viewModelScope.launch {
-            cache.observe(inspectionId).collect { v -> if (v != null) snapshots.save(viewKey, InspectionView.serializer(), v) }
+            cache.observe(inspectionId, serverBase).collect { v -> if (v != null) snapshots.save(viewKey, InspectionView.serializer(), v) }
         }
         // New photos (from the queue or another client) need their artifact names for thumbnails.
         viewModelScope.launch {
-            cache.observe(inspectionId).map { v -> v?.photos?.map { it.evidenceId }.orEmpty() }.distinctUntilChanged().collect { ids ->
+            cache.observe(inspectionId, serverBase).map { v -> v?.photos?.map { it.evidenceId }.orEmpty() }.distinctUntilChanged().collect { ids ->
                 if (ids.any { id -> local.value.artifacts.none { it.startsWith("$id-") } })
                     (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
             }
         }
     }
 
-    fun artifactUrl(name: String): String = settings.currentBase().resolve("v1/inspections/$inspectionId/artifacts/$name").toString()
+    fun artifactUrl(name: String): String = serverBase.toHttpUrl().resolve("v1/inspections/$inspectionId/artifacts/$name").toString()
     /** The designed receipt page served by the API (embed mode: the app draws its own top bar). */
-    fun receiptUrl(): String = settings.currentBase().resolve("m/i/$inspectionId/receipt?embed=1&theme=${if (Fo.isDark) "dark" else "light"}").toString()
-    fun receiptJsonUrl(): String = settings.currentBase().resolve("v1/inspections/$inspectionId/receipt").toString()
+    fun receiptUrl(): String = serverBase.toHttpUrl().resolve("m/i/$inspectionId/receipt?embed=1&theme=${if (Fo.isDark) "dark" else "light"}").toString()
+    fun receiptJsonUrl(): String = serverBase.toHttpUrl().resolve("v1/inspections/$inspectionId/receipt").toString()
     fun artifactFor(evidenceId: String): String? = state.value.artifacts.firstOrNull { it.startsWith("$evidenceId-") }
 
     fun refresh() = viewModelScope.launch {
         when (val r = apiCall { api.inspection(inspectionId) }) {
             is ApiOutcome.Ok -> {
-                cache.put(r.value)
+                cacheView(r.value)
                 local.update { it.copy(viewCachedAt = null) }
                 if (local.value.knowledgeCachedAt != null) loadKnowledge()
             }
             is ApiOutcome.Unreachable -> {
                 report(r)
-                if (state.value.view == null) snapshots.load(viewKey, InspectionView.serializer())?.let { snap ->
+                if (state.value.view == null) snapshots.load(viewKey, InspectionView.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
                     local.update { it.copy(view = snap.value, viewCachedAt = snap.fetchedAt) }
                 }
             }
@@ -230,55 +242,64 @@ class InspectionViewModel @Inject constructor(
     /** Muse looks at the latest photo, then SAM outlines each part the site expects, repair target last. */
     fun assessAndOutline() = act("LensQi is looking at the photo…") {
         val assessment = when (val r = apiCall { api.investigate(inspectionId, key()) }) {
-            is ApiOutcome.Ok -> { cache.put(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
+            is ApiOutcome.Ok -> { cacheView(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
             else -> { report(r); null }
         }
         for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment))
-            apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept)) }.onOk { cache.put(it.state) }
+            apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept)) }.onOk { cacheView(it.state) }
     }
 
     /**
      * After the shutter: queue the original photo, wait for the server to have it, then let Muse look and SAM outline
      * (before a repair) or show the server's change check (after one). Offline, the photo stays queued and says so.
      */
+
     fun captureForReview(file: File, origin: String) {
-        val view = state.value.view
-        val afterRepair = view?.currentClaimId != null
-        val known = view?.photos?.map { it.evidenceId }?.toSet().orEmpty()
-        val labels = if (afterRepair) listOf("Saving photo", "Comparing with before") else listOf("Saving photo", "Observing", "Matching asset", "Outlining parts")
-        local.update { it.copy(error = null, review = Review(file, origin, afterRepair, labels.mapIndexed { i, l -> ReviewStep(l, if (i == 0) StepState.Doing else StepState.Todo) })) }
-        running?.cancel()
-        running = viewModelScope.launch {
-            // observedAt is when the file was written at the shutter, not when the technician confirmed the photo.
+        viewModelScope.launch {
+            val afterRepair = state.value.view?.currentClaimId != null
             val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
-            runCatching { queue.enqueuePhoto(inspectionId, file, origin, shotAt) }.onFailure { e -> local.update { it.copy(error = com.lensqi.fieldops.ui.common.friendly("local_save_failed", "")) } }
-            var photo: PhotoEvidence? = null
-            withTimeoutOrNull(45_000) {
-                while (photo == null) {
-                    queue.drain()
-                    (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.let { v -> cache.put(v); photo = v.photos.firstOrNull { it.evidenceId !in known } }
-                    if (photo == null) delay(1_500)
-                }
+            try {
+                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair == true)
+                resumeReview(command)
+            } catch (e: java.io.IOException) {
+                local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
             }
-            val uploaded = photo ?: run { reviewUpdate { it.copy(awaitingUpload = true) }; return@launch }
+        }
+    }
+
+    private fun resumeReview(command: PendingCommand) {
+        if (reviewCommandId == command.id) return
+        reviewJob?.cancel()
+        reviewCommandId = command.id
+        val labels = if (command.afterRepair) listOf("Saving photo", "Comparing with before") else listOf("Saving photo", "Observing", "Matching asset", "Outlining parts")
+        local.update { it.copy(error = null, review = Review(File(requireNotNull(command.filePath)), command.source ?: "Phone", command.afterRepair,
+            labels.map { label -> ReviewStep(label, StepState.Todo) }, awaitingUpload = true)) }
+        queue.requestSync()
+        reviewJob = viewModelScope.launch {
+            val uploaded = queue.observe(inspectionId, serverBase).map { list -> list.firstOrNull { it.id == command.id } }
+                .first { it == null || it.state != com.lensqi.fieldops.data.queue.CommandState.Pending } ?: return@launch
+            if (uploaded.state == com.lensqi.fieldops.data.queue.CommandState.Rejected) {
+                local.update { it.copy(error = uploaded.errorMessage ?: "The photo was refused; it remains saved on this phone.") }
+                reviewUpdate { it.copy(awaitingUpload = false, done = true) }
+                return@launch
+            }
+            val photoId = requireNotNull(uploaded.resultEvidenceId)
             reviewStep(0, StepState.Done)
-            reviewUpdate { it.copy(photoId = uploaded.evidenceId) }
-            if (afterRepair) {
-                reviewStep(1, StepState.Done)
-            } else {
+            reviewUpdate { it.copy(photoId = photoId, awaitingUpload = false) }
+            if (uploaded.afterRepair) reviewStep(1, StepState.Done)
+            else {
                 reviewStep(1, StepState.Doing)
-                val assessment = when (val r = apiCall { api.investigate(inspectionId, key()) }) {
-                    is ApiOutcome.Ok -> { cache.put(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
+                val assessment = when (val r = apiCall { api.investigate(inspectionId, "review-${command.id}", photoId) }) {
+                    is ApiOutcome.Ok -> { cacheView(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
                     else -> { report(r); null }
                 }
                 reviewStep(1, if (assessment != null) StepState.Done else StepState.Skipped)
                 reviewUpdate { it.copy(assetSeen = assessment?.assetId, assetMatch = assetMatch(assessment, state.value.view?.assetId)) }
                 reviewStep(2, if (assessment != null) StepState.Done else StepState.Skipped)
-                reviewStep(3, StepState.Doing)
-                var failed = false
-                for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment)) {
-                    when (val r = apiCall { api.segment(inspectionId, key(), SegmentRequest(photoEvidenceId = uploaded.evidenceId, concept = concept)) }) {
-                        is ApiOutcome.Ok -> cache.put(r.value.state)
+                var failed = assessment == null
+                if (assessment != null) for (concept in outlineOrder(local.value.fixture, assessment)) {
+                    when (val r = apiCall { api.segment(inspectionId, "review-${command.id}-$concept", SegmentRequest(photoEvidenceId = photoId, concept = concept)) }) {
+                        is ApiOutcome.Ok -> cacheView(r.value.state)
                         else -> { failed = true; report(r) }
                     }
                 }
@@ -289,7 +310,17 @@ class InspectionViewModel @Inject constructor(
         }
     }
 
-    fun closeReview() = local.update { it.copy(review = null) }
+    fun retryUpload(command: PendingCommand) = viewModelScope.launch { reviewCommandId = null; queue.retry(command, serverBase) }
+    fun removeUpload(command: PendingCommand) = viewModelScope.launch { queue.dismiss(command) }
+    fun closeReview() {
+        val closingId = reviewCommandId
+        reviewJob?.cancel()
+        local.update { it.copy(review = null) }
+        viewModelScope.launch {
+            queue.observe(inspectionId, serverBase).first().firstOrNull { it.id == closingId && it.state == com.lensqi.fieldops.data.queue.CommandState.Uploaded }?.let { queue.dismiss(it) }
+            // Keep the ID until another capture. Pending records recover on the next screen opening.
+        }
+    }
 
     private fun reviewUpdate(change: (Review) -> Review) = local.update { ui -> ui.copy(review = ui.review?.let(change)) }
     private fun reviewStep(index: Int, to: StepState) = reviewUpdate { r -> r.copy(steps = r.steps.mapIndexed { i, st -> if (i == index) st.copy(state = to) else st }) }
@@ -299,7 +330,7 @@ class InspectionViewModel @Inject constructor(
     fun onClaimChanged(value: String) = local.update { it.copy(claimText = value) }
 
     fun queuePhoto(file: File, origin: String) = viewModelScope.launch {
-        runCatching { queue.enqueuePhoto(inspectionId, file, origin) }.onFailure { e -> local.update { it.copy(error = com.lensqi.fieldops.ui.common.friendly("local_save_failed", "")) } }
+        runCatching { queue.enqueuePhoto(inspectionId, file, origin, serverBase) }.onFailure { e -> local.update { it.copy(error = com.lensqi.fieldops.ui.common.friendly("local_save_failed", "")) } }
     }
 
     fun syncNow() = viewModelScope.launch { queue.drain(); refresh() }
@@ -311,41 +342,41 @@ class InspectionViewModel @Inject constructor(
 
     fun investigate() = act("Asking Muse Spark…") {
         apiCall { api.investigate(inspectionId, key()) }.onOk { r ->
-            cache.put(r.state)
+            cacheView(r.state)
             local.update { it.copy(assessment = r) }
         }
     }
 
     fun segment(concept: String) = act("Asking SAM 3.1…") {
         apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept.ifBlank { null })) }.onOk { r ->
-            cache.put(r.state)
+            cacheView(r.state)
             val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)
             local.update { it.copy(segmentation = r.segmentation, segmentationImage = bitmap) }
         }
     }
 
     fun runDiagnostic(diagnosticId: String) = act("Running $diagnosticId…") {
-        apiCall { api.runDiagnostic(inspectionId, diagnosticId, key()) }.onOk { cache.put(it.state) }
+        apiCall { api.runDiagnostic(inspectionId, diagnosticId, key()) }.onOk { cacheView(it.state) }
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
         apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
     }
 
-    fun workOrder(summary: String) = act("Drafting work order…") { apiCall { api.workOrder(inspectionId, key(), WorkOrderRequest(summary)) }.onOk(cache::put) }
+    fun workOrder(summary: String) = act("Drafting work order…") { apiCall { api.workOrder(inspectionId, key(), WorkOrderRequest(summary)) }.onOk(::cacheView) }
 
     fun claim(description: String) = act("Recording repair claim…") {
-        apiCall { api.repairClaim(inspectionId, key(), RepairClaimRequest(description)) }.onOk { cache.put(it.state) }
+        apiCall { api.repairClaim(inspectionId, key(), RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        apiCall { api.checklist(inspectionId, key(), ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(cache::put)
+        apiCall { api.checklist(inspectionId, key(), ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
     }
 
-    fun acknowledge() = act("Recording acknowledgement…") { apiCall { api.acknowledge(inspectionId, key()) }.onOk(cache::put) }
+    fun acknowledge() = act("Recording acknowledgement…") { apiCall { api.acknowledge(inspectionId, key()) }.onOk(::cacheView) }
 
     fun verify() = act("Server is verifying…") {
-        apiCall { api.verify(inspectionId, key()) }.onOk { cache.put(it.state) }
+        apiCall { api.verify(inspectionId, key()) }.onOk { cacheView(it.state) }
     }
 
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
@@ -358,15 +389,15 @@ class InspectionViewModel @Inject constructor(
                 snapshots.save(knowledgeKey, KnowledgeResponse.serializer(), k.value)
                 local.update { it.copy(knowledge = k.value, knowledgeCachedAt = null) }
             }
-            is ApiOutcome.Unreachable -> snapshots.load(knowledgeKey, KnowledgeResponse.serializer())?.let { snap ->
+            is ApiOutcome.Unreachable -> snapshots.load(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
                 local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
             }
             is ApiOutcome.Rejected -> report(k)
         }
     }
 
-    private val viewKey get() = "inspection-"
-    private val knowledgeKey get() = "knowledge-"
+    private val viewKey get() = SnapshotStore.key(serverBase, "inspection", inspectionId)
+    private val knowledgeKey get() = SnapshotStore.key(serverBase, "knowledge", inspectionId)
 
     /** A stored photo for display on the camera (the before photo as a framing aid), upright and downscaled; null offline. */
     suspend fun photoForDisplay(evidenceId: String): Bitmap? {

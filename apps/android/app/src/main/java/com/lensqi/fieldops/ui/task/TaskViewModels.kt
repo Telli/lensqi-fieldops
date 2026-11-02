@@ -16,6 +16,7 @@ import com.lensqi.fieldops.data.api.retryable
 import com.lensqi.fieldops.data.queue.CommandKind
 import com.lensqi.fieldops.data.queue.StepCheckQueue
 import com.lensqi.fieldops.data.queue.CommandState
+import com.lensqi.fieldops.data.queue.PendingCommand
 import com.lensqi.fieldops.domain.live.LiveResponse
 import com.lensqi.fieldops.ui.common.friendly
 import com.lensqi.fieldops.voice.SpeechOutput
@@ -89,6 +90,7 @@ data class TaskUi(
     val linked: InspectionView? = null,
     /** Step-check photos saved on the phone, waiting for the network. */
     val queuedChecks: Int = 0,
+    val refusedChecks: List<PendingCommand> = emptyList(),
 )
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
@@ -110,10 +112,10 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
                 val pending = checks.count { it.state == CommandState.Pending }
                 if (pending < waiting) refresh()
                 waiting = pending
-                _state.update { it.copy(queuedChecks = pending) }
+                _state.update { it.copy(queuedChecks = pending, refusedChecks = checks.filter { c -> c.state == CommandState.Rejected }) }
                 checks.filter { it.state == CommandState.Rejected }.forEach { c ->
                     _state.update { it.copy(error = friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())) }
-                    queue.dismiss(c)
+                    // Keep refused originals until the user explicitly removes or retries them.
                 }
             }
         }
@@ -160,18 +162,18 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */
     fun check(stepId: String, photo: File) = viewModelScope.launch {
         _state.update { it.copy(busy = "check", error = null) }
-        // Upright pixels (EXIF rotation applied) so the model never judges a sideways photo.
-        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reduce(photo, 2400) }
-        val part = if (bytes != null) jpeg("image", bytes) else MultipartBody.Part.createFormData("image", photo.name, photo.asRequestBody("image/jpeg".toMediaType()))
-        val action = "check:$stepId"
+        // Preserve the original evidence; model input preparation belongs to the server.
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { photo.readBytes() }
+        val part = jpeg("image", bytes)
+        val action = "check:$stepId:${key()}"
         val key = keyFor(action)
         val r = apiCall { api.checkStep(taskId, stepId, key, part) }
-        if (r is ApiOutcome.Unreachable) {
+        if (r.retryable) {
             // GT-R09.5: offline, the photo waits on the phone under the same key and is checked when the network returns.
-            val jpeg = bytes ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { photo.readBytes() }
+            val jpeg = bytes
             queue.enqueueStepCheck(taskId, stepId, key, jpeg)
             keys.remove(action)
-            _state.update { it.copy(busy = null, error = "No connection. The photo is saved on the phone and will be checked when you're back online.") }
+            _state.update { it.copy(busy = null, error = "The photo is saved on the phone and will be checked when the service is available.") }
             return@launch
         }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
@@ -183,7 +185,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun ask(question: String, frame: ByteArray?) = viewModelScope.launch {
         if (question.isBlank()) return@launch
         _state.update { it.copy(busy = "ask", error = null) }
-        val action = "ask:${question.trim()}"
+        val action = "ask:${question.trim()}:${frame?.let { com.lensqi.fieldops.data.queue.CommandQueue.sha256(it) }}"
         val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text)) }
         settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
@@ -192,6 +194,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         // The answer is now part of the task's record; reload it so conversation views show it.
         if (answer != null) refresh()
     }
+
+    fun retryCheck(command: PendingCommand) = viewModelScope.launch { queue.retry(command) }
+    fun removeCheck(command: PendingCommand) = viewModelScope.launch { queue.dismiss(command) }
 
     fun clearAnswer() = _state.update { it.copy(answer = null) }
 

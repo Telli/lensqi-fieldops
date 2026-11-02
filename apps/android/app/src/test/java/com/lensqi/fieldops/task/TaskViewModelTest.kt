@@ -147,7 +147,7 @@ class TaskViewModelTest {
         val down = MockWebServer().apply { start() }.also { it.shutdown() }   // a port nothing answers on
         val vm = viewModel(api(down.url("/")))
         vm.reduce = { _, _ -> byteArrayOf(1, 2, 3) }
-        vm.check(stepId, File("unused.jpg"))
+        vm.check(stepId, File.createTempFile("offline-photo", ".jpg").apply { writeBytes(byteArrayOf(-1, -40, -1, 3)) })
         val ui = await(vm) { it.error?.contains("saved on the phone") == true }
         assertNull(ui.busy)
         until { queue.queued.isNotEmpty() }
@@ -157,7 +157,7 @@ class TaskViewModelTest {
     }
 
     @Test
-    fun `queued checks are counted, a finished one reloads the task, a refused one is reported and removed`() {
+    fun `queued checks are counted, a finished one reloads the task, a refused one is retained until explicit removal`() {
         val vm = viewModel()
         await(vm) { it.task != null }
         fun check(id: String, state: CommandState = CommandState.Pending, message: String? = null) =
@@ -170,6 +170,8 @@ class TaskViewModelTest {
         until { gets() > loads }
         queue.commands.value = listOf(check("b", CommandState.Rejected, "The step is already done"))
         assertTrue(await(vm) { it.error?.contains("Refresh and review where things stand") == true }.queuedChecks == 0)
+        assertTrue(queue.dismissed.isEmpty())
+        vm.removeCheck(vm.state.value.refusedChecks.single())
         until { queue.dismissed == listOf("b") }
     }
 
@@ -187,5 +189,26 @@ class TaskViewModelTest {
         vm.abandon { stopped = true }
         until { stopped }
         assertTrue(requests.any { it.path == "/v1/tasks/${task.taskId}/abandon" && it.body.readUtf8().contains("Stopped by the user") })
+    }
+
+    @Test
+    fun `a retaken photo has a new request identity and keeps its original bytes`() {
+        val vm = viewModel()
+        await(vm) { it.task != null }
+        vm.reduce = { _, _ -> "reduced derivative".toByteArray() }
+        val a = File.createTempFile("capture-a", ".jpg").apply { writeText("original capture A") }
+        val b = File.createTempFile("capture-b", ".jpg").apply { writeText("original capture B") }
+        try {
+            scripted += "/check" to error(409, "provider_unavailable", "try again")
+            vm.check(stepId, a)
+            until { keysFor("/check").size == 1 && vm.state.value.busy == null }
+            scripted += "/check" to error(409, "provider_unavailable", "try again")
+            vm.check(stepId, b)
+            until { keysFor("/check").size == 2 && vm.state.value.busy == null }
+            assertNotEquals(keysFor("/check")[0], keysFor("/check")[1])
+            val bodies = requests.filter { it.path.orEmpty().endsWith("/check") }.map { it.body.clone().readUtf8() }
+            assertTrue(bodies[0].contains("original capture A"))
+            assertTrue(bodies[1].contains("original capture B"))
+        } finally { a.delete(); b.delete() }
     }
 }

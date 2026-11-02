@@ -254,7 +254,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                     PrimaryButton("Save plan", { vm.workOrder(s.workOrderText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.workOrderText.isNotBlank(), icon = Icons.Outlined.Build)
                 }
                 MoveKind.Repair -> {
-                    Field(s.claimText, vm::onClaimChanged, "What did you do?")
+                    ClaimField(s.claimText, vm::onClaimChanged, "What did you do?")
                     PrimaryButton("Repair done — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Build)
                 }
                 else -> {}
@@ -309,7 +309,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
         ) { req, st -> accepted?.let { vm.review(req, st, it.evidenceId) } }
     }
     val claimAgain: @Composable () -> Unit = {
-        Field(s.claimText, vm::onClaimChanged, "What did you do this time?")
+        ClaimField(s.claimText, vm::onClaimChanged, "What did you do this time?")
         PrimaryButton("Record the repair", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
     }
 
@@ -345,7 +345,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 aiSummary(view, null), asked?.note ?: "Photograph the repair",
                 asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",
             ) {
-                PendingUploads(s)
+                PendingUploads(s, vm)
                 PrimaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
@@ -587,13 +587,17 @@ private fun PhotoStrip(s: InspectionUi, vm: InspectionViewModel) {
             }
         }
     }
-    PendingUploads(s)
+    PendingUploads(s, vm)
 }
 
 @Composable
-private fun PendingUploads(s: InspectionUi) {
-    s.pending.forEach { c ->
+private fun PendingUploads(s: InspectionUi, vm: InspectionViewModel) {
+    s.pending.filter { it.state != CommandState.Uploaded }.forEach { c ->
         val rejected = c.state == CommandState.Rejected
+        if (rejected) androidx.compose.material3.TextButton(onClick = { vm.retryUpload(c) }) {
+            Text(if (c.serverBase == null) "Retry saved photo on this server" else "Retry saved photo")
+        }
+        if (c.state == CommandState.Rejected) TextButton(onClick = { vm.removeUpload(c) }) { Text("Remove saved photo") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Dot(if (rejected) Fo.Failure else Fo.Warning)
             Text(
@@ -642,6 +646,7 @@ private fun EquipmentCheck(s: InspectionUi, vm: InspectionViewModel, view: Inspe
 
 @Composable
 private fun Knowledge(s: InspectionUi) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val k = s.knowledge ?: return
     Expandable("Vendor knowledge") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -649,6 +654,10 @@ private fun Knowledge(s: InspectionUi) {
             Muted(if (k.packId != null) "${k.facts.size} sourced facts" else "No documentation pack for this equipment")
         }
         s.knowledgeCachedAt?.let { Muted("Copy saved on this phone at ${whenText(it)}") }
+        k.packRevision?.let { Muted("Revision $it") }
+        k.packSha256?.let { Muted("Pack digest: $it") }
+        k.originKind?.let { Tag(if (it == "Synthetic") "SYNTHETIC" else "VENDOR LINKED", Fo.Warning) }
+        k.warnings.forEach { Text(it, color = Fo.Warning, fontSize = 12.sp) }
         Muted("Guidance with sources. Documentation never proves a repair worked.")
         k.facts.forEach { f ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -658,6 +667,9 @@ private fun Knowledge(s: InspectionUi) {
                 }
                 Text(f.statement, fontSize = 13.sp)
                 Muted("${f.citation.documentTitle} — ${f.citation.sourceLocator}")
+                f.citation.sourceUrl?.takeIf { com.lensqi.fieldops.ui.receipt.webOrigin(it) != null }?.let { url ->
+                    androidx.compose.material3.TextButton(onClick = { runCatching { uri.openUri(url) } }) { Text("Open source") }
+                }
             }
         }
     }
@@ -675,4 +687,19 @@ private suspend fun copyToCache(context: Context, uri: Uri): File = withContext(
     val file = File(context.cacheDir, "import-${System.nanoTime()}")
     context.contentResolver.openInputStream(uri).use { input -> file.outputStream().use { requireNotNull(input).copyTo(it) } }
     file
+}
+
+/** Dictation edits only the draft: the person reviews it before pressing the separate record/verify button. */
+@Composable
+private fun ClaimField(text: String, onChange: (String) -> Unit, label: String) {
+    val voice = com.lensqi.fieldops.voice.rememberVoiceInput(onFinal = onChange)
+    Field(text, onChange, label)
+    if (voice.supported) {
+        TextButton(onClick = { if (voice.listening) voice.stop() else voice.start() }) {
+            Text(if (voice.listening) "Finish dictating" else "Dictate repair claim")
+        }
+        if (voice.listening) Text(voice.heard.ifBlank { "Listening…" })
+        Muted("Review the text before recording the repair. Voice uses your phone’s speech service.")
+        voice.error?.let { Text(it, color = Fo.Warning) }
+    }
 }

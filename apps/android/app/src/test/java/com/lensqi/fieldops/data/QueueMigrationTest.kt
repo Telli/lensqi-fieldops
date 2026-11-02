@@ -35,15 +35,20 @@ class QueueMigrationTest {
             old.createStatement().execute("INSERT INTO pending_command (id, inspectionId, kind, createdAtMillis, filePath, mediaType, sha256, source, observedAt, state, attempts) " +
                 "VALUES ('k-1', 'I-1', 'UploadPhoto', 1, '/captures/k-1.jpg', 'image/jpeg', 'abc', 'Phone', '2026-10-30T00:00:00Z', 'Pending', 0)")
             old.createStatement().execute(QueueDatabase.MIGRATION_1_2_SQL)
+            QueueDatabase.MIGRATION_2_3_SQL.forEach { old.createStatement().execute(it) }
 
             memory().use { fresh ->
                 fresh.createStatement().execute(current)
                 assertEquals(columns(fresh), columns(old))
             }
-            old.createStatement().executeQuery("SELECT id, inspectionId, kind, filePath, stepId FROM pending_command").use { r ->
+            old.createStatement().executeQuery("SELECT id, inspectionId, kind, filePath, stepId, state, serverBase, errorCode, afterRepair FROM pending_command").use { r ->
                 r.next()
                 assertEquals(listOf("k-1", "I-1", "UploadPhoto", "/captures/k-1.jpg"), (1..4).map(r::getString))
                 assertNull(r.getString("stepId"))
+                assertEquals("Rejected", r.getString("state"))
+                assertNull(r.getString("serverBase"))
+                assertEquals("server_unbound", r.getString("errorCode"))
+                assertEquals(0, r.getInt("afterRepair"))
             }
         }
     }

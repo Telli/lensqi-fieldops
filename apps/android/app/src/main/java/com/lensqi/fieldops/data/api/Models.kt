@@ -306,6 +306,7 @@ data class KnowledgeResponse(
     val packId: String? = null,
     val packSha256: String? = null,
     val packRevision: Int? = null,
+    val originKind: String? = null,
     val facts: List<KnowledgeFact>,
     val warnings: List<String>,
     val approvedDiagnostics: List<String> = emptyList(),

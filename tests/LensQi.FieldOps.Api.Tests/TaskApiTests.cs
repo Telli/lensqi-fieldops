@@ -365,4 +365,46 @@ public class TaskApiTests
         Assert.Single(photos);
         Assert.Equal(photos[0].GetProperty("evidenceId").GetString(), (await Body(r)).GetProperty("photoId").GetString());
     }
+    [Fact]
+    public async Task Restricted_step_check_reasons_never_return_hands_on_instructions()
+    {
+        using var f = new FieldOpsApiFactory();
+        f.FakeChat.CannedResponse = PlanJson(handsOn: false, restricted: "MainsElectrical", professional: true, risk: "High",
+            instruction: "Photograph the panel label and have a licensed electrician do the work.", title: "Document the panel");
+        using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Replace the breaker panel" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "NotYet", reason = "Remove the panel cover." });
+        var response = await c.PostAsync($"/v1/tasks/{id}/steps/s1/check", Image());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await Body(response);
+        Assert.Equal(LensQi.FieldOps.Core.Tasks.TaskSafety.Referral, body.GetProperty("check").GetProperty("reason").GetString());
+        Assert.Equal("InProgress", body.GetProperty("task").GetProperty("phase").GetString());
+        var events = await c.GetStringAsync($"/v1/tasks/{id}/events");
+        Assert.DoesNotContain("Remove the panel cover", events);
+    }
+
+    [Fact]
+    public async Task Technician_plans_use_only_applicable_vendor_citations_and_preserve_them_on_reload()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var node = System.Text.Json.Nodes.JsonNode.Parse(PlanJson())!;
+        node["steps"]![0]!["factIds"] = new System.Text.Json.Nodes.JsonArray("LAB-HEALTH-CHECK-01");
+        f.FakeChat.CannedResponse = node.ToJsonString();
+        var (id, result) = await Create(c, new { mode = "Technician", goal = "Inspect the lab switch", fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        var fact = result.GetProperty("task").GetProperty("plan").GetProperty("steps")[0].GetProperty("sourceFacts")[0];
+        Assert.Equal("LAB-HEALTH-CHECK-01", fact.GetProperty("factId").GetString());
+        Assert.Equal(64, fact.GetProperty("citation").GetProperty("packSha256").GetString()!.Length);
+        Assert.Equal("SiteConfigured", fact.GetProperty("provenance").GetString());
+        using var restarted = FieldOpsApiFactory.Over(f.DataDir);
+        using var afterRestart = restarted.CreateClient();
+        var reloaded = await Body(await afterRestart.GetAsync($"/v1/tasks/{id}"));
+        Assert.Equal(fact.ToString(), reloaded.GetProperty("plan").GetProperty("steps")[0].GetProperty("sourceFacts")[0].ToString());
+
+        node["steps"]![0]!["factIds"] = new System.Text.Json.Nodes.JsonArray("invented-fact");
+        f.FakeChat.CannedResponse = node.ToJsonString();
+        var (_, invalid) = await Create(c, new { mode = "Technician", goal = "Inspect the lab switch", fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        Assert.Equal(JsonValueKind.Null, invalid.GetProperty("task").GetProperty("plan").ValueKind);
+        Assert.Equal("invalid_model_output", invalid.GetProperty("planError").GetProperty("code").GetString());
+    }
 }

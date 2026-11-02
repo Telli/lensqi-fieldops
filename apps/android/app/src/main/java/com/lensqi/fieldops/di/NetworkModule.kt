@@ -31,8 +31,10 @@ object NetworkModule {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    @Provides @Singleton
-    fun api(client: OkHttpClient, json: Json): FieldOpsApi = retrofit(client, json).create(FieldOpsApi::class.java)
+    // Each screen gets a client pinned to the selected server. Existing requests cannot change destinations.
+    @Provides
+    fun api(client: OkHttpClient, json: Json, settings: SettingsStore): FieldOpsApi =
+        retrofit(client, json, settings.currentBase().toString()).create(FieldOpsApi::class.java)
 
     fun retrofit(client: OkHttpClient, json: Json, base: String = PLACEHOLDER_BASE): Retrofit = Retrofit.Builder()
         .baseUrl(base)
@@ -51,4 +53,9 @@ object NetworkModule {
 
     private const val PLACEHOLDER_HOST = "fieldops.invalid"
     private const val PLACEHOLDER_BASE = "http://$PLACEHOLDER_HOST/"
+}
+
+/** Queued commands carry their own server; they never inherit a later Settings change. */
+class ApiFactory @javax.inject.Inject constructor(private val client: OkHttpClient, private val json: Json) {
+    fun forServer(base: String): FieldOpsApi = NetworkModule.retrofit(client, json, base).create(FieldOpsApi::class.java)
 }

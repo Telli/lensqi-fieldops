@@ -1,0 +1,57 @@
+{
+  "gates": [
+    {
+      "id": "android-tests",
+      "cwd": "apps/android",
+      "command": [
+        "./gradlew",
+        ":app:testDebugUnitTest",
+        "--rerun",
+        ":app:assembleDebug",
+        "--console=plain"
+      ],
+      "timeout": 600,
+      "kind": "test",
+      "report": {
+        "format": "junit",
+        "path": "app/build/test-results/testDebugUnitTest/TEST-*.xml"
+      }
+    },
+    {
+      "id": "android-release-lint",
+      "cwd": "apps/android",
+      "command": [
+        "./gradlew",
+        ":app:assembleRelease",
+        ":app:lintDebug",
+        ":app:lintRelease",
+        "--console=plain"
+      ],
+      "timeout": 600,
+      "kind": "check"
+    },
+    {
+      "id": "backend",
+      "cwd": ".",
+      "command": [
+        "dotnet",
+        "test",
+        "--nologo",
+        "--verbosity",
+        "minimal"
+      ],
+      "timeout": 600,
+      "kind": "check"
+    },
+    {
+      "id": "secrets",
+      "cwd": ".",
+      "command": [
+        "bash",
+        "scripts/secret_scan.sh"
+      ],
+      "timeout": 120,
+      "kind": "check"
+    }
+  ]
+}

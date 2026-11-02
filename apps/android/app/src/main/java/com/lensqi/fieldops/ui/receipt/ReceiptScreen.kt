@@ -1,5 +1,6 @@
 package com.lensqi.fieldops.ui.receipt
 
+import kotlinx.coroutines.launch
 import android.annotation.SuppressLint
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -45,6 +46,21 @@ import com.lensqi.fieldops.ui.theme.Fo
 @Composable
 fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var exportPath by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    val save = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val file = exportPath?.let { java.io.File(it) }
+        if (uri != null && file != null) scope.launch {
+            exportMessage = try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    requireNotNull(context.contentResolver.openOutputStream(uri)).use { output -> file.inputStream().use { it.copyTo(output) } }
+                }
+                "Record saved"
+            } catch (e: java.io.IOException) { "The record could not be saved. Try another location." }
+        }
+    }
     val id = remember(url) { recordInspectionId(url) }
     LaunchedEffect(id) { vm.load(id) }
     var technical by remember { mutableStateOf(false) }
@@ -78,6 +94,25 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
                     Text("Limits of this record", style = MaterialTheme.typography.titleSmall)
                     record.limits.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.TextButton(enabled = !state.exporting && id != null, onClick = {
+                        scope.launch { vm.export(id!!, java.io.File(context.cacheDir, "receipt-exports"))?.let { file ->
+                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", file)
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "application/zip"; putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                clipData = android.content.ClipData.newRawUri("Inspection record", uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share inspection record"))
+                        } }
+                    }) { Text(if (state.exporting) "Preparing…" else "Share bundle") }
+                    androidx.compose.material3.TextButton(enabled = !state.exporting && id != null, onClick = {
+                        scope.launch { vm.export(id!!, java.io.File(context.cacheDir, "receipt-exports"))?.let { file ->
+                            exportPath = file.path; save.launch("fieldproof-$id.zip")
+                        } }
+                    }) { Text("Save bundle") }
+                }
+                exportMessage?.let { Text(it) }
                 Expandable("Details") {
                     Text("Check history · earliest first", style = MaterialTheme.typography.titleSmall)
                     Text("Includes earlier attempts. The result above is the recorded final decision.", style = MaterialTheme.typography.bodySmall)
@@ -101,10 +136,10 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
                     setBackgroundColor(background)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    val origin = android.net.Uri.parse(url).let { "${it.scheme}://${it.authority}" }
+
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) =
-                            !request.url.toString().startsWith(origin)
+                            !sameWebOrigin(url, request.url.toString())
                         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
                             if (request.isForMainFrame) {
                                 com.lensqi.fieldops.data.diagnostics.DiagnosticHistory.record("record", "load_failed", e.errorCode)

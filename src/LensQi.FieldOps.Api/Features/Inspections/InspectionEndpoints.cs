@@ -154,6 +154,9 @@ public static class InspectionEndpoints
                 return ApiResults.Conflict(InspectionErrorCodes.InvalidState, $"Assessment is not accepted in the current stage (stage {session.State.Stage})");
             var photo = session.State.Photos.LastOrDefault();
             if (photo is null) return ApiResults.Conflict(InspectionErrorCodes.InvalidState, "No photo to assess");
+            var requestedPhoto = http.Query["photoEvidenceId"].ToString();
+            if (!string.IsNullOrEmpty(requestedPhoto) && requestedPhoto != photo.EvidenceId)
+                return ApiResults.Conflict("photo_superseded", "A newer photo is available. Open the latest capture to review it.");
             var twin = session.Twin;
             var dir = Path.Combine("evidence", id);
             var artifactPath = Directory.EnumerateFiles(Path.Combine(files.DataDirectoryPath, dir)).FirstOrDefault(f => Path.GetFileName(f).StartsWith(photo.EvidenceId + "-", StringComparison.Ordinal));
@@ -166,6 +169,8 @@ public static class InspectionEndpoints
             var requestId = RequestId(http, "investigate:" + outcome.ResponseDigest);
             return await GuardAsync(() => store.ExecuteAsync(id, s =>
             {
+                if (s.State.Photos.LastOrDefault()?.EvidenceId != photo.EvidenceId)
+                    return Task.FromResult<IResult>(ApiResults.Conflict("photo_superseded", "A newer photo arrived during analysis. Review the latest capture."));
                 var evidenceId = "assess-" + outcome.ResponseDigest[..10];
                 var events = s.RecordAssessment(requestId, evidenceId, outcome.Assessment, clock.GetUtcNow(), outcome.PromptDigest, outcome.ResponseDigest);
                 return Task.FromResult(Results.Ok(new { evidenceId, outcome.ModelId, outcome.PromptDigest, outcome.ResponseDigest, usage = outcome.Usage, assessment = outcome.Assessment, events = events.Count, state = View(s), replayed = false }));

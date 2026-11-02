@@ -108,7 +108,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         onDetails = { goal -> nav.navigate("newTask?mode=Diy&goal=${Uri.encode(goal)}") },
                         onJustAsk = { taskList.justAsk { id -> nav.navigate("task/$id/live") } },
                         onTechnician = { goTab("home") },
-                        onOpen = { t -> nav.navigate(if (t.mode == TaskMode.Freeform) "task/${t.taskId}/live" else when (t.phase) { TaskPhase.InProgress -> "task/${t.taskId}/step"; TaskPhase.Completed -> "task/${t.taskId}/done"; else -> "task/${t.taskId}" }) },
+                        onOpen = { t -> nav.navigate(com.lensqi.fieldops.ui.task.taskRoute(t)) },
                         onProfile = { nav.navigate("profile") })
                 }
                 composable(NEW_TASK, arguments = listOf(
@@ -154,7 +154,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("task/{taskId}/done", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
                     TaskDoneScreen(hiltViewModel(), onHome = { goTab("taskHome") }, onInspection = openInspection)
                 }
-                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
+                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onAssets = { nav.navigate("assets") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
                 composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("start") { inclusive = true } } ; nav.navigate("camera") } }
                 composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }

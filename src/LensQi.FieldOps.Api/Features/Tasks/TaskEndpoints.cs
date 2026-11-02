@@ -7,6 +7,7 @@ using LensQi.FieldOps.Api.Infrastructure.Tasks;
 using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Core.Tasks;
+using LensQi.FieldOps.Core.Knowledge;
 using LensQi.FieldOps.Meta.Tasks;
 
 namespace LensQi.FieldOps.Api.Features.Tasks;
@@ -26,7 +27,7 @@ public static class TaskEndpoints
         var g = app.MapGroup("/v1/tasks");
 
         // Create a task and write its plan. JSON {mode, goal, details, fixtureId?, assetId?} or multipart with up to 3 manual photos.
-        g.MapPost("", async (HttpRequest http, TaskStore store, ExpectedTwinStore twins, EvidenceFileStore files, TaskPlanner planner, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("", async (HttpRequest http, TaskStore store, ExpectedTwinStore twins, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, EvidenceFileStore files, TaskPlanner planner, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             string? mode, goal, details, fixtureId, assetId, height;
             IReadOnlyList<string> tools;
@@ -75,7 +76,7 @@ public static class TaskEndpoints
                 var asset = twin?.Twin.FindAsset(assetId ?? "");
                 if (twin is null || asset is null) return ApiResults.NotFound($"Asset '{assetId}' is not on site record '{fixtureId}'");
                 site = new SiteLink(twin.Twin.FixtureId, asset.AssetId);
-                siteContext = SiteContext(twins, site);
+                siteContext = SiteContext(twins, site, bindings, resolver);
             }
             return await GuardAsync(async () =>
             {
@@ -106,7 +107,7 @@ public static class TaskEndpoints
         g.MapGet("/{id}/events", (string id, TaskStore store) => store.Find(id) is null ? ApiResults.NotFound($"Task '{id}' not found") : Results.Ok(store.Execute(id, s => s.Events.ToList())));
 
         // Retry the plan when the first attempt failed or was rejected; a task keeps at most one plan.
-        g.MapPost("/{id}/plan", async (string id, TaskStore store, ExpectedTwinStore twins, EvidenceFileStore files, TaskPlanner planner, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/{id}/plan", async (string id, TaskStore store, ExpectedTwinStore twins, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, EvidenceFileStore files, TaskPlanner planner, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
             // State first, so a request that cannot be recorded never spends a model call.
@@ -115,7 +116,7 @@ public static class TaskEndpoints
             var manuals = task.State.Photos.Where(p => p.Purpose == TaskPhotoPurpose.Manual).ToList();
             var images = manuals.Select(p => ArtifactPath(files, id, p.EvidenceId)).Where(p => p is not null)
                 .Select(p => { var b = File.ReadAllBytes(p!); return (b, EvidenceFileStore.DetectImageType(b)!); }).ToList();
-            var site = task.State.Site is { } link ? SiteContext(twins, link) : null;
+            var site = task.State.Site is { } link ? SiteContext(twins, link, bindings, resolver) : null;
             return await GuardAsync(async () =>
             {
                 var planError = await Plan(store, planner, id, site, images, [.. manuals.Select(m => m.EvidenceId)], clock, ct);
@@ -183,7 +184,9 @@ public static class TaskEndpoints
                 var result = await coach.CheckAsync(store.Find(id)!.State, step, bytes, mediaType, ct);
                 if (result.Value is not { } check || check.Reason is not { Length: > 0 and <= 400 } || TaskPlanValidator.HasLink(check.Reason))
                     return ModelFailure(result.Error, "The step check is unavailable; the photo is saved, try again or decide yourself");
-                var recorded = store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, check.Reason, result.ModelId, clock.GetUtcNow()))
+                var reason = TaskSafety.Guard(store.Find(id)!.State, check.Reason);
+                if (reason.Length > 400) reason = TaskSafety.Referral;
+                var recorded = store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, reason, result.ModelId, clock.GetUtcNow()))
                     .OfType<StepChecked>().Single();
                 return Results.Ok(CheckResult(recorded, store.Find(id)!));
             });
@@ -281,13 +284,15 @@ public static class TaskEndpoints
 
     public const string Referral = TaskSafety.Referral;
 
-    private static PlanSiteContext? SiteContext(ExpectedTwinStore twins, SiteLink link)
+    private static PlanSiteContext? SiteContext(ExpectedTwinStore twins, SiteLink link, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver)
     {
         var twin = twins.Find(link.FixtureId);
         if (twin?.Twin.FindAsset(link.AssetId) is not { } asset) return null;
+        var binding = bindings.FirstOrDefault(b => b.FixtureId == link.FixtureId && b.AssetId == link.AssetId);
+        var facts = binding is null ? [] : resolver.Resolve(binding, binding.ToAssetIdentity(), []).Facts;
         return new PlanSiteContext(asset.AssetId, asset.DisplayName, asset.Kind,
             twin.Twin.Connections.Where(c => c.FromAssetId == asset.AssetId || c.ToAssetId == asset.AssetId)
-                .Select(c => $"{c.FromAssetId} port {c.FromPortLabel} to {c.ToAssetId}, cable {c.CableLabel}, {c.ExpectedState}").ToList());
+                .Select(c => $"{c.FromAssetId} port {c.FromPortLabel} to {c.ToAssetId}, cable {c.CableLabel}, {c.ExpectedState}").ToList(), facts);
     }
 
     private sealed record CreateBody(string? Mode, string? Goal, string? Details, string? FixtureId, string? AssetId, int? HeightCm = null, IReadOnlyList<string>? Tools = null);
@@ -374,7 +379,7 @@ public static class TaskEndpoints
                 needsSafetyAck = plan.Risk != RiskLevel.Low || plan.ProfessionalRequired || plan.Steps.Any(x => x.Cautions.Count > 0),
                 steps = plan.Steps.Select(step => new
                 {
-                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.AccessFor, step.Cautions, step.StopIf, step.Check,
+                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.AccessFor, step.Cautions, step.StopIf, step.Check, sourceFacts = step.SourceFacts ?? [],
                     skipReason = s.SkipReasons.GetValueOrDefault(step.Id),
                     status = s.CompletedStepIds.Contains(step.Id) ? "Done" : s.SkippedStepIds.Contains(step.Id) ? "Skipped" : s.CurrentStepId == step.Id ? "Active" : "Todo",
                     lastCheck = s.Checks.LastOrDefault(c => c.StepId == step.Id),

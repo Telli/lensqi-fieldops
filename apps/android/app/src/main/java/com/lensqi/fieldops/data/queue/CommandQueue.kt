@@ -40,111 +40,105 @@ fun dispositionOf(outcome: ApiOutcome<*>): Disposition = when {
     else -> Disposition.Refused
 }
 
-/**
- * Offline-first command queue (Track B day 2): inspection photos, and task step-check photos taken while the API was
- * unreachable. Captures land in Room first, then drain in order. A 4xx keeps the
- * command visible with the server's code and moves on; a network failure stops the drain and WorkManager retries.
- */
-@Singleton
-/** The part of the queue a task screen uses: offline step checks for one task (GT-R09.5). */
+/** A task screen owns a server-bound view of the durable queue. */
 interface StepCheckQueue {
     fun observe(sessionId: String): Flow<List<PendingCommand>>
     suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray): PendingCommand
     suspend fun dismiss(command: PendingCommand)
+    suspend fun retry(command: PendingCommand) {}
 }
 
-class CommandQueue @Inject constructor(
-    @ApplicationContext private val context: Context,
+@Singleton
+class CommandQueue internal constructor(
+    private val directory: File,
     private val dao: PendingCommandDao,
-    private val api: FieldOpsApi,
+    private val apiFor: (String) -> FieldOpsApi,
     private val cache: InspectionCache,
-) : StepCheckQueue {
+    private val schedule: () -> Unit,
+) {
+    @Inject constructor(@ApplicationContext context: Context, dao: PendingCommandDao,
+        factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache) :
+        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, { scheduleSync(context) })
+
     private val mutex = Mutex()
-
-    override fun observe(sessionId: String): Flow<List<PendingCommand>> = dao.observe(sessionId)
-
-    fun requestSync() = scheduleSync(context)
-
-    /** Moves a captured or imported file into app storage, hashes it on device and queues the upload. */
-    suspend fun enqueuePhoto(inspectionId: String, source: File, origin: String, observedAt: Instant = Instant.now()): PendingCommand {
-        val id = UUID.randomUUID().toString()
-        val dir = File(context.filesDir, "captures").apply { mkdirs() }
-        val bytes = source.readBytes()
-        val mediaType = mediaTypeOf(bytes) ?: error("Only JPEG or PNG images can be evidence")
-        val target = File(dir, "$id.${if (mediaType == "image/png") "png" else "jpg"}").apply { writeBytes(bytes) }
-        if (source.parentFile == context.cacheDir) source.delete()
-        val command = PendingCommand(
-            id = id, sessionId = inspectionId, kind = CommandKind.UploadPhoto, createdAtMillis = System.currentTimeMillis(),
-            filePath = target.absolutePath, mediaType = mediaType, sha256 = sha256(bytes), source = origin, observedAt = observedAt.toString(),
-        )
-        dao.insert(command)
-        scheduleSync(context)
-        return command
+    fun observe(sessionId: String, server: String) = dao.observe(sessionId, server)
+    fun requestSync() = schedule()
+    fun forServer(server: String): StepCheckQueue = object : StepCheckQueue {
+        override fun observe(sessionId: String) = this@CommandQueue.observe(sessionId, server)
+        override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray) =
+            save(PendingCommand(key, taskId, CommandKind.StepCheckPhoto, System.currentTimeMillis(), stepId = stepId, serverBase = server), jpeg)
+        override suspend fun dismiss(command: PendingCommand) = this@CommandQueue.dismiss(command)
+        override suspend fun retry(command: PendingCommand) { this@CommandQueue.retry(command, server) }
     }
 
-    /**
-     * Saves a step-check photo that could not be sent and queues it under the same [key] the first attempt used, so if
-     * that attempt reached the server after all, the server returns its recorded check instead of checking twice.
-     */
-    override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray): PendingCommand {
-        val dir = File(context.filesDir, "captures").apply { mkdirs() }
-        val target = File(dir, "$key.jpg").apply { writeBytes(jpeg) }
-        val command = PendingCommand(
-            id = key, sessionId = taskId, kind = CommandKind.StepCheckPhoto, createdAtMillis = System.currentTimeMillis(),
-            filePath = target.absolutePath, mediaType = "image/jpeg", sha256 = sha256(jpeg), stepId = stepId,
-        )
-        dao.insert(command)
-        scheduleSync(context)
-        return command
-    }
+    suspend fun enqueuePhoto(inspectionId: String, source: File, origin: String, server: String,
+        observedAt: Instant = Instant.now(), afterRepair: Boolean = false): PendingCommand =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            save(PendingCommand(UUID.randomUUID().toString(), inspectionId, CommandKind.UploadPhoto, System.currentTimeMillis(),
+                source = origin, observedAt = observedAt.toString(), serverBase = server, afterRepair = afterRepair), source.readBytes())
+        }
 
-    /** Removes a command the person has been told about (a refused step check), with its saved photo. */
-    override suspend fun dismiss(command: PendingCommand) {
+    private suspend fun save(command: PendingCommand, bytes: ByteArray): PendingCommand =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val media = mediaTypeOf(bytes) ?: error("Only JPEG or PNG images can be evidence")
+            directory.mkdirs()
+            val target = File(directory, "${command.id}.${if (media == "image/png") "png" else "jpg"}")
+            target.writeBytes(bytes)
+            val saved = command.copy(filePath = target.path, mediaType = media, sha256 = sha256(bytes))
+            dao.insert(saved)
+            schedule()
+            saved
+        }
+
+    suspend fun dismiss(command: PendingCommand) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         dao.delete(command.id)
         command.filePath?.let { File(it).delete() }
+        Unit
+    }
+
+    /** Refused photos stay on disk until an explicit retry or removal; unknown legacy destinations require user choice. */
+    suspend fun retry(command: PendingCommand, server: String) {
+        require(command.serverBase == null || command.serverBase == server)
+        dao.retry(command.id, server)
+        schedule()
     }
 
     suspend fun drain(): DrainResult = mutex.withLock {
         var next = dao.nextPending()
         while (next != null) {
-            dao.countAttempt(next.id)
-            val outcome = send(next)
+            val command = next
+            dao.countAttempt(command.id)
+            val outcome = send(command)
             when (dispositionOf(outcome)) {
                 Disposition.Sent -> {
-                    dao.delete(next.id)
-                    next.filePath?.let { File(it).delete() }
+                    if (command.kind == CommandKind.UploadPhoto) dao.uploaded(command.id, (outcome as ApiOutcome.Ok).value!!)
+                    else dismiss(command)
                 }
-                // A server error, rate limit or failed model call is not a refusal: the photo stays on the phone and
-                // WorkManager retries later with the same key, so the server replays rather than acting twice.
                 Disposition.RetryLater -> return@withLock DrainResult.Offline
-                Disposition.Refused -> (outcome as ApiOutcome.Rejected).let { dao.reject(next.id, it.code, it.message) }
+                Disposition.Refused -> (outcome as ApiOutcome.Rejected).let { dao.reject(command.id, it.code, it.message) }
             }
             next = dao.nextPending()
         }
         DrainResult.Empty
     }
 
-    private suspend fun send(c: PendingCommand): ApiOutcome<Unit> = when (c.kind) {
-        CommandKind.UploadPhoto -> {
-            val file = File(requireNotNull(c.filePath))
-            val part = MultipartBody.Part.createFormData("image", file.name, file.asRequestBody(requireNotNull(c.mediaType).toMediaType()))
-            when (val r = apiCall { api.uploadObservation(c.sessionId, c.id, part, requireNotNull(c.source).toRequestBody(), requireNotNull(c.observedAt).toRequestBody()) }) {
+    private suspend fun send(c: PendingCommand): ApiOutcome<String?> {
+        val server = c.serverBase ?: return ApiOutcome.Rejected(0, "server_unbound", "Choose the original server before retrying this saved photo")
+        val file = c.filePath?.let(::File)?.takeIf { it.isFile }
+            ?: return ApiOutcome.Rejected(0, "photo_missing", "The saved photo could not be found; capture it again")
+        val api = apiFor(server)
+        val part = MultipartBody.Part.createFormData("image", file.name, file.asRequestBody(requireNotNull(c.mediaType).toMediaType()))
+        return when (c.kind) {
+            CommandKind.UploadPhoto -> when (val r = apiCall { api.uploadObservation(c.sessionId, c.id, part, requireNotNull(c.source).toRequestBody(), requireNotNull(c.observedAt).toRequestBody()) }) {
                 is ApiOutcome.Ok -> {
-                    cache.put(r.value.state)
-                    // The server hashes what it stored; a different digest means the bytes changed in transit.
-                    if (r.value.sha256 != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "device ${c.sha256?.take(12)} vs server ${r.value.sha256.take(12)}")
-                    else ApiOutcome.Ok(Unit)
+                    if (r.value.sha256 != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "Uploaded bytes did not match the saved photo")
+                    else { cache.put(r.value.state, server); ApiOutcome.Ok(r.value.evidenceId) }
                 }
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }
-        }
-        // The check is recorded on the task by the server; the screen refreshes when the queue empties.
-        CommandKind.StepCheckPhoto -> {
-            val file = File(requireNotNull(c.filePath))
-            val part = MultipartBody.Part.createFormData("image", file.name, file.asRequestBody("image/jpeg".toMediaType()))
-            when (val r = apiCall { api.checkStep(c.sessionId, requireNotNull(c.stepId), c.id, part) }) {
-                is ApiOutcome.Ok -> ApiOutcome.Ok(Unit)
+            CommandKind.StepCheckPhoto -> when (val r = apiCall { api.checkStep(c.sessionId, requireNotNull(c.stepId), c.id, part) }) {
+                is ApiOutcome.Ok -> ApiOutcome.Ok(null)
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }
