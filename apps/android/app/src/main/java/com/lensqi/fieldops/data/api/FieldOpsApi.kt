@@ -109,6 +109,9 @@ interface FieldOpsApi {
     @GET("v1/tasks/{id}")
     suspend fun task(@Path("id") id: String): TaskView
 
+    @GET("v1/tasks/{id}/events")
+    suspend fun taskEvents(@Path("id") id: String): List<JsonObject>
+
     @Multipart
     @POST("v1/tasks")
     suspend fun createTask(@Header(IDEMPOTENCY_KEY) key: String, @Part("mode") mode: RequestBody, @Part("goal") goal: RequestBody,

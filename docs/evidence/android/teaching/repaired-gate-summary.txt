@@ -1,0 +1,7 @@
+== summary
+  PASS  101.033s  ['./gradlew', ':app:testDebugUnitTest', '--rerun', ':app:assembleDebug', ':app:assembleRelease', '--console=plain']
+  PASS  8.578s  ['python3', 'scripts/test_dotnet_report.py', '{report_dir}']
+  PASS  0.127s  ['bash', 'scripts/secret_scan.sh']
+  PASS  0.072s  ['python3', 'scripts/test_report_adapter.py']
+== vs baseline: UNKNOWN
+  gate configuration changed or baseline format unsupported; failure equivalence unknown
