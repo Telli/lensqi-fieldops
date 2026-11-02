@@ -90,7 +90,7 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
     val assessment = if (r.afterRepair) null else assessmentForPhoto(s.latestAssessment, r.photoId)
     val tags = if (outlinesReady) arTags(s.fixture, assessment, s.outlines, change) else emptyList()
     val target = if (outlinesReady) targetConcept(s.fixture, assessment) else null
-    val rejected = change?.verdict == VisualChangeVerdict.DuplicateImage || change?.verdict == VisualChangeVerdict.NoVisualChange
+    val rejected = r.refused != null || change?.verdict == VisualChangeVerdict.DuplicateImage || change?.verdict == VisualChangeVerdict.NoVisualChange
     val expected = s.fixture?.assets?.firstOrNull { it.assetId == view?.assetId }?.displayName ?: view?.assetId.orEmpty()
     val glass = Color(0xCC0B0F14)
 
@@ -142,11 +142,12 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LensQiMark()
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    if (r.done && !r.awaitingUpload) Text(aiSummary(view, assessment), fontSize = 13.sp, lineHeight = 19.sp, color = FoDark.Muted)
+                    if (r.done && !r.awaitingUpload && r.refused == null) Text(aiSummary(view, assessment), fontSize = 13.sp, lineHeight = 19.sp, color = FoDark.Muted)
                     Text(
                         when {
                             r.awaitingUpload -> "Saved on this phone"
                             !r.done -> if (r.afterRepair) "Comparing with the photo from before…" else "Looking at your photo…"
+                            r.refused != null -> "Photo not uploaded"
                             rejected -> "Photo not accepted"
                             r.afterRepair -> "Photo accepted"
                             else -> nextMove(view, assessment)?.title ?: "Here's what I see"
@@ -168,6 +169,7 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                     }
                 }
             }
+            r.refused?.let { Text("$it The photo stays saved on this phone; retry or remove it from the inspection.", fontSize = 12.sp, color = FoDark.Failure) }
             if (r.awaitingUpload) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.CloudOff, null, tint = FoDark.Warning, modifier = Modifier.size(16.dp))
                 Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = FoDark.Warning)

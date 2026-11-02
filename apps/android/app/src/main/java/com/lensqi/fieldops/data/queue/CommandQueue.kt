@@ -40,6 +40,9 @@ fun dispositionOf(outcome: ApiOutcome<*>): Disposition = when {
     else -> Disposition.Refused
 }
 
+/** The bytes are neither JPEG nor PNG (a HEIC or WebP import, say); nothing is saved. */
+class UnsupportedImageException : IllegalArgumentException("Only JPEG or PNG images can be evidence")
+
 /** A task screen owns a server-bound view of the durable queue. */
 interface StepCheckQueue {
     fun observe(sessionId: String): Flow<List<PendingCommand>>
@@ -54,11 +57,13 @@ class CommandQueue internal constructor(
     private val dao: PendingCommandDao,
     private val apiFor: (String) -> FieldOpsApi,
     private val cache: InspectionCache,
+    /** Where the camera and imports write temporary files; a source there is deleted once its saved copy exists. */
+    private val scratch: File? = null,
     private val schedule: () -> Unit,
 ) {
     @Inject constructor(@ApplicationContext context: Context, dao: PendingCommandDao,
         factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache) :
-        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, { scheduleSync(context) })
+        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, context.cacheDir, { scheduleSync(context) })
 
     private val mutex = Mutex()
     fun observe(sessionId: String, server: String) = dao.observe(sessionId, server)
@@ -76,11 +81,12 @@ class CommandQueue internal constructor(
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             save(PendingCommand(UUID.randomUUID().toString(), inspectionId, CommandKind.UploadPhoto, System.currentTimeMillis(),
                 source = origin, observedAt = observedAt.toString(), serverBase = server, afterRepair = afterRepair), source.readBytes())
+                .also { if (scratch != null && source.parentFile == scratch) source.delete() }
         }
 
     private suspend fun save(command: PendingCommand, bytes: ByteArray): PendingCommand =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val media = mediaTypeOf(bytes) ?: error("Only JPEG or PNG images can be evidence")
+            val media = mediaTypeOf(bytes) ?: throw UnsupportedImageException()
             directory.mkdirs()
             val target = File(directory, "${command.id}.${if (media == "image/png") "png" else "jpg"}")
             target.writeBytes(bytes)
@@ -103,8 +109,10 @@ class CommandQueue internal constructor(
         schedule()
     }
 
+    /** Sends in capture order per server; a server that cannot take a command now is skipped, so it never holds up another. */
     suspend fun drain(): DrainResult = mutex.withLock {
-        var next = dao.nextPending()
+        val unavailable = mutableSetOf<String>()
+        var next = dao.nextPending(emptyList())
         while (next != null) {
             val command = next
             dao.countAttempt(command.id)
@@ -114,12 +122,12 @@ class CommandQueue internal constructor(
                     if (command.kind == CommandKind.UploadPhoto) dao.uploaded(command.id, (outcome as ApiOutcome.Ok).value!!)
                     else dismiss(command)
                 }
-                Disposition.RetryLater -> return@withLock DrainResult.Offline
+                Disposition.RetryLater -> unavailable += requireNotNull(command.serverBase)
                 Disposition.Refused -> (outcome as ApiOutcome.Rejected).let { dao.reject(command.id, it.code, it.message) }
             }
-            next = dao.nextPending()
+            next = dao.nextPending(unavailable.toList())
         }
-        DrainResult.Empty
+        if (unavailable.isEmpty()) DrainResult.Empty else DrainResult.Offline
     }
 
     private suspend fun send(c: PendingCommand): ApiOutcome<String?> {

@@ -52,8 +52,9 @@ interface PendingCommandDao {
     @Query("SELECT * FROM pending_command WHERE inspectionId = :sessionId AND (serverBase = :serverBase OR serverBase IS NULL) ORDER BY createdAtMillis")
     fun observe(sessionId: String, serverBase: String): Flow<List<PendingCommand>>
 
-    @Query("SELECT * FROM pending_command WHERE state = 'Pending' ORDER BY createdAtMillis LIMIT 1")
-    suspend fun nextPending(): PendingCommand?
+    /** The oldest pending command whose server is not in [skip]; unbound legacy rows always qualify (they are refused). */
+    @Query("SELECT * FROM pending_command WHERE state = 'Pending' AND (serverBase IS NULL OR serverBase NOT IN (:skip)) ORDER BY createdAtMillis LIMIT 1")
+    suspend fun nextPending(skip: List<String>): PendingCommand?
 
     @Query("UPDATE pending_command SET attempts = attempts + 1 WHERE id = :id")
     suspend fun countAttempt(id: String)

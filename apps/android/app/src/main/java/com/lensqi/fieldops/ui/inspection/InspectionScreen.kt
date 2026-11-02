@@ -189,6 +189,8 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
                 }
             }
             s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
+            // Saved photos are listed in both modes, also before the server has any photo, so a refused one can be retried or removed.
+            if (s.pending.any { it.state != CommandState.Uploaded }) item { PendingUploads(s, vm) }
             if (view != null) {
                 val asset = s.fixture?.assets?.firstOrNull { it.assetId == view.assetId }
                 if (verifying) verificationItems(s, vm, view, onCapture, importPhoto, onOpenReceipt, onGlasses)
@@ -587,7 +589,6 @@ private fun PhotoStrip(s: InspectionUi, vm: InspectionViewModel) {
             }
         }
     }
-    PendingUploads(s, vm)
 }
 
 @Composable

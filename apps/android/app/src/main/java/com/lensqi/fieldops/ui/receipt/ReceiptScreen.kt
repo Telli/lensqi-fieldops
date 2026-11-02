@@ -55,7 +55,9 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
         if (uri != null && file != null) scope.launch {
             exportMessage = try {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    requireNotNull(context.contentResolver.openOutputStream(uri)).use { output -> file.inputStream().use { it.copyTo(output) } }
+                    // A crashed document provider returns no stream; that is a failed save like any other.
+                    (context.contentResolver.openOutputStream(uri) ?: throw java.io.IOException("No output stream for $uri"))
+                        .use { output -> file.inputStream().use { it.copyTo(output) } }
                 }
                 "Record saved"
             } catch (e: java.io.IOException) { "The record could not be saved. Try another location." }

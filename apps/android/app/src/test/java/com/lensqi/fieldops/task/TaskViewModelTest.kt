@@ -211,4 +211,20 @@ class TaskViewModelTest {
             assertTrue(bodies[1].contains("original capture B"))
         } finally { a.delete(); b.delete() }
     }
+
+    @Test
+    fun `a photo over the server upload limit is sent as a reduced copy instead of being refused`() {
+        val vm = viewModel()
+        await(vm) { it.task != null }
+        vm.reduce = { _, side -> "reduced to $side".toByteArray() }
+        val large = File.createTempFile("capture-large", ".jpg").apply { writeBytes(ByteArray((com.lensqi.fieldops.ui.task.MAX_UPLOAD_BYTES + 1).toInt())) }
+        try {
+            scripted += "/check" to error(409, "provider_unavailable", "try again")
+            vm.check(stepId, large)
+            until { keysFor("/check").size == 1 && vm.state.value.busy == null }
+            val body = requests.single { it.path.orEmpty().endsWith("/check") }
+            assertTrue(body.bodySize < 1024 * 1024)
+            assertTrue(body.body.clone().readUtf8().contains("reduced to 2400"))
+        } finally { large.delete() }
+    }
 }

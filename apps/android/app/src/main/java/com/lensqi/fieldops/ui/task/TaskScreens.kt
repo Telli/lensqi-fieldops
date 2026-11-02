@@ -669,6 +669,17 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onHome) { Text("Home", color = Fo.Muted) }; Text("Summary", style = MaterialTheme.typography.titleLarge) } }
         if (t == null) { item { TaskLoading(s.error, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
+        // Check photos still saved on the phone stay manageable after the task closes; the task record itself is the server's.
+        if (s.queuedChecks > 0 || s.refusedChecks.isNotEmpty()) item {
+            Panel {
+                Text("Check photos saved on this phone", fontWeight = FontWeight.Medium)
+                if (s.queuedChecks > 0) Text("${s.queuedChecks} waiting for the network", style = MaterialTheme.typography.bodySmall)
+                s.refusedChecks.forEach { command ->
+                    Text("Refused: ${com.lensqi.fieldops.ui.common.friendly(command.errorCode ?: "unknown", command.errorMessage.orEmpty())}", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
+                }
+            }
+        }
         if (plan == null) {
             item { Panel {
                 Text(t.goal)
@@ -690,7 +701,8 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                             color = if (verified) Fo.Success else if (i.stage == InspectionStage.VerificationFailed) Fo.Failure else Fo.Muted, fontWeight = FontWeight.Medium)
                     }
                     if (t.inspectionId != null) PrimaryButton(if (s.linked?.stage == InspectionStage.VerifiedComplete) "View inspection record" else "Open inspection", { onInspection(t.inspectionId) }, Modifier.fillMaxWidth())
-                    else PrimaryButton("Verify with FieldProof", { vm.linkInspection(onInspection) }, Modifier.fillMaxWidth(), busy = s.busy == "link")
+                    // The server refuses to link a stopped task, so only a linked inspection is offered there.
+                    else if (t.phase != TaskPhase.Abandoned) PrimaryButton("Verify with FieldProof", { vm.linkInspection(onInspection) }, Modifier.fillMaxWidth(), busy = s.busy == "link")
                 }
             }
         }
