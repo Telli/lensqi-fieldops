@@ -31,17 +31,18 @@
       "kind": "check"
     },
     {
-      "id": "backend",
-      "cwd": ".",
+      "id": "dotnet",
       "command": [
-        "dotnet",
-        "test",
-        "--nologo",
-        "--verbosity",
-        "minimal"
+        "python3",
+        "scripts/test_dotnet_report.py",
+        "{report_dir}"
       ],
+      "kind": "test",
       "timeout": 600,
-      "kind": "check"
+      "report": {
+        "format": "junit",
+        "path": "{report_dir}/*.xml"
+      }
     },
     {
       "id": "secrets",
@@ -52,6 +53,13 @@
       ],
       "timeout": 120,
       "kind": "check"
+    },
+    {
+      "id": "report-adapter",
+      "command": [
+        "python3",
+        "scripts/test_report_adapter.py"
+      ]
     }
   ]
 }

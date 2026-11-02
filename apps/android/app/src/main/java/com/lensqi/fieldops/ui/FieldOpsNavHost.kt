@@ -109,7 +109,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         onJustAsk = { taskList.justAsk { id -> nav.navigate("task/$id/live") } },
                         onTechnician = { goTab("home") },
                         onOpen = { t -> nav.navigate(com.lensqi.fieldops.ui.task.taskRoute(t)) },
-                        onProfile = { nav.navigate("profile") })
+                        onProfile = { nav.navigate("profile") }, onTeaching = { nav.navigate("teaching") })
+                }
+                composable("teaching?taskId={taskId}", arguments = listOf(navArgument("taskId") { type = NavType.StringType; defaultValue = "" })) {
+                    com.lensqi.fieldops.teaching.TeachingScreen(hiltViewModel(), onBack = { nav.popBackStack() })
                 }
                 composable(NEW_TASK, arguments = listOf(
                     navArgument("mode") { type = NavType.StringType; defaultValue = "Diy" },
@@ -121,7 +124,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 }
                 composable("task/{taskId}", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
                     val id = requireNotNull(e.arguments?.getString("taskId"))
-                    PlanScreen(hiltViewModel(), onBack = { taskList.refresh(); nav.popBackStack() }, onStep = { nav.navigate("task/$id/step") }, onDone = { nav.navigate("task/$id/done") })
+                    PlanScreen(hiltViewModel(), onBack = { taskList.refresh(); nav.popBackStack() }, onStep = { nav.navigate("task/$id/step") }, onDone = { nav.navigate("task/$id/done") }, onTeaching = { nav.navigate("teaching?taskId=$id") })
                 }
                 composable("task/{taskId}/step", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { e ->
                     val id = requireNotNull(e.arguments?.getString("taskId"))

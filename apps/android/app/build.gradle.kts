@@ -89,6 +89,7 @@ dependencies {
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
+    implementation(libs.camerax.video)
     implementation(libs.datastore.preferences)
     implementation(libs.coil.compose)
 
