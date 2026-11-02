@@ -129,4 +129,28 @@ public class ReceiptTests
         Assert.Contains("Moved the cable to P2", html);
         Assert.Equal(receipt.ManifestSha256, receipt.WithManifest().ManifestSha256);
     }
+
+    [Fact]
+    public void Receipt_page_is_the_same_under_any_server_culture()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim(); k.PostRepairEvidence();
+        var built = ReceiptBuilder.Build(k.Session, [], null, k.Now, "visual-assessment/1.1");
+        var analysis = Assert.Single(built.VisualChange.Analyses) with { TargetRegionIoU = 0.5, ComponentShiftNormalized = 0.25 };
+        var receipt = built with { VisualChange = built.VisualChange with { Analyses = [analysis] } };
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+            var issued = ReceiptHtml.Render(receipt);
+            Assert.Contains("0.500", issued);
+            // A page issued before rendering was invariant, on this server's culture, is still recognised.
+            Assert.True(ReceiptHtml.IsRenderingOf(ReceiptHtml.Render(receipt, System.Globalization.CultureInfo.CurrentCulture), receipt));
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("en-US");
+            Assert.Equal(issued, ReceiptHtml.Render(receipt));
+            Assert.True(ReceiptHtml.IsRenderingOf(issued, receipt));
+            Assert.False(ReceiptHtml.IsRenderingOf(issued.Replace("0.500", "0.900"), receipt));
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+    }
 }

@@ -133,8 +133,16 @@ public static class ReceiptBuilder
 
 public static class ReceiptHtml
 {
-    public static string Render(EvidenceReceipt r)
+    /// <summary>Whether a stored page is this receipt's rendering: culture-invariant, or (for pages issued before rendering
+    /// was made invariant) in the server's current culture.</summary>
+    public static bool IsRenderingOf(string html, EvidenceReceipt r) =>
+        html == Render(r) || html == Render(r, System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>The printable receipt page. Numbers and dates are culture-invariant unless <paramref name="format"/> is given,
+    /// so the same receipt renders the same bytes on any server.</summary>
+    public static string Render(EvidenceReceipt r, IFormatProvider? format = null)
     {
+        var f = format ?? System.Globalization.CultureInfo.InvariantCulture;
         static string E(string? s) => System.Net.WebUtility.HtmlEncode(s ?? "");
         var sb = new System.Text.StringBuilder();
         var outcome = r.Inspection.OutcomeKind ?? (r.Decision is null ? "No verification decision" : r.Decision.Result.ToString());
@@ -175,7 +183,7 @@ public static class ReceiptHtml
                 sb.Append("<table><tr><th>Claim</th><th>Photo</th><th>Verdict</th><th>Compared with</th><th>dHash distance</th><th>IoU</th><th>Shift</th><th>Reason</th><th>Thresholds</th></tr>");
                 foreach (var c in r.VisualChange.Analyses)
                     sb.Append("<tr><td>").Append(E(c.ClaimId)).Append("</td><td>").Append(E(c.PhotoEvidenceId)).Append("</td><td><b>").Append(E(c.Verdict.ToString())).Append("</b></td><td>").Append(E(c.DuplicateOfEvidenceId ?? c.ReferencePhotoEvidenceId))
-                      .Append("</td><td>").Append(c.PerceptualHashDistance?.ToString() ?? "").Append("</td><td>").Append(c.TargetRegionIoU?.ToString("0.000") ?? "").Append("</td><td>").Append(c.ComponentShiftNormalized?.ToString("0.000") ?? "")
+                      .Append("</td><td>").Append(c.PerceptualHashDistance?.ToString(f) ?? "").Append("</td><td>").Append(c.TargetRegionIoU?.ToString("0.000", f) ?? "").Append("</td><td>").Append(c.ComponentShiftNormalized?.ToString("0.000", f) ?? "")
                       .Append("</td><td>").Append(E(c.Reason)).Append("</td><td>").Append(E(c.ThresholdsVersion)).Append("</td></tr>");
                 sb.Append("</table>");
             }
@@ -209,7 +217,7 @@ public static class ReceiptHtml
         {
             sb.Append("<h2>Documentation (guidance, not evidence)</h2><p>Pack <code>").Append(E(k.PackId)).Append("</code> rev ").Append(k.PackRevision).Append(" sha256 <code>").Append(E(k.PackSha256)).Append("</code>, status ").Append(E(k.Status)).Append("</p><table><tr><th>Fact</th><th>Provenance</th><th>Statement</th><th>Source</th></tr>");
             foreach (var c in k.Citations)
-                sb.Append("<tr><td>").Append(E(c.FactId)).Append("</td><td>").Append(E(c.Provenance)).Append("</td><td>").Append(E(c.Statement)).Append("</td><td>").Append(E(c.DocumentTitle)).Append(" — ").Append(E(c.SourceLocator)).Append(c.SourceUrl is null ? "" : $" (<a href=\"{E(c.SourceUrl)}\">link</a>)").Append(", accessed ").Append(c.AccessedOn.ToString("yyyy-MM-dd")).Append("</td></tr>");
+                sb.Append("<tr><td>").Append(E(c.FactId)).Append("</td><td>").Append(E(c.Provenance)).Append("</td><td>").Append(E(c.Statement)).Append("</td><td>").Append(E(c.DocumentTitle)).Append(" — ").Append(E(c.SourceLocator)).Append(c.SourceUrl is null ? "" : $" (<a href=\"{E(c.SourceUrl)}\">link</a>)").Append(", accessed ").Append(c.AccessedOn.ToString("yyyy-MM-dd", f)).Append("</td></tr>");
             sb.Append("</table>");
         }
         sb.Append("<h2>Event trail (append-only)</h2><table><tr><th>#</th><th>Event</th><th>At</th></tr>");
