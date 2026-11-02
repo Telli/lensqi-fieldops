@@ -52,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.layout.offset
@@ -124,7 +125,7 @@ fun InspectionCard(s: InspectionSummary, assetName: String?, onOpen: (String) ->
 }
 
 @Composable
-fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit, onProfile: () -> Unit = {}) {
+fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onAssets: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit, onProfile: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val queue = needsYou(s.inspections)
     val focus = queue.firstOrNull { it.inspectionId == s.focusId } ?: queue.firstOrNull { it.photos > 0 }
@@ -143,6 +144,12 @@ fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onOpen: (String) -> Unit,
             }
         }
         s.cachedAt?.let { at -> item { Text("Offline: showing the list saved at ${whenText(at)}. Captures still queue on this phone.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall) } }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = onStart) { Text("Start inspection") }
+                TextButton(onClick = onAssets) { Text("Assets") }
+            }
+        }
         item { if (focus != null) FocusHero(focus, s.focusPhotoUrl.takeIf { s.focusId == focus.inspectionId }, vm.assetName(focus.assetId)) { onOpen(focus.inspectionId) } else ScanHero(onStart) }
         if (rest.isNotEmpty()) {
             item { Text("UP NEXT", style = Eyebrow, modifier = Modifier.padding(start = 4.dp)) }
@@ -337,6 +344,7 @@ private fun AboutYou(vm: HomeViewModel, field: androidx.compose.material3.TextFi
 
 @Composable
 fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val s by vm.state.collectAsStateWithLifecycle()
     var existing by rememberSaveable { mutableStateOf("") }
     val field = OutlinedTextFieldDefaults.colors(focusedBorderColor = Fo.Primary, unfocusedBorderColor = Fo.Border)
@@ -354,7 +362,11 @@ fun ProfileScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
         item {
             OutlinedTextField(s.apiBase, vm::onBaseChanged, label = { Text("Server address") }, singleLine = true, colors = field, modifier = Modifier.fillMaxWidth())
         }
-        item { PrimaryButton("Save and check connection", { vm.saveBase() }, busy = s.loading) }
+        item { PrimaryButton("Save and check connection", { vm.saveBase {
+            val intent = android.content.Intent(context, com.lensqi.fieldops.ui.MainActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            context.startActivity(intent)
+        } }, busy = s.loading) }
         item { AboutYou(vm, field) }
         item {
             com.lensqi.fieldops.ui.common.Expandable("Diagnostics") {

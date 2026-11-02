@@ -9,15 +9,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.lensqi.fieldops.BuildConfig
 import com.lensqi.fieldops.ui.theme.Appearance
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,44 +24,39 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
 
 /** Device preferences: the API base URL and the appearance. Never something the server or a model supplies. */
 @Singleton
-class SettingsStore @Inject constructor(@ApplicationContext private val context: Context) {
+class SettingsStore internal constructor(private val store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>) {
+    @Inject constructor(@ApplicationContext context: Context) : this(context.dataStore)
     private val key = stringPreferencesKey("api_base")
-    private val current = AtomicReference(DEFAULT_BASE.toHttpUrlOrNull()!!)
 
-    val apiBase: Flow<String> = context.dataStore.data.map { it[key] ?: DEFAULT_BASE }
+    val apiBase: Flow<String> = store.data.map { it[key] ?: DEFAULT_BASE }
 
     private val diagnosticsKey = booleanPreferencesKey("diagnostic_overlays")
-    val diagnostics: Flow<Boolean> = context.dataStore.data.map { it[diagnosticsKey] ?: DIAGNOSTICS_DEFAULT }
-    suspend fun setDiagnostics(enabled: Boolean) { context.dataStore.edit { it[diagnosticsKey] = enabled } }
+    val diagnostics: Flow<Boolean> = store.data.map { it[diagnosticsKey] ?: DIAGNOSTICS_DEFAULT }
+    suspend fun setDiagnostics(enabled: Boolean) { store.edit { it[diagnosticsKey] = enabled } }
 
     private val appearanceKey = stringPreferencesKey("appearance")
-    val appearance: Flow<Appearance> = context.dataStore.data.map { p -> Appearance.entries.firstOrNull { it.name == p[appearanceKey] } ?: Appearance.System }
-    suspend fun setAppearance(value: Appearance) { context.dataStore.edit { it[appearanceKey] = value.name } }
+    val appearance: Flow<Appearance> = store.data.map { p -> Appearance.entries.firstOrNull { it.name == p[appearanceKey] } ?: Appearance.System }
+    suspend fun setAppearance(value: Appearance) { store.edit { it[appearanceKey] = value.name } }
 
     private val heightKey = stringPreferencesKey("height_cm")
     private val toolsKey = stringSetPreferencesKey("tools")
     /** Height and tools the person gave in Profile; sent with each new task. */
-    val person: Flow<PersonProfile> = context.dataStore.data.map { p -> PersonProfile(p[heightKey]?.toIntOrNull(), p[toolsKey].orEmpty()) }
+    val person: Flow<PersonProfile> = store.data.map { p -> PersonProfile(p[heightKey]?.toIntOrNull(), p[toolsKey].orEmpty()) }
     suspend fun setPerson(value: PersonProfile) {
-        context.dataStore.edit { p ->
+        store.edit { p ->
             value.heightCm?.let { p[heightKey] = it.toString() } ?: p.remove(heightKey)
             p[toolsKey] = value.tools
         }
     }
 
-    init {
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            apiBase.collect { value -> normalize(value)?.let(current::set) }
-        }
+    /** Read the persisted selection before creating any server-bound client, including on cold start. */
+    fun currentBase(): HttpUrl = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+        normalize(apiBase.first()) ?: DEFAULT_BASE.toHttpUrlOrNull()!!
     }
-
-    /** Read synchronously by the OkHttp interceptor on every request. */
-    fun currentBase(): HttpUrl = current.get()
 
     suspend fun setApiBase(value: String): Boolean {
         val url = normalize(value) ?: return false
-        current.set(url)
-        context.dataStore.edit { it[key] = url.toString() }
+        store.edit { it[key] = url.toString() }
         return true
     }
 

@@ -15,7 +15,7 @@ public static class InspectionKnowledgeEndpoints
 
     public static IEndpointRouteBuilder MapInspectionKnowledge(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v1/inspections/{id}/knowledge", (string id, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver) =>
+        app.MapGet("/v1/inspections/{id}/knowledge", (string id, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, IKnowledgePackStore packs) =>
         {
             var s = store.Find(id);
             if (s is null) return ApiResults.NotFound($"Inspection '{id}' not found");
@@ -25,6 +25,7 @@ public static class InspectionKnowledgeEndpoints
             return Results.Ok(new
             {
                 inspectionId = id, status = r.Status.ToString(), r.PackId, r.PackSha256, r.PackRevision,
+                originKind = r.PackId is { } packId ? packs.Find(packId)?.Pack.OriginKind.ToString() : null,
                 facts = r.Facts.Select(f => new { f.FactId, f.FactKey, f.AssertedValue, f.Statement, claimKind = f.ClaimKind.ToString(), provenance = f.Provenance.ToString(), safety = f.Safety.ToString(), f.Tags,
                     citation = new { f.Citation.DocumentTitle, f.Citation.Publisher, sourceUrl = f.Citation.SourceUrl?.ToString(), f.Citation.SourceLocator, f.Citation.AccessedOn } }),
                 excluded = r.Excluded, r.Warnings, approvedDiagnostics = binding.ApprovedDiagnostics,

@@ -1,5 +1,7 @@
 package com.lensqi.fieldops.ui.task
 
+import com.lensqi.fieldops.ui.common.Expandable
+
 import com.lensqi.fieldops.ui.common.TechnicianText
 
 import com.lensqi.fieldops.wearables.SpokenFeedbackGate
@@ -115,22 +117,21 @@ fun TaskRow(t: TaskSummary, onOpen: () -> Unit) {
             Icon(when (t.mode) { TaskMode.Diy -> Icons.Outlined.AutoAwesome; TaskMode.Freeform -> Icons.Outlined.CameraAlt; TaskMode.Technician -> Icons.Outlined.Build }, null, tint = if (tech) Fo.Warning else Fo.Primary)
         }
         Column(Modifier.weight(1f)) {
-            Text(if (t.mode == TaskMode.Freeform) "Just ask" else t.title ?: t.goal, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(if (t.mode == TaskMode.Freeform) "Free-form help · ${if (t.phase == TaskPhase.Completed) "ended" else "open"}" else when (t.phase) {
-                TaskPhase.Completed -> "Done"; TaskPhase.Abandoned -> "Stopped"
-                TaskPhase.Planned -> if (t.title != null) "Plan ready" else "No plan yet"
-                TaskPhase.InProgress -> "${t.currentStepTitle ?: "In progress"} · ${t.finished}/${t.steps}"
-            }, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            Text(t.title ?: t.goal, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(taskStatus(t), style = MaterialTheme.typography.bodySmall, maxLines = 1)
         }
         Icon(Icons.Outlined.ChevronRight, null, tint = Fo.Muted)
     }
 }
 
 /** Two ways in: say what you want to do yourself, or go to technician work. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (String) -> Unit, onJustAsk: () -> Unit, onTechnician: () -> Unit, onOpen: (TaskSummary) -> Unit, onProfile: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(TaskFilter.All) }
+    var search by remember { mutableStateOf("") }
     var planning by remember { mutableStateOf(false) }
     val writing = planning && s.creating
     val voice = rememberVoiceInput { goal = it }
@@ -192,7 +193,18 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
                 }
             }
         }
-        val recent = s.tasks.filter { it.phase != TaskPhase.Abandoned }.take(6)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("All tasks", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(search, { search = it }, label = { Text("Search tasks") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TaskFilter.entries.forEach { choice ->
+                        androidx.compose.material3.FilterChip(selected = filter == choice, onClick = { filter = choice }, label = { Text(choice.name) })
+                    }
+                }
+            }
+        }
+        val recent = taskHistory(s.tasks, filter, search)
         if (recent.isNotEmpty()) {
             item { SectionTitle("Your tasks") }
             item {
@@ -271,7 +283,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
         }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
-            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { vm.create(mode, goal, details, asset?.first, asset?.second, manuals.toList(), onCreated) },
+            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { val selected = siteForMode(mode, asset); vm.create(mode, goal, details, selected?.first, selected?.second, manuals.toList(), onCreated) },
                 Modifier.fillMaxWidth(), enabled = !s.creating && goal.trim().length >= 3, icon = Icons.Outlined.AutoAwesome, busy = s.creating)
         }
         if (s.creating) item { Text("This takes up to half a minute. The plan is checked for safety before you see it.", style = MaterialTheme.typography.bodySmall) }
@@ -288,6 +300,7 @@ private fun StepRow(step: TaskStep, n: Int) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(step.title + if (step.handsOn) " · hands-on" else "", fontWeight = FontWeight.Medium)
             Text(TechnicianText.guidance(step.instruction), style = MaterialTheme.typography.bodySmall)
+            TaskSources(step)
             step.cautions.forEach { Text("${it.kind} · ${it.text}", color = Fo.Warning, fontSize = 12.sp) }
             if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = Fo.Failure, fontSize = 12.sp)
         }
@@ -423,7 +436,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || reach?.canSkip == true,
+        showDetails = step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -434,6 +447,13 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.queuedChecks > 0) Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp))
+            s.refusedChecks.forEach { command ->
+                Text("A saved check was refused: ${command.errorMessage.orEmpty()}", color = FoDark.Warning)
+                Row {
+                    TextButton(onClick = { vm.retryCheck(command) }) { Text(if (command.serverBase == null) "Retry on this server" else "Retry saved photo") }
+                    TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
+                }
+            }
             StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
         },
         controls = { handle ->
@@ -622,6 +642,7 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 @Composable
 private fun ColumnScope.StepDetails(step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TaskSources(step)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
         if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
         step.lastCheck?.let { c ->
@@ -644,10 +665,19 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
     val plan = t?.plan
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onHome) { Text("Home", color = Fo.Muted) }; Text("Summary", style = MaterialTheme.typography.titleLarge) } }
-        if (t == null || plan == null) { item { TaskLoading(if (t == null) s.error else null, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
+        if (t == null) { item { TaskLoading(s.error, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
+        if (plan == null) {
+            item { Panel {
+                Text(t.goal)
+                Text(if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase == TaskPhase.Completed) "Session ended · record retained" else "No plan was recorded")
+                Text("${t.photos.size} saved photos")
+                t.answers.forEach { answer -> Text("You asked: ${answer.question}"); Text(answer.answer) }
+            } }
+            return@LazyColumn
+        }
         val skipped = plan.steps.count { it.status == StepStatus.Skipped }
         item {
-            AiCard(plan.title, if (t.phase != TaskPhase.Completed) "In progress" else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
+            AiCard(plan.title, if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase != TaskPhase.Completed) "In progress" else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
                 if (t.mode == TaskMode.Diy) "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." else null,
                 tone = if (skipped > 0) Fo.Warning else Fo.Success) {
                 if (t.site != null) {
@@ -740,4 +770,18 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             }
         },
     )
+}
+
+@Composable
+private fun TaskSources(step: TaskStep) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    if (step.sourceFacts.isNotEmpty()) Expandable("Sources · guidance, not evidence") {
+        step.sourceFacts.forEach { fact ->
+            Text("${fact.provenance} · ${fact.statement}", style = MaterialTheme.typography.bodySmall)
+            Text("${fact.citation.documentTitle} · ${fact.citation.sourceLocator}", style = MaterialTheme.typography.bodySmall)
+            fact.citation.sourceUrl?.takeIf { com.lensqi.fieldops.ui.receipt.webOrigin(it) != null }?.let { url ->
+                TextButton(onClick = { runCatching { uri.openUri(url) } }) { Text("Open source") }
+            }
+        }
+    }
 }

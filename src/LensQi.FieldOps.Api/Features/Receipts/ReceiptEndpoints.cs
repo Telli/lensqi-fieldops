@@ -154,6 +154,37 @@ public static class ReceiptEndpoints
         app.MapGet("/v1/inspections/{id}/receipt.html", (string id, ReceiptService svc) =>
             svc.Current(id) is { } b ? Results.Content(ReceiptHtml.Render(b.Receipt), "text/html; charset=utf-8") : ApiResults.NotFound($"Inspection '{id}' not found"));
 
+        // Export the issued snapshot, including original evidence; never silently repair a damaged bundle.
+        app.MapGet("/v1/inspections/{id}/receipt.zip", (string id, ReceiptService svc, InspectionStore store) =>
+        {
+            if (svc.Current(id) is not { } bundle || store.Find(id) is not { } session)
+                return ApiResults.NotFound($"Inspection '{id}' not found");
+            if (!ReceiptVerifier.Verify(bundle.BundleDir).IsValid
+                || ReceiptService.BundleManifest(bundle.BundleDir) != bundle.Issue.ManifestSha256
+                || ReceiptService.AgainstRecord(bundle.BundleDir, ReceiptService.Expected(session.Events.Take(bundle.Issue.EventCount))).Any())
+                return ApiResults.Conflict("receipt_invalid", "The issued record failed its integrity check; review it before exporting");
+            var paths = new[] { "receipt.json", "receipt.html" }.Concat(bundle.Receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray();
+            return Results.Stream(async output =>
+            {
+                // Zip finalisation can write synchronously. Spool to a disposable file instead of buffering all
+                // evidence in RAM or enabling synchronous writes on the HTTP response.
+                await using var spool = new FileStream(Path.Combine(Path.GetTempPath(), "fieldproof-" + Guid.NewGuid().ToString("N") + ".zip"),
+                    FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 65536, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+                using (var zip = new System.IO.Compression.ZipArchive(spool, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+                {
+                    foreach (var path in paths)
+                    {
+                        var entry = zip.CreateEntry(path.Replace('\\', '/'));
+                        using var target = entry.Open();
+                        await using var source = File.OpenRead(Path.Combine(bundle.BundleDir, path));
+                        await source.CopyToAsync(target);
+                    }
+                }
+                spool.Position = 0;
+                await spool.CopyToAsync(output);
+            }, "application/zip", $"fieldproof-{id}-v{bundle.Issue.Number}.zip");
+        });
+
         app.MapGet("/v1/inspections/{id}/receipts", (string id, ReceiptService svc, InspectionStore store) =>
             store.Find(id) is null ? ApiResults.NotFound($"Inspection '{id}' not found") : Results.Ok(new { versions = svc.Issues(id) }));
 

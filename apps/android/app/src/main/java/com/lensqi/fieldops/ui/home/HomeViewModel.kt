@@ -51,6 +51,7 @@ class HomeViewModel @Inject constructor(
     private val cache: InspectionCache,
     private val snapshots: SnapshotStore,
 ) : ViewModel() {
+    private val serverBase = settings.currentBase().toString()
     val diagnostics = settings.diagnostics
     /** A failed preference write (DataStore throws IOException) is reported on Settings instead of crashing the app. */
     fun setDiagnostics(enabled: Boolean) = viewModelScope.launch {
@@ -118,15 +119,15 @@ class HomeViewModel @Inject constructor(
 
     fun onBaseChanged(value: String) = _state.update { it.copy(apiBase = value) }
 
-    fun saveBase() = viewModelScope.launch {
-        if (!settings.setApiBase(_state.value.apiBase)) _state.update { it.copy(error = "Not an http(s) address") } else refresh()
+    fun saveBase(onSaved: () -> Unit) = viewModelScope.launch {
+        if (!settings.setApiBase(_state.value.apiBase)) _state.update { it.copy(error = "Not an http(s) address") } else onSaved()
     }
 
     /** Creates the inspection on the server; the id always comes from the API. */
     fun create(fixtureId: String, assetId: String, onCreated: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(creating = assetId, error = null) }
         when (val r = apiCall { api.createInspection(UUID.randomUUID().toString(), CreateInspectionRequest(fixtureId, assetId)) }) {
-            is ApiOutcome.Ok -> { cache.put(r.value); onCreated(r.value.inspectionId) }
+            is ApiOutcome.Ok -> { cache.put(r.value, serverBase); onCreated(r.value.inspectionId) }
             is ApiOutcome.Rejected -> _state.update { it.copy(error = friendly(r.code, r.message)) }
             is ApiOutcome.Unreachable -> _state.update { it.copy(error = friendly("offline", r.message)) }
         }
@@ -135,8 +136,6 @@ class HomeViewModel @Inject constructor(
 
     fun assetName(assetId: String) = _state.value.fixtures.flatMap { it.assets }.firstOrNull { it.assetId == assetId }?.displayName
 
-    private companion object {
-        const val LIST_KEY = "inspections-list"
-        const val FIXTURES_KEY = "fixtures"
-    }
+    private val LIST_KEY get() = SnapshotStore.key(serverBase, "inspections-list")
+    private val FIXTURES_KEY get() = SnapshotStore.key(serverBase, "fixtures")
 }

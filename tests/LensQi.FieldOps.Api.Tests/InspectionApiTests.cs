@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using LensQi.FieldOps.Core.Inspection;
+
 using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Diagnostics;
 using LensQi.FieldOps.Meta.Segmentation;
@@ -294,5 +294,18 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.False(n.GetProperty("segmentation").GetProperty("matched").GetBoolean());
         Assert.Equal(JsonValueKind.Null, n.GetProperty("segmentation").GetProperty("maskSha256").ValueKind);
         Assert.Equal("NeedsEvidence", n.GetProperty("state").GetProperty("stage").GetString());
+    }
+
+    [Fact]
+    public async Task A_capture_review_never_investigates_a_different_latest_photo()
+    {
+        var id = await CreateInspection();
+        var a = await Upload(id);
+        await Upload(id, TestImages.Png(800, 600, 9));
+        var calls = _factory.FakeChat.Calls;
+        var response = await _client.PostAsync($"/v1/inspections/{id}/investigate?photoEvidenceId={a}", null);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("photo_superseded", (await Json(response)).GetProperty("code").GetString());
+        Assert.Equal(calls, _factory.FakeChat.Calls);
     }
 }

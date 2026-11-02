@@ -15,6 +15,13 @@ data class Snapshot<T>(val fetchedAt: String, val value: T)
  * to the server and never stands in for a decision: commands still need the API.
  */
 class SnapshotStore(private val dir: File, private val json: Json) {
+    companion object {
+        /** Never reuse pre-isolation snapshots: their server and inspection ownership cannot be trusted. */
+        fun key(server: String, kind: String, id: String = ""): String =
+            java.security.MessageDigest.getInstance("SHA-256").digest("$server|$kind|$id".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+    }
+    @Synchronized
     fun <T> save(key: String, serializer: KSerializer<T>, value: T, now: Instant = Instant.now()) {
         dir.mkdirs()
         val tmp = File(dir, "$key.json.tmp")
@@ -22,6 +29,7 @@ class SnapshotStore(private val dir: File, private val json: Json) {
         tmp.renameTo(File(dir, "$key.json"))
     }
 
+    @Synchronized
     fun <T> load(key: String, serializer: KSerializer<T>): Snapshot<T>? {
         val file = File(dir, "$key.json")
         if (!file.exists()) return null

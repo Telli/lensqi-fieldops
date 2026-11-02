@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.Flow
 /** UploadPhoto is inspection evidence; StepCheckPhoto is a guided-task step check (GT-R09.5). */
 enum class CommandKind { UploadPhoto, StepCheckPhoto }
 
-enum class CommandState { Pending, Rejected }
+enum class CommandState { Pending, Rejected, Uploaded }
 
 /**
  * One command waiting for the server, in capture order. The id is the Idempotency-Key, so a command replayed
@@ -39,6 +39,9 @@ data class PendingCommand(
     val errorCode: String? = null,
     val errorMessage: String? = null,
     val stepId: String? = null,
+    val serverBase: String? = null,
+    val resultEvidenceId: String? = null,
+    @ColumnInfo(defaultValue = "0") val afterRepair: Boolean = false,
 )
 
 @Dao
@@ -46,8 +49,8 @@ interface PendingCommandDao {
     @Insert
     suspend fun insert(command: PendingCommand)
 
-    @Query("SELECT * FROM pending_command WHERE inspectionId = :sessionId ORDER BY createdAtMillis")
-    fun observe(sessionId: String): Flow<List<PendingCommand>>
+    @Query("SELECT * FROM pending_command WHERE inspectionId = :sessionId AND (serverBase = :serverBase OR serverBase IS NULL) ORDER BY createdAtMillis")
+    fun observe(sessionId: String, serverBase: String): Flow<List<PendingCommand>>
 
     @Query("SELECT * FROM pending_command WHERE state = 'Pending' ORDER BY createdAtMillis LIMIT 1")
     suspend fun nextPending(): PendingCommand?
@@ -58,15 +61,30 @@ interface PendingCommandDao {
     @Query("UPDATE pending_command SET state = 'Rejected', errorCode = :code, errorMessage = :message WHERE id = :id")
     suspend fun reject(id: String, code: String, message: String)
 
+    @Query("UPDATE pending_command SET state = 'Uploaded', resultEvidenceId = :evidenceId WHERE id = :id")
+    suspend fun uploaded(id: String, evidenceId: String)
+
+    @Query("UPDATE pending_command SET state = 'Pending', serverBase = :serverBase, errorCode = NULL, errorMessage = NULL WHERE id = :id")
+    suspend fun retry(id: String, serverBase: String)
+
     @Query("DELETE FROM pending_command WHERE id = :id")
     suspend fun delete(id: String)
 }
 
-@Database(entities = [PendingCommand::class], version = 2, exportSchema = false)
+@Database(entities = [PendingCommand::class], version = 3, exportSchema = false)
 abstract class QueueDatabase : RoomDatabase() {
     abstract fun commands(): PendingCommandDao
 
     companion object {
+        val MIGRATION_2_3_SQL = listOf(
+            "ALTER TABLE pending_command ADD COLUMN serverBase TEXT",
+            "ALTER TABLE pending_command ADD COLUMN resultEvidenceId TEXT",
+            "ALTER TABLE pending_command ADD COLUMN afterRepair INTEGER NOT NULL DEFAULT 0",
+            "UPDATE pending_command SET state = 'Rejected', errorCode = 'server_unbound', errorMessage = 'Choose the original server before retrying this saved photo'"
+        )
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) = MIGRATION_2_3_SQL.forEach { db.execSQL(it) }
+        }
         /** Version 2 adds the step of a queued step check; queued inspection photos are kept. */
         const val MIGRATION_1_2_SQL = "ALTER TABLE pending_command ADD COLUMN stepId TEXT"
         val MIGRATION_1_2 = object : Migration(1, 2) {

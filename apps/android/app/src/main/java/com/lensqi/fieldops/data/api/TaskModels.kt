@@ -19,6 +19,7 @@ data class TaskStep(
     val check: TaskStepCheckSpec? = null, val status: StepStatus = StepStatus.Todo, val lastCheck: TaskStepCheck? = null,
     /** On a ladder or step-stool step: the part it reaches, so the phone can check whether it is needed. */
     val accessFor: String? = null, val skipReason: SkipReason? = null,
+    val sourceFacts: List<KnowledgeFact> = emptyList(),
 )
 
 /** Why a step was skipped, with the measured numbers when the phone took them. */

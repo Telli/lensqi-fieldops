@@ -23,7 +23,7 @@ import javax.inject.Singleton
 object StorageModule {
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): QueueDatabase =
-        Room.databaseBuilder(context, QueueDatabase::class.java, "fieldops-queue.db").addMigrations(QueueDatabase.MIGRATION_1_2).build()
+        Room.databaseBuilder(context, QueueDatabase::class.java, "fieldops-queue.db").addMigrations(QueueDatabase.MIGRATION_1_2, QueueDatabase.MIGRATION_2_3).build()
 
     @Provides @Singleton
     fun snapshots(@ApplicationContext context: Context, json: Json): SnapshotStore = SnapshotStore(File(context.filesDir, "snapshots"), json)
@@ -32,7 +32,7 @@ object StorageModule {
     fun commands(db: QueueDatabase): PendingCommandDao = db.commands()
 
     @Provides
-    fun stepChecks(queue: CommandQueue): StepCheckQueue = queue
+    fun stepChecks(queue: CommandQueue, settings: com.lensqi.fieldops.data.settings.SettingsStore): StepCheckQueue = queue.forServer(settings.currentBase().toString())
 
     @Provides
     fun speech(speaker: Speaker): SpeechOutput = speaker

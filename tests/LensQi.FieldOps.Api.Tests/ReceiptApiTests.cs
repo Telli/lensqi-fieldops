@@ -220,5 +220,33 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.False(altered.GetProperty("isValid").GetBoolean());
         Assert.Contains(altered.GetProperty("failures").EnumerateArray(), f => f.GetString()!.Contains(segId));
     }
+
+    [Fact]
+    public async Task Downloaded_bundle_contains_original_evidence_and_verifies_after_extraction()
+    {
+        var create = await _client.PostAsJsonAsync("/v1/inspections", new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("inspectionId").GetString()!;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(Png), "image", "original.png" } };
+        Assert.True((await _client.PostAsync($"/v1/inspections/{id}/observations", form)).IsSuccessStatusCode);
+        var knowledge = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/knowledge")).RootElement;
+        Assert.Equal("Synthetic", knowledge.GetProperty("originKind").GetString());
+        Assert.Equal(64, knowledge.GetProperty("packSha256").GetString()!.Length);
+        var response = await _client.GetAsync($"/v1/inspections/{id}/receipt.zip");
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("application/zip", response.Content.Headers.ContentType!.MediaType);
+        var destination = Path.Combine(Path.GetTempPath(), "fieldproof-export-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
+            using var zip = new System.IO.Compression.ZipArchive(stream);
+            System.IO.Compression.ZipFileExtensions.ExtractToDirectory(zip, destination);
+            Assert.True(ReceiptVerifier.Verify(destination).IsValid);
+            Assert.Equal(Png, File.ReadAllBytes(Directory.GetFiles(Path.Combine(destination, "artifacts")).Single()));
+            var issued = await Check(id);
+            File.WriteAllText(Path.Combine(issued.GetProperty("bundle").GetString()!, "receipt.json"), "{}");
+            Assert.Equal(System.Net.HttpStatusCode.Conflict, (await _client.GetAsync($"/v1/inspections/{id}/receipt.zip")).StatusCode);
+        }
+        finally { if (Directory.Exists(destination)) Directory.Delete(destination, true); }
+    }
 }
 
