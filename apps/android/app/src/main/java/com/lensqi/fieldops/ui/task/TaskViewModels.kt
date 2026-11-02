@@ -35,6 +35,8 @@ import java.util.UUID
 import javax.inject.Inject
 
 private fun text(value: String) = value.toRequestBody("text/plain".toMediaType())
+/** The server's EvidenceFileStore.MaxImageBytes. */
+internal const val MAX_UPLOAD_BYTES = 12L * 1024 * 1024
 private fun jpeg(name: String, bytes: ByteArray) = MultipartBody.Part.createFormData(name, "$name.jpg", bytes.toRequestBody("image/jpeg".toMediaType()))
 private fun key() = UUID.randomUUID().toString()
 
@@ -162,18 +164,22 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */
     fun check(stepId: String, photo: File) = viewModelScope.launch {
         _state.update { it.copy(busy = "check", error = null) }
-        // Preserve the original evidence; model input preparation belongs to the server.
-        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { photo.readBytes() }
+        // Preserve the original evidence; model input preparation belongs to the server. A photo over the server's upload
+        // limit would be refused outright, so it goes as an upright copy of at most 2400 px instead.
+        val bytes = try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { if (photo.length() <= MAX_UPLOAD_BYTES) photo.readBytes() else reduce(photo, 2400) }
+        } catch (e: java.io.IOException) { null }
+        if (bytes == null) { _state.update { it.copy(busy = null, error = "That photo couldn't be read. Take it again.") }; return@launch }
         val part = jpeg("image", bytes)
         val action = "check:$stepId:${key()}"
         val key = keyFor(action)
         val r = apiCall { api.checkStep(taskId, stepId, key, part) }
         if (r.retryable) {
             // GT-R09.5: offline, the photo waits on the phone under the same key and is checked when the network returns.
-            val jpeg = bytes
-            queue.enqueueStepCheck(taskId, stepId, key, jpeg)
+            val saved = try { queue.enqueueStepCheck(taskId, stepId, key, bytes); true }
+                catch (e: java.io.IOException) { false } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) { false }
             keys.remove(action)
-            _state.update { it.copy(busy = null, error = "The photo is saved on the phone and will be checked when the service is available.") }
+            _state.update { it.copy(busy = null, error = if (saved) "The photo is saved on the phone and will be checked when the service is available." else friendly("local_save_failed", "")) }
             return@launch
         }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }

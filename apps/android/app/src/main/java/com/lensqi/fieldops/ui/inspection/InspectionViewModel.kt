@@ -69,6 +69,7 @@ data class ReviewStep(val label: String, val state: StepState)
 
 /** The post-capture review: the frozen frame, what the server is doing with it, and what came back. */
 data class Review(
+    val commandId: String,
     val file: File,
     val origin: String,
     val afterRepair: Boolean,
@@ -79,6 +80,8 @@ data class Review(
     /** Whether LensQi saw the inspection's asset; null until it has looked. */
     val assetMatch: AssetMatch? = null,
     val done: Boolean = false,
+    /** The server's refusal of the upload, in the technician's words; the photo stays saved on the phone. */
+    val refused: String? = null,
 )
 
 data class InspectionUi(
@@ -139,8 +142,11 @@ class InspectionViewModel @Inject constructor(
     }
     private val local = MutableStateFlow(InspectionUi())
     private var running: Job? = null
+    // Main thread only. The review on screen follows one photo; each photo's analysis runs to the end even after its
+    // review is closed or a newer photo is taken, one at a time in capture order.
     private var reviewCommandId: String? = null
-    private var reviewJob: Job? = null
+    private val analyses = mutableMapOf<String, Job>()
+    private var lastAnalysis: Job? = null
 
     val state: StateFlow<InspectionUi> = combine(local, cache.observe(inspectionId, serverBase), queue.observe(inspectionId, serverBase)) { ui, view, pending ->
         ui.copy(view = view ?: ui.view, pending = pending)
@@ -158,8 +164,11 @@ class InspectionViewModel @Inject constructor(
         queue.requestSync()
         viewModelScope.launch {
             queue.observe(inspectionId, serverBase).collect { commands ->
-                if (reviewCommandId == null) commands.lastOrNull { it.kind == com.lensqi.fieldops.data.queue.CommandKind.UploadPhoto && it.state != com.lensqi.fieldops.data.queue.CommandState.Rejected }
-                    ?.let(::resumeReview)
+                val photos = commands.filter { it.kind == com.lensqi.fieldops.data.queue.CommandKind.UploadPhoto }
+                if (reviewCommandId == null) photos.lastOrNull { it.state != com.lensqi.fieldops.data.queue.CommandState.Rejected }?.let(::resumeReview)
+                // Photos uploaded while no screen followed them are on the server (digest checked) and only the newest is
+                // analysed, so their saved copies are removed instead of piling up.
+                photos.filter { it.state == com.lensqi.fieldops.data.queue.CommandState.Uploaded && it.id !in analyses }.forEach { queue.dismiss(it) }
             }
         }
         // Every server view is kept on the device so the screen still shows the last known state offline.
@@ -263,67 +272,83 @@ class InspectionViewModel @Inject constructor(
                 resumeReview(command)
             } catch (e: java.io.IOException) {
                 local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
+            } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) {
+                local.update { it.copy(error = "Only JPEG or PNG photos can be used as evidence. Choose another photo.") }
             }
         }
     }
 
     private fun resumeReview(command: PendingCommand) {
         if (reviewCommandId == command.id) return
-        reviewJob?.cancel()
         reviewCommandId = command.id
         val labels = if (command.afterRepair) listOf("Saving photo", "Comparing with before") else listOf("Saving photo", "Observing", "Matching asset", "Outlining parts")
-        local.update { it.copy(error = null, review = Review(File(requireNotNull(command.filePath)), command.source ?: "Phone", command.afterRepair,
+        local.update { it.copy(error = null, review = Review(command.id, File(requireNotNull(command.filePath)), command.source ?: "Phone", command.afterRepair,
             labels.map { label -> ReviewStep(label, StepState.Todo) }, awaitingUpload = true)) }
         queue.requestSync()
-        reviewJob = viewModelScope.launch {
-            val uploaded = queue.observe(inspectionId, serverBase).map { list -> list.firstOrNull { it.id == command.id } }
-                .first { it == null || it.state != com.lensqi.fieldops.data.queue.CommandState.Pending } ?: return@launch
-            if (uploaded.state == com.lensqi.fieldops.data.queue.CommandState.Rejected) {
-                local.update { it.copy(error = uploaded.errorMessage ?: "The photo was refused; it remains saved on this phone.") }
-                reviewUpdate { it.copy(awaitingUpload = false, done = true) }
+        analyze(command)
+    }
+
+    /** Waits for the server to have the photo, then lets Muse look and SAM outline; the review shows it only while it is open. */
+    private fun analyze(command: PendingCommand) {
+        if (command.id in analyses) return
+        val id = command.id
+        val previous = lastAnalysis
+        lastAnalysis = viewModelScope.launch {
+            previous?.join()
+            val uploaded = queue.observe(inspectionId, serverBase).map { list -> list.firstOrNull { it.id == id } }
+                .first { it == null || it.state != com.lensqi.fieldops.data.queue.CommandState.Pending }
+            if (uploaded == null || uploaded.state == com.lensqi.fieldops.data.queue.CommandState.Rejected) {
+                // Removed or refused: a retry starts a new analysis.
+                analyses.remove(id)
+                val refused = uploaded?.let { com.lensqi.fieldops.ui.common.friendly(it.errorCode ?: "unknown", it.errorMessage.orEmpty()) }
+                if (refused != null) local.update { it.copy(error = refused) }
+                reviewUpdate(id) { it.copy(awaitingUpload = false, done = true, refused = refused) }
                 return@launch
             }
             val photoId = requireNotNull(uploaded.resultEvidenceId)
-            reviewStep(0, StepState.Done)
-            reviewUpdate { it.copy(photoId = photoId, awaitingUpload = false) }
-            if (uploaded.afterRepair) reviewStep(1, StepState.Done)
+            reviewStep(id, 0, StepState.Done)
+            reviewUpdate(id) { it.copy(photoId = photoId, awaitingUpload = false) }
+            if (uploaded.afterRepair) reviewStep(id, 1, StepState.Done)
             else {
-                reviewStep(1, StepState.Doing)
-                val assessment = when (val r = apiCall { api.investigate(inspectionId, "review-${command.id}", photoId) }) {
+                reviewStep(id, 1, StepState.Doing)
+                val assessment = when (val r = apiCall { api.investigate(inspectionId, "review-$id", photoId) }) {
                     is ApiOutcome.Ok -> { cacheView(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
                     else -> { report(r); null }
                 }
-                reviewStep(1, if (assessment != null) StepState.Done else StepState.Skipped)
-                reviewUpdate { it.copy(assetSeen = assessment?.assetId, assetMatch = assetMatch(assessment, state.value.view?.assetId)) }
-                reviewStep(2, if (assessment != null) StepState.Done else StepState.Skipped)
+                reviewStep(id, 1, if (assessment != null) StepState.Done else StepState.Skipped)
+                reviewUpdate(id) { it.copy(assetSeen = assessment?.assetId, assetMatch = assetMatch(assessment, state.value.view?.assetId)) }
+                reviewStep(id, 2, if (assessment != null) StepState.Done else StepState.Skipped)
                 var failed = assessment == null
                 if (assessment != null) for (concept in outlineOrder(local.value.fixture, assessment)) {
-                    when (val r = apiCall { api.segment(inspectionId, "review-${command.id}-$concept", SegmentRequest(photoEvidenceId = photoId, concept = concept)) }) {
+                    when (val r = apiCall { api.segment(inspectionId, "review-$id-$concept", SegmentRequest(photoEvidenceId = photoId, concept = concept)) }) {
                         is ApiOutcome.Ok -> cacheView(r.value.state)
                         else -> { failed = true; report(r) }
                     }
                 }
-                reviewStep(3, if (failed) StepState.Skipped else StepState.Done)
+                reviewStep(id, 3, if (failed) StepState.Skipped else StepState.Done)
             }
             refresh().join()
-            reviewUpdate { it.copy(done = true) }
-        }
+            reviewUpdate(id) { it.copy(done = true) }
+            // Its review was closed while it ran: nothing shows the saved copy any more.
+            if (local.value.review?.commandId != id) queue.dismiss(uploaded)
+        }.also { analyses[id] = it }
     }
 
     fun retryUpload(command: PendingCommand) = viewModelScope.launch { reviewCommandId = null; queue.retry(command, serverBase) }
     fun removeUpload(command: PendingCommand) = viewModelScope.launch { queue.dismiss(command) }
     fun closeReview() {
-        val closingId = reviewCommandId
-        reviewJob?.cancel()
+        val closing = local.value.review?.commandId ?: return
         local.update { it.copy(review = null) }
+        // Keep reviewCommandId until another capture so the closed review is not reopened. An unfinished analysis keeps
+        // running and removes its own saved copy when it ends.
+        if (analyses[closing]?.isActive == true) return
         viewModelScope.launch {
-            queue.observe(inspectionId, serverBase).first().firstOrNull { it.id == closingId && it.state == com.lensqi.fieldops.data.queue.CommandState.Uploaded }?.let { queue.dismiss(it) }
-            // Keep the ID until another capture. Pending records recover on the next screen opening.
+            queue.observe(inspectionId, serverBase).first().firstOrNull { it.id == closing && it.state == com.lensqi.fieldops.data.queue.CommandState.Uploaded }?.let { queue.dismiss(it) }
         }
     }
 
-    private fun reviewUpdate(change: (Review) -> Review) = local.update { ui -> ui.copy(review = ui.review?.let(change)) }
-    private fun reviewStep(index: Int, to: StepState) = reviewUpdate { r -> r.copy(steps = r.steps.mapIndexed { i, st -> if (i == index) st.copy(state = to) else st }) }
+    private fun reviewUpdate(id: String, change: (Review) -> Review) = local.update { ui -> ui.copy(review = ui.review?.let { if (it.commandId == id) change(it) else it }) }
+    private fun reviewStep(id: String, index: Int, to: StepState) = reviewUpdate(id) { r -> r.copy(steps = r.steps.mapIndexed { i, st -> if (i == index) st.copy(state = to) else st }) }
 
     fun onConceptChanged(value: String) = local.update { it.copy(concept = value) }
     fun onWorkOrderChanged(value: String) = local.update { it.copy(workOrderText = value) }

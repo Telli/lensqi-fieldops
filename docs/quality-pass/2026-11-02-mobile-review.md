@@ -30,7 +30,7 @@ Existing baseline was preserved. Verbatim current gate summary:
 
 Fresh release failure: `NonNullableMutableLiveDataDetector` throws `IncompatibleClassChangeError` because `KaCallableMemberCall` is a class where an interface was expected. `BUILD FAILED in 8s`; 79 actionable tasks, 11 executed and 68 up-to-date. Packaging produced an unsigned APK before validation failed; that artifact is not a successful release gate.
 
-Local evidence: [Android gate results](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/.quality-pass/logs/20261102-102120-6b45399c/results.json), [API reproduction harness](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/.quality-pass/mobile-repro/Program.cs), [reproduction output](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/.quality-pass/mobile-repro/output.log), [finding state](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/.quality-pass/state.json).
+Local evidence, kept on the review machine and not in the repository: Android gate results (`.quality-pass/logs/20261102-102120-6b45399c/results.json`, local only), API reproduction harness (`.quality-pass/mobile-repro/Program.cs`, local only), reproduction output (`.quality-pass/mobile-repro/output.log`, local only), finding state (`.quality-pass/state.json`, local only).
 
 ## Feature completeness
 
@@ -53,7 +53,7 @@ Local evidence: [Android gate results](/Users/telli/Downloads/LensQi_FieldOps_Ve
 | Production access and lifecycle | Outside hackathon completeness | Authentication, organization/record ownership, role checks, retention/deletion and operational deployment |
 | iOS | No implementation found | Not required by the Android-focused product scope |
 
-Outstanding acceptance is supported by [S23 run 2](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/docs/evidence/tasks/s23-phone-run-2/run.json) (silent phone, no demonstrated command/shutter check), [Android acceptance notes](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/docs/evidence/android/ux-polish/README.md) and [mock-glasses evidence](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/docs/evidence/live-glasses/README.md). Older documentation incorrectly calls some now-built work missing: offline step-check queue, task glasses integration and speech pacing all exist.
+Outstanding acceptance is supported by [S23 run 2](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/docs/evidence/tasks/s23-phone-run-2/run.json) (silent phone, no demonstrated command/shutter check), [Android acceptance notes](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/docs/evidence/android/ux-polish/README.md) and [mock-glasses evidence](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/docs/evidence/live-glasses/README.md). Older documentation incorrectly calls some now-built work missing: offline step-check queue, task glasses integration and speech pacing all exist.
 
 ## Verified findings, ranked
 
@@ -61,20 +61,20 @@ Outstanding acceptance is supported by [S23 run 2](/Users/telli/Downloads/LensQi
 
 | ID | Priority | Finding | Primary evidence |
 |---|---|---|---|
-| QP-a44aed57dc5c | High | Restricted photo checks bypass the safety guard | [TaskEndpoints.cs](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/src/LensQi.FieldOps.Api/Features/Tasks/TaskEndpoints.cs:183) |
-| QP-fa3264f16e22 | High | Offline inspection snapshots collide across inspections | [InspectionViewModel.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt:368) |
-| QP-024e3ecf9dc5 | High | Changing servers redirects pending photos to the new server | [QueueDb.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/QueueDb.kt:27) |
-| QP-4f0e419229ef | High | Retaking a step-check photo can assess the previous image | [TaskViewModels.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskViewModels.kt:166) |
-| QP-05140e98a2a2 | High | Inspection review can mix two different captures | [InspectionViewModel.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt:259) |
-| QP-0a1a91dea4a2 | High | Release and lint validation fail in the current toolchain | [libs.versions.toml](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/gradle/libs.versions.toml:2) |
-| QP-f77d1b51d61a | Medium | Offline capture review does not resume after upload | [InspectionViewModel.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt:263) |
-| QP-599ba70a979b | Medium | Older active and stopped tasks are unreachable | [TaskScreens.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskScreens.kt:195) |
-| QP-04012496d74c | Medium | Existing asset screens have no navigation entry | [FieldOpsNavHost.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/FieldOpsNavHost.kt:160) |
-| QP-758c5ec1ef86 | Medium | Switching Technician to DIY submits a hidden site selection | [TaskScreens.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskScreens.kt:274) |
-| QP-c129048cfe95 | Medium | Step-check records lose original image resolution | [TaskViewModels.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskViewModels.kt:164) |
-| QP-c9f05bf0b68c | Medium | Knowledge sources omit revision and provenance details | [InspectionScreen.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionScreen.kt:644) |
-| QP-2596be81c153 | Medium | Receipt origin check permits unrelated lookalike hosts | [ReceiptScreen.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/receipt/ReceiptScreen.kt:107) |
-| QP-7ed4a22d5dc8 | Low | Superseded SegmentationOverlay has no callers | [SegmentationOverlay.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/SegmentationOverlay.kt:23) |
+| QP-a44aed57dc5c | High | Restricted photo checks bypass the safety guard | [TaskEndpoints.cs](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/src/LensQi.FieldOps.Api/Features/Tasks/TaskEndpoints.cs#L183) |
+| QP-fa3264f16e22 | High | Offline inspection snapshots collide across inspections | [InspectionViewModel.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt#L368) |
+| QP-024e3ecf9dc5 | High | Changing servers redirects pending photos to the new server | [QueueDb.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/QueueDb.kt#L27) |
+| QP-4f0e419229ef | High | Retaking a step-check photo can assess the previous image | [TaskViewModels.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskViewModels.kt#L166) |
+| QP-05140e98a2a2 | High | Inspection review can mix two different captures | [InspectionViewModel.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt#L259) |
+| QP-0a1a91dea4a2 | High | Release and lint validation fail in the current toolchain | [libs.versions.toml](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/gradle/libs.versions.toml#L2) |
+| QP-f77d1b51d61a | Medium | Offline capture review does not resume after upload | [InspectionViewModel.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionViewModel.kt#L263) |
+| QP-599ba70a979b | Medium | Older active and stopped tasks are unreachable | [TaskScreens.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskScreens.kt#L195) |
+| QP-04012496d74c | Medium | Existing asset screens have no navigation entry | [FieldOpsNavHost.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/FieldOpsNavHost.kt#L160) |
+| QP-758c5ec1ef86 | Medium | Switching Technician to DIY submits a hidden site selection | [TaskScreens.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskScreens.kt#L274) |
+| QP-c129048cfe95 | Medium | Step-check records lose original image resolution | [TaskViewModels.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/task/TaskViewModels.kt#L164) |
+| QP-c9f05bf0b68c | Medium | Knowledge sources omit revision and provenance details | [InspectionScreen.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/InspectionScreen.kt#L644) |
+| QP-2596be81c153 | Medium | Receipt origin check permits unrelated lookalike hosts | [ReceiptScreen.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/receipt/ReceiptScreen.kt#L107) |
+| QP-7ed4a22d5dc8 | Low | Superseded SegmentationOverlay has no callers | [SegmentationOverlay.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/ui/inspection/SegmentationOverlay.kt#L23) |
 
 ### QP-a44aed57dc5c — Restricted photo checks bypass the safety guard
 
@@ -246,8 +246,8 @@ Repeatable check: `rg -n SegmentationOverlay apps/android --glob '!**/build/**' 
 
 ## Suspected risks — outside the confirmed fix plan
 
-- **QP-aa7126a1baee: Queue mutex is per instance, allowing competing drainers.** @Singleton decorates StepCheckQueue rather than concrete CommandQueue. Generated Hilt commandQueue() returns new CommandQueue; each has a private Mutex. Multiple instances are confirmed in generated DI. A user-visible duplicate-model-work, ordering or data-loss outcome was not reproduced. Next validation: Run simultaneous foreground and WorkManager drains; inspect generated provider and measure duplicate sends/file lifetime. See [CommandQueue.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/CommandQueue.kt:48).
-- **QP-3101167c9806: Capture persistence runs blocking work on the UI coroutine.** viewModelScope.launch calls enqueuePhoto without dispatcher change; before the first suspension it reads/copies the full file and hashes it. Step-check persistence and snapshot saves have similar synchronous disk work. Dispatch/call path confirmed; no frame-time, ANR, latency or battery measurement was made. User-visible performance impact remains suspected. Next validation: Record a system trace or StrictMode disk violations while capturing a large real-phone JPEG. See [CommandQueue.kt](/Users/telli/Downloads/LensQi_FieldOps_Vendor_Knowledge_Kiro_Kit/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/CommandQueue.kt:69).
+- **QP-aa7126a1baee: Queue mutex is per instance, allowing competing drainers.** @Singleton decorates StepCheckQueue rather than concrete CommandQueue. Generated Hilt commandQueue() returns new CommandQueue; each has a private Mutex. Multiple instances are confirmed in generated DI. A user-visible duplicate-model-work, ordering or data-loss outcome was not reproduced. Next validation: Run simultaneous foreground and WorkManager drains; inspect generated provider and measure duplicate sends/file lifetime. See [CommandQueue.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/CommandQueue.kt#L48).
+- **QP-3101167c9806: Capture persistence runs blocking work on the UI coroutine.** viewModelScope.launch calls enqueuePhoto without dispatcher change; before the first suspension it reads/copies the full file and hashes it. Step-check persistence and snapshot saves have similar synchronous disk work. Dispatch/call path confirmed; no frame-time, ANR, latency or battery measurement was made. User-visible performance impact remains suspected. Next validation: Record a system trace or StrictMode disk violations while capturing a large real-phone JPEG. See [CommandQueue.kt](https://github.com/Telli/lensqi-fieldops/blob/fdb0db5/apps/android/app/src/main/java/com/lensqi/fieldops/data/queue/CommandQueue.kt#L69).
 
 ## Rejected and already-resolved claims
 
@@ -294,7 +294,7 @@ Measured existing APKs: debug **105,307,405 bytes (100.43 MiB)**; unsigned relea
 5. Run a physical-phone acceptance session: audible step cautions, voice command, full-resolution shutter step check, ARCore/no-depth fallback, tracking loss/recovery, offline restart/reconnect, and a technician task through failed then successful FieldProof with provenance-labelled receipt. Test real glasses only if that capability will be claimed.
 6. Profile the suspected UI-thread persistence hotspot and reproduce competing queue drains before claiming their user-visible impact. Optional overlay cleanup and mechanical screen splits come last.
 
-Application changes are intentionally outside this review. The requested review is complete; no implementation approval has been recorded. The review-only skill says, “Produce the ranked, evidence-backed report and stop. No code changes.” [Review skill](/Users/telli/.codex/plugins/cache/quality-pass-marketplace/quality-pass/1.1.0/skills/quality-pass-review/SKILL.md).
+Application changes are intentionally outside this review. The requested review is complete; no implementation approval has been recorded. The review-only skill says, “Produce the ranked, evidence-backed report and stop. No code changes.” the quality-pass review skill (a local Codex plugin).
 
 Approve to continue with `quality-pass-execute`.
 

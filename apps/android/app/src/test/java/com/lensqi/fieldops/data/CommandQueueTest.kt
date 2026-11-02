@@ -17,7 +17,7 @@ class MemoryCommands : PendingCommandDao {
     val rows = MutableStateFlow<List<PendingCommand>>(emptyList())
     override suspend fun insert(command: PendingCommand) { rows.update { it + command } }
     override fun observe(sessionId: String, serverBase: String) = rows.map { it.filter { c -> c.sessionId == sessionId && (c.serverBase == serverBase || c.serverBase == null) } }
-    override suspend fun nextPending() = rows.value.firstOrNull { it.state == CommandState.Pending }
+    override suspend fun nextPending(skip: List<String>) = rows.value.firstOrNull { it.state == CommandState.Pending && it.serverBase !in skip }
     private fun change(id: String, fn: (PendingCommand) -> PendingCommand) { rows.update { it.map { c -> if(c.id == id) fn(c) else c } } }
     override suspend fun countAttempt(id: String) = change(id) { it.copy(attempts = it.attempts + 1) }
     override suspend fun reject(id: String, code: String, message: String) = change(id) { it.copy(state = CommandState.Rejected, errorCode = code, errorMessage = message) }
@@ -56,6 +56,36 @@ class CommandQueueTest {
             restarted.dismiss(result)
             assertTrue(dao.rows.value.isEmpty()); assertFalse(File(saved.filePath).exists())
         } }
+    }
+    @Test fun `an unreachable server does not hold up photos for another server`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { a -> MockWebServer().use { b ->
+            a.start(); b.start()
+            val dao = MemoryCommands()
+            val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val shot = File(dir, "shot.jpg").apply { writeBytes(original) }
+            val first = queue.enqueuePhoto("I-1", shot, "Phone", a.url("/").toString())
+            val second = queue.enqueuePhoto("I-1", shot, "Phone", a.url("/").toString())
+            val other = queue.enqueuePhoto("I-2", shot, "Phone", b.url("/").toString())
+            a.enqueue(MockResponse().setResponseCode(503).setBody("{}"))
+            b.enqueue(MockResponse().setBody(Recordings.text("observation-initial").replace(Regex("\"sha256\"\\s*:\\s*\"[^\"]+\""), "\"sha256\":\"${CommandQueue.sha256(original)}\"")))
+            assertEquals(DrainResult.Offline, queue.drain())
+            // A was asked once and its later photo kept its place behind the first; B's photo went through.
+            assertEquals(1, a.requestCount)
+            assertEquals(first.id, a.takeRequest().getHeader("Idempotency-Key"))
+            assertEquals(listOf(CommandState.Pending, CommandState.Pending, CommandState.Uploaded), listOf(first, second, other).map { c -> dao.rows.value.single { it.id == c.id }.state })
+        } }
+    }
+    @Test fun `a temporary shutter file is deleted once its saved copy exists`(@TempDir dir: File) = runBlocking {
+        val scratch = File(dir, "cache").apply { mkdirs() }
+        val dao = MemoryCommands()
+        val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache(), scratch) {}
+        val shutter = File(scratch, "capture.jpg").apply { writeBytes(original) }
+        val kept = File(dir, "picked.jpg").apply { writeBytes(original) }
+        val saved = queue.enqueuePhoto("I-1", shutter, "Phone", "http://127.0.0.1:1/")
+        queue.enqueuePhoto("I-1", kept, "Phone", "http://127.0.0.1:1/")
+        assertFalse(shutter.exists())
+        assertArrayEquals(original, File(saved.filePath!!).readBytes())
+        assertTrue(kept.exists())
     }
     @Test fun `refused and legacy photos stay saved until an explicit choice`(@TempDir dir: File) = runBlocking {
         MockWebServer().use { server ->

@@ -243,6 +243,13 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
             Assert.True(ReceiptVerifier.Verify(destination).IsValid);
             Assert.Equal(Png, File.ReadAllBytes(Directory.GetFiles(Path.Combine(destination, "artifacts")).Single()));
             var issued = await Check(id);
+            var html = Path.Combine(issued.GetProperty("bundle").GetString()!, "receipt.html");
+            var page = File.ReadAllText(html);
+            File.WriteAllText(html, page.Replace("</body>", "<p>Verified complete</p></body>"));
+            Assert.Contains(issued.GetProperty("issued").GetProperty("manifestSha256").GetString()!, File.ReadAllText(html));
+            Assert.Equal(System.Net.HttpStatusCode.Conflict, (await _client.GetAsync($"/v1/inspections/{id}/receipt.zip")).StatusCode);
+            File.WriteAllText(html, page);
+            Assert.True((await _client.GetAsync($"/v1/inspections/{id}/receipt.zip")).IsSuccessStatusCode);
             File.WriteAllText(Path.Combine(issued.GetProperty("bundle").GetString()!, "receipt.json"), "{}");
             Assert.Equal(System.Net.HttpStatusCode.Conflict, (await _client.GetAsync($"/v1/inspections/{id}/receipt.zip")).StatusCode);
         }
