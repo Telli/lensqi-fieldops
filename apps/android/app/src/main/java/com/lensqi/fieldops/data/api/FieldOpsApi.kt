@@ -59,6 +59,22 @@ interface FieldOpsApi {
     @GET("v1/inspections/{id}/knowledge")
     suspend fun knowledge(@Path("id") id: String): KnowledgeResponse
 
+    /** Grounded advice from the documentation for this unit; the server validates the proposal and records it either way. */
+    @POST("v1/inspections/{id}/knowledge/reason")
+    suspend fun reason(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: ReasonRequest): ReasonResponse
+
+    /** Registered predictions with the server's scores. Read-only calibration; never a verification input. */
+    @GET("v1/inspections/{id}/predictions")
+    suspend fun predictions(@Path("id") id: String): PredictionsResponse
+
+    /** The technician cannot safely take the requested view: the server closes the inspection as inconclusive and records why. */
+    @POST("v1/inspections/{id}/decline-view")
+    suspend fun declineView(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String): InspectionView
+
+    /** The site record, every asset's documentation and the open inspections of one fixture, for work out of signal. */
+    @GET("v1/fixtures/{fixtureId}/pack")
+    suspend fun sitePack(@Path("fixtureId") fixtureId: String): SitePack
+
     @POST("v1/inspections/{id}/diagnostics/{diagnosticId}:run")
     suspend fun runDiagnostic(@Path("id") id: String, @Path("diagnosticId") diagnosticId: String, @Header(IDEMPOTENCY_KEY) key: String): DiagnosticRunResponse
 

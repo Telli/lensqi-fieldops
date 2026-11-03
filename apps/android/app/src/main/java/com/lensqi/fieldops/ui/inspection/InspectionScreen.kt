@@ -130,6 +130,13 @@ import com.lensqi.fieldops.ui.common.featureName
 import com.lensqi.fieldops.ui.common.isPostRepairItem
 import com.lensqi.fieldops.ui.common.observationLabel
 import com.lensqi.fieldops.ui.common.plainReason
+import com.lensqi.fieldops.ui.common.excludedReason
+import com.lensqi.fieldops.ui.common.nextActionText
+import com.lensqi.fieldops.ui.common.predictionOutcome
+import com.lensqi.fieldops.ui.common.probeValue
+import com.lensqi.fieldops.data.api.PredictionRow
+import com.lensqi.fieldops.data.api.ReasonResponse
+import androidx.compose.material3.AlertDialog
 import com.lensqi.fieldops.ui.common.sentence
 import com.lensqi.fieldops.ui.common.stageLabel
 import com.lensqi.fieldops.ui.common.stageState
@@ -246,9 +253,11 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                 modifier = Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.65f)).padding(horizontal = 10.dp, vertical = 4.dp))
         }
     }
-    // One AI card: what LensQi sees, the next move, the single action.
+    // One AI card: what LensQi sees, the next move, the single action. A closed inspection shows how it closed instead.
     item {
-        AiCard(aiSummary(view, a), move?.title, move?.hint) {
+        if (view.stage == InspectionStage.Inconclusive) AiCard(plainReason(s.stageReason ?: "The inspection is closed (Inconclusive)"), "Inspection closed · inconclusive",
+            "Nothing is marked as a fault or as repaired. The record keeps how it closed.")
+        else AiCard(aiSummary(view, a), move?.title, move?.hint) {
             when (move?.kind) {
                 MoveKind.Scan -> {
                     PrimaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
@@ -271,6 +280,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                 }
                 else -> {}
             }
+            if (view.stage == InspectionStage.NeedsEvidence) DeclineView(s, vm)
         }
     }
     item { ProgressSegments(progressStep(view, a)) }
@@ -285,6 +295,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
         }
     }
     item { Expandable("Equipment check") { EquipmentCheck(s, vm, view) } }
+    item { GroundedAdvisor(s, vm, view, onCapture) }
     if (view.photos.isNotEmpty()) item {
         Expandable("Photos · ${view.photos.size}") {
             PhotoStrip(s, vm)
@@ -393,6 +404,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
         }
     }
     item { ProgressSegments(if (attempt?.decision?.result == VerificationResult.Verified) 4 else card.step, verifySteps) }
+    item { PredictionPanel(s, vm, view) }
     if (attempt == null && accepted != null && (card == VerifyCard.Confirm || card == VerifyCard.Run)) item { Expandable("Your review · ${required.size} items") { reviewRows() } }
     if (s.history.isNotEmpty()) item {
         Expandable("Attempts · ${s.history.size} kept in the inspection record") {
@@ -756,6 +768,157 @@ private fun Knowledge(s: InspectionUi) {
                 }
             }
         }
+        // Facts the server kept away from this unit, each with its reason: the pack may describe other firmware or hardware.
+        if (k.excluded.isNotEmpty()) Expandable("Not applied to this unit · ${k.excluded.size}") {
+            Muted("The server did not apply these to this equipment. They are never used for advice or predictions here.")
+            k.excluded.forEach { x ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Dot(Fo.Warning)
+                    Text(x.factId, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Tag(x.verdict.uppercase(), Fo.Muted)
+                }
+                Muted(excludedReason(x.reason))
+            }
+            TechDetails(k.excluded.map { it.factId to it.reason })
+        }
+    }
+}
+
+/**
+ * Grounded advice from the unit's documentation. The server resolves the facts, asks the model, validates the proposal and
+ * records it, accepted or refused; the phone shows the hypothesis as written and the facts it rests on with their sources.
+ * Advice is inferred: a suggestion, never evidence, and never a stage.
+ */
+@Composable
+private fun GroundedAdvisor(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit) {
+    val k = s.knowledge
+    val closed = view.stage == InspectionStage.VerifiedComplete || view.stage == InspectionStage.Inconclusive
+    Expandable("Grounded advisor") {
+        Muted("Advice grounded only in this unit's documentation. The server checks every suggestion against the sources and records it, accepted or refused.")
+        when {
+            k == null -> Muted(if (s.viewCachedAt != null) "Documentation isn't available offline for this inspection." else "Documentation hasn't loaded yet.")
+            k.packId == null -> Muted("No documentation pack for this equipment, so there is nothing to ground advice in")
+            else -> {
+                // Starts blank: what is sent is recorded as the technician's observation, so LensQi's own reading of the photo
+                // is never sent back as theirs, and the advisor is never grounded on the model's earlier words.
+                val draft = s.observationText.orEmpty()
+                Field(draft, vm::onObservationChanged, "What you observe, in your own words")
+                PrimaryButton("Ask grounded advisor", { vm.askAdvisor(draft) }, Modifier.fillMaxWidth(),
+                    enabled = s.busy == null && !closed && draft.isNotBlank(), busy = s.busy?.startsWith("Asking the grounded advisor") == true, icon = Icons.Outlined.AutoAwesome)
+                if (closed) Muted("The inspection is closed; the advisor takes no more questions.")
+                if (s.knowledgeCachedAt != null) Muted("The documentation shown is the copy saved on this phone; asking needs a connection.")
+            }
+        }
+        s.advice?.let { AdvisorAnswer(it, s, vm, onCapture) }
+    }
+}
+
+
+@Composable
+private fun AdvisorAnswer(r: ReasonResponse, s: InspectionUi, vm: InspectionViewModel, onCapture: () -> Unit) {
+    val again = if (r.replayed) " (same answer as before)" else ""
+    val p = r.proposal
+    if (r.accepted && p != null) {
+        val facts = s.knowledge?.facts.orEmpty()
+        AiCard(p.hypothesis, "Inferred · AI suggestion, not evidence$again", nextActionText(p.nextAction), verbatim = true) {
+            if (p.usedFactIds.isNotEmpty()) {
+                Text("Based on", style = Eyebrow, color = Fo.Muted)
+                p.usedFactIds.forEach { id ->
+                    val f = facts.firstOrNull { it.factId == id }
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Dot(Fo.Primary, 5)
+                        Column { Text(f?.statement ?: id, fontSize = 13.sp); Muted(f?.citation?.documentTitle ?: "Fact $id") }
+                    }
+                }
+            }
+            p.requestedVisualEvidence?.takeIf { it.isNotBlank() }?.let { asked ->
+                Text("LensQi asks for this view: $asked", fontSize = 13.sp)
+                SecondaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+            }
+            p.proposedDiagnosticId?.let { id ->
+                val approved = s.fixture?.diagnostics?.any { it.diagnosticId == id } == true
+                Text("Proposed check: $id", fontSize = 13.sp)
+                if (approved) SecondaryButton("Run the check", { vm.runDiagnostic(id) }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.PlayArrow)
+                else Muted("This check isn't on the site's approved list for the equipment, so it can't run from here.")
+            }
+            (r.prediction?.predictedValue ?: p.prediction?.predictedValue)?.let { v ->
+                Muted("LensQi predicts the check will report ${probeValue(v)} · recorded before the check runs")
+            }
+            Muted("A suggestion from the documentation, not evidence. Your review and the equipment check decide.")
+            TechDetails(listOf("Proposal" to r.proposalId, "Model" to r.modelId, "Next action" to p.nextAction.name) + listOfNotNull(r.prediction?.let { "Prediction" to it.predictionId }))
+        }
+    } else {
+        Panel(border = Fo.Warning.copy(alpha = 0.45f), background = Fo.Warning.copy(alpha = 0.06f)) {
+            Text("The server refused LensQi's suggestion and recorded why$again", fontWeight = FontWeight.Medium, color = Fo.Warning)
+            r.rejections.forEach { x -> Muted("${x.code} · ${x.message}") }
+            if (r.rejections.isEmpty()) Muted("No reason was given.")
+            Muted("Nothing it asked for was run.")
+        }
+    }
+}
+
+/** The technician cannot safely take the view LensQi asked for; the server closes the inspection as inconclusive and records the decline. */
+@Composable
+private fun DeclineView(s: InspectionUi, vm: InspectionViewModel) {
+    var confirm by remember { mutableStateOf(false) }
+    TextButton(onClick = { confirm = true }, enabled = s.busy == null) { Text("I can't safely get this view", color = Fo.Muted) }
+    if (confirm) AlertDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text("Close this inspection as inconclusive?") },
+        text = { Text("LensQi asked for a view you can't safely capture. The inspection closes as inconclusive: nothing is marked as a fault or as repaired, and the record keeps that the view was declined.") },
+        confirmButton = { TextButton(onClick = { confirm = false; vm.declineView() }) { Text("Close as inconclusive") } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Keep going") } },
+    )
+}
+
+private fun instant(iso: String?): java.time.Instant? = iso?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+
+/**
+ * The model says what the equipment check will report before it runs (inferred); the check then measures it and the server
+ * scores the prediction. Calibration only: the measurement decides verification, never the prediction.
+ */
+@Composable
+private fun PredictionPanel(s: InspectionUi, vm: InspectionViewModel, view: InspectionView) {
+    val since = instant(view.repairClaimedAt)
+    val registered: PredictionRow? = s.predictions?.predictions?.filter { p -> since != null && instant(p.registeredAt)?.let { !it.isBefore(since) } == true }?.maxByOrNull { it.registeredAt }
+    val canAsk = view.currentClaimId != null && view.stage != InspectionStage.VerifiedComplete && view.stage != InspectionStage.Inconclusive
+    if (registered == null && !canAsk) return
+    val (state, label) = predictionOutcome(registered?.outcome)
+    Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Outlined.AutoAwesome, null, tint = Fo.Primary, modifier = Modifier.size(14.dp))
+                Text("Prediction before the check", style = Eyebrow, color = Fo.Muted)
+            }
+            if (registered != null) EvidenceBadge(state, label)
+        }
+        if (s.predictionsCachedAt != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Tag("CACHED", Fo.Warning); Muted("Copy saved on this phone at ${whenText(s.predictionsCachedAt)}")
+        }
+        if (registered != null) {
+            val scored = registered.outcome != "Pending"
+            val measuredTone = when (registered.outcome) { "Confirmed" -> Fo.Success; "Falsified" -> Fo.Failure; else -> Fo.Border }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f).background(Fo.Primary.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(1.dp, Fo.Primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).padding(10.dp)) {
+                    Muted("LensQi predicted · inferred")
+                    Text(probeValue(registered.predictedValue), fontWeight = FontWeight.Medium)
+                }
+                Column(Modifier.weight(1f).background(if (scored) measuredTone.copy(alpha = 0.06f) else Color.Transparent, RoundedCornerShape(12.dp))
+                    .border(1.dp, if (scored) measuredTone.copy(alpha = 0.4f) else Fo.Border, RoundedCornerShape(12.dp)).padding(10.dp)) {
+                    Muted("Check measured · measured")
+                    Text(if (scored) probeValue(registered.measuredValue) else "not run yet", fontWeight = FontWeight.Medium)
+                }
+            }
+            registered.scoredAt?.let { Muted("Scored by the server · ${whenText(it)}") }
+        } else {
+            val refused = s.refusedCodes
+            Muted(if (refused != null) "The server refused LensQi's last suggestion (${refused.joinToString(", ")}). It ran nothing and the refusal is in the record."
+                else "Ask LensQi to say what the equipment check will report, before it runs. It's recorded first, then scored against the measurement.")
+            val claim = s.claimDescription ?: s.claimText
+            SecondaryButton("Ask LensQi to predict the check", { vm.askAdvisor("Technician's repair claim: $claim. Predict what the approved equipment check will report.") },
+                Modifier.fillMaxWidth(), enabled = s.busy == null && s.viewCachedAt == null, icon = Icons.Outlined.AutoAwesome)
+        }
+        Muted("A prediction is model calibration. The measurement decides verification, never the prediction.")
     }
 }
 

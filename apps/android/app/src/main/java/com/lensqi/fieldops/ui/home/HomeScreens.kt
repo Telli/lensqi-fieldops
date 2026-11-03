@@ -43,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Wifi
@@ -290,6 +291,30 @@ fun StartScreen(vm: HomeViewModel, onScan: () -> Unit = {}, onCreated: (String) 
     }
 }
 
+/**
+ * One fixture's site pack: the site record, every asset's documentation and the open inspections, kept on this phone for
+ * work out of signal. The pack is a server response saved as-is; photos are never part of it. Online only to fetch.
+ */
+@Composable
+fun SitePackRow(s: HomeState, vm: HomeViewModel, fixtureId: String) {
+    val receipt = s.sitePacks[fixtureId]
+    val downloading = s.downloadingPack == fixtureId
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SecondaryButton(if (receipt != null) "Download site pack again" else "Download site pack", { vm.downloadSitePack(fixtureId) }, Modifier.fillMaxWidth(),
+            enabled = s.reachable == true && s.downloadingPack == null, icon = Icons.Outlined.CloudDownload)
+        Text(
+            when {
+                downloading -> "Downloading…"
+                receipt != null -> "Site pack saved ${whenText(receipt.savedAt)} · revision ${receipt.fixtureRevision} · ${receipt.assets} asset${if (receipt.assets == 1) "" else "s"} · ${receipt.open} open inspection${if (receipt.open == 1) "" else "s"}"
+                s.reachable != true -> "Needs a connection to download the site pack."
+                else -> "No site pack saved on this phone yet."
+            },
+            style = MaterialTheme.typography.bodySmall, color = if (receipt != null && !downloading) Fo.Success else Fo.Muted,
+        )
+        Text("Keeps the site record, the vendor documentation for every asset and the open inspections on this phone for work out of signal. Photos are not included.", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 /** The assets on screen are the copy saved on this phone: the server did not answer for them this time. */
 @Composable
 private fun AssetsCachedNote(fetchedAt: String) = Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,8 +328,11 @@ fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Assets", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
         s.fixturesCachedAt?.let { at -> item { AssetsCachedNote(at) } }
+        s.packNotice?.let { item { Text(it, color = Fo.Success, style = MaterialTheme.typography.bodySmall) } }
+        s.packError?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         s.fixtures.forEach { f ->
             item { SectionTitle(f.fixtureId) }
+            item { SitePackRow(s, vm, f.fixtureId) }
             item {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Fo.Surface).border(1.dp, Fo.Border, RoundedCornerShape(18.dp))) {
                     f.assets.forEachIndexed { i, a ->

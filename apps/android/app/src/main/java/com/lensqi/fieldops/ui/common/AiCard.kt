@@ -36,9 +36,13 @@ fun LensQiMark(size: Int = 28) {
     ) { Icon(Icons.Outlined.AutoAwesome, "LensQi", tint = Fo.OnPrimary, modifier = Modifier.size((size * 0.5).dp)) }
 }
 
-/** The one AI card per screen: what LensQi sees, the next move, and the single action that does it. [tone] marks a decided outcome. */
+/**
+ * The one AI card per screen: what LensQi sees, the next move, and the single action that does it. [tone] marks a decided
+ * outcome. [verbatim] shows [says] exactly as the model wrote it (a grounded hypothesis names the equipment in its own
+ * words); the title and hint are status strings and stay in the technician's vocabulary.
+ */
 @Composable
-fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Modifier, tone: Color? = null, actions: (@Composable ColumnScope.() -> Unit)? = null) {
+fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Modifier, tone: Color? = null, verbatim: Boolean = false, actions: (@Composable ColumnScope.() -> Unit)? = null) {
     Column(
         modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Fo.Elevated, Fo.Surface)), RoundedCornerShape(26.dp))
             .border(1.dp, tone?.copy(alpha = 0.45f) ?: Fo.Border, RoundedCornerShape(26.dp)).padding(16.dp),
@@ -47,7 +51,7 @@ fun AiCard(says: String?, title: String?, hint: String?, modifier: Modifier = Mo
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             LensQiMark()
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                says?.let { Text(TechnicianText.guidance(it), fontSize = 13.sp, lineHeight = 19.sp, color = Fo.Muted) }
+                says?.let { Text(if (verbatim) it else TechnicianText.guidance(it), fontSize = 13.sp, lineHeight = 19.sp, color = Fo.Muted) }
                 title?.let { Text(TechnicianText.guidance(it), fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = tone ?: Color.Unspecified) }
                 hint?.let { Text(TechnicianText.guidance(it), fontSize = 12.sp, color = Fo.Muted) }
             }

@@ -68,9 +68,12 @@ CodeRabbit's twelve inline findings on the pull request and four more from a sec
 
 A fourth CodeRabbit pass found five more, all fixed: a replayed task creation now matches the whole request (details, tools, hand-off source and reference photos too); a keyed step check or question is serialised through its final write, so two overlapping requests under one key save one photo and call the model once; a replayed step command must be about the same step and a replayed question the same question; the teaching start flag is released when a pre-check fails; and punctuation peeling on scanned labels is bounded.
 
+## Adopted after the merge
+
+The review's priority-list features were first set aside as product scope rather than defects. On 3 November, after the fixes merged, the decision was reversed and the six items were built on `codex/open-product-scope` (see `docs/quality-pass/2026-11-03-open-scope.md`): the grounded advisor and prediction cards on Android, continuous hands-free voice on Android, tap-to-ask on live outlines on Android, the site pack a technician downloads before going out of signal, OCR reading of printed asset tags, and the `decline-view` exit to `Inconclusive` on both mobile clients.
+
 ## Not adopted
 
-- Priority-list features (grounded advisor and prediction cards on Android, hands-free mode on Android, tap-to-ask on live outlines, site pack download, OCR tags, `decline-view`) are product scope, not defects. They remain open in `.kiro/specs`.
 - The feature-completeness percentage. Hardware acceptance (audible TTS, voice commands, shutter checks, SAM outlines on a real part, glasses) is still unsigned, as `docs/FEATURE_STATUS.md` records.
 
 ## Gates on the branch

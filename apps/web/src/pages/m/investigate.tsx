@@ -7,19 +7,19 @@ import { EvidenceBadge, Expandable, TechDetails } from "@/components/fo/primitiv
 import { ExpectedState } from "@/components/fo/expected-state";
 import { ArFrame } from "@/components/fo/ar-frame";
 import { AiCard, Progress } from "@/components/fo/ai";
-import { api, commandScope } from "@/lib/api";
+import { api, commandScope, type Stage } from "@/lib/api";
 import { aiSummary, nextMove, progress } from "@/lib/ai";
 import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { useAct, useElapsed } from "@/lib/hooks";
 import { lastPhoto, latestDiagnostic, useInspectionBundle } from "@/lib/inspection";
-import { featureName, fmtWhen, isPostRepairItem, observationState, stageLabel, stageState } from "@/lib/labels";
+import { featureName, fmtWhen, isPostRepairItem, observationState, plainReason, stageLabel, stageState } from "@/lib/labels";
 
 /**
  * The inspection hub: the latest photo with LensQi's outlines first, then one AI card that says what it sees and offers
  * the single next move. Everything else (findings, check, knowledge, ids) is folded away below.
  */
 export default function Investigate({ id }: { id: string }) {
-  const { i, fixture, assessment, photoUrl } = useInspectionBundle(id);
+  const { i, ev, fixture, assessment, photoUrl } = useInspectionBundle(id);
   const [, nav] = useLocation();
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,6 +37,8 @@ export default function Investigate({ id }: { id: string }) {
   const looking = useElapsed(look.isPending);
   const workOrder = useAct(id, (s: string) => api.workOrder(id, s), { success: "Plan saved" });
   const claim = useAct(id, (d: string) => api.claim(id, d, commandScope(i)));
+  // The declined view is the one asked after this photo; a retry under the same photo replays, a new photo is a new question.
+  const decline = useAct(id, () => api.declineView(id, latest?.evidenceId ?? ""));
 
   if (!i) return <><TopBar title="Inspection" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
@@ -45,7 +47,9 @@ export default function Investigate({ id }: { id: string }) {
   const move = nextMove(i, assessment);
   const target = targetConcept(fixture, shown);
   const findings = shown?.hypotheses.filter((h) => !isPostRepairItem(h.featureId)) ?? [];
-  const busy = look.isPending || workOrder.isPending || claim.isPending;
+  const busy = look.isPending || workOrder.isPending || claim.isPending || decline.isPending;
+  // Why the inspection closed without a decision, from the stage change the server recorded; shown in the technician's words.
+  const closedReason = i.stage === "Inconclusive" ? ([...ev].reverse().find((e) => e.kind === "StageChanged" && e["to"] === "Inconclusive")?.["reason"] as string | undefined) : undefined;
 
   const action = (() => {
     switch (move?.kind) {
@@ -90,7 +94,17 @@ export default function Investigate({ id }: { id: string }) {
           {i.photos.length > 1 && <span className="glass pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px]"><Images className="size-3" />{i.photos.length}</span>}
         </div>
 
-        <AiCard says={aiSummary(i, shown)} title={move?.title} hint={move?.hint}>{action}</AiCard>
+        {i.stage === "Inconclusive" ? (
+          <AiCard title="Inspection closed · inconclusive" says={plainReason(closedReason ?? "The inspection was closed without a decision.")}
+            hint="Nothing was marked as a fault or a repair. The record keeps why it closed.">
+            <Button asChild size="lg" variant="outline" className="h-12 w-full rounded-2xl"><Link href="/m">Back to inspections</Link></Button>
+          </AiCard>
+        ) : (
+          <AiCard says={aiSummary(i, shown)} title={move?.title} hint={move?.hint}>
+            {action}
+            <DeclineViewAction stage={i.stage} pending={decline.isPending} onConfirm={() => decline.mutate([])} />
+          </AiCard>
+        )}
 
         <Progress step={progress(i, assessment)} />
 
@@ -127,5 +141,36 @@ export default function Investigate({ id }: { id: string }) {
         </div>
       </Page>
     </>
+  );
+}
+
+/**
+ * "I can't safely get this view": offered only while LensQi is waiting for a view (NeedsEvidence). The confirm step says
+ * what the server will do (close as Inconclusive, mark nothing as a fault or a repair, keep the decline on record) before
+ * the command is sent; the server decides the stage.
+ */
+export function DeclineViewAction({ stage, pending, onConfirm }: { stage: Stage; pending?: boolean; onConfirm: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  if (stage !== "NeedsEvidence") return null;
+  if (!confirming) {
+    return (
+      <button type="button" onClick={() => setConfirming(true)} className="w-full py-1 text-center text-xs text-muted-foreground underline-offset-2 hover:underline" data-decline-view>
+        I can't safely get this view
+      </button>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-2xl border border-border bg-surface p-3 text-xs text-muted-foreground" role="group" aria-label="Close without this view" data-decline-confirm>
+      <p className="font-medium text-foreground">Close this inspection without the view?</p>
+      <ul className="list-disc space-y-0.5 pl-4">
+        <li>The inspection closes as inconclusive.</li>
+        <li>Nothing is marked as a fault or a repair.</li>
+        <li>The record keeps that the view was declined.</li>
+      </ul>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" className="h-9 flex-1 rounded-xl" disabled={pending} onClick={onConfirm}>{pending && <Loader2 className="animate-spin" />} Close as inconclusive</Button>
+        <Button size="sm" variant="ghost" className="h-9 flex-1 rounded-xl" disabled={pending} onClick={() => setConfirming(false)}>Keep going</Button>
+      </div>
+    </div>
   );
 }

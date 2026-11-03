@@ -89,13 +89,20 @@ export interface KnowledgeFact {
   factId: string; factKey: string; assertedValue: string; statement: string; claimKind: string; provenance: string; safety: string; tags: string[];
   citation: { documentTitle: string; publisher: string; sourceUrl?: string | null; sourceLocator: string; accessedOn: string };
 }
-export interface Knowledge { inspectionId: string; status: string; packId?: string | null; packSha256?: string | null; packRevision?: number | null; facts: KnowledgeFact[]; warnings: string[] }
+/** A pack fact that was not applied to this unit, with the resolver's reason code (see `excludedReason` in labels). */
+export interface KnowledgeExclusion { factId: string; verdict: "Applicable" | "Unverified" | "Inapplicable" | string; reason: string }
+export interface Knowledge {
+  inspectionId: string; status: string; packId?: string | null; packSha256?: string | null; packRevision?: number | null;
+  /** "Synthetic" marks a demo pack written for the lab, not a vendor document; "VendorLinked" cites the vendor's own pages. */
+  originKind?: string | null;
+  facts: KnowledgeFact[]; excluded: KnowledgeExclusion[]; warnings: string[]; approvedDiagnostics?: string[];
+}
 export interface EventRecord { kind: string; sequence: number; occurredAt: string; [k: string]: unknown }
 export interface ProposalRejection { code: string; message: string; offendingIds: string[] }
 export interface ReasonResponse {
   accepted: boolean; proposalId: string; modelId: string; replayed: boolean; rejections: ProposalRejection[];
-  proposal?: { nextAction: NextAction; hypothesis?: string | null; requestedVisualEvidence?: string | null } | null;
-  prediction?: { predictionId: string; diagnosticId: string; predictedValue: string; basedOnFactIds: string[] } | null;
+  proposal?: { nextAction: NextAction; hypothesis?: string | null; requestedVisualEvidence?: string | null; usedFactIds?: string[]; proposedDiagnosticId?: string | null } | null;
+  prediction?: { predictionId: string; diagnosticId: string; predictedValue: string; basedOnFactIds: string[]; rationale?: string | null } | null;
   state: Inspection;
 }
 export interface ReceiptCheck { bundle: string; isValid: boolean; checks: string[]; failures: string[]; issued?: ReceiptIssue }
@@ -219,6 +226,8 @@ export const api = {
   review: (id: string, requirementId: string, status: ChecklistStatus, photoEvidenceId: string, scope = "") =>
     once(`${id}:review:${scope}:${requirementId}:${status}:${photoEvidenceId}`, (k) => request<Inspection>("POST", `${I(id)}/checklist`, { requirementId, status, photoEvidenceId }, undefined, k)),
   requestEvidence: (id: string, note: string) => once(`${id}:evidence:${note}`, (k) => request<Inspection>("POST", `${I(id)}/evidence-requests`, { note }, undefined, k)),
+  /** "I can't safely get this view": closes a NeedsEvidence inspection as Inconclusive with the decline on record. The scope names the photo the view was asked after. */
+  declineView: (id: string, scope = "") => once(`${id}:decline:${scope}`, (k) => request<Inspection>("POST", `${I(id)}/decline-view`, undefined, undefined, k)),
   acknowledge: (id: string, scope = "") => once(`${id}:acknowledge:${scope}`, (k) => request<Inspection>("POST", `${I(id)}/acknowledge`, undefined, undefined, k)),
   verify: (id: string, scope = "", signal?: AbortSignal) =>
     once(`${id}:verify:${scope}`, (k) => request<{ decision: Decision; state: Inspection }>("POST", `${I(id)}/verify`, undefined, undefined, k, { signal })),

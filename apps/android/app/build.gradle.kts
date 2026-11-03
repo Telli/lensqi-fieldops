@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.google.ar.core)
     implementation(libs.mlkit.barcode)
+    implementation(libs.mlkit.text.recognition)
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

@@ -1,0 +1,67 @@
+package com.lensqi.fieldops.task
+
+import android.speech.SpeechRecognizer
+import com.lensqi.fieldops.voice.HandsFreePolicy
+import com.lensqi.fieldops.voice.NOTHING_HEARD
+import com.lensqi.fieldops.voice.VoiceCommand
+import com.lensqi.fieldops.voice.parseCommand
+import com.lensqi.fieldops.voice.speechNotice
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+/** Hands-free: the microphone opens again by itself only when nothing else holds the floor, and ends when it cannot open. */
+class HandsFreeTest {
+    private fun listens(on: Boolean = true, supported: Boolean = true, listening: Boolean = false, speaking: Boolean = false, busy: Boolean = false) =
+        HandsFreePolicy.shouldListen(on, supported, listening, speaking, busy)
+
+    @Test fun `the microphone opens only while idle, with hands-free on, nothing listening, LensQi silent and no request pending`() {
+        assertTrue(listens())
+        assertFalse(listens(on = false), "push-to-talk never opens the microphone by itself")
+        assertFalse(listens(supported = false), "a phone without a recognizer has nothing to open")
+        assertFalse(listens(listening = true), "a listen already open is not reopened")
+        assertFalse(listens(speaking = true), "a step or answer being read is never taken as the question")
+        assertFalse(listens(busy = true), "a question being answered, or an earlier step on screen, holds the microphone")
+        // Once the answer has been spoken and the request settled, it opens again.
+        assertTrue(listens(speaking = false, busy = false))
+    }
+
+    @Test fun `a start failure after switching on ends hands-free, as does a microphone blocked for good`() {
+        assertFalse(HandsFreePolicy.shouldStop(settingsNeeded = false, startFailuresNow = 2, startFailuresAtOn = 2), "failures from before the switch do not count")
+        assertTrue(HandsFreePolicy.shouldStop(settingsNeeded = false, startFailuresNow = 3, startFailuresAtOn = 2), "one refusal since the switch ends it")
+        assertTrue(HandsFreePolicy.shouldStop(settingsNeeded = true, startFailuresNow = 0, startFailuresAtOn = 0), "Android will not ask for the microphone again")
+        assertFalse(HandsFreePolicy.shouldStop(settingsNeeded = false, startFailuresNow = 0, startFailuresAtOn = 0))
+    }
+
+    @Test fun `silence is not a failure, so hands-free keeps listening through it, and anything else is`() {
+        assertFalse(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_NO_MATCH), "nothing matched: the normal state between questions")
+        assertFalse(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_SPEECH_TIMEOUT), "no speech before the timeout: likewise")
+        assertTrue(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS))
+        assertTrue(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_RECOGNIZER_BUSY))
+        assertTrue(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_NETWORK))
+        assertTrue(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_CLIENT))
+        assertTrue(HandsFreePolicy.startFailure(SpeechRecognizer.ERROR_AUDIO))
+        // A silent cycle still has a line for push-to-talk; hands-free screens drop it by this exact text.
+        assertEquals("I didn't catch that.", NOTHING_HEARD)
+    }
+
+    @Test fun `while paused only resume and the voice switch are heard, and nothing else is a command or a question`() {
+        for (c in VoiceCommand.entries) assertTrue(HandsFreePolicy.pausedCommandAllowed(c, paused = false), "$c runs while not paused")
+        assertTrue(HandsFreePolicy.pausedCommandAllowed(null, paused = false), "a question runs while not paused")
+        assertTrue(HandsFreePolicy.pausedCommandAllowed(VoiceCommand.Resume, paused = true))
+        assertTrue(HandsFreePolicy.pausedCommandAllowed(VoiceCommand.Mute, paused = true))
+        assertTrue(HandsFreePolicy.pausedCommandAllowed(VoiceCommand.Unmute, paused = true))
+        for (c in listOf(VoiceCommand.Next, VoiceCommand.Back, VoiceCommand.Repeat, VoiceCommand.Check, VoiceCommand.Skip, VoiceCommand.Pause))
+            assertFalse(HandsFreePolicy.pausedCommandAllowed(c, paused = true), "$c is dropped while paused")
+        // Ambient talk while paused never reaches the server as a question.
+        assertFalse(HandsFreePolicy.pausedCommandAllowed(parseCommand("is the filter on the left"), paused = true))
+        assertTrue(HandsFreePolicy.pausedCommandAllowed(parseCommand("ok LensQi, resume"), paused = true))
+    }
+
+    @Test fun `the speech badge says where audio goes and never that it reaches LensQi`() {
+        assertEquals("On-device speech recognition · no audio leaves the phone", speechNotice(onDevice = true))
+        assertEquals("The phone's speech service may send audio to its provider. Only the recognised text reaches LensQi.", speechNotice(onDevice = false))
+        for (onDevice in listOf(true, false)) assertFalse(Regex("audio[^.]*reaches LensQi", RegexOption.IGNORE_CASE).containsMatchIn(speechNotice(onDevice)))
+    }
+}

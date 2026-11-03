@@ -43,16 +43,7 @@ public static class InspectionEndpoints
     {
         var g = app.MapGroup("/v1");
 
-        g.MapGet("/fixtures", (ExpectedTwinStore twins) => Results.Ok(twins.Twins.Select(t => new
-        {
-            t.Twin.FixtureId, t.Twin.FixtureRevision, t.Sha256, t.Twin.FixtureDescription,
-            assets = t.Twin.Assets.Select(a => new { a.AssetId, a.Kind, a.DisplayName }),
-            diagnostics = t.Twin.Diagnostics.Select(d => new { d.DiagnosticId, d.Type, d.TargetAlias, d.ClaimVerified }),
-            visualRequirements = t.Twin.VisualRequirements,
-            // The site's expected installation state (port, cable, peer); documentation of intent, never proof of the current state.
-            connections = t.Twin.Connections,
-            t.Twin.VerificationPolicy,
-        })));
+        g.MapGet("/fixtures", (ExpectedTwinStore twins) => Results.Ok(twins.Twins.Select(FixtureView)));
 
         // A retried create (same Idempotency-Key, same fixture and asset) returns the inspection the first attempt made,
         // never a second one; the same key with different inputs is refused.
@@ -331,6 +322,21 @@ public static class InspectionEndpoints
 
     /// <summary>Evidence ids of diagnostics the verify call ran itself start with this; a manual run's start with "diag-".</summary>
     public const string VerifyDiagnosticPrefix = "verify-diag-";
+
+    /// <summary>One item of GET /v1/fixtures; the site pack carries the same object so an offline client sees exactly what the list shows.</summary>
+    public static object FixtureView(LoadedExpectedTwin t) => new
+    {
+        t.Twin.FixtureId, t.Twin.FixtureRevision, t.Sha256, t.Twin.FixtureDescription,
+        assets = t.Twin.Assets.Select(a => new { a.AssetId, a.Kind, a.DisplayName }),
+        diagnostics = t.Twin.Diagnostics.Select(d => new { d.DiagnosticId, d.Type, d.TargetAlias, d.ClaimVerified }),
+        visualRequirements = t.Twin.VisualRequirements,
+        // The site's expected installation state (port, cable, peer); documentation of intent, never proof of the current state.
+        connections = t.Twin.Connections,
+        t.Twin.VerificationPolicy,
+    };
+
+    /// <summary>Open means still being worked: anything but the two closing stages.</summary>
+    public static bool IsOpen(InspectionSession s) => s.State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive);
 
     public sealed record InspectionSummary(string InspectionId, string FixtureId, string AssetId, string Stage, string? OutcomeKind,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, int Photos, int Diagnostics, string? LastDecision, string? LatestChange,
