@@ -109,12 +109,15 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
 
   async function check(photo?: Blob | null) {
     if (!step || busy) return;
-    const blob = photo ?? (live === "on" ? await grab(video.current, 4096) : null);
-    if (!blob) { file.current?.click(); return; }
+    // No camera frame to take: the picker's file comes back through this function as `photo`, so no lock is needed yet.
+    if (!photo && live !== "on") { file.current?.click(); return; }
+    // Locked before the first await: a second tap while the frame is still being encoded must not start a second check.
     setBusy("check");
     const controller = new AbortController();
     inflight.current = controller;
     try {
+      const blob = photo ?? await grab(video.current, 4096);
+      if (!blob) { file.current?.click(); return; }
       const r = await tasks.check(id, step.id, blob, controller.signal);
       save(r.task);
       speech.speak(`${verdictLabel[r.check.verdict].text}. ${r.check.reason}`, true);
