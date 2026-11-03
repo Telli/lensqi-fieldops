@@ -402,8 +402,33 @@ public class TaskApiTests
         Assert.Equal("invalid_state", (await Body(otherGoal)).GetProperty("code").GetString());
         var otherMode = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Technician", goal = "Change the oil in my 2025 Civic" })));
         Assert.Equal(HttpStatusCode.Conflict, otherMode.StatusCode);
+        // The rest of the request counts too: other details or tools describe another job.
+        var otherDetails = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Diy", goal = "Change the oil in my 2025 Civic", details = "It is a hybrid" })));
+        Assert.Equal(HttpStatusCode.Conflict, otherDetails.StatusCode);
+        var otherTools = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Diy", goal = "Change the oil in my 2025 Civic", tools = new[] { "torque wrench" } })));
+        Assert.Equal(HttpStatusCode.Conflict, otherTools.StatusCode);
         Assert.Single((await Body(await c.GetAsync("/v1/tasks"))).EnumerateArray());
         Assert.Equal(1, f.FakeChat.Calls);
+    }
+
+    [Fact]
+    public async Task Concurrent_checks_under_one_key_save_one_photo_and_call_the_model_once()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "LooksDone", reason = "The drain plug is back in." });
+        var planCalls = f.FakeChat.Calls;
+        // The model is slow, so the retry arrives while the first request is still inside the check.
+        f.FakeChat.Delay = TimeSpan.FromMilliseconds(400);
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1/check", "chk-1", Image()))));
+        f.FakeChat.Delay = null;
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(planCalls + 1, f.FakeChat.Calls);
+        var events = await Events(c, id);
+        Assert.Single(events, e => e.GetProperty("kind").GetString() == "TaskPhotoRecorded");
+        Assert.Single(events, e => e.GetProperty("kind").GetString() == "StepChecked");
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(f.DataDir, "evidence", id)));
     }
 
     [Fact]

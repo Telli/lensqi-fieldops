@@ -91,7 +91,7 @@ public sealed class TaskSession
         });
 
     public IReadOnlyList<TaskEvent> StartStep(string requestId, string stepId, DateTimeOffset now) =>
-        Idempotent<StepStarted>(requestId, () =>
+        Idempotent<StepStarted>(requestId, e => e.StepId == stepId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -102,7 +102,7 @@ public sealed class TaskSession
 
     /// <summary>Stores the AI's suggestion about a step photo. It never finishes the step.</summary>
     public IReadOnlyList<TaskEvent> RecordCheck(string requestId, string stepId, string photoId, StepCheckVerdict verdict, string reason, string modelId, DateTimeOffset now) =>
-        Idempotent<StepChecked>(requestId, () =>
+        Idempotent<StepChecked>(requestId, e => e.StepId == stepId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -112,7 +112,7 @@ public sealed class TaskSession
         });
 
     public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now, string? sessionTitle = null) =>
-        Idempotent<QuestionAnswered>(requestId, () =>
+        Idempotent<QuestionAnswered>(requestId, e => e.Question == question.Trim(), () =>
         {
             // Coaching starts only once the plan's safety notes are accepted (free-form help is in progress from the start).
             Require(State.Phase == TaskPhase.InProgress, "Questions need a started task, or free-form help");
@@ -133,7 +133,7 @@ public sealed class TaskSession
     /// suggestion, so it never stands between the user and the next step.
     /// </summary>
     public IReadOnlyList<TaskEvent> CompleteStep(string requestId, string stepId, DateTimeOffset now) =>
-        Idempotent<StepCompleted>(requestId, () =>
+        Idempotent<StepCompleted>(requestId, e => e.StepId == stepId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -143,7 +143,7 @@ public sealed class TaskSession
 
     /// <param name="reason">Why, when the person gave a reason; a measured reason (the part within reach) keeps its numbers.</param>
     public IReadOnlyList<TaskEvent> SkipStep(string requestId, string stepId, DateTimeOffset now, SkipReason? reason = null) =>
-        Idempotent<StepSkipped>(requestId, () =>
+        Idempotent<StepSkipped>(requestId, e => e.StepId == stepId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -220,11 +220,15 @@ public sealed class TaskSession
     /// never passed off as this one's answer: the caller is told so instead of getting a stale batch, or a silent no-op.
     /// An empty batch (a start that changed nothing) is replayed as it was, since nothing in it says which command it was.
     /// </summary>
-    private IReadOnlyList<TaskEvent> Idempotent<TEvent>(string requestId, Func<IReadOnlyList<TaskEvent>> action) where TEvent : TaskEvent
+    private IReadOnlyList<TaskEvent> Idempotent<TEvent>(string requestId, Func<IReadOnlyList<TaskEvent>> action) where TEvent : TaskEvent =>
+        Idempotent<TEvent>(requestId, _ => true, action);
+
+    /// <summary>As above, and the recorded event must also be this command's ([same]): the same step, the same question.</summary>
+    private IReadOnlyList<TaskEvent> Idempotent<TEvent>(string requestId, Func<TEvent, bool> same, Func<IReadOnlyList<TaskEvent>> action) where TEvent : TaskEvent
     {
         if (_outcomes.TryGetValue(requestId, out var earlier))
         {
-            if (earlier.Count > 0 && !earlier.OfType<TEvent>().Any()) throw new TaskConflictException(TaskErrorCodes.InvalidState, DifferentCommandMessage);
+            if (earlier.Count > 0 && !earlier.OfType<TEvent>().Any(same)) throw new TaskConflictException(TaskErrorCodes.InvalidState, DifferentCommandMessage);
             return earlier;
         }
         _requestId = requestId;
