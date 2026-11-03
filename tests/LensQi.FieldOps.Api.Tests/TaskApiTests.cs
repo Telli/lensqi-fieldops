@@ -218,11 +218,32 @@ public class TaskApiTests
         using var capture = Image();
         Assert.True((await c.PostAsync($"/v1/inspections/{inspectionId}/observations", capture)).IsSuccessStatusCode);
         Assert.True((await c.PostAsync($"/v1/inspections/{inspectionId}/diagnostics/NODE-A-HEALTH:run", null)).IsSuccessStatusCode);
-        using var package = new System.IO.Compression.ZipArchive(new MemoryStream(await c.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
+        async Task<int> Versions() => (await Body(await c.GetAsync($"/v1/inspections/{inspectionId}/receipts"))).GetProperty("versions").GetArrayLength();
+        async Task<(System.IO.Compression.ZipArchive Zip, string Summary)> Package()
+        {
+            var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await c.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
+            using var reader = new StreamReader(zip.GetEntry("summary.html")!.Open());
+            return (zip, await reader.ReadToEndAsync());
+        }
+        // Downloading the package never issues a receipt: before one exists it says so and carries none.
+        var (unissued, before) = await Package();
+        Assert.Null(unissued.GetEntry("fieldproof/receipt.html"));
+        Assert.Contains("No FieldProof receipt has been issued", before);
+        Assert.Contains("Simulated", before);
+        Assert.Equal(0, await Versions());
+        Assert.True((await c.GetAsync($"/v1/inspections/{inspectionId}/receipt.html")).IsSuccessStatusCode);
+        Assert.Equal(1, await Versions());
+        var (package, summary) = await Package();
         Assert.NotNull(package.GetEntry("fieldproof/receipt.html"));
         Assert.Contains(package.Entries, e => e.FullName.StartsWith("fieldproof/artifacts/", StringComparison.Ordinal));
-        using var html = new StreamReader(package.GetEntry("summary.html")!.Open());
-        Assert.Contains("Simulated", await html.ReadToEndAsync());
+        Assert.Contains("FieldProof receipt v1, issued", summary);
+        Assert.DoesNotContain("recorded more since", summary);
+        // The record moves on: the package still carries v1, says the record has grown, and still issues nothing.
+        Assert.True((await c.PostAsync($"/v1/inspections/{inspectionId}/diagnostics/NODE-A-HEALTH:run", null)).IsSuccessStatusCode);
+        var (_, later) = await Package();
+        Assert.Contains("FieldProof receipt v1, issued", later);
+        Assert.Contains("recorded more since", later);
+        Assert.Equal(1, await Versions());
 
         var (diy, _) = await Create(c, new { mode = "Diy", goal = "Change the oil" });
         Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{diy}/link-inspection", null)).StatusCode);

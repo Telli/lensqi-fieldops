@@ -163,6 +163,19 @@ class TaskViewModelTest {
     }
 
     @Test
+    fun `an older snapshot never replaces a newer one and server offsets are read`() = runBlocking {
+        val library = com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp, "server-a")
+        val newer = task.copy(updatedAt = "2026-10-29T01:00:00.000000+00:00", goal = "newer")
+        val older = task.copy(updatedAt = "2026-10-29T00:59:00Z", goal = "older")
+        library.remember(newer); library.remember(older)
+        assertEquals("newer", library.job(task.taskId)?.value?.goal)
+        library.remember(older.copy(updatedAt = "2026-10-29T01:01:00+00:00", goal = "newest"))
+        assertEquals("newest", library.job(task.taskId)?.value?.goal)
+        library.remember(older.copy(updatedAt = "not a time", goal = "unreadable"))
+        assertEquals("unreadable", library.job(task.taskId)?.value?.goal)
+    }
+
+    @Test
     fun `cached reference bytes belong to the job and the server that supplied them`() = runBlocking {
         val snapshots = com.lensqi.fieldops.data.SnapshotStore(temp, json)
         val first = com.lensqi.fieldops.data.TaskLibrary(snapshots, temp, "server-a")

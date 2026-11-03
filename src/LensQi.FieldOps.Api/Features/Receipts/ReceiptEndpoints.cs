@@ -39,6 +39,26 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
         return (bundle.BundleDir, new[] { "receipt.json", "receipt.html" }.Concat(bundle.Receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray(), bundle.Issue.Number);
     }
 
+    /// <summary>The last receipt already issued for this inspection, checked the same way as <see cref="VerifiedExport"/> but
+    /// never issuing a new one, so a work package records what was issued without changing the issue log. Null when none has
+    /// been issued. <c>Covers</c> is false when the inspection has recorded events since.</summary>
+    public (string Directory, string[] Paths, ReceiptIssue Issue, bool Covers)? IssuedExport(string id)
+    {
+        if (store.Find(id) is not { } session || Issues(id).LastOrDefault() is not { } last) return null;
+        var dir = BundleDir(id, last);
+        EvidenceReceipt? receipt;
+        try { receipt = JsonSerializer.Deserialize<EvidenceReceipt>(File.ReadAllBytes(Path.Combine(dir, "receipt.json")), KnowledgeJson.Options); }
+        catch (Exception ex) when (ex is IOException or JsonException) { receipt = null; }
+        if (receipt is null || !ReceiptVerifier.Verify(dir).IsValid
+                || receipt.ManifestSha256 != last.ManifestSha256
+                || AgainstRecord(dir, Expected(session.Events.Take(last.EventCount))).Any()
+                || !File.Exists(Path.Combine(dir, "receipt.html"))
+                || !ReceiptHtml.IsRenderingOf(File.ReadAllText(Path.Combine(dir, "receipt.html")), receipt))
+            throw new InvalidDataException("The issued record failed its integrity check");
+        var paths = new[] { "receipt.json", "receipt.html" }.Concat(receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray();
+        return (dir, paths, last, last.EventCount == session.Events.Count && last.ReceiptVersion == EvidenceReceipt.Version);
+    }
+
     public string BundleRoot => Path.Combine(files.DataDirectoryPath, "receipts");
 
     private string IssueLog(string inspectionId) => Path.Combine(BundleRoot, inspectionId + ".issued.jsonl");

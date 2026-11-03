@@ -75,7 +75,7 @@ public sealed class TaskSession
                 Require(State.Photos.Any(p => p.EvidenceId == id && p.Purpose == TaskPhotoPurpose.Manual), $"Manual photo '{id}' is not part of this task");
             if (plan.Steps.Any(step => step.ReferencePhotoIds?.Any(id => !manualPhotoIds.Contains(id)) == true))
                 throw new TaskConflictException(TaskErrorCodes.InvalidPlan, "A step cites a page outside this task");
-            TaskPlanValidator.Validate(plan, State.Goal, State.Details + " " + State.Handoff?.GuidanceContext());
+            TaskPlanValidator.Validate(plan, State.Goal, State.Details + " " + State.Handoff?.UserWords());
             return Commit([new PlanProposed(0, State.TaskId, now, plan, modelId, promptDigest, responseDigest, manualPhotoIds)]);
         });
 

@@ -150,6 +150,22 @@ public class TaskSessionTests
     }
 
     [Fact]
+    public void Only_the_person_s_words_in_a_hand_off_classify_restricted_work()
+    {
+        var plan = Plan(steps: [Step("s1")]);
+        var answerMentionsHazard = new TaskHandoff("T-0", "2025 Civic, 1.5 L", [new AnswerRecord(null, "Which oil does it take?", "0W-20. Unrelated: never open a breaker panel yourself.", null, "muse", T0)], []);
+        var fromAnswer = TaskSession.Create("T-1", TaskMode.Diy, "Change the oil", null, null, T0, handoff: answerMentionsHazard);
+        fromAnswer.ProposePlan("a", plan, "muse", "p", "r", [], T0);
+        Assert.Equal(RestrictedCategory.None, fromAnswer.State.Plan!.Restricted);
+
+        var questionMentionsHazard = new TaskHandoff("T-0", "Old house", [new AnswerRecord(null, "Can I replace the breaker panel myself?", "Please ask a professional.", null, "muse", T0)], []);
+        var fromQuestion = TaskSession.Create("T-2", TaskMode.Diy, "Do the work we discussed", null, null, T0, handoff: questionMentionsHazard);
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => fromQuestion.ProposePlan("b", plan, "muse", "p", "r", [], T0)).Code);
+        Assert.Contains("breaker panel", questionMentionsHazard.UserWords());
+        Assert.DoesNotContain("professional", questionMentionsHazard.UserWords());
+    }
+
+    [Fact]
     public void A_high_risk_hands_on_step_must_carry_a_caution()
     {
         var s = TaskSession.Create("T-1", TaskMode.Diy, "Jack up the car", null, null, T0);

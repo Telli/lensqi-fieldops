@@ -115,7 +115,8 @@ public sealed class TaskPlanner(IChatClient chat)
     public async Task<MuseResult<TaskPlan>> PlanAsync(TaskMode mode, string goal, string? details, PlanSiteContext? site,
         IReadOnlyList<(byte[] Bytes, string MediaType)> manualPhotos, CancellationToken ct, string? rejection = null, PersonContext? person = null, IReadOnlyList<string>? referenceIds = null, TaskHandoff? handoff = null)
     {
-        var restricted = RestrictedTopics.Classify(goal + " " + details + " " + handoff?.GuidanceContext());
+        // Restricted categories come from the person's words alone; the earlier AI answers in the hand-off are context, not a classifier input.
+        var restricted = RestrictedTopics.Classify(goal + " " + details + " " + handoff?.UserWords());
         var context = new
         {
             mode = mode.ToString(), goal, details, site,
