@@ -153,7 +153,8 @@ class CommandQueue internal constructor(
         return when (c.kind) {
             CommandKind.UploadPhoto -> when (val r = apiCall { api.uploadObservation(c.sessionId, c.id, part, requireNotNull(c.source).toRequestBody(), requireNotNull(c.observedAt).toRequestBody(), c.measured?.toRequestBody()) }) {
                 is ApiOutcome.Ok -> {
-                    if (r.value.sha256 != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "Uploaded bytes did not match the saved photo")
+                    // The server may store the photo turned upright; the digest of the bytes as uploaded is what this copy must match.
+                    if ((r.value.uploadedSha256 ?: r.value.sha256) != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "Uploaded bytes did not match the saved photo")
                     else { cache.put(r.value.state, server); ApiOutcome.Ok(r.value.evidenceId) }
                 }
                 is ApiOutcome.Rejected -> r

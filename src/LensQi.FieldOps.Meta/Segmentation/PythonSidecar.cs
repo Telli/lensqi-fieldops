@@ -17,7 +17,7 @@ public interface ISamOutputParser
 /// Runs Meta's meta-sam-parser through a local Python process. Model grammar never enters C#; the sidecar emits typed JSON.
 /// Also performs the pixel crop with Pillow so .NET needs no image codec. Never exposed over the network.
 /// </summary>
-public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper, IImageAnalyzer
+public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOutputParser, IRoiCropper, IImageAnalyzer, IImageOrienter
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -90,6 +90,28 @@ public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOut
         catch (Exception ex) when (ex is InvalidOperationException or JsonException or KeyNotFoundException or System.ComponentModel.Win32Exception or TimeoutException)
         {
             return null;
+        }
+    }
+
+    public async Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, long maxPixels, CancellationToken ct)
+    {
+        var dir = Directory.CreateTempSubdirectory("fieldops-orient-").FullName;
+        var input = Path.Combine(dir, "in.jpg"); var output = Path.Combine(dir, "out.jpg");
+        try
+        {
+            await File.WriteAllBytesAsync(input, jpeg, ct).ConfigureAwait(false);
+            var (stdout, _) = await RunAsync(["-I", Path.Combine(ScriptDirectory, "auto_orient.py"), "--image", input, "--out", output, "--max-pixels", maxPixels.ToString()], null, ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(stdout);
+            if (doc.RootElement.TryGetProperty("error", out _) || !File.Exists(output)) return null;
+            return await File.ReadAllBytesAsync(output, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonException or IOException or System.ComponentModel.Win32Exception or TimeoutException)
+        {
+            return null;
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
         }
     }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ListChecks, Loader2, Mic, Radio, Send, Square, Volume2, VolumeX, X } from "lucide-react";
+import { Ear, ListChecks, Loader2, Mic, Radio, Send, Square, Volume2, VolumeX, X } from "lucide-react";
 import { LensQiMark } from "@/components/fo/ai";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
@@ -10,7 +10,7 @@ import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
 import { taskKeys, tasks, useTask } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { parseCommand, speechNotice, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
+import { parseCommand, speechNotice, useHandsFree, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 const LOOK = "What am I looking at, and is anything wrong?";
@@ -82,7 +82,8 @@ export default function FreeformLive({ id }: { id: string }) {
       case "check": return void ask(LOOK);
       default: return void ask(text);
     }
-  });
+  }, { onListening: speech.setListening });
+  const handsFree = useHandsFree(voice, speech, asking || !open);
 
   async function end() {
     try { qc.setQueryData(taskKeys.one(id), await tasks.finish(id)); qc.invalidateQueries({ queryKey: taskKeys.list }); nav("/m"); }
@@ -94,7 +95,7 @@ export default function FreeformLive({ id }: { id: string }) {
     <div className="dark flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       <div className="relative min-h-0 flex-1 bg-black">
         <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-contain", live !== "on" && "hidden")} />
-        {assist.enabled && <LiveOverlay {...assist} />}
+        {assist.enabled && <LiveOverlay {...assist} onSelect={asking || !open ? undefined : (o) => void ask(`Tell me about the ${o.label} in view. Is anything wrong with it?`)} />}
         {live !== "on" && <p className="absolute inset-0 grid place-items-center px-8 text-center text-sm opacity-70">{live === "starting" ? "Starting camera…" : cameraNote}</p>}
         <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3">
           <Link href="/m" aria-label="Close" className="glass grid size-11 place-items-center rounded-full"><X className="size-5" /></Link>
@@ -135,6 +136,7 @@ export default function FreeformLive({ id }: { id: string }) {
           </button>
         )}
         {voice.listening && <p className="text-center text-sm text-primary" aria-live="polite">{voice.heard || "Listening…"}</p>}
+        {handsFree.on && !voice.listening && <p className="text-center text-[11px] opacity-60">Hands-free: the microphone opens again after each answer.</p>}
         {voice.error && <p className="text-center text-xs text-warning">{voice.error}</p>}
 
         <form onSubmit={(e) => { e.preventDefault(); ask(typed); }} className="flex items-center gap-2">
@@ -142,6 +144,12 @@ export default function FreeformLive({ id }: { id: string }) {
             <button type="button" onClick={voice.listening ? voice.stop : voice.start} disabled={asking || !open} aria-label={voice.listening ? "Stop listening" : "Ask by voice"}
               className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20", voice.listening && "border-primary bg-primary text-primary-foreground")}>
               {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
+            </button>
+          )}
+          {voice.supported && (
+            <button type="button" onClick={handsFree.toggle} disabled={!open} aria-pressed={handsFree.on} aria-label={handsFree.on ? "Turn hands-free off" : "Hands-free: keep listening"}
+              className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-40", handsFree.on && "border-primary text-primary")}>
+              <Ear className="size-5" />
             </button>
           )}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={!open} placeholder={open ? "Ask anything about what you see…" : "This session has ended"} aria-label="Ask a question"

@@ -14,6 +14,7 @@ import TaskDone from "@/pages/m/task/done";
 import FreeformLive from "@/pages/m/task/live";
 import Start from "@/pages/m/start";
 import Scan from "@/pages/m/scan";
+import ScanLabel from "@/pages/m/scan-label";
 import GlassesView from "@/pages/m/glasses";
 import { initTheme } from "@/lib/theme";
 import MobileAssetDetail from "@/pages/m/asset-detail";
@@ -60,6 +61,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/m/t/:id/done">{(p) => m(<TaskDone id={p.id} />)}</Route>
         <Route path="/m/t/:id">{(p) => m(<TaskPlanPage id={p.id} />)}</Route>
         <Route path="/m/start">{() => m(<Start />)}</Route>
+        <Route path="/m/scan-label">{() => m(<ScanLabel />, true)}</Route>
         <Route path="/m/inspections">{() => m(<Inspections />)}</Route>
         <Route path="/m/assets">{() => m(<Assets />)}</Route>
         <Route path="/m/assets/:assetId">{(p) => m(<MobileAssetDetail assetId={p.assetId} />)}</Route>

@@ -84,7 +84,7 @@ export interface SegmentationGeometry {
   photoWidth?: number | null; photoHeight?: number | null;
   boxes: Box[]; masks: Mask[]; crop?: { file: string; transform?: { sourceWidth: number; sourceHeight: number } | null } | null; label: string; purpose?: string;
 }
-export interface ObservationResponse { evidenceId: string; sha256: string; width: number; height: number; quality?: ImageQuality | null; changeAnalysis?: ChangeAnalysis | null; state: Inspection }
+export interface ObservationResponse { evidenceId: string; sha256: string; /** Digest of the bytes as uploaded; differs from sha256 when the server stored the photo turned upright. */ uploadedSha256?: string; width: number; height: number; quality?: ImageQuality | null; changeAnalysis?: ChangeAnalysis | null; state: Inspection }
 export interface KnowledgeFact {
   factId: string; factKey: string; assertedValue: string; statement: string; claimKind: string; provenance: string; safety: string; tags: string[];
   citation: { documentTitle: string; publisher: string; sourceUrl?: string | null; sourceLocator: string; accessedOn: string };
