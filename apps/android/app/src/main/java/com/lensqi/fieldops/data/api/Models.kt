@@ -195,6 +195,8 @@ data class ReadinessCheck(
 data class ObservationResponse(
     val evidenceId: String,
     val sha256: String,
+    /** Digest of the bytes as uploaded; differs from [sha256] when the server stored the photo turned by its EXIF orientation. */
+    val uploadedSha256: String? = null,
     val mediaType: String,
     val bytes: Long,
     val width: Int,

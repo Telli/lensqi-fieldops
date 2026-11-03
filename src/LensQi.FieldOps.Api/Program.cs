@@ -144,6 +144,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<ISamOutputParser>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddSingleton<IRoiCropper>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddSingleton<IImageAnalyzer>(sp => sp.GetRequiredService<PythonSidecar>());
+builder.Services.AddSingleton<IImageOrienter>(sp => sp.GetRequiredService<PythonSidecar>());
 builder.Services.AddHttpClient("sam");
 builder.Services.AddSingleton(sp =>
 {
