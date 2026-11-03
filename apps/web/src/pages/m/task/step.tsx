@@ -82,8 +82,11 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (!routed) { nav(current, { replace: true }); return; }
     // Only an unfinished step becomes current; a finished one is shown read-only with a way back to the current step.
     // When the server will not open it, coaching and questions would be about its own current step, so go there.
+    // A failure that arrives after the route changed belongs to a screen that is gone: no toast, no redirect.
+    let active = true;
     if (open && t.currentStepId !== stepId && routed.status !== "Done" && routed.status !== "Skipped")
-      tasks.start(id, routed.id).then(save).catch((e) => { toast.error(`This step couldn't be opened. ${friendlyError(e)}`); nav(current, { replace: true }); });
+      tasks.start(id, routed.id).then(save).catch((e) => { if (!active) return; toast.error(`This step couldn't be opened. ${friendlyError(e)}`); nav(current, { replace: true }); });
+    return () => { active = false; };
   }, [t?.phase, t?.currentStepId, stepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const readStep = (force = false) => step && speech.speak(`Step ${n + 1}. ${step.title}. ${step.instruction} ${step.cautions.map((c) => c.text).join(". ")}`, force);
@@ -108,7 +111,8 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   }
 
   async function check(photo?: Blob | null) {
-    if (!step || busy) return;
+    // A finished step is read-only: no check is recorded against it, by tap or by voice.
+    if (!step || busy || step.status === "Done" || step.status === "Skipped") return;
     // No camera frame to take: the picker's file comes back through this function as `photo`, so no lock is needed yet.
     if (!photo && live !== "on") { file.current?.click(); return; }
     // Locked before the first await: a second tap while the frame is still being encoded must not start a second check.
@@ -252,7 +256,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
         {voice.notice && <p className="text-[11px] opacity-60">{speechNotice}</p>}
         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2">
           <button onClick={() => move("back")} disabled={n === 0 || !!busy} aria-label="Previous step" className="grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-30"><ArrowLeft className="size-5" /></button>
-          <button onClick={() => (busy === "check" ? cancel() : check())} disabled={(!!busy && busy !== "check") || !open} aria-label={busy === "check" ? "Cancel the photo check" : "Check this step with a photo"} className={cn("grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20", needsCheck && "border-primary text-primary")}>
+          <button onClick={() => (busy === "check" ? cancel() : check())} disabled={(!!busy && busy !== "check") || !open || finished} aria-label={busy === "check" ? "Cancel the photo check" : "Check this step with a photo"} className={cn("grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20", needsCheck && "border-primary text-primary")}>
             {busy === "check" ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
           </button>
           <button onClick={() => move("complete")} disabled={!!busy || !open || finished} aria-label="Step done"
