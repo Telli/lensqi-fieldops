@@ -17,7 +17,7 @@ class TaskLibrary(private val snapshots: SnapshotStore, private val directory: F
     suspend fun remember(t: TaskView) = withContext(Dispatchers.IO) {
         synchronized(snapshots) {
             val previous = snapshots.load(key("task", t.taskId), TaskView.serializer())
-            if (previous != null && java.time.Instant.parse(previous.value.updatedAt) > java.time.Instant.parse(t.updatedAt)) return@synchronized
+            if (previous != null && at(previous.value.updatedAt)?.let { kept -> at(t.updatedAt)?.let { kept > it } } == true) return@synchronized
             snapshots.save(key("task", t.taskId), TaskView.serializer(), t)
             val steps = t.plan?.steps.orEmpty()
             val summary = TaskSummary(t.taskId, t.mode, t.goal, t.title ?: t.plan?.title, t.phase, steps.size,
@@ -26,6 +26,9 @@ class TaskLibrary(private val snapshots: SnapshotStore, private val directory: F
             snapshots.save(key("tasks"), summaries, listOf(summary) + list.filter { it.taskId != t.taskId })
         }
     }
+
+    /** Server timestamps carry an offset ("+00:00"), which `Instant.parse` rejects on API 31 and 32; an unreadable one never blocks a save. */
+    private fun at(s: String) = runCatching { java.time.OffsetDateTime.parse(s).toInstant() }.getOrNull()
 
     fun reference(taskId: String, photoId: String) = File(directory, key("task-reference:$taskId", photoId))
     suspend fun cacheReferences(t: TaskView, api: FieldOpsApi) = withContext(Dispatchers.IO) {

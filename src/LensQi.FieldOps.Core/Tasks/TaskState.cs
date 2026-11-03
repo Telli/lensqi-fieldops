@@ -9,7 +9,9 @@ public sealed record StepCheckRecord(string StepId, string PhotoId, StepCheckVer
 
 public sealed record TaskHandoff(string SourceTaskId, string? EquipmentDetails, IReadOnlyList<AnswerRecord> Answers, IReadOnlyList<string> PhotoIds, SiteLink? Equipment = null)
 {
-    public string GuidanceContext() => string.Join(" ", Answers.Select(a => a.Question + " " + a.Answer).Prepend(EquipmentDetails));
+    /// <summary>What the person said in the earlier conversation: the equipment details and their questions. The AI's answers
+    /// are left out so that an answer mentioning a hazard can never classify a plan as restricted work; only the user's words do.</summary>
+    public string UserWords() => string.Join(" ", Answers.Select(a => a.Question).Prepend(EquipmentDetails));
 }
 
 public sealed record AnswerRecord(string? StepId, string Question, string Answer, string? PhotoId, string ModelId, DateTimeOffset At);

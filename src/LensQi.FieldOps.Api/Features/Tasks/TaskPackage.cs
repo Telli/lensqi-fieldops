@@ -35,13 +35,17 @@ internal static class TaskPackage
                     foreach (var claim in decision.VerifiedClaims) Line("p", claim);
                     foreach (var reason in decision.Reasons) Line("p", reason);
                 }
-                if (inspection is not null)
+                // A download reports the record; it never issues a receipt. The package carries the receipt last issued, named by
+                // version, and says when the inspection has moved on since, so the reader knows to issue a new one.
+                if (inspection is not null && receipts.IssuedExport(inspection.InspectionId) is { } export)
                 {
-                    var export = receipts.VerifiedExport(inspection.InspectionId);
                     foreach (var path in export.Paths)
                         zip.CreateEntryFromFile(Path.Combine(export.Directory, path), "fieldproof/" + path);
+                    var version = export.Issue.Number == 0 ? "FieldProof receipt" : $"FieldProof receipt v{export.Issue.Number}";
+                    Line("p", $"{version}, issued {export.Issue.IssuedAt:u}" + (export.Covers ? "" : " · the inspection has recorded more since; issue a new receipt for the latest record"));
                     html.Append("<p><a href='fieldproof/receipt.html'>FieldProof inspection receipt and evidence</a></p>");
                 }
+                else if (inspection is not null) Line("p", "No FieldProof receipt has been issued for this inspection yet.");
                 foreach (var probe in inspection?.Diagnostics ?? [])
                     Line("p", $"{probe.Result.DiagnosticId}: {probe.Result.Source} · {probe.Result.NormalizedValue} · {probe.Result.CompletedAt:u}");
                 Line("p", "Task progress and AI suggestions do not certify completion of a repair.");
