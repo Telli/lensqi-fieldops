@@ -10,7 +10,7 @@ import { changeLabel, featureName, isPostRepairItem, observationState, sentence 
 import { ArFrame } from "@/components/fo/ar-frame";
 import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
 import { cameraError, connectCamera, takeStill } from "@/lib/camera";
-import { clearCapture, loadCapture, saveCapture, type SavedCapture } from "@/lib/captures";
+import { clearCapture, loadCaptures, saveCapture, type SavedCapture } from "@/lib/captures";
 import { SavedAs } from "@/components/fo/verify-camera";
 import { WhyNotAccepted } from "@/components/fo/why-not-accepted";
 import { fmtWhen } from "@/lib/labels";
@@ -42,11 +42,12 @@ export default function Scan({ id }: { id: string }) {
   const [steps, setSteps] = useState<Step[]>([]);
   const [drawer, setDrawer] = useState(false);
   const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; outlines: SegmentationGeometry[]; change?: ChangeAnalysis | null; state: Inspection; saved: ObservationResponse; still?: boolean } | null>(null);
-  // A capture an earlier visit could not upload, kept on the device under its key so it can be sent again, not re-taken.
-  const [kept, setKept] = useState<SavedCapture | null>(null);
-  // False when the browser gave no storage: the capture is only held on this screen and goes with it.
-  const [keptOnDevice, setKeptOnDevice] = useState(true);
-  useEffect(() => { void loadCapture(id).then(setKept); }, [id]);
+  // Captures that could not be uploaded, each kept under its own key so it can be sent again, not re-taken, and never
+  // replaced by a later one: they stay until sent or discarded. `onDevice` false means the browser gave no storage and the
+  // capture is only held on this screen.
+  const [kept, setKept] = useState<(SavedCapture & { onDevice: boolean })[]>([]);
+  useEffect(() => { void loadCaptures(id).then((cs) => setKept(cs.map((c) => ({ ...c, onDevice: true })))); }, [id]);
+  const dropKept = (key: string) => { void clearCapture(id, key); setKept((ks) => ks.filter((k) => k.key !== key)); };
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
@@ -119,7 +120,7 @@ export default function Scan({ id }: { id: string }) {
     try {
       up = await api.upload(id, blob, name, source, key, observedAt, { signal });
       setStep(0, "done");
-      void clearCapture(id); setKept(null);
+      if (opts?.prior) dropKept(opts.prior.key);
       state = up.state;
       if (afterRepair) {
         setStep(1, "done");
@@ -168,8 +169,8 @@ export default function Scan({ id }: { id: string }) {
         const refused = e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
         if (!up && !refused) {
           const c: SavedCapture = { inspectionId: id, blob, name, source, key, observedAt, savedAt: Date.now() };
-          setKeptOnDevice(await saveCapture(c));
-          setKept(c);
+          const onDevice = await saveCapture(c);
+          setKept((ks) => [...ks.filter((k) => k.key !== key), { ...c, onDevice }]);
         }
       }
     } finally {
@@ -195,8 +196,9 @@ export default function Scan({ id }: { id: string }) {
     shuttering.current = true;
     void takeStill(v).then((r) => { if (r && !gone.current) void process(r.blob, `capture-${Date.now()}.jpg`, "Phone", { still: r.still }); }).finally(() => { shuttering.current = false; });
   }
-  const retryKept = () => { if (kept) void process(kept.blob, kept.name, kept.source as "Phone" | "RecordedFixture", { prior: kept }); };
-  const discardKept = () => { void clearCapture(id); setKept(null); };
+  const firstKept = kept[0];
+  const retryKept = () => { if (firstKept) void process(firstKept.blob, firstKept.name, firstKept.source as "Phone" | "RecordedFixture", { prior: firstKept }); };
+  const discardKept = () => { if (firstKept) dropKept(firstKept.key); };
 
   // A file from the native camera on a touch device is a capture; on a desktop it is an imported file and says so.
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -265,9 +267,9 @@ export default function Scan({ id }: { id: string }) {
           guide={target ? { concept: target, label: `Frame this part next · ${sentence(result?.assessment?.requestedView) || target}` } : null}
           className="w-full" imgClassName="max-h-[45dvh] object-contain" />}
         {!preview && live === "starting" && <p role="status" className="absolute inset-x-0 top-1/2 flex items-center justify-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Starting camera…</p>}
-        {kept && !preview && !busy && (
+        {firstKept && !preview && !busy && (
           <div className="glass absolute inset-x-3 bottom-3 space-y-2 rounded-2xl p-3 text-xs" role="status" data-kept-capture>
-            <p>A photo from {fmtWhen(kept.observedAt)} didn't finish uploading. {keptOnDevice ? "It's still on this device." : "It's held on this screen only and goes if you leave."}</p>
+            <p>A photo from {fmtWhen(firstKept.observedAt)} didn't finish uploading{kept.length > 1 ? ` (${kept.length - 1} more waiting)` : ""}. {firstKept.onDevice ? "It's still on this device." : "It's held on this screen only and goes if you leave."}</p>
             <div className="flex gap-2">
               <button type="button" onClick={retryKept} className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-primary-foreground"><RotateCcw className="size-3.5" /> Try again with this photo</button>
               <button type="button" onClick={discardKept} className="h-10 rounded-xl border border-overlay-foreground/30 px-3">Discard</button>

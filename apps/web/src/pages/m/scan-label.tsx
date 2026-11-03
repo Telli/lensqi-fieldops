@@ -37,10 +37,12 @@ export default function ScanLabel() {
   const create = useMutation({
     mutationFn: (a: ScannedAsset) => api.create(a.fixtureId, a.assetId),
     onSuccess: (i) => nav(`/m/i/${i.inspectionId}/scan`),
-    // A failed create releases the lock so the technician can try again here.
-    onError: (e) => { started.current = false; toast.error(friendlyError(e)); },
+    // A failed create releases the lock, and automatic reading pauses so the same label in view is not sent again and
+    // again; the technician asks for another read or types the id.
+    onError: (e) => { started.current = false; setPaused(friendlyError(e)); },
   });
   const started = useRef(false);
+  const [paused, setPaused] = useState<string | null>(null);
   const start = (a: ScannedAsset) => { if (started.current) return; started.current = true; create.mutate(a); };
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export default function ScanLabel() {
     let busy = false, left = false;
     const t = setInterval(async () => {
       const v = video.current;
-      if (busy || !v || !v.videoWidth || started.current) return;
+      if (busy || !v || !v.videoWidth || started.current || paused) return;
       busy = true;
       try {
         const codes = await detector.detect(v);
@@ -78,7 +80,7 @@ export default function ScanLabel() {
       } catch { /* a frame the detector could not read; the next one is tried */ } finally { busy = false; }
     }, 350);
     return () => { left = true; clearInterval(t); };
-  }, [live, fixtures.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [live, fixtures.data, paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typedAsset = assetFromScan(typed, fixtures.data);
   const readAsset = read ? assetFromScan(read, fixtures.data) : undefined;
@@ -101,6 +103,11 @@ export default function ScanLabel() {
         {!supported && live === "on" && <p className="text-xs text-warning">This browser can't read codes from the camera. Type the id from the label below.</p>}
         {create.isPending ? (
           <p role="status" className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Starting the inspection…</p>
+        ) : paused ? (
+          <div role="alert" className="space-y-2 text-xs">
+            <p>The inspection couldn't be started. {paused}</p>
+            <button type="button" onClick={() => setPaused(null)} className="min-h-10 rounded-xl border border-overlay-foreground/30 px-3">Read the label again</button>
+          </div>
         ) : read ? (
           <p role="status" className="text-xs">
             Code read: <span className="font-mono">{read}</span>

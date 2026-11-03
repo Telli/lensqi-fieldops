@@ -96,17 +96,22 @@ public static class InspectionEndpoints
             // A JPEG turned by its EXIF orientation is stored the way it is shown, so SAM, the crops and every client draw
             // on the same pixels. The digest of the bytes as uploaded is returned too, so a client can still check its copy.
             var uploadedSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
-            var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
-            // Re-encoding can grow the file; a turned copy over the upload limit is not stored, the bytes as uploaded are.
-            if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, ct) is { Length: > 0 } turned && turned.LongLength <= EvidenceFileStore.MaxImageBytes && EvidenceFileStore.DetectImageType(turned) == "image/jpeg")
-                bytes = turned;
-            // T6.1: size comes from the file header, never from the form; too small or too large is refused before storage.
+            // T6.1: size comes from the file header, never from the form; too large is refused before any pixel is decoded,
+            // here or in the sidecar (a turn keeps the pixel count), too small after the turn.
             if (!EvidenceFileStore.TryReadDimensions(bytes, out var width, out var height))
                 return ApiResults.BadRequest("image_unreadable", "image header has no readable pixel size");
-            if (Math.Min(width, height) < limits.MinImageShortSide || Math.Max(width, height) < limits.MinImageLongSide)
-                return ApiResults.BadRequest("image_too_small", $"image is {width}x{height}; at least {limits.MinImageLongSide}x{limits.MinImageShortSide} is required");
             if ((long)width * height > limits.MaxImagePixels)
                 return ApiResults.BadRequest("image_too_large", $"image is {width}x{height}; at most {limits.MaxImagePixels} pixels are accepted");
+            var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
+            // Re-encoding can grow the file; a turned copy over the upload limit is not stored, the bytes as uploaded are.
+            if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, limits.MaxImagePixels, ct) is { Length: > 0 } turned
+                && turned.LongLength <= EvidenceFileStore.MaxImageBytes && EvidenceFileStore.DetectImageType(turned) == "image/jpeg"
+                && EvidenceFileStore.TryReadDimensions(turned, out var turnedWidth, out var turnedHeight) && (long)turnedWidth * turnedHeight <= limits.MaxImagePixels)
+            {
+                bytes = turned; width = turnedWidth; height = turnedHeight;
+            }
+            if (Math.Min(width, height) < limits.MinImageShortSide || Math.Max(width, height) < limits.MinImageLongSide)
+                return ApiResults.BadRequest("image_too_small", $"image is {width}x{height}; at least {limits.MinImageLongSide}x{limits.MinImageShortSide} is required");
             if (!TryCaptureOrigin(form["source"].ToString(), out var origin)) return InvalidSource();
             // What the phone's ARCore measured at the shutter travels with the photo as a measured note; malformed is refused, never guessed.
             if (MeasuredParts.Parse(form["measured"]) is not { } measured) return MeasuredParts.Invalid();
