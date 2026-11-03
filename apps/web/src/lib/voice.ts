@@ -181,12 +181,10 @@ export function useHandsFree(voice: { supported: boolean; listening: boolean; er
   const retried = useRef(false);
   useEffect(() => {
     if (!on || !voice.supported) return;
-    if (blocked) {
-      if (retried.current) { setOn(false); return; }
-      retried.current = true;
-    }
+    if (blocked && retried.current) { setOn(false); return; }
     if (voice.listening || speech.speaking || busy) return;
-    const t = setTimeout(voice.start, 400);
+    // The retry is spent only when a start is really attempted, not while something else holds hands-free back.
+    const t = setTimeout(() => { if (blocked) retried.current = true; voice.start(); }, 400);
     return () => clearTimeout(t);
   }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggle = () => setOn((v) => {

@@ -39,10 +39,12 @@ export default function ScanLabel() {
     onSuccess: (i) => nav(`/m/i/${i.inspectionId}/scan`),
     // A failed create releases the lock, and automatic reading pauses so the same label in view is not sent again and
     // again; the technician asks for another read or types the id.
-    onError: (e) => { started.current = false; setPaused(friendlyError(e)); },
+    onError: (e) => { pausedRef.current = true; started.current = false; setPaused(friendlyError(e)); },
   });
   const started = useRef(false);
   const [paused, setPaused] = useState<string | null>(null);
+  // Set before the lock is released, so a read already in flight cannot start the same inspection again.
+  const pausedRef = useRef(false);
   const start = (a: ScannedAsset) => { if (started.current) return; started.current = true; create.mutate(a); };
 
   useEffect(() => {
@@ -68,8 +70,8 @@ export default function ScanLabel() {
       busy = true;
       try {
         const codes = await detector.detect(v);
-        // A read that finishes after the page was left must not start an inspection.
-        if (left) return;
+        // A read that finishes after the page was left, after a failed create, or while another is starting must not start an inspection.
+        if (left || pausedRef.current || started.current) return;
         for (const code of codes) {
           const value = code.rawValue?.trim();
           if (!value) continue;
@@ -106,7 +108,7 @@ export default function ScanLabel() {
         ) : paused ? (
           <div role="alert" className="space-y-2 text-xs">
             <p>The inspection couldn't be started. {paused}</p>
-            <button type="button" onClick={() => setPaused(null)} className="min-h-10 rounded-xl border border-overlay-foreground/30 px-3">Read the label again</button>
+            <button type="button" onClick={() => { pausedRef.current = false; setPaused(null); }} className="min-h-10 rounded-xl border border-overlay-foreground/30 px-3">Read the label again</button>
           </div>
         ) : read ? (
           <p role="status" className="text-xs">
