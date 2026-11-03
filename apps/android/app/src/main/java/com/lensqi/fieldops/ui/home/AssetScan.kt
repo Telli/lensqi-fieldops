@@ -39,3 +39,22 @@ fun assetFromScan(payload: String, fixtures: List<Fixture>): ScannedAsset? {
         .filter { it.assetId.lowercase() == text.lowercase() || it.assetId.lowercase() in tokens }
         .maxByOrNull { it.assetId.length }
 }
+
+/** A printed token that looks like an asset id: letters, a dash or underscore, then more id characters ("LAB-SW-01", "RACK_2a"). */
+private val ID_LIKE = Regex("[A-Za-z]+[-_][A-Za-z0-9_-]+")
+
+/**
+ * The longest id-looking token in [line], or null when the line carries none. Lets the scanner show the read most likely
+ * to be the label's id ("LAB-SW-0l", mis-read with a letter l) when no line names a recorded asset. Bounded like [peeled]:
+ * a token longer than [MAX_TOKEN] is not an id and is skipped.
+ */
+fun looksLikeId(line: String): String? =
+    ID_LIKE.findAll(line).map { it.value }.filter { it.length <= MAX_TOKEN }.maxByOrNull { it.length }
+
+/**
+ * The first recognised text line that names an asset on a site record, by the same rule as a scanned code
+ * ([assetFromScan]: whole token, longest id wins within a line). Lines that name nothing are skipped, so a label's
+ * "ASSET TAG" heading does not hide the id printed under it.
+ */
+fun assetFromText(lines: List<String>, fixtures: List<Fixture>): ScannedAsset? =
+    lines.firstNotNullOfOrNull { assetFromScan(it, fixtures) }

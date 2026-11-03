@@ -18,6 +18,11 @@ import com.lensqi.fieldops.data.api.Fixture
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.InvestigateResponse
 import com.lensqi.fieldops.data.api.KnowledgeResponse
+import com.lensqi.fieldops.data.api.PredictionsResponse
+import com.lensqi.fieldops.data.api.ReasonRequest
+import com.lensqi.fieldops.data.api.ReasonResponse
+import com.lensqi.fieldops.data.SitePackStore
+import com.lensqi.fieldops.data.Snapshot
 import com.lensqi.fieldops.data.api.ReceiptVerification
 import com.lensqi.fieldops.data.api.RepairClaimRequest
 import com.lensqi.fieldops.data.api.SegmentRequest
@@ -37,6 +42,7 @@ import com.lensqi.fieldops.ui.common.assetMatch
 import com.lensqi.fieldops.ui.common.sentence
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.lensqi.fieldops.data.queue.CommandQueue
@@ -104,6 +110,20 @@ data class InspectionUi(
     val knowledge: KnowledgeResponse? = null,
     /** Set when the knowledge shown is the on-device copy because the API is unreachable. */
     val knowledgeCachedAt: String? = null,
+    /** The grounded advisor's last answer this session, accepted or refused; the server holds the record either way. */
+    val advice: ReasonResponse? = null,
+    /** Null until the technician edits it; the screen then prefills a one-line observation from the latest assessment. */
+    val observationText: String? = null,
+    /** Registered predictions and the server's scores. Calibration only: the measurement decides, never the prediction. */
+    val predictions: PredictionsResponse? = null,
+    /** Set when the predictions shown are the on-device copy because the API is unreachable. */
+    val predictionsCachedAt: String? = null,
+    /** The server's reason for the latest stage change, from the events; what a closed card says. */
+    val stageReason: String? = null,
+    /** The current repair claim as the technician described it, from the events. */
+    val claimDescription: String? = null,
+    /** Codes of the latest knowledge proposal refused since the claim, when the newest proposal was a refusal; null otherwise. */
+    val refusedCodes: List<String>? = null,
     /** Set when the inspection view shown is the on-device copy because the API is unreachable. */
     val viewCachedAt: String? = null,
     val receiptCheck: ReceiptVerification? = null,
@@ -220,7 +240,26 @@ class InspectionViewModel @Inject constructor(
             else -> report(r)
         }
         (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
+        loadPredictions()
         loadTrail()
+    }
+
+    /**
+     * Predictions are read on every refresh, so the card follows a check run or an advisor answer. Offline the last saved
+     * copy is shown, dated; an older server without the endpoint simply shows no card.
+     */
+    private suspend fun loadPredictions() {
+        when (val p = apiCall { api.predictions(inspectionId) }) {
+            is ApiOutcome.Ok -> {
+                snapshots.saveOn(predictionsKey, PredictionsResponse.serializer(), p.value)
+                local.update { it.copy(predictions = p.value, predictionsCachedAt = null) }
+            }
+            is ApiOutcome.Unreachable -> if (local.value.predictions == null)
+                snapshots.loadOn(predictionsKey, PredictionsResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
+                    local.update { it.copy(predictions = snap.value, predictionsCachedAt = snap.fetchedAt) }
+                }
+            is ApiOutcome.Rejected -> {}
+        }
     }
 
     /** Assessment and verification history from the events, the stored outline of the latest photo, and the demo switch. */
@@ -230,7 +269,10 @@ class InspectionViewModel @Inject constructor(
             ?.let { runCatching { json.decodeFromJsonElement(VisualAssessment.serializer(), it) }.getOrNull() }
         val attempts = events.filter { it["kind"]?.jsonPrimitive?.content == "VerificationEvaluated" }
             .mapNotNull { e -> e["decision"]?.jsonObject?.get("result")?.jsonPrimitive?.content?.let { r -> runCatching { VerificationResult.valueOf(r) }.getOrNull() } }
-        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json)) }
+        val stageReason = events.lastOrNull { it["kind"]?.jsonPrimitive?.content == "StageChanged" }?.get("reason")?.jsonPrimitive?.content
+        val claimDescription = events.lastOrNull { it["kind"]?.jsonPrimitive?.content == "RepairClaimed" }?.get("description")?.jsonPrimitive?.content
+        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json),
+            stageReason = stageReason, claimDescription = claimDescription, refusedCodes = refusedSinceClaim(events, state.value.view?.repairClaimedAt)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
         // The latest photo; while a repair is being verified also the before photo (toggling "Before" keeps its outlines) and
@@ -562,15 +604,54 @@ class InspectionViewModel @Inject constructor(
                 snapshots.saveOn(knowledgeKey, KnowledgeResponse.serializer(), k.value)
                 local.update { it.copy(knowledge = k.value, knowledgeCachedAt = null) }
             }
-            is ApiOutcome.Unreachable -> snapshots.loadOn(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
-                local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
+            is ApiOutcome.Unreachable -> {
+                // This inspection's own copy first; else the asset's documentation a site pack left on the phone.
+                val snap = snapshots.loadOn(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId } ?: assetKnowledgeSnapshot()
+                if (snap != null) local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
             }
             is ApiOutcome.Rejected -> report(k)
         }
     }
 
+    /** The asset-keyed documentation from a site pack, found through the view (cached or saved) that names the fixture and asset. */
+    private suspend fun assetKnowledgeSnapshot(): Snapshot<KnowledgeResponse>? {
+        val view = local.value.view ?: state.value.view
+            ?: snapshots.loadOn(viewKey, InspectionView.serializer())?.value?.takeIf { it.inspectionId == inspectionId } ?: return null
+        return snapshots.loadOn(SitePackStore.knowledgeKey(serverBase, view.fixtureId, view.assetId), KnowledgeResponse.serializer())
+    }
+
+    fun onObservationChanged(value: String) = local.update { it.copy(observationText = value) }
+
+    /**
+     * Asks the server for advice grounded in this unit's documentation. The server validates the model's proposal and records
+     * it, accepted or refused; the phone shows what came back verbatim. Never saved for later: the answer is about the
+     * evidence as it stands now, and the record must show when it was asked.
+     */
+    fun askAdvisor(observation: String) = act("Asking the grounded advisor…") {
+        val text = observation.trim().take(2000) // the server accepts 1-2000 characters
+        when (val r = keys.command(action("reason:$text")) { k -> api.reason(inspectionId, k, ReasonRequest(text)) }) {
+            is ApiOutcome.Ok -> {
+                cacheView(r.value.state)
+                local.update { it.copy(advice = r.value) }
+                loadPredictions()
+            }
+            is ApiOutcome.Unreachable -> local.update { it.copy(error = NEEDS_CONNECTION_ADVISOR) }
+            is ApiOutcome.Rejected -> report(r)
+        }
+    }
+
+    /** The technician cannot safely take the view LensQi asked for. The server closes the inspection as inconclusive and keeps the decline in the record. */
+    fun declineView() = act("Closing as inconclusive…") {
+        when (val r = keys.command(action("decline")) { k -> api.declineView(inspectionId, k) }) {
+            is ApiOutcome.Ok -> cacheView(r.value)
+            is ApiOutcome.Unreachable -> local.update { it.copy(error = NEEDS_CONNECTION_DECLINE) }
+            is ApiOutcome.Rejected -> report(r)
+        }
+    }
+
     private val viewKey get() = SnapshotStore.key(serverBase, "inspection", inspectionId)
     private val knowledgeKey get() = SnapshotStore.key(serverBase, "knowledge", inspectionId)
+    private val predictionsKey get() = SnapshotStore.key(serverBase, "predictions", inspectionId)
 
     /** A stored photo for display on the camera (the before photo as a framing aid), upright and downscaled; null offline. */
     suspend fun photoForDisplay(evidenceId: String): Bitmap? {
@@ -626,5 +707,22 @@ class InspectionViewModel @Inject constructor(
         const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
         const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
         const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."
+        const val NEEDS_CONNECTION_ADVISOR = "Needs a connection to ask the advisor. Nothing was sent; try again when connected."
+        const val NEEDS_CONNECTION_DECLINE = "Needs a connection; the server records the decision. Nothing was sent; try again when connected."
+
+        /**
+         * The newest knowledge proposal recorded since the claim, when it was a refusal: its codes, so the screen can say the
+         * server refused LensQi's last suggestion and ran nothing. Null when the newest was accepted or none was recorded.
+         */
+        fun refusedSinceClaim(events: List<kotlinx.serialization.json.JsonObject>, claimedAt: String?): List<String>? {
+            val since = claimedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return null
+            val latest = events.lastOrNull { e ->
+                val kind = e["kind"]?.jsonPrimitive?.content
+                (kind == "KnowledgeProposalRejected" || kind == "KnowledgeProposalAccepted") &&
+                    e["occurredAt"]?.jsonPrimitive?.content?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }?.let { !it.isBefore(since) } == true
+            } ?: return null
+            if (latest["kind"]?.jsonPrimitive?.content != "KnowledgeProposalRejected") return null
+            return latest["rejections"]?.let { r -> runCatching { r.jsonArray.map { it.jsonObject["code"]?.jsonPrimitive?.content ?: "unknown" } }.getOrNull() }.orEmpty()
+        }
     }
 }

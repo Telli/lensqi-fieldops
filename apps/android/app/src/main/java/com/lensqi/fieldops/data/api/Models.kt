@@ -307,9 +307,13 @@ data class KnowledgeFact(
     val citation: Citation,
 )
 
+/**
+ * GET /v1/inspections/{id}/knowledge, and the same object per asset inside a site pack (keyed by assetId there, so
+ * [inspectionId] is absent). [excluded] lists the pack's facts the server did not apply to this unit, with its reason.
+ */
 @Serializable
 data class KnowledgeResponse(
-    val inspectionId: String,
+    val inspectionId: String? = null,
     val status: String,
     val packId: String? = null,
     val packSha256: String? = null,
@@ -318,7 +322,98 @@ data class KnowledgeResponse(
     val facts: List<KnowledgeFact>,
     val warnings: List<String>,
     val approvedDiagnostics: List<String> = emptyList(),
+    val excluded: List<ExcludedFact> = emptyList(),
 )
+
+/** A fact the server kept out of the applicable set: verdict is Unverified or Inapplicable, reason a stable snake_case code. */
+@Serializable
+data class ExcludedFact(val factId: String, val verdict: String, val reason: String)
+
+// ---- grounded advisor (POST /v1/inspections/{id}/knowledge/reason) ----
+
+@Serializable
+data class ReasonRequest(val observation: String)
+
+/**
+ * The server's answer to a grounded-advice request: the model's proposal only when the validator accepted it, else every
+ * rejection. Both are in the inspection record; a replayed key returns what was recorded. Model text is shown verbatim.
+ */
+@Serializable
+data class ReasonResponse(
+    val accepted: Boolean,
+    val proposalId: String,
+    val modelId: String,
+    val promptDigest: String? = null,
+    val responseDigest: String? = null,
+    val proposal: GroundedProposal? = null,
+    val rejections: List<ProposalRejection> = emptyList(),
+    /** The prediction the server registered with an accepted RunApprovedProbe, before any check for it can run. */
+    val prediction: RegisteredPrediction? = null,
+    val replayed: Boolean = false,
+    val state: InspectionView,
+)
+
+@Serializable
+data class GroundedProposal(
+    val assetId: String,
+    val usedFactIds: List<String> = emptyList(),
+    val hypothesis: String? = null,
+    val requestedVisualEvidence: String? = null,
+    val proposedDiagnosticId: String? = null,
+    val nextAction: ProposedNextAction,
+    val prediction: ProposalPrediction? = null,
+)
+
+@Serializable
+data class ProposalPrediction(val diagnosticId: String, val predictedValue: String, val basedOnFactIds: List<String> = emptyList(), val rationale: String? = null)
+
+@Serializable
+data class ProposalRejection(val code: String, val message: String, val offendingIds: List<String> = emptyList())
+
+@Serializable
+data class RegisteredPrediction(val predictionId: String, val diagnosticId: String, val predictedValue: String, val basedOnFactIds: List<String> = emptyList(), val predictionDigest: String? = null)
+
+// ---- predictions (GET /v1/inspections/{id}/predictions): model calibration, never a verification input ----
+
+@Serializable
+data class PredictionsResponse(val inspectionId: String, val predictions: List<PredictionRow>, val tally: PredictionTally, val note: String? = null)
+
+/** One registered prediction and, once the check ran, the measurement and the server's score (Confirmed, Falsified, Unscorable, Pending). */
+@Serializable
+data class PredictionRow(
+    val predictionId: String,
+    val diagnosticId: String,
+    val predictedValue: String,
+    val basedOnFactIds: List<String> = emptyList(),
+    val predictionDigest: String? = null,
+    val proposalId: String? = null,
+    val registeredAt: String,
+    val measuredValue: String? = null,
+    val outcome: String,
+    val diagnosticEvidenceId: String? = null,
+    val scoredAt: String? = null,
+)
+
+@Serializable
+data class PredictionTally(val confirmed: Int = 0, val falsified: Int = 0, val unscorable: Int = 0, val pending: Int = 0)
+
+// ---- site pack (GET /v1/fixtures/{fixtureId}/pack): everything a phone needs for this site out of signal, photos excepted ----
+
+@Serializable
+data class SitePack(
+    val fixtureId: String,
+    val fixtureRevision: Int,
+    val sha256: String,
+    val generatedAt: String,
+    val fixture: Fixture,
+    val assets: List<SitePackAsset> = emptyList(),
+    val inspections: List<InspectionSummary> = emptyList(),
+    /** The server view of every open inspection of this fixture. */
+    val open: List<InspectionView> = emptyList(),
+)
+
+@Serializable
+data class SitePackAsset(val assetId: String, val knowledge: KnowledgeResponse)
 
 @Serializable
 data class DiagnosticRunResponse(val evidenceId: String, val result: DiagnosticResult, val source: DiagnosticSource, val events: Int, val state: InspectionView)

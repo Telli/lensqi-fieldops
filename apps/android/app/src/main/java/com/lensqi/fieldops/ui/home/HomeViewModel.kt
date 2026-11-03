@@ -5,6 +5,8 @@ import com.lensqi.fieldops.ui.theme.Appearance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lensqi.fieldops.data.InspectionCache
+import com.lensqi.fieldops.data.SitePackReceipt
+import com.lensqi.fieldops.data.SitePackStore
 import com.lensqi.fieldops.data.SnapshotStore
 import com.lensqi.fieldops.data.api.ApiOutcome
 import com.lensqi.fieldops.data.api.CreateInspectionRequest
@@ -47,6 +49,14 @@ data class HomeState(
     val focusPhotoUrl: String? = null,
     /** Latest photo URL per asset, loaded when the asset's page opens. */
     val assetPhotos: Map<String, String> = emptyMap(),
+    /** Site packs saved on this phone, by fixture: when, which revision, how much it covered. */
+    val sitePacks: Map<String, SitePackReceipt> = emptyMap(),
+    /** The fixture whose site pack is downloading now. */
+    val downloadingPack: String? = null,
+    /** What the last site-pack download left on the phone; cleared by the next download. Not an error. */
+    val packNotice: String? = null,
+    /** Why the last site pack download failed; kept apart from [error] so an unrelated stale error never shows under the button. */
+    val packError: String? = null,
 )
 
 /** Shared by the home, inspections, assets, start and profile tabs; everything shown comes from the server or its cached copy. */
@@ -56,6 +66,7 @@ class HomeViewModel @Inject constructor(
     private val settings: SettingsStore,
     private val cache: InspectionCache,
     private val snapshots: SnapshotStore,
+    private val sitePacks: SitePackStore,
 ) : ViewModel() {
     private val serverBase = settings.currentBase().toString()
     val diagnostics = settings.diagnostics
@@ -107,6 +118,7 @@ class HomeViewModel @Inject constructor(
                     inspections = list ?: it.inspections, cachedAt = null, loading = false)
             }
             loadFocus()
+            loadReceipts()
         } else {
             val list = snapshots.loadOn(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
             // Same rule: the list this run fetched outranks the saved copy.
@@ -116,7 +128,36 @@ class HomeViewModel @Inject constructor(
                 it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt,
                     fixturesCachedAt = fetchedAt, fixturesFetchedAt = fetchedAt, fixturesFailed = true, loading = false)
             }
+            loadReceipts()
         }
+    }
+
+    /** What each known fixture's site pack left on this phone, so the screens can say "Saved on this phone at …". */
+    private suspend fun loadReceipts() {
+        val receipts = _state.value.fixtures.mapNotNull { f -> sitePacks.receipt(f.fixtureId, serverBase)?.value?.let { f.fixtureId to it } }.toMap()
+        _state.update { it.copy(sitePacks = it.sitePacks + receipts) }
+    }
+
+    /**
+     * Fetches one fixture's site pack (site record, every asset's documentation, the open inspections; never photos) and
+     * leaves it under the snapshot keys the screens read offline. Online only: the pack is a server response, nothing else.
+     */
+    fun downloadSitePack(fixtureId: String) = viewModelScope.launch {
+        if (_state.value.downloadingPack != null) return@launch
+        _state.update { it.copy(downloadingPack = fixtureId, packNotice = null, packError = null) }
+        when (val r = apiCall { api.sitePack(fixtureId) }) {
+            is ApiOutcome.Ok -> {
+                sitePacks.store(r.value, serverBase)
+                val receipt = sitePacks.receipt(fixtureId, serverBase)?.value
+                _state.update {
+                    it.copy(sitePacks = if (receipt != null) it.sitePacks + (fixtureId to receipt) else it.sitePacks,
+                        packNotice = "Site pack saved on this phone: ${r.value.assets.size} asset${if (r.value.assets.size == 1) "" else "s"}, ${r.value.open.size} open inspection${if (r.value.open.size == 1) "" else "s"}. Photos are not included.")
+                }
+            }
+            is ApiOutcome.Rejected -> _state.update { it.copy(packError = friendly(r.code, r.message)) }
+            is ApiOutcome.Unreachable -> _state.update { it.copy(packError = friendly("offline", r.message)) }
+        }
+        _state.update { it.copy(downloadingPack = null) }
     }
 
     private suspend fun loadFocus() {

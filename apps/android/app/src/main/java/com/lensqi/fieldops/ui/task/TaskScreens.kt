@@ -101,9 +101,14 @@ import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.ui.theme.Fo
 import com.lensqi.fieldops.ui.theme.FoDark
+import com.lensqi.fieldops.voice.HandsFreePolicy
+import com.lensqi.fieldops.voice.NOTHING_HEARD
 import com.lensqi.fieldops.voice.VoiceCommand
 import com.lensqi.fieldops.voice.parseCommand
+import com.lensqi.fieldops.voice.rememberHandsFree
 import com.lensqi.fieldops.voice.rememberVoiceInput
+import com.lensqi.fieldops.voice.speechNotice
+import androidx.compose.material.icons.outlined.Hearing
 import java.io.File
 
 fun verdictText(v: StepVerdict) = when (v) { StepVerdict.LooksDone -> "Looks done"; StepVerdict.NotYet -> "Not yet"; StepVerdict.CantTell -> "Can't tell" }
@@ -120,6 +125,28 @@ private fun MuteButton(muted: Boolean, onToggle: () -> Unit) {
         Icon(if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp, if (muted) "Turn voice on" else "Mute voice", tint = if (muted) FoDark.Muted else FoDark.Foreground, modifier = Modifier.size(20.dp))
     }
 }
+
+/**
+ * The hands-free switch, beside the mute button: a pill that also says when the microphone is open. Tapping the mic
+ * button while hands-free is on goes through the same switch, so a tap always ends the open listen.
+ */
+@Composable
+private fun HandsFreeChip(on: Boolean, listening: Boolean, onToggle: () -> Unit) {
+    val tint = if (on) FoDark.Primary else FoDark.Foreground
+    Row(Modifier.height(36.dp).clip(RoundedCornerShape(12.dp)).background(if (on) FoDark.Primary.copy(alpha = .22f) else Color.Black.copy(alpha = .4f))
+        .border(1.dp, if (on) FoDark.Primary else FoDark.Border, RoundedCornerShape(12.dp))
+        .clickable(onClickLabel = if (on) "Turn hands-free off" else "Hands-free: keep listening", onClick = onToggle).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(Icons.Outlined.Hearing, null, tint = tint, modifier = Modifier.size(16.dp))
+        Text(if (on && listening) "Hands-free · listening" else "Hands-free", color = tint, fontSize = 11.sp)
+    }
+}
+
+/** Where the microphone's audio goes while hands-free keeps it open; shown in the details so it is read before it is relied on. */
+@Composable
+private fun SpeechBadge(onDevice: Boolean) =
+    Text(speechNotice(onDevice), color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 6.dp))
 
 @Composable
 private fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 48) {
@@ -259,6 +286,9 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
         }
     }
     var asset by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
+    // The asset label scanner (codes and printed ids, read on the phone); a picked asset fills the site-record choice.
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    if (scanning) com.lensqi.fieldops.ui.home.AssetScannerSheet(fixtures, onPicked = { picked -> asset = picked.fixtureId to picked.assetId; scanning = false }, onDismiss = { scanning = false })
     // The copies live in the cache; a restored path whose file is gone is dropped rather than sent empty.
     val manuals = rememberSaveable(saver = listSaver<androidx.compose.runtime.snapshots.SnapshotStateList<File>, String>(save = { it.map { f -> f.path } }, restore = { it.map(::File).filter { f -> f.isFile }.toMutableStateList() })) { mutableStateListOf<File>() }
     val voice = rememberVoiceInput { goal = it }
@@ -320,7 +350,13 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
             label = { Text("Make, model and variant") }, placeholder = { Text("Check the equipment label if unsure") }) }
         item { OutlinedTextField(details, { details = it }, Modifier.fillMaxWidth(), label = { Text("Equipment model, variant and job details") }, placeholder = { Text(if (mode == TaskMode.Diy) "Engine size, tools you have" else "Site notes, access") }, minLines = 2) }
         if (mode == TaskMode.Technician && fixtures.isNotEmpty()) {
-            item { SectionTitle("Equipment on a site record (optional)") }
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { SectionTitle("Equipment on a site record (optional)") }
+                    // The label on the equipment names the asset: scan it instead of finding it in the list.
+                    TextButton(onClick = { scanning = true }) { Text("Scan the label", color = Fo.Primary) }
+                }
+            }
             items(fixtures.flatMap { f -> f.assets.map { f.fixtureId to it } }) { (fixtureId, a) ->
                 val chosen = asset == fixtureId to a.assetId
                 Panel(Modifier.clickable { asset = if (chosen) null else fixtureId to a.assetId }, border = if (chosen) Fo.Primary else Fo.Border) {
@@ -473,8 +509,12 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         val now = vm.state.value
         val current = now.displayed?.currentStep ?: return@rememberVoiceInput
         val idle = now.busy == null
+        val command = parseCommand(said)
+        // While paused nothing said is a command or a question; only "resume" (and the voice switch) is heard, so ambient
+        // speech never reaches the server. Hands-free keeps listening for it, or a pause by voice could only be ended by a tap.
+        if (!HandsFreePolicy.pausedCommandAllowed(command, pace.paused)) return@rememberVoiceInput
         // A command that can't run now says why; one that runs is heard through the next step being read.
-        when (parseCommand(said)) {
+        when (command) {
             VoiceCommand.Next -> if (viewingId != null) viewingId = null else if (idle) vm.complete(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
             VoiceCommand.Skip -> if (viewingId != null) vm.speaker.speak("Go to the current step to skip it. Say next to go there.", force = true)
                 else if (idle) vm.skip(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
@@ -490,7 +530,12 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpokenErrors(vm.speaker, s.error ?: s.notice, voice.error)
+    // Hands-free holds while a request is pending (the question being answered, a step moving) and while an earlier step is
+    // on screen, where questions are not taken; it listens through a pause, so "resume" is heard.
+    val handsFree = rememberHandsFree(voice, vm.speaker, busy = s.busy != null || reviewing, paused = pace.paused)
+    // Silence between questions is the normal state of hands-free, not something to say or show.
+    val voiceError = voice.error?.takeUnless { handsFree.on && it == NOTHING_HEARD }
+    SpokenErrors(vm.speaker, s.error ?: s.notice, voiceError)
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
@@ -505,14 +550,28 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
         header = (if (reviewing) "Earlier step ${n + 1} of ${steps.size} · " else "Step ${n + 1} of ${steps.size} · ") + step.title,
         onGuidance = pace::guidance,
+        // A tapped outline becomes a question about that part, with the live frame, as the web app asks it; the server
+        // answers it and the answer is spoken through the same path as a spoken question's.
+        onAskPart = { part ->
+            when {
+                reviewingNow -> vm.speaker.speak("Questions are about the current step. Say next to go to it.", force = true)
+                vm.state.value.busy != null -> vm.speaker.speak(STILL_WORKING, force = true)
+                else -> {
+                    // A question asked by tapping a box while the microphone is open ends the listen first, so the answer is spoken.
+                    if (voice.listening) voice.abort()
+                    vm.ask("Tell me about the ${part.label.lowercase()} in view. Is anything wrong with it for this step?", camera.value?.latestFrame?.invoke())
+                }
+            }
+        },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
+            if (handsFree.on) SpeechBadge(handsFree.onDevice)
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.cachedAt != null) Text("Saved plan · ${s.cachedAt}")
             s.pendingSteps.filter { it.state == CommandState.Pending }.forEach { Text("Step ${it.stepId}: update waiting for sync") }
@@ -528,15 +587,15 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice)
+            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voiceError, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice)
         },
         controls = { handle ->
             camera.value = handle
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
                 // LensQi stops talking while it listens, so it never hears itself as the question; the voice input's hold
-                // does that and reads a cut-off step again afterwards.
-                onMic = { if (voice.listening) voice.stop() else voice.start() },
-                onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
+                // does that and reads a cut-off step again afterwards. With hands-free on, the mic button is its off switch.
+                onMic = { if (handsFree.on) handsFree.toggle() else if (voice.listening) voice.stop() else voice.start() },
+                onSend = { if (voice.listening) voice.abort(); vm.ask(typed, handle.latestFrame()); typed = "" })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { viewingId = it.id } }
                 StepButton(Icons.Outlined.Visibility, "Use the glasses for this step", enabled = !reviewing && s.busy == null) { onGlasses() }
@@ -551,7 +610,13 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
-                Text(if (needsCheck) "Tip: a quick check photo can confirm this step." else if (voice.supported) "Say “next”, “repeat”, “check this”, or ask a question." else "", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                if (voice.supported) HandsFreeChip(handsFree.on, voice.listening, handsFree.toggle)
+                Text(when {
+                    needsCheck -> "Tip: a quick check photo can confirm this step."
+                    handsFree.on -> "Hands-free: the microphone opens again after each answer."
+                    voice.supported -> "Say “next”, “repeat”, “check this”, or ask a question. Hands-free keeps listening."
+                    else -> ""
+                }, color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (!reviewing) TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },
@@ -822,7 +887,11 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     var muted by remember { mutableStateOf(!vm.speaker.enabled) }
     val pace = rememberVoicePace(vm.speaker, camera) { true }
     val voice = rememberVoiceInput(vm.speaker) { said ->
-        when (parseCommand(said)) {
+        val command = parseCommand(said)
+        // While paused nothing said is a command or a question; only "resume" (and the voice switch) is heard, so ambient
+        // speech never reaches the server. Hands-free keeps listening for it.
+        if (!HandsFreePolicy.pausedCommandAllowed(command, pace.paused)) return@rememberVoiceInput
+        when (command) {
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
             VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true, replace = true) } ?: vm.speaker.speak("There's no answer yet. Ask a question.", force = true)
@@ -832,7 +901,10 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             else -> vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpokenErrors(vm.speaker, s.error, voice.error)
+    // Hands-free holds while a question is being answered and once the session has ended; it listens through a pause.
+    val handsFree = rememberHandsFree(voice, vm.speaker, busy = s.busy != null || !open, paused = pace.paused)
+    val voiceError = voice.error?.takeUnless { handsFree.on && it == NOTHING_HEARD }
+    SpokenErrors(vm.speaker, s.error, voiceError)
     CameraScreen(
         prompt = answers.firstOrNull()?.answer ?: "Point at the equipment and ask a question.",
         analyzeLive = vm::analyzeLiveFrame,
@@ -841,9 +913,23 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         // A title the AI named from the conversation is labelled as such, as the plan and summary label it.
         header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
+        // The speech badge must be readable while hands-free keeps the microphone open.
+        showDetails = handsFree.on,
+        // A tapped outline becomes a question about that part, with the live frame, in the web app's words.
+        onAskPart = { part ->
+            when {
+                !open -> vm.speaker.speak("This session has ended.", force = true)
+                vm.state.value.busy != null -> vm.speaker.speak(STILL_WORKING, force = true)
+                else -> {
+                    if (voice.listening) voice.abort()
+                    vm.ask("Tell me about the ${part.label.lowercase()} in view. Is anything wrong with it?", camera.value?.latestFrame?.invoke())
+                }
+            }
+        },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
-            val note = s.error ?: voice.error
+            if (handsFree.on) SpeechBadge(handsFree.onDevice)
+            val note = s.error ?: voiceError
             if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }
                 if (voice.listening) Text(voice.heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
@@ -856,15 +942,16 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",
-                        onMic = { if (voice.listening) voice.stop() else voice.start() },
-                        onSend = { vm.ask(typed, handle.latestFrame()); typed = "" })
+                        onMic = { if (handsFree.on) handsFree.toggle() else if (voice.listening) voice.stop() else voice.start() },
+                        onSend = { if (voice.listening) voice.abort(); vm.ask(typed, handle.latestFrame()); typed = "" })
                 }
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
+                if (voice.supported && open) HandsFreeChip(handsFree.on, voice.listening, handsFree.toggle)
                 TextButton(onClick = { onPlan(t?.title?.takeUnless { it == "Just ask" } ?: answers.firstOrNull { it.question != LOOK }?.question.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
-                Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Text(if (handsFree.on) "Hands-free: the microphone opens again after each answer." else "Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },

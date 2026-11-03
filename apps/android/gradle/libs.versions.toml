@@ -73,6 +73,8 @@ androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", vers
 google-ar-core = { module = "com.google.ar:core", version.ref = "arcore" }
 # Bundled barcode model: asset labels scan without Google Play Services (the arm64 emulator has none).
 mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
+# Bundled Latin text model: printed asset ids are read on the phone without Google Play Services, like the barcodes.
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
