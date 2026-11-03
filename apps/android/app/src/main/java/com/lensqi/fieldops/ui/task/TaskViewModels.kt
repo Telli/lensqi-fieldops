@@ -46,40 +46,48 @@ private fun <T> ApiOutcome<T>.errorText(): String? = when (this) {
     is ApiOutcome.Unreachable -> friendly("offline", message)
 }
 
-data class TaskListUi(val tasks: List<TaskSummary> = emptyList(), val creating: Boolean = false, val error: String? = null)
+data class TaskListUi(val tasks: List<TaskSummary> = emptyList(), val cached: Boolean = false, val creating: Boolean = false, val error: String? = null)
 
 /** The task list and starting a new task: the server writes and checks the plan; the id always comes from the API. */
 @HiltViewModel
-class TaskListViewModel @Inject constructor(private val api: FieldOpsApi, private val settings: com.lensqi.fieldops.data.settings.SettingsStore) : ViewModel() {
+class TaskListViewModel @Inject constructor(private val api: FieldOpsApi, private val settings: com.lensqi.fieldops.data.settings.SettingsStore, private val library: com.lensqi.fieldops.data.TaskLibrary) : ViewModel() {
     private val _state = MutableStateFlow(TaskListUi())
     val state: StateFlow<TaskListUi> = _state
 
     init { refresh() }
 
     fun refresh() = viewModelScope.launch {
-        (apiCall { api.tasks() } as? ApiOutcome.Ok)?.value?.let { list -> _state.update { it.copy(tasks = list) } }
+        val cached = library.history()
+        if (cached.isNotEmpty()) _state.update { it.copy(tasks = cached, cached = true) }
+        when (val r = apiCall { api.tasks() }) {
+            is ApiOutcome.Ok -> { library.history(r.value); _state.update { it.copy(tasks = r.value, cached = false) } }
+            else -> _state.update { it.copy(error = r.errorText()) }
+        }
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
 
     /** Free-form help: straight to the camera, no goal or plan. */
-    fun justAsk(onCreated: (String) -> Unit) = create(TaskMode.Freeform, "", null, null, null, emptyList(), onCreated)
+    fun justAsk(onCreated: (String) -> Unit) = create(TaskMode.Freeform, "", null, null, null, emptyList(), onCreated = onCreated)
+
+    fun photoUrl(id: String, photo: String) = library.server.trimEnd('/') + "/v1/tasks/$id/artifacts/$photo"
+    suspend fun loadSource(id: String) = (apiCall { api.task(id) } as? ApiOutcome.Ok)?.value ?: library.job(id)?.value
 
     // A retried create reuses its key so the server returns the task it already made instead of making another.
     private val createKeys = mutableMapOf<String, String>()
 
-    fun create(mode: TaskMode, goal: String, details: String?, fixtureId: String?, assetId: String?, manuals: List<File>, onCreated: (String) -> Unit) = viewModelScope.launch {
+    fun create(mode: TaskMode, goal: String, details: String?, fixtureId: String?, assetId: String?, manuals: List<File>, sourceId: String? = null, photos: List<String> = emptyList(), answers: List<String> = emptyList(), onCreated: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(creating = true, error = null) }
         val parts = manuals.take(3).map { MultipartBody.Part.createFormData("manual", it.name, it.asRequestBody("image/jpeg".toMediaType())) }
-        val action = "${mode.name}:${goal.trim()}"
+        val action = listOf(mode, goal.trim(), details, fixtureId, assetId, sourceId, photos, answers, manuals.map { it.path }).toString()
         val k = createKeys.getOrPut(action) { key() }
         // The person's height and tools (Profile) go with the goal, so the plan fits who is doing the job.
         val person = settings.person.first()
         val r = apiCall { api.createTask(k, text(mode.name), text(goal.trim()), details?.takeIf { it.isNotBlank() }?.let(::text), fixtureId?.let(::text), assetId?.let(::text), parts,
-            person.heightCm?.let { text(it.toString()) }, person.tools.map(::text)) }
+            person.heightCm?.let { text(it.toString()) }, person.tools.map(::text), sourceId?.let(::text), photos.map(::text), answers.map(::text)) }
         if (!r.retryable) createKeys.remove(action)
         _state.update { it.copy(creating = false, error = r.errorText()) }
-        if (r is ApiOutcome.Ok) { refresh(); onCreated(r.value.task.taskId) }
+        if (r is ApiOutcome.Ok) { library.remember(r.value.task); library.cacheReferences(r.value.task, api); refresh(); onCreated(r.value.task.taskId) }
     }
 }
 
@@ -90,15 +98,35 @@ data class TaskUi(
     val answer: Pair<String, String>? = null,
     /** The FieldProof inspection a technician task is linked to, for its stage and live or simulated outcome. */
     val linked: InspectionView? = null,
+    val cachedAt: String? = null,
+    val pendingSteps: List<PendingCommand> = emptyList(),
     /** Step-check photos saved on the phone, waiting for the network. */
     val queuedChecks: Int = 0,
     val refusedChecks: List<PendingCommand> = emptyList(),
-)
+) {
+    // An outbox overlay lets the person continue the next step without changing the confirmed snapshot.
+    val displayed: TaskView? get() {
+        val confirmed = task ?: return null
+        val plan = confirmed.plan ?: return confirmed
+        if (confirmed.phase != com.lensqi.fieldops.data.api.TaskPhase.InProgress) return confirmed
+        val updates = pendingSteps.filter { it.state == CommandState.Pending }.associateBy { it.stepId }
+        if (updates.isEmpty()) return confirmed
+        val steps = plan.steps.map { s ->
+            when (updates[s.id]?.kind) {
+                CommandKind.TaskComplete -> s.copy(status = com.lensqi.fieldops.data.api.StepStatus.Done)
+                CommandKind.TaskSkip -> s.copy(status = com.lensqi.fieldops.data.api.StepStatus.Skipped)
+                else -> s
+            }
+        }
+        val next = steps.firstOrNull { it.status == com.lensqi.fieldops.data.api.StepStatus.Todo || it.status == com.lensqi.fieldops.data.api.StepStatus.Active }
+        return confirmed.copy(plan = plan.copy(steps = steps), currentStepId = next?.id ?: confirmed.currentStepId)
+    }
+}
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
 @HiltViewModel
 class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: SpeechOutput, private val queue: StepCheckQueue,
-    private val spoken: SpokenChecks = SpokenChecks()) : ViewModel() {
+    private val spoken: SpokenChecks, val library: com.lensqi.fieldops.data.TaskLibrary) : ViewModel() {
     val taskId: String = checkNotNull(saved["taskId"])
     /** Decodes and shrinks a shutter photo; Android's bitmap decoder in the app, a stand-in in JVM tests. */
     internal var reduce: (File, Int) -> ByteArray? = ::downscaledJpeg
@@ -112,11 +140,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
             var waiting = 0
             queue.observe(taskId).collect { all ->
                 val checks = all.filter { it.kind == CommandKind.StepCheckPhoto }
-                val pending = checks.count { it.state == CommandState.Pending }
+                val moves = all.filter { it.kind == CommandKind.TaskComplete || it.kind == CommandKind.TaskSkip }
+                val pending = moves.count { it.state == CommandState.Pending } + checks.count { it.state == CommandState.Pending }
                 if (pending < waiting) refresh()
                 waiting = pending
-                _state.update { it.copy(queuedChecks = pending, refusedChecks = checks.filter { c -> c.state == CommandState.Rejected }) }
-                checks.filter { it.state == CommandState.Rejected }.forEach { c ->
+                _state.update { it.copy(queuedChecks = checks.count { c -> c.state == CommandState.Pending }, pendingSteps = moves, refusedChecks = (checks + moves).filter { c -> c.state == CommandState.Rejected }) }
+                all.filter { it.state == CommandState.Rejected }.forEach { c ->
                     _state.update { it.copy(error = friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())) }
                     // Keep refused originals until the user explicitly removes or retries them.
                 }
@@ -125,9 +154,13 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     }
 
     fun refresh() = viewModelScope.launch {
+        if (_state.value.task == null) library.job(taskId)?.let { cached ->
+            _state.update { it.copy(task = cached.value, cachedAt = cached.fetchedAt) }
+        }
         val r = apiCall { api.task(taskId) }
-        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
-        (r as? ApiOutcome.Ok)?.value?.let(::speakNewChecks)
+        if (r is ApiOutcome.Ok) library.remember(r.value)
+        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else it.cachedAt, error = r.errorText()) }
+        (r as? ApiOutcome.Ok)?.value?.let { speakNewChecks(it); library.cacheReferences(it, api) }
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 
@@ -155,6 +188,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     private fun act(label: String, action: String, block: suspend (String) -> TaskView, after: (TaskView) -> Unit = {}) = viewModelScope.launch {
         _state.update { it.copy(busy = label, error = null) }
         val r = apiCall { block(keyFor(action)) }
+        if (r is ApiOutcome.Ok) library.remember(r.value)
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
         settle(action, r)
         if (r is ApiOutcome.Ok) after(r.value)
@@ -162,11 +196,40 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     fun replan() = act("plan", "plan", { k -> api.replan(taskId, k) })
     fun accept(acknowledged: Boolean, onStarted: () -> Unit) = act("accept", "accept", { k -> api.acceptPlan(taskId, k, AcceptRequest(acknowledged)) }) { onStarted() }
-    fun complete(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "complete:$stepId", { k -> api.stepAction(taskId, stepId, "complete", k) }, onMoved)
-    fun skip(stepId: String, onMoved: (TaskView) -> Unit) = act("move", "skip:$stepId", { k -> api.stepAction(taskId, stepId, "skip", k) }, onMoved)
-    /** Skips an access step the person can reach without, keeping the measured reason in the task's record. */
-    fun skipNotNeeded(stepId: String, advice: ReachAdvice) = act("move", "skip:$stepId", { k ->
-        api.skipStep(taskId, stepId, k, com.lensqi.fieldops.data.api.SkipRequest(advice.text.take(200), advice.partHeightCm, advice.reachCm)) })
+    fun complete(stepId: String, onMoved: (TaskView) -> Unit) = move(stepId, CommandKind.TaskComplete, null, onMoved)
+    fun skip(stepId: String, onMoved: (TaskView) -> Unit) = move(stepId, CommandKind.TaskSkip, null, onMoved)
+    fun skipNotNeeded(stepId: String, advice: ReachAdvice) = move(stepId, CommandKind.TaskSkip,
+        com.lensqi.fieldops.data.api.SkipRequest(advice.text.take(200), advice.partHeightCm, advice.reachCm)) {}
+
+    private fun move(step: String, kind: CommandKind, reason: com.lensqi.fieldops.data.api.SkipRequest?, onMoved: (TaskView) -> Unit) =
+        viewModelScope.launch {
+            if (_state.value.busy != null) return@launch
+            _state.update { it.copy(busy = "move", error = null) }
+            try {
+                val pending = queue.observe(taskId).first()
+                if (pending.any { it.stepId == step && it.kind in setOf(CommandKind.TaskComplete, CommandKind.TaskSkip) })
+                    return@launch
+                val action = "${kind.name}:$step"
+                val key = keyFor(action)
+                val outcome = if (pending.any { it.state == CommandState.Pending }) null else apiCall {
+                    if (reason != null) api.skipStep(taskId, step, key, reason)
+                    else api.stepAction(taskId, step, if (kind == CommandKind.TaskComplete) "complete" else "skip", key)
+                }
+                if (outcome == null || outcome.retryable) {
+                    val payload = reason?.let { kotlinx.serialization.json.Json.encodeToString(com.lensqi.fieldops.data.api.SkipRequest.serializer(), it) }
+                    queue.enqueueStepAction(PendingCommand(key, taskId, kind, System.currentTimeMillis(), stepId = step, payload = payload))
+                    keys.drop(action)
+                    _state.update { it.copy(error = "Step update saved on this phone. Waiting for server confirmation.") }
+                } else {
+                    settle(action, outcome)
+                    if (outcome is ApiOutcome.Ok) {
+                        library.remember(outcome.value)
+                        _state.update { it.copy(task = outcome.value, cachedAt = null) }
+                        onMoved(outcome.value)
+                    } else _state.update { it.copy(error = outcome.errorText()) }
+                }
+            } finally { _state.update { it.copy(busy = null) } }
+        }
 
     /** What ARCore measured on the step screen; it goes with live frames and questions so the coach can use real numbers. */
     @Volatile var measured: List<com.lensqi.fieldops.domain.live.LiveObject> = emptyList()
@@ -189,7 +252,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val part = jpeg("image", bytes)
         val action = "check:$stepId:${key()}"
         val key = keyFor(action)
-        val r = apiCall { api.checkStep(taskId, stepId, key, part, text(origin)) }
+        val r = if (queue.observe(taskId).first().any { it.state == CommandState.Pending })
+            ApiOutcome.Unreachable("Earlier updates are waiting")
+        else apiCall { api.checkStep(taskId, stepId, key, part, text(origin)) }
         if (r.retryable) {
             // GT-R09.5: offline, the photo waits on the phone under the same key and is checked when the network returns.
             val saved = try { queue.enqueueStepCheck(taskId, stepId, key, bytes, origin); true }
@@ -238,6 +303,15 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val r = apiCall { api.linkInspection(taskId, key()) }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         if (r is ApiOutcome.Ok) onLinked(r.value.inspectionId)
+    }
+
+    suspend fun exportPackage(dir: File): File? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        dir.mkdirs()
+        val file = File.createTempFile("work-package-", ".zip", dir)
+        when (val result = apiCall { api.workPackage(taskId).use { body -> file.outputStream().use { out -> body.byteStream().copyTo(out) } } }) {
+            is ApiOutcome.Ok -> file
+            else -> { file.delete(); _state.update { it.copy(error = result.errorText()) }; null }
+        }
     }
 
     suspend fun analyzeLiveFrame(kind: String, bytes: ByteArray, frameId: String): LiveResponse =

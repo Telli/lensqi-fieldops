@@ -7,6 +7,11 @@ public sealed record TaskPhoto(string EvidenceId, string Sha256, int Width, int 
 
 public sealed record StepCheckRecord(string StepId, string PhotoId, StepCheckVerdict Verdict, string Reason, string ModelId, DateTimeOffset At);
 
+public sealed record TaskHandoff(string SourceTaskId, string? EquipmentDetails, IReadOnlyList<AnswerRecord> Answers, IReadOnlyList<string> PhotoIds, SiteLink? Equipment = null)
+{
+    public string GuidanceContext() => string.Join(" ", Answers.Select(a => a.Question + " " + a.Answer).Prepend(EquipmentDetails));
+}
+
 public sealed record AnswerRecord(string? StepId, string Question, string Answer, string? PhotoId, string ModelId, DateTimeOffset At);
 
 /// <summary>A task as its events say it is. Built only by <see cref="Replay"/>.</summary>
@@ -16,6 +21,7 @@ public sealed record TaskState
     public required TaskMode Mode { get; init; }
     public required string Goal { get; init; }
     public string? Details { get; init; }
+    public TaskHandoff? Handoff { get; init; }
     public SiteLink? Site { get; init; }
     public PersonContext? Person { get; init; }
     public IReadOnlyDictionary<string, SkipReason> SkipReasons { get; init; } = new Dictionary<string, SkipReason>();
@@ -45,7 +51,7 @@ public sealed record TaskState
         TaskState? state = null;
         foreach (var e in events)
             state = state is null
-                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, Person = c.Person, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
+                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, Person = c.Person, Handoff = c.Handoff, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
                     // Free-form help has no plan to accept: it is in progress from the start.
                     Phase = c.Mode == TaskMode.Freeform ? TaskPhase.InProgress : TaskPhase.Planned }
                     : throw new InvalidOperationException("A task log must start with TaskCreated")

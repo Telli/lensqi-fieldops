@@ -1,5 +1,10 @@
 # Feature status
 
+The Android client keeps a server-specific history, confirmed task plans and cited reference images. Pending step updates are shown separately and replay with their original keys. The production web client supports reopening previously loaded jobs using a service worker on HTTPS or localhost. Mobile web Home searches every job status, including stopped work.
+
+A planned job can cite an uploaded reference page per step. Both clients can start a plan from selected photos and answers in a Just ask session. Work-package ZIPs include a readable summary, job photos, their recorded origins and digests, and the integrity-checked FieldProof receipt when linked. Rotated inspection JPEGs recorded with this version keep both the original and the upright derivative. Earlier receipts retain the artifacts that were recorded when they were issued.
+
+
 As of 31 October 2026 (Pacific), `main` at `4a60d38`. Submission is due 4 November, 9 PM ET.
 
 This status was assembled from:

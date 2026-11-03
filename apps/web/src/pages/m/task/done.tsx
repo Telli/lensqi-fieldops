@@ -16,7 +16,9 @@ export default function TaskDone({ id }: { id: string }) {
   const [, nav] = useLocation();
   const linked = useInspection(t?.inspectionId ?? "", { enabled: !!t?.inspectionId });
   const link = useMutation({ mutationFn: () => tasks.linkInspection(id), onSuccess: (r) => nav(`/m/i/${r.inspectionId}/scan`), onError: (e) => toast.error(friendlyError(e)) });
-  if (t && !t.plan) return <><TopBar title="Summary" back="/m" /><Page><p className="text-sm text-muted-foreground">{t.phase === "Abandoned" ? "This task was stopped before it had a plan." : "This task has no plan yet."}</p></Page></>;
+  if (t && !t.plan) return <><TopBar title="Summary" back="/m" /><Page><a download href={`/v1/tasks/${encodeURIComponent(id)}/package.zip`}>Download work package</a>
+    {t.answers.map(a=><p key={a.at}><b>{a.question}</b> {a.answer}</p>)}
+    <p className="text-sm text-muted-foreground">{t.phase === "Abandoned" ? "This task was stopped before it had a plan." : "This task has no plan yet."}</p></Page></>;
   if (!t?.plan) return <><TopBar title="Summary" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
   const steps = t.plan.steps;
   const done = steps.filter((s) => s.status === "Done").length;
@@ -25,8 +27,9 @@ export default function TaskDone({ id }: { id: string }) {
     <>
       <TopBar title="Summary" back="/m" />
       <Page className="space-y-4">
+        <a download href={`/v1/tasks/${encodeURIComponent(id)}/package.zip`}>Download work package</a>
         <AiCard tone={skipped.length ? "warning" : "success"} says={t.plan.title}
-          title={t.phase === "Completed" ? (skipped.length ? `Done, with ${skipped.length} step${skipped.length === 1 ? "" : "s"} skipped` : "All steps done") : "In progress"}
+          title={t.phase === "Completed" ? (skipped.length ? `Done, with ${skipped.length} step${skipped.length === 1 ? "" : "s"} skipped` : "All steps done") : t.phase === "Abandoned" ? "Stopped · record retained" : "In progress"}
           hint={t.mode === "Diy" ? "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." : undefined}>
           {t.site && t.inspectionId && linked.data && (
             <p className={cn("mb-2 flex items-center gap-1.5 text-sm font-medium", linked.data.stage === "VerifiedComplete" ? "text-success" : linked.data.stage === "VerificationFailed" ? "text-failure" : "text-muted-foreground")}>

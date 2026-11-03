@@ -29,7 +29,7 @@ public sealed class TaskSession
 
     /// <summary>Starts a task. <paramref name="requestId"/> is the creation request's key, kept on <see cref="TaskCreated"/>.</summary>
     public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestId = null,
-        PersonContext? person = null)
+        PersonContext? person = null, TaskHandoff? handoff = null)
     {
         goal = goal?.Trim() ?? "";
         if (mode == TaskMode.Freeform && goal.Length == 0) goal = FreeformGoal;
@@ -45,7 +45,7 @@ public sealed class TaskSession
                 throw new TaskConflictException(TaskErrorCodes.InvalidInput, $"Name up to {PersonContext.MaxTools} tools, each in 1 to 4 plain words");
             if (person.HeightCm is null && person.Tools.Count == 0) person = null;
         }
-        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site, person) { RequestId = requestId }]);
+        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site, person, handoff) { RequestId = requestId }]);
     }
 
     public static TaskSession Rehydrate(IEnumerable<TaskEvent> events) => new(events.ToList());
@@ -73,7 +73,9 @@ public sealed class TaskSession
             Require(State.Phase == TaskPhase.Planned && State.Plan is null, "This task already has a plan");
             foreach (var id in manualPhotoIds)
                 Require(State.Photos.Any(p => p.EvidenceId == id && p.Purpose == TaskPhotoPurpose.Manual), $"Manual photo '{id}' is not part of this task");
-            TaskPlanValidator.Validate(plan, State.Goal, State.Details);
+            if (plan.Steps.Any(step => step.ReferencePhotoIds?.Any(id => !manualPhotoIds.Contains(id)) == true))
+                throw new TaskConflictException(TaskErrorCodes.InvalidPlan, "A step cites a page outside this task");
+            TaskPlanValidator.Validate(plan, State.Goal, State.Details + " " + State.Handoff?.GuidanceContext());
             return Commit([new PlanProposed(0, State.TaskId, now, plan, modelId, promptDigest, responseDigest, manualPhotoIds)]);
         });
 
