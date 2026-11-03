@@ -22,7 +22,7 @@ The status words mean:
 | `dotnet test --nologo` | 303 passed (Core 152, Meta 18, Api 133) | 31 Oct, this Mac |
 | `./gradlew :app:testDebugUnitTest :app:assembleDebug` | 174 passed, debug APK built | 31 Oct, this Mac |
 | `scripts/secret_scan.sh` | PASS | 31 Oct |
-| Web tests | 37 passed | Last recorded with PR 6 (30 Oct); not re-run since |
+| Web tests | 60 passed | 2 Nov, this Mac (web review fixes and improvements) |
 | GitHub Actions | Jobs don't start. GitHub reports failed payments or a spending limit | Since 30 Oct |
 
 Because of the Actions problem, the test results for PRs 7 and 8 come from local runs only.
@@ -63,6 +63,8 @@ Because of the Actions problem, the test results for PRs 7 and 8 come from local
 | RouterOS read-only probe (VK-T15–T18, P1) | **Open** | Optional, after the other vendor-knowledge P0 work |
 | Guided-task core, plan validator, planner, coach, checker, `/v1/tasks` (GT-T01–T08) | **Done** | Core and API tests; genuine calls in `docs/evidence/tasks/` |
 | Web DIY flow, free-form help, ops Tasks list (GT-T09–T14, T23, T30) | **Done** | Checked in the browser at phone size. The browser pane had no camera or microphone |
+| Web review fixes (2 Nov): aligned live boxes, Cancel on every model call, kept and scoped idempotency keys, rotated-photo outlines, honest progress | **Done** | PR 14; `apps/web` tests and `InspectionApiTests` (create replay, geometry frame) |
+| Web improvements (2 Nov): verify preflight and attempt history, uploads stored upright (server), full-resolution stills, kept capture for retry, tap-to-ask live boxes with freshness, asset-label scan, why-not-accepted sheet, hands-free mode | **Done, not browser-checked** | 60 web tests, 314 .NET tests; the auto-orient script was run against Pillow 11 on a turned JPEG. Camera, BarcodeDetector, ImageCapture and speech paths were not exercised in a browser |
 
 ### Android
 
