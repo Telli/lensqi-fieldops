@@ -47,3 +47,15 @@ class RetryKeysSavedStateTest {
         assertNotEquals(key, RetryKeys(saved).keyFor("verify:c1@9"), "a settled key is gone from the saved state too")
     }
 }
+
+/** When the state a group of pending actions depended on changes elsewhere, they all become new requests. */
+class RetryKeysDropAllTest {
+    @Test fun `dropAll clears the matching pending actions and leaves the others`() {
+        val keys = RetryKeys()
+        val diag = keys.keyFor("diagnostic:D1:p1:@claim=c1"); val other = keys.keyFor("diagnostic:D2:p1:@claim=c1"); val ack = keys.keyFor("acknowledge:p1:@claim=c1")
+        keys.dropAll("diagnostic:D1:")
+        assertNotEquals(diag, keys.keyFor("diagnostic:D1:p1:@claim=c1"))
+        assertEquals(other, keys.keyFor("diagnostic:D2:p1:@claim=c1"))
+        assertEquals(ack, keys.keyFor("acknowledge:p1:@claim=c1"))
+    }
+}

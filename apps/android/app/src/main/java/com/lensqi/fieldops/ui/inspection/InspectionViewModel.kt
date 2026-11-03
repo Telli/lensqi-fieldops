@@ -406,7 +406,11 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
-        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
+        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk {
+            local.update { it.copy(simUp = passed) }
+            // The demo outcome changed: a check whose answer was lost before must not replay the old measurement now.
+            keys.dropAll("diagnostic:$diagnosticId:")
+        }
     }
 
     fun workOrder(summary: String) = act("Drafting work order…") {
@@ -428,8 +432,11 @@ class InspectionViewModel @Inject constructor(
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
         val body = ChecklistRequest(requirementId, status, photoEvidenceId)
         val action = action("review:$requirementId:$status:$photoEvidenceId")
-        keys.command(action) { k -> api.checklist(inspectionId, k, body) }
-            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, json.encodeToString(ChecklistRequest.serializer(), body))
+        val outcome = keys.command(action) { k -> api.checklist(inspectionId, k, body) }
+        // Any review the server may have applied, or that is saved to be sent, clears the confirmation there, even one that
+        // repeats an answer: a confirmation whose answer was lost before is a new request now. A refused review changed nothing.
+        if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("acknowledge:")
+        outcome.queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, json.encodeToString(ChecklistRequest.serializer(), body))
             ?.onOk(::cacheView)
     }
 
