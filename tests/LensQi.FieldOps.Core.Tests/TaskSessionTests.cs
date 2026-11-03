@@ -166,6 +166,31 @@ public class TaskSessionTests
     }
 
     [Fact]
+    public void An_older_free_form_log_is_named_by_its_first_real_question_and_an_answer_only_title_is_marked_as_the_AI_s()
+    {
+        // No session title, as logs before 2 November were written: the first substantive question names the job and a follow-up never renames it.
+        var s = TaskSession.Create("T-10", TaskMode.Freeform, "", null, null, T0);
+        s.RecordAnswer("q1", null, "Why is my router losing power?", "The adapter is loose.", null, "muse", T0);
+        s.RecordAnswer("q2", null, "Can you explain that again?", "The power adapter is not seated.", null, "muse", T0);
+        Assert.Equal("Why is my router losing power?", s.State.DisplayTitle);
+        Assert.False(s.State.TitleByAi);
+
+        // A look-only session has no question of the person's to use, so the AI's answer is the title and is marked as such.
+        var look = TaskSession.Create("T-11", TaskMode.Freeform, "", null, null, T0);
+        look.RecordAnswer("q", null, "What am I looking at, and is anything wrong?", "The switch cable appears loose.", null, "muse", T0);
+        Assert.Equal("The switch cable appears loose.", look.State.DisplayTitle);
+        Assert.True(look.State.TitleByAi);
+        Assert.True(TaskState.Replay(look.Events).TitleByAi);
+
+        // A session title from the model is the AI's; a goal the person typed is theirs.
+        var titled = TaskSession.Create("T-12", TaskMode.Freeform, "", null, null, T0);
+        titled.RecordAnswer("q", null, "Which port is this?", "Port 2.", null, "muse", T0, "Patch panel port check");
+        Assert.True(titled.State.TitleByAi);
+        var typed = TaskSession.Create("T-13", TaskMode.Freeform, "Loose cable on the rack", null, null, T0);
+        Assert.False(typed.State.TitleByAi);
+    }
+
+    [Fact]
     public void A_high_risk_hands_on_step_must_carry_a_caution()
     {
         var s = TaskSession.Create("T-1", TaskMode.Diy, "Jack up the car", null, null, T0);

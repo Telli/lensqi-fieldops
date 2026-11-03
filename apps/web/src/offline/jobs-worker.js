@@ -87,7 +87,10 @@ async function drain(wanted) {
   let result;
   const unavailable = new Set();
   for (const row of await pending()) {
-    if (row.error || unavailable.has(row.taskId)) continue;
+    if (unavailable.has(row.taskId)) continue;
+    // A refused update holds the task's later updates back, so step B is never recorded while step A is still open;
+    // dismissing the refused row lets them go again.
+    if (row.error) { unavailable.add(row.taskId); continue; }
     let r;
     try { r = await fetch(row.url, {method:"POST", headers:row.headers, body:row.body}); }
     catch { unavailable.add(row.taskId); continue; }
@@ -98,6 +101,9 @@ async function drain(wanted) {
     if (r.ok) {
       const data = await r.clone().json();
       await remember(data.task ?? data);
+      await remove(row.id);
+    } else if (row.id === wanted) {
+      // The caller sees this refusal itself (an ordinary validation answer while online); keeping the row would block the next tap.
       await remove(row.id);
     } else {
       row.error = (await r.clone().json().catch(()=>({}))).message || "Server refused the update.";
@@ -145,9 +151,20 @@ async function readJob(req) {
       const step = m && task.plan?.steps.find(s=>s.id===decodeURIComponent(m[1]));
       if (step) step.status = m[2]==="complete" ? "Done" : "Skipped";
     }
-    if (updates.length && task.phase === "InProgress")
-      task.currentStepId = task.plan?.steps.find(s=>s.status==="Active"||s.status==="Todo")?.id ?? task.currentStepId;
-    return Response.json({...task,cached:true,pendingUpdates:updates.length});
+    let pendingCompletion = false;
+    if (updates.length && task.phase === "InProgress") {
+      const next = task.plan?.steps.find(s=>s.status==="Active"||s.status==="Todo");
+      // Every step finished on this device: the task is not Completed until the server says so, but there is no step left to show.
+      if (next) task.currentStepId = next.id; else if (task.plan) { task.currentStepId = null; pendingCompletion = true; }
+    }
+    return Response.json({...task,cached:true,pendingUpdates:updates.length,pendingCompletion});
+  }
+  // The offline history lists only jobs whose record is still saved here, so no row opens onto the offline error.
+  if (saved && new URL(req.url).pathname === "/v1/tasks") {
+    const rows = await saved.clone().json();
+    const openable = [];
+    for (const s of rows) if (await cache.match("/v1/tasks/" + encodeURIComponent(s.taskId))) openable.push(s);
+    return Response.json(openable);
   }
   return saved ?? problem(503,"offline","This job has not been saved on this device.");
 }

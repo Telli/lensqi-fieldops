@@ -47,25 +47,28 @@ public sealed record TaskState
     public string? SessionTitle { get; init; }
     /// <summary>The shown title was named by the AI from a free-form conversation, not written by the person or taken from
     /// their words; clients and the work package label it so it is never read as a finding.</summary>
-    public bool TitleByAi => Mode == TaskMode.Freeform && SessionTitle is not null && DisplayTitle == SessionTitle;
-    public string? DisplayTitle
+    public bool TitleByAi => Named().ByAi;
+    public string? DisplayTitle => Named().Title;
+
+    /// <summary>The title and whether the AI supplied it: the session title, or for an older log an AI answer when no question
+    /// of the person's can name the job.</summary>
+    private (string? Title, bool ByAi) Named()
     {
-        get
-        {
-            if (Mode != TaskMode.Freeform) return Plan?.Title;
-            if (!Goal.Equals(TaskSession.FreeformGoal, StringComparison.OrdinalIgnoreCase) &&
-                !Goal.Equals("Just ask", StringComparison.OrdinalIgnoreCase)) return Goal;
-            if (SessionTitle is not null) return SessionTitle;
-            // Logs written before session titles existed still have the original questions and guarded answers.
-            const string look = "What am I looking at, and is anything wrong?";
-            var questions = Answers.Select(a => a.Question).Where(q => !q.Equals(look, StringComparison.OrdinalIgnoreCase));
-            var topic = questions.LastOrDefault(q => q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 3)
-                ?? questions.FirstOrDefault() ?? Answers.LastOrDefault()?.Answer;
-            if (string.IsNullOrWhiteSpace(topic)) return "Just ask";
-            var words = topic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            var title = string.Join(" ", words.Take(12));
-            return title.Length > 80 ? title[..77] + "…" : title;
-        }
+        if (Mode != TaskMode.Freeform) return (Plan?.Title, false);
+        if (!Goal.Equals(TaskSession.FreeformGoal, StringComparison.OrdinalIgnoreCase) &&
+            !Goal.Equals("Just ask", StringComparison.OrdinalIgnoreCase)) return (Goal, false);
+        if (SessionTitle is not null) return (SessionTitle, true);
+        // Logs written before session titles existed still have the original questions and guarded answers. The earliest
+        // substantive question names the job: a later "can you explain that again?" never replaces the equipment it was about.
+        const string look = "What am I looking at, and is anything wrong?";
+        var questions = Answers.Select(a => a.Question).Where(q => !q.Equals(look, StringComparison.OrdinalIgnoreCase)).ToList();
+        var topic = questions.FirstOrDefault(q => q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 3) ?? questions.FirstOrDefault();
+        var byAi = false;
+        if (topic is null && Answers.LastOrDefault()?.Answer is { } answer) { topic = answer; byAi = true; }
+        if (string.IsNullOrWhiteSpace(topic)) return ("Just ask", false);
+        var words = topic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var title = string.Join(" ", words.Take(12));
+        return (title.Length > 80 ? title[..77] + "…" : title, byAi);
     }
 
     public TaskStep? CurrentStep => Plan?.Steps.FirstOrDefault(s => s.Id == CurrentStepId);

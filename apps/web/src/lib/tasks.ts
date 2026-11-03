@@ -35,6 +35,8 @@ export interface Task {
   /** The title was named by the AI from the conversation (a free-form session), not by the person. */
   titleByAi?: boolean;
   cached?: boolean; pendingUpdates?: number;
+  /** Served from this device with every step finished here; the server has not confirmed the task is complete. */
+  pendingCompletion?: boolean;
   taskId: string; mode: TaskMode; goal: string; details: string | null; site: { fixtureId: string; assetId: string } | null; phase: TaskPhase;
   currentStepId: string | null; inspectionId: string | null; createdAt: string; updatedAt: string; safetyAcknowledged: boolean; abandonReason: string | null;
   plan: TaskPlan | null; photos: TaskPhoto[]; answers: TaskAnswer[];

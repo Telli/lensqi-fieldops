@@ -160,6 +160,14 @@ class TaskViewModelTest {
         assertEquals(stepId, ui.task!!.currentStepId)
         assertNotEquals(stepId, ui.displayed!!.currentStepId)
         assertEquals(TaskPhase.InProgress, ui.displayed!!.phase)
+        assertFalse(ui.pendingCompletion)
+        // Every remaining step finished on the phone: the summary opens with a pending label, and the phase is still the server's.
+        val steps = task.plan!!.steps
+        val allPending = ui.copy(pendingSteps = steps.filter { it.status != com.lensqi.fieldops.data.api.StepStatus.Done }
+            .map { PendingCommand("m-${it.id}", task.taskId, CommandKind.TaskComplete, 0, stepId = it.id) })
+        assertTrue(allPending.pendingCompletion)
+        assertEquals(TaskPhase.InProgress, allPending.displayed!!.phase)
+        assertFalse(allPending.copy(task = task.copy(phase = TaskPhase.Completed)).pendingCompletion)
     }
 
     @Test
