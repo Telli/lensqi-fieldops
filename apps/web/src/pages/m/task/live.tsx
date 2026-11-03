@@ -61,6 +61,8 @@ export default function FreeformLive({ id }: { id: string }) {
     // One question at a time: a second submit while one is pending would replace the controller Cancel and unmount abort.
     if (!question.trim() || !open || asking) return;
     setAsking(true);
+    // A question asked by typing or by tapping a box while the microphone is open ends the listen first, so the answer is spoken.
+    if (voice.listening) voice.abort();
     const controller = new AbortController();
     inflight.current = controller;
     try {

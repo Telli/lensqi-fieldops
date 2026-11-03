@@ -39,7 +39,7 @@ export default function ScanLabel() {
     onSuccess: (i) => nav(`/m/i/${i.inspectionId}/scan`),
     // A failed create releases the lock, and automatic reading pauses so the same label in view is not sent again and
     // again; the technician asks for another read or types the id.
-    onError: (e) => { pausedRef.current = true; started.current = false; setPaused(friendlyError(e)); },
+    onError: (e) => { pausedRef.current = true; started.current = false; setPaused(friendlyError(e) || "Try again."); },
   });
   const started = useRef(false);
   const [paused, setPaused] = useState<string | null>(null);
