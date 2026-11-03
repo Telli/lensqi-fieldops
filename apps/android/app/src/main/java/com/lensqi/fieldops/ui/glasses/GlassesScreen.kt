@@ -194,7 +194,7 @@ fun GlassesScreen(
                     Text(live.feedback.status, color = Fo.Primary, fontWeight = FontWeight.Medium)
                     if (com.lensqi.fieldops.ui.common.LocalDiagnostics.current) Text("${live.feedback.fps} tracking updates/s · AI guidance ${live.feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}", style = MaterialTheme.typography.bodySmall)
                     SecondaryButton("Pause live assist", vm::pauseLive, Modifier.fillMaxWidth())
-                    Text(if (notificationsOn) "Active with the phone locked. Stop the camera from its notification."
+                    Text(if (notificationsOn) "Active with the phone locked. Stop the camera from its notification; if the lock screen hides notifications, unlock the phone to reach it."
                         else "Active with the phone locked. Notifications are off, so there is no Stop or Mute on the lock screen: pause live assist from this screen.",
                         style = MaterialTheme.typography.bodySmall)
                 } else {
