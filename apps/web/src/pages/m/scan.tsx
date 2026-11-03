@@ -227,7 +227,7 @@ export default function Scan({ id }: { id: string }) {
     <div className="dark relative flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       {/* Feed: live camera, or the photo just taken with its outline */}
       <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-contain", (live !== "on" || preview) && "hidden")} />
-      {!preview && assist.enabled && <LiveOverlay {...assist} targetConcept={!afterRepair ? targetConcept(fixture, prior) : undefined} selectedId={picked?.id} onSelect={(o) => setPicked(picked?.id === o.id ? null : o)} />}
+      {!preview && assist.enabled && <LiveOverlay {...assist} targetConcept={!afterRepair ? targetConcept(fixture, prior) : undefined} selectedId={picked?.id ?? null} onSelect={(o) => setPicked(picked?.id === o.id ? null : o)} />}
       <div className={cn("pointer-events-none absolute inset-0 bg-overlay transition-opacity", shot ? "opacity-80" : "opacity-0")} />
       {busy && <div className="pointer-events-none absolute inset-x-0 top-0 h-[9%] animate-scan bg-gradient-to-b from-transparent via-primary/25 to-transparent" />}
 

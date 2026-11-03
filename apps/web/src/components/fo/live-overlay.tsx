@@ -18,6 +18,7 @@ export const boxOpacity = (age: number | null) => (age === null || age < 4 ? 1 :
  * says how long ago it was seen. With `onSelect`, tapping a box hands it to the page (to ask about that part).
  */
 export function LiveOverlay({ objects, width, height, targetConcept, fit = "contain", detectedAt, onSelect, selectedId }: LiveFeedback & {
+  /** With `selectedId` (null for none) the boxes are toggles that report their state; without it a tap is an action. */
   targetConcept?: string; fit?: "contain" | "cover"; onSelect?: (o: LiveObject) => void; selectedId?: string | null;
 }) {
   if (!width || !height) return null;
@@ -37,7 +38,8 @@ export function LiveOverlay({ objects, width, height, targetConcept, fit = "cont
         return (
           <g key={o.id} opacity={selected ? 1 : boxOpacity(age)} onClick={onSelect ? () => onSelect(o) : undefined} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined}
             onKeyDown={onSelect ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(o); } } : undefined}
-            aria-label={onSelect ? `Ask about the ${o.label}` : undefined} style={onSelect ? { pointerEvents: "all", cursor: "pointer" } : undefined}>
+            aria-label={onSelect ? (selectedId !== undefined ? `Select the ${o.label}` : `Ask about the ${o.label}`) : undefined}
+            aria-pressed={onSelect && selectedId !== undefined ? selected : undefined} style={onSelect ? { pointerEvents: "all", cursor: "pointer" } : undefined}>
             <rect x={x} y={y} width={w} height={h}
               fill={isTarget ? "rgba(245, 184, 61, 0.08)" : "rgba(53, 214, 232, 0.06)"}
               stroke={stroke} strokeOpacity={selected ? 1 : 0.55} strokeDasharray={selected ? undefined : "8 6"} strokeWidth={selected ? 3 : 2} vectorEffect="non-scaling-stroke"

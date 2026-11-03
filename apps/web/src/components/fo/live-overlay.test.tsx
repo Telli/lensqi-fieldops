@@ -26,4 +26,8 @@ it("boxes can be tapped only when the page asks to know", () => {
   const tappable = renderToStaticMarkup(<LiveOverlay {...feedback} onSelect={() => undefined} />);
   expect(tappable).toContain('aria-label="Ask about the Yellow cable"');
   expect(tappable).toContain('tabindex="0"');
+  expect(tappable).not.toContain("aria-pressed");
+  const toggle = renderToStaticMarkup(<LiveOverlay {...feedback} onSelect={() => undefined} selectedId="a" />);
+  expect(toggle).toContain('aria-pressed="true"');
+  expect(toggle).toContain('aria-label="Select the Yellow cable"');
 });
