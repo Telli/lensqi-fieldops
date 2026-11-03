@@ -39,9 +39,12 @@ export function useSpeak(initiallyOn = true) {
     last.current = text;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
+    // Some browsers never fire onend for a long utterance; a generous time limit keeps hands-free from waiting forever.
+    const limit = setTimeout(() => setSpeaking(false), 3000 + text.length * 90);
+    const done = () => { clearTimeout(limit); setSpeaking(false); };
     u.onstart = () => setSpeaking(true);
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
+    u.onend = done;
+    u.onerror = done;
     setSpeaking(true);
     speechSynthesis.speak(u);
   }, [on, held, supported]);
