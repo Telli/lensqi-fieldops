@@ -67,8 +67,8 @@ class TaskViewModelTest {
         val queued: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
         val dismissed: MutableList<String> = Collections.synchronizedList(mutableListOf())
         override fun observe(sessionId: String): Flow<List<PendingCommand>> = commands
-        override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray): PendingCommand =
-            PendingCommand(key, taskId, CommandKind.StepCheckPhoto, 0, stepId = stepId).also { queued += Triple(taskId, stepId, key) }
+        override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String): PendingCommand =
+            PendingCommand(key, taskId, CommandKind.StepCheckPhoto, 0, source = source, stepId = stepId).also { queued += Triple(taskId, stepId, key) }
         override suspend fun dismiss(command: PendingCommand) { dismissed += command.id }
     }
 

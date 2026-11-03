@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using LensQi.FieldOps.Core.Inspection;
 
 namespace LensQi.FieldOps.Core.Tasks;
 
@@ -32,8 +33,12 @@ public sealed record PlanProposed(long Sequence, string TaskId, DateTimeOffset O
 
 public sealed record PlanAccepted(long Sequence, string TaskId, DateTimeOffset OccurredAt, bool SafetyAcknowledged) : TaskEvent(Sequence, TaskId, OccurredAt);
 
+/// <summary>
+/// A photo kept with the task. <see cref="Origin"/> is the capture device the client declared (phone, glasses, mock glasses);
+/// events written before it existed replay as Phone, the only origin clients could send then.
+/// </summary>
 public sealed record TaskPhotoRecorded(long Sequence, string TaskId, DateTimeOffset OccurredAt, string EvidenceId, string Sha256, int Width, int Height,
-    TaskPhotoPurpose Purpose, string? StepId) : TaskEvent(Sequence, TaskId, OccurredAt);
+    TaskPhotoPurpose Purpose, string? StepId, EvidenceOrigin Origin = EvidenceOrigin.Phone) : TaskEvent(Sequence, TaskId, OccurredAt);
 
 public sealed record StepStarted(long Sequence, string TaskId, DateTimeOffset OccurredAt, string StepId) : TaskEvent(Sequence, TaskId, OccurredAt);
 

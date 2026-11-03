@@ -129,12 +129,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 
-    // One idempotency key per pending action: a retry after a lost response, a server error or a failed model call replays
-    // the server's outcome (or reuses the photo it saved) instead of acting twice. A refusal drops the key.
-    private val keys = mutableMapOf<String, String>()
-    private fun keyFor(action: String) = keys.getOrPut(action) { key() }
+    // One idempotency key per pending action (RetryKeys): a retry after a lost response, a server error or a failed model
+    // call replays the server's outcome (or reuses the photo it saved) instead of acting twice. A refusal drops the key.
+    private val keys = com.lensqi.fieldops.data.api.RetryKeys()
+    private fun keyFor(action: String) = keys.keyFor(action)
     private fun <T> settle(action: String, r: ApiOutcome<T>) {
-        if (!r.retryable) keys.remove(action)
+        keys.settle(action, r)
         // A refusal means the server's state moved on (for example the step was already done): show it.
         if (r is ApiOutcome.Rejected) refresh()
     }
@@ -161,8 +161,11 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     val spatialTarget = com.lensqi.fieldops.ui.camera.TargetMemory()
     fun clearError() = _state.update { it.copy(error = null) }
 
-    /** A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken. */
-    fun check(stepId: String, photo: File) = viewModelScope.launch {
+    /**
+     * A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken.
+     * [origin] is the capture device ("Phone", "Glasses" or "MockWearables"); the server keeps it with the photo.
+     */
+    fun check(stepId: String, photo: File, origin: String = "Phone") = viewModelScope.launch {
         _state.update { it.copy(busy = "check", error = null) }
         // Preserve the original evidence; model input preparation belongs to the server. A photo over the server's upload
         // limit would be refused outright, so it goes as an upright copy of at most 2400 px instead.
@@ -173,12 +176,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val part = jpeg("image", bytes)
         val action = "check:$stepId:${key()}"
         val key = keyFor(action)
-        val r = apiCall { api.checkStep(taskId, stepId, key, part) }
+        val r = apiCall { api.checkStep(taskId, stepId, key, part, text(origin)) }
         if (r.retryable) {
             // GT-R09.5: offline, the photo waits on the phone under the same key and is checked when the network returns.
-            val saved = try { queue.enqueueStepCheck(taskId, stepId, key, bytes); true }
+            val saved = try { queue.enqueueStepCheck(taskId, stepId, key, bytes, origin); true }
                 catch (e: java.io.IOException) { false } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) { false }
-            keys.remove(action)
+            keys.drop(action)
             _state.update { it.copy(busy = null, error = if (saved) "The photo is saved on the phone and will be checked when the service is available." else friendly("local_save_failed", "")) }
             return@launch
         }

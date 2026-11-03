@@ -38,3 +38,21 @@ suspend fun <T> apiCall(block: suspend () -> T): ApiOutcome<T> = try {
     com.lensqi.fieldops.data.diagnostics.DiagnosticHistory.record("api", "client_contract_mismatch")
     ApiOutcome.Rejected(0, "client_contract_mismatch", e.message ?: "unreadable response")
 }
+
+/**
+ * One Idempotency-Key per pending action. A retry after a lost response, a server error or a failed model call reuses the
+ * key, so the server replays its outcome (or reuses the photo it saved) instead of acting twice; an answer, accepted or
+ * refused, drops the key so the next tap is a new request.
+ */
+class RetryKeys {
+    private val keys = mutableMapOf<String, String>()
+    @Synchronized fun keyFor(action: String): String = keys.getOrPut(action) { java.util.UUID.randomUUID().toString() }
+    /** The action moved somewhere else (queued offline under its key, say): the next tap is a new request. */
+    @Synchronized fun drop(action: String) { keys.remove(action) }
+    @Synchronized fun <T> settle(action: String, outcome: ApiOutcome<T>): ApiOutcome<T> {
+        if (!outcome.retryable) keys.remove(action)
+        return outcome
+    }
+    /** Runs one command under its action's key and settles it. */
+    suspend fun <T> command(action: String, call: suspend (key: String) -> T): ApiOutcome<T> = settle(action, apiCall { call(keyFor(action)) })
+}

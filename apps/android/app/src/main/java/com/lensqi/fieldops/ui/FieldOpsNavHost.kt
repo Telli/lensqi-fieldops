@@ -147,7 +147,8 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         prompt = step.instruction,
                         status = "Step ${n + 1} of ${t.plan?.steps?.size ?: 1} · ${step.title}",
                         onClose = { nav.popBackStack() },
-                        onCaptured = { file, _ -> vm.check(step.id, file); nav.popBackStack() },
+                        // origin is "Glasses" or "MockWearables"; the server keeps it with the check photo.
+                        onCaptured = { file, origin -> vm.check(step.id, file, origin); nav.popBackStack() },
                     )
                 }
                 composable("task/{taskId}/live", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {

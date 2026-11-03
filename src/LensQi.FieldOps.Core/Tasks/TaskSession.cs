@@ -1,3 +1,5 @@
+using LensQi.FieldOps.Core.Inspection;
+
 namespace LensQi.FieldOps.Core.Tasks;
 
 /// <summary>
@@ -53,13 +55,14 @@ public sealed class TaskSession
 
     // ---------------- commands ----------------
 
-    public IReadOnlyList<TaskEvent> RecordPhoto(string requestId, string evidenceId, string sha256, int width, int height, TaskPhotoPurpose purpose, string? stepId, DateTimeOffset now) =>
+    public IReadOnlyList<TaskEvent> RecordPhoto(string requestId, string evidenceId, string sha256, int width, int height, TaskPhotoPurpose purpose, string? stepId, DateTimeOffset now,
+        EvidenceOrigin origin = EvidenceOrigin.Phone) =>
         Idempotent(requestId, () =>
         {
             Require(!State.IsClosed, "The task is closed");
             if (State.Photos.Any(p => p.EvidenceId == evidenceId)) throw new TaskConflictException(TaskErrorCodes.DuplicateEvidence, $"Photo '{evidenceId}' is already recorded");
             if (stepId is not null) Step(stepId);
-            return Commit([new TaskPhotoRecorded(0, State.TaskId, now, evidenceId, sha256, width, height, purpose, stepId)]);
+            return Commit([new TaskPhotoRecorded(0, State.TaskId, now, evidenceId, sha256, width, height, purpose, stepId, origin)]);
         });
 
     /// <summary>Records the AI-written plan after <see cref="TaskPlanValidator"/> accepts it. One plan per task.</summary>

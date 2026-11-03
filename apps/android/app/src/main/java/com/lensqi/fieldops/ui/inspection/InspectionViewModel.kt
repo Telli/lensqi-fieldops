@@ -57,7 +57,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -250,12 +249,12 @@ class InspectionViewModel @Inject constructor(
 
     /** Muse looks at the latest photo, then SAM outlines each part the site expects, repair target last. */
     fun assessAndOutline() = act("LensQi is looking at the photo…") {
-        val assessment = when (val r = apiCall { api.investigate(inspectionId, key()) }) {
+        val assessment = when (val r = keys.command("investigate") { k -> api.investigate(inspectionId, k) }) {
             is ApiOutcome.Ok -> { cacheView(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
             else -> { report(r); null }
         }
         for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment))
-            apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept)) }.onOk { cacheView(it.state) }
+            keys.command("segment:$concept") { k -> api.segment(inspectionId, k, SegmentRequest(concept = concept)) }.onOk { cacheView(it.state) }
     }
 
     /**
@@ -366,14 +365,14 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun investigate() = act("Asking Muse Spark…") {
-        apiCall { api.investigate(inspectionId, key()) }.onOk { r ->
+        keys.command("investigate") { k -> api.investigate(inspectionId, k) }.onOk { r ->
             cacheView(r.state)
             local.update { it.copy(assessment = r) }
         }
     }
 
     fun segment(concept: String) = act("Asking SAM 3.1…") {
-        apiCall { api.segment(inspectionId, key(), SegmentRequest(concept = concept.ifBlank { null })) }.onOk { r ->
+        keys.command("segment:${concept.ifBlank { "auto" }}") { k -> api.segment(inspectionId, k, SegmentRequest(concept = concept.ifBlank { null })) }.onOk { r ->
             cacheView(r.state)
             val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)
             local.update { it.copy(segmentation = r.segmentation, segmentationImage = bitmap) }
@@ -381,27 +380,28 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun runDiagnostic(diagnosticId: String) = act("Running $diagnosticId…") {
-        apiCall { api.runDiagnostic(inspectionId, diagnosticId, key()) }.onOk { cacheView(it.state) }
+        keys.command("diagnostic:$diagnosticId") { k -> api.runDiagnostic(inspectionId, diagnosticId, k) }.onOk { cacheView(it.state) }
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
         apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
     }
 
-    fun workOrder(summary: String) = act("Drafting work order…") { apiCall { api.workOrder(inspectionId, key(), WorkOrderRequest(summary)) }.onOk(::cacheView) }
+    fun workOrder(summary: String) = act("Drafting work order…") { keys.command("workOrder:$summary") { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
 
     fun claim(description: String) = act("Recording repair claim…") {
-        apiCall { api.repairClaim(inspectionId, key(), RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
+        keys.command("claim:$description") { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        apiCall { api.checklist(inspectionId, key(), ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
+        keys.command("review:$requirementId:$status:$photoEvidenceId") { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
     }
 
-    fun acknowledge() = act("Recording acknowledgement…") { apiCall { api.acknowledge(inspectionId, key()) }.onOk(::cacheView) }
+    fun acknowledge() = act("Recording acknowledgement…") { keys.command("acknowledge") { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView) }
 
+    /** A verify that times out on the phone and is tapped again replays the server's decision instead of recording a second attempt. */
     fun verify() = act("Server is verifying…") {
-        apiCall { api.verify(inspectionId, key()) }.onOk { cacheView(it.state) }
+        keys.command("verify") { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
 
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
@@ -461,6 +461,9 @@ class InspectionViewModel @Inject constructor(
         })
     }
 
-    /** One fresh Idempotency-Key per user action. */
-    private fun key() = UUID.randomUUID().toString()
+    /**
+     * One Idempotency-Key per pending command, kept while the server has not answered (unreachable, timed out, 5xx or a
+     * failed model call) so a retry replays rather than repeats; an answer drops it and the next tap is a new request.
+     */
+    private val keys = com.lensqi.fieldops.data.api.RetryKeys()
 }

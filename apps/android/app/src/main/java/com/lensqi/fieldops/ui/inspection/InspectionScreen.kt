@@ -347,7 +347,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 aiSummary(view, null), asked?.note ?: "Photograph the repair",
                 asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",
             ) {
-                PendingUploads(s, vm)
+                // Saved photos are listed once, above the cards, in both modes.
                 PrimaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)

@@ -34,11 +34,40 @@ public class TaskApiTests
         return (json.GetProperty("task").GetProperty("taskId").GetString()!, json);
     }
 
-    private static MultipartFormDataContent Image(string field = "image", int w = 640, int h = 480)
+    private static MultipartFormDataContent Image(string field = "image", int w = 640, int h = 480, string? source = null)
     {
         var form = new MultipartFormDataContent();
         form.Add(new ByteArrayContent(TestImages.Png(w, h)), field, "photo.png");
+        if (source is not null) form.Add(new StringContent(source), "source");
         return form;
+    }
+
+    [Fact]
+    public async Task A_step_check_keeps_the_photo_s_capture_device_and_refuses_an_unknown_one()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        await c.PostAsync($"/v1/tasks/{id}/steps/s1:complete", null);
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "CantTell", reason = "The plug is out of frame." });
+
+        var bogus = await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Image(source: "Webcam"));
+        Assert.Equal(HttpStatusCode.BadRequest, bogus.StatusCode);
+        Assert.Equal("invalid_source", (await Body(bogus)).GetProperty("code").GetString());
+        Assert.Empty((await Body(await c.GetAsync($"/v1/tasks/{id}"))).GetProperty("photos").EnumerateArray());
+
+        var mock = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Image(source: "MockWearables")));
+        var photoId = mock.GetProperty("check").GetProperty("photoId").GetString();
+        var photo = mock.GetProperty("task").GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == photoId);
+        Assert.Equal("MockWearables", photo.GetProperty("origin").GetString());
+
+        // No source is a phone capture, as for inspection photos; the origin survives a restart with the event log.
+        var phone = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Image()));
+        var phoneId = phone.GetProperty("check").GetProperty("photoId").GetString();
+        var reloaded = await Body(await c.GetAsync($"/v1/tasks/{id}"));
+        var origins = reloaded.GetProperty("photos").EnumerateArray().ToDictionary(p => p.GetProperty("evidenceId").GetString()!, p => p.GetProperty("origin").GetString());
+        Assert.Equal("MockWearables", origins[photoId!]);
+        Assert.Equal("Phone", origins[phoneId!]);
     }
 
     [Fact]
