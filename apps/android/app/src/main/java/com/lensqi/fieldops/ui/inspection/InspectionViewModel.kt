@@ -249,13 +249,23 @@ class InspectionViewModel @Inject constructor(
 
     /** Muse looks at the latest photo, then SAM outlines each part the site expects, repair target last. */
     fun assessAndOutline() = act("LensQi is looking at the photo…") {
-        val assessment = when (val r = keys.command("investigate") { k -> api.investigate(inspectionId, k) }) {
+        val photo = latestPhotoId()
+        val assessment = when (val r = keys.command(action("investigate:$photo")) { k -> api.investigate(inspectionId, k, photo) }) {
             is ApiOutcome.Ok -> { cacheView(r.value.state); local.update { it.copy(assessment = r.value, latestAssessment = r.value.assessment) }; r.value.assessment }
             else -> { report(r); null }
         }
         for (concept in outlineOrder(local.value.fixture, assessment ?: local.value.latestAssessment))
-            keys.command("segment:$concept") { k -> api.segment(inspectionId, k, SegmentRequest(concept = concept)) }.onOk { cacheView(it.state) }
+            keys.command(action("segment:$photo:$concept")) { k -> api.segment(inspectionId, k, SegmentRequest(photoEvidenceId = photo, concept = concept)) }.onOk { cacheView(it.state) }
     }
+
+    /**
+     * The name a command's retry key is kept under: the command, what it is about (a photo, a claim, a review answer) and
+     * the server's event sequence as the screen saw it. A new photo, a new claim or any other change of state makes a new
+     * name, so a key kept after a lost answer is only ever replayed for the very same request; it can never hand a new
+     * photo an old photo's assessment or a new claim an old claim's decision.
+     */
+    private fun action(name: String) = "$name@${state.value.view?.lastSequence ?: local.value.view?.lastSequence ?: 0}"
+    private fun latestPhotoId() = state.value.view?.photos?.lastOrNull()?.evidenceId
 
     /**
      * After the shutter: queue the original photo, wait for the server to have it, then let Muse look and SAM outline
@@ -365,14 +375,16 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun investigate() = act("Asking Muse Spark…") {
-        keys.command("investigate") { k -> api.investigate(inspectionId, k) }.onOk { r ->
+        val photo = latestPhotoId()
+        keys.command(action("investigate:$photo")) { k -> api.investigate(inspectionId, k, photo) }.onOk { r ->
             cacheView(r.state)
             local.update { it.copy(assessment = r) }
         }
     }
 
     fun segment(concept: String) = act("Asking SAM 3.1…") {
-        keys.command("segment:${concept.ifBlank { "auto" }}") { k -> api.segment(inspectionId, k, SegmentRequest(concept = concept.ifBlank { null })) }.onOk { r ->
+        val photo = latestPhotoId()
+        keys.command(action("segment:$photo:${concept.ifBlank { "auto" }}")) { k -> api.segment(inspectionId, k, SegmentRequest(photoEvidenceId = photo, concept = concept.ifBlank { null })) }.onOk { r ->
             cacheView(r.state)
             val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)
             local.update { it.copy(segmentation = r.segmentation, segmentationImage = bitmap) }
@@ -380,28 +392,33 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun runDiagnostic(diagnosticId: String) = act("Running $diagnosticId…") {
-        keys.command("diagnostic:$diagnosticId") { k -> api.runDiagnostic(inspectionId, diagnosticId, k) }.onOk { cacheView(it.state) }
+        keys.command(action("diagnostic:$diagnosticId")) { k -> api.runDiagnostic(inspectionId, diagnosticId, k) }.onOk { cacheView(it.state) }
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
         apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
     }
 
-    fun workOrder(summary: String) = act("Drafting work order…") { keys.command("workOrder:$summary") { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
+    fun workOrder(summary: String) = act("Drafting work order…") { keys.command(action("workOrder:$summary")) { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
 
     fun claim(description: String) = act("Recording repair claim…") {
-        keys.command("claim:$description") { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
+        keys.command(action("claim:$description")) { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        keys.command("review:$requirementId:$status:$photoEvidenceId") { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
+        keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
     }
 
-    fun acknowledge() = act("Recording acknowledgement…") { keys.command("acknowledge") { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView) }
+    fun acknowledge() = act("Recording acknowledgement…") {
+        keys.command(action("acknowledge:${state.value.view?.currentClaimId}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+    }
 
-    /** A verify that times out on the phone and is tapped again replays the server's decision instead of recording a second attempt. */
+    /**
+     * A verify that times out on the phone and is tapped again replays the server's decision instead of recording a second
+     * attempt. The key is for this claim at this state: after a new claim, a new photo or any other change it is a new request.
+     */
     fun verify() = act("Server is verifying…") {
-        keys.command("verify") { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
+        keys.command(action("verify:${state.value.view?.currentClaimId}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
 
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
@@ -465,5 +482,5 @@ class InspectionViewModel @Inject constructor(
      * One Idempotency-Key per pending command, kept while the server has not answered (unreachable, timed out, 5xx or a
      * failed model call) so a retry replays rather than repeats; an answer drops it and the next tap is a new request.
      */
-    private val keys = com.lensqi.fieldops.data.api.RetryKeys()
+    private val keys = com.lensqi.fieldops.data.api.RetryKeys(savedState)
 }

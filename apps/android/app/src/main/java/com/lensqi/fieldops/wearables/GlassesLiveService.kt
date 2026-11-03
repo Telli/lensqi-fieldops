@@ -198,6 +198,18 @@ class GlassesLiveService : Service() {
             val kind = intent.getStringExtra(SESSION_KIND)?.let { k -> LiveSessionKind.entries.firstOrNull { it.name == k } } ?: return null
             return LiveSession(id, kind, intent.getStringExtra(TARGET))
         }
+        /**
+         * Whether the live-assist notification can show at all: the permission (Android 13+), app notifications on, and
+         * the channel not blocked. A channel not yet made counts as open. Without it the service still runs, but its Stop and
+         * Mute actions are not on the lock screen, and the screen must not promise them.
+         */
+        fun notificationsAvailable(context: Context): Boolean {
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+            val manager = androidx.core.app.NotificationManagerCompat.from(context)
+            if (!manager.areNotificationsEnabled()) return false
+            return manager.getNotificationChannel(CHANNEL)?.let { it.importance != NotificationManager.IMPORTANCE_NONE } ?: true
+        }
         fun pause(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(PAUSE)) }
         fun mute(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(MUTE)) }
     }

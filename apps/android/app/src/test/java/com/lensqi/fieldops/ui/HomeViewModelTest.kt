@@ -80,9 +80,11 @@ class HomeViewModelTest {
 
         fixturesDown.set(true)
         vm.refresh()
-        val after = await(vm) { !it.loading }
+        val after = await(vm) { !it.loading && it.fixturesCachedAt != null }
         assertEquals(true, after.reachable)
         assertEquals(assets, after.fixtures.flatMap { it.assets }.map { it.assetId }, "the server answered health but not fixtures: the list stays")
+        assertTrue(after.fixturesCachedAt!!.isNotBlank(), "and it is marked as the saved copy, with when it was fetched")
+        assertEquals(null, loaded.fixturesCachedAt, "a fresh answer carries no cached mark")
     }
 
     @Test fun `a cold start whose fixtures call fails shows the device copy`(@TempDir dir: File) {
@@ -91,5 +93,51 @@ class HomeViewModelTest {
         fixturesDown.set(true)
         val restarted = await(viewModel(dir, settings)) { !it.loading && it.reachable == true }
         assertTrue(restarted.fixtures.isNotEmpty(), "the snapshot saved by the earlier run fills the list")
+        assertTrue(restarted.fixturesCachedAt != null, "and says it is the saved copy")
+    }
+}
+
+/** An empty answer is an answer: it is saved, so a later failure cannot bring back assets the server removed. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class HomeViewModelEmptyFixturesTest {
+    private lateinit var server: MockWebServer
+    private val mode = java.util.concurrent.atomic.AtomicReference("full")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @BeforeEach
+    fun setUp() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        server = MockWebServer().apply {
+            dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                    "/health" -> MockResponse().setBody(Recordings.text("health"))
+                    "/v1/fixtures" -> when (mode.get()) {
+                        "full" -> MockResponse().setBody(Recordings.text("fixtures"))
+                        "empty" -> MockResponse().setBody("[]")
+                        else -> MockResponse().setResponseCode(500).setBody("""{"code":"internal","message":"down"}""")
+                    }
+                    "/v1/inspections" -> MockResponse().setBody("[]")
+                    else -> MockResponse().setResponseCode(404).setBody("""{"code":"not_found","message":"no"}""")
+                }
+            }
+            start()
+        }
+    }
+
+    @AfterEach
+    fun tearDown() { server.shutdown(); scope.cancel(); Dispatchers.resetMain() }
+
+    @Test fun `an empty fixtures answer replaces the saved copy`(@TempDir dir: File) {
+        val json = NetworkModule.json()
+        val api = NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { server.url("/") }).build(), json).create(FieldOpsApi::class.java)
+        val settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") })
+        fun vm() = HomeViewModel(api, settings, InspectionCache(), SnapshotStore(File(dir, "snapshots"), json))
+        fun await(vm: HomeViewModel, what: (HomeState) -> Boolean) = runBlocking { withTimeout(5000) { vm.state.first(what) } }
+        await(vm()) { it.fixtures.isNotEmpty() && !it.loading }
+        mode.set("empty")
+        assertTrue(await(vm()) { !it.loading && it.reachable == true }.fixtures.isEmpty(), "the server now lists no assets")
+        mode.set("down")
+        val later = await(vm()) { !it.loading && it.reachable == true }
+        assertTrue(later.fixtures.isEmpty(), "the failed call falls back to the empty answer, not the older full list")
     }
 }
