@@ -46,7 +46,8 @@ class UnsupportedImageException : IllegalArgumentException("Only JPEG or PNG ima
 /** A task screen owns a server-bound view of the durable queue. */
 interface StepCheckQueue {
     fun observe(sessionId: String): Flow<List<PendingCommand>>
-    suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray): PendingCommand
+    /** [source] is the capture device ("Phone", "Glasses", "MockWearables"); it is sent with the photo when the queue drains. */
+    suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String = "Phone"): PendingCommand
     suspend fun dismiss(command: PendingCommand)
     suspend fun retry(command: PendingCommand) {}
 }
@@ -70,8 +71,8 @@ class CommandQueue internal constructor(
     fun requestSync() = schedule()
     fun forServer(server: String): StepCheckQueue = object : StepCheckQueue {
         override fun observe(sessionId: String) = this@CommandQueue.observe(sessionId, server)
-        override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray) =
-            save(PendingCommand(key, taskId, CommandKind.StepCheckPhoto, System.currentTimeMillis(), stepId = stepId, serverBase = server), jpeg)
+        override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String) =
+            save(PendingCommand(key, taskId, CommandKind.StepCheckPhoto, System.currentTimeMillis(), source = source, stepId = stepId, serverBase = server), jpeg)
         override suspend fun dismiss(command: PendingCommand) = this@CommandQueue.dismiss(command)
         override suspend fun retry(command: PendingCommand) { this@CommandQueue.retry(command, server) }
     }
@@ -145,7 +146,7 @@ class CommandQueue internal constructor(
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }
-            CommandKind.StepCheckPhoto -> when (val r = apiCall { api.checkStep(c.sessionId, requireNotNull(c.stepId), c.id, part) }) {
+            CommandKind.StepCheckPhoto -> when (val r = apiCall { api.checkStep(c.sessionId, requireNotNull(c.stepId), c.id, part, c.source?.toRequestBody()) }) {
                 is ApiOutcome.Ok -> ApiOutcome.Ok(null)
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r

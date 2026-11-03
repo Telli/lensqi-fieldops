@@ -28,3 +28,16 @@ class LiveSessionTest {
         } finally { server.shutdown() }
     }
 }
+
+/** The live service serves one session at a time; a request for another inspection, task or step target replaces it. */
+class LiveSessionSwitchTest {
+    @Test fun `a different inspection, kind or step target needs a switch and the same session does not`() {
+        val a = LiveSession("I-1", LiveSessionKind.Inspection)
+        assertEquals(false, GlassesLiveService.switchNeeded(a, LiveSession("I-1", LiveSessionKind.Inspection)))
+        assertEquals(true, GlassesLiveService.switchNeeded(a, LiveSession("I-2", LiveSessionKind.Inspection)))
+        assertEquals(true, GlassesLiveService.switchNeeded(a, LiveSession("I-1", LiveSessionKind.Task)))
+        val step1 = LiveSession("T-1", LiveSessionKind.Task, "drain plug")
+        assertEquals(true, GlassesLiveService.switchNeeded(step1, LiveSession("T-1", LiveSessionKind.Task, "oil filter")))
+        assertEquals(true, GlassesLiveService.switchNeeded(null, step1), "nothing served yet counts as a switch to the request")
+    }
+}

@@ -129,7 +129,9 @@ interface FieldOpsApi {
 
     @Multipart
     @POST("v1/tasks/{id}/steps/{stepId}/check")
-    suspend fun checkStep(@Path("id") id: String, @Path("stepId") stepId: String, @Header(IDEMPOTENCY_KEY) key: String, @Part image: MultipartBody.Part): StepCheckResponse
+    /** [source] names the capture device (Phone, Glasses, MockWearables) so the server keeps it with the photo; absent means Phone. */
+    suspend fun checkStep(@Path("id") id: String, @Path("stepId") stepId: String, @Header(IDEMPOTENCY_KEY) key: String, @Part image: MultipartBody.Part,
+        @Part("source") source: RequestBody? = null): StepCheckResponse
 
     @Multipart
     @POST("v1/tasks/{id}/ask")

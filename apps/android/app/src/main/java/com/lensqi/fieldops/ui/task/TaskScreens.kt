@@ -81,6 +81,7 @@ import com.lensqi.fieldops.data.api.TaskMode
 import com.lensqi.fieldops.data.api.TaskPhase
 import com.lensqi.fieldops.data.api.TaskStep
 import com.lensqi.fieldops.data.api.TaskSummary
+import com.lensqi.fieldops.data.api.checkPhotoNote
 import com.lensqi.fieldops.ui.camera.CameraHandle
 import com.lensqi.fieldops.ui.camera.CameraScreen
 import com.lensqi.fieldops.ui.common.AiCard
@@ -457,7 +458,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
+            StepDetails(t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
         },
         controls = { handle ->
             camera.value = handle
@@ -643,13 +644,13 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
-private fun ColumnScope.StepDetails(step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?) {
+private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TaskSources(step)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
         if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
         step.lastCheck?.let { c ->
-            Text(TechnicianText.guidance("Camera check: ${verdictText(c.verdict)} · ${c.reason}"), color = verdictColor(c.verdict), fontSize = 12.sp)
+            Text(TechnicianText.guidance("Camera check: ${verdictText(c.verdict)} · ${c.reason}") + checkPhotoNote(task, c), color = verdictColor(c.verdict), fontSize = 12.sp)
             Text("A suggestion. You decide when the step is done.", color = FoDark.Muted, fontSize = 10.sp)
         }
         answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
@@ -712,7 +713,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                     if (i > 0) HorizontalDivider(color = Fo.Border)
                     Column(Modifier.padding(14.dp)) {
                         Text("${i + 1}. ${step.title}", fontWeight = FontWeight.Medium, color = if (step.status == StepStatus.Done) Fo.Foreground else Fo.Muted)
-                        step.lastCheck?.let { Text(TechnicianText.guidance("Camera check: ${verdictText(it.verdict)} · ${it.reason}"), color = verdictColor(it.verdict), fontSize = 12.sp) }
+                        step.lastCheck?.let { Text(TechnicianText.guidance("Camera check: ${verdictText(it.verdict)} · ${it.reason}") + checkPhotoNote(t, it), color = verdictColor(it.verdict), fontSize = 12.sp) }
                     }
                 }
             }

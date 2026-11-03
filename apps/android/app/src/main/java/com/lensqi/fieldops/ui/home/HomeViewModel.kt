@@ -33,6 +33,12 @@ data class HomeState(
     val inspections: List<InspectionSummary> = emptyList(),
     /** Set when the list shown is the device copy because the server is unreachable. */
     val cachedAt: String? = null,
+    /** Set when the assets shown are the device copy: the fixtures call failed (even with the server reachable) or the server is unreachable. */
+    val fixturesCachedAt: String? = null,
+    /** The last fixtures call did not answer (failed, or the server was unreachable); an empty list then means nothing is known, not that there are no assets. */
+    val fixturesFailed: Boolean = false,
+    /** When the assets on screen were last fetched from the server, so a list kept in memory after a failed call is dated too. */
+    val fixturesFetchedAt: String? = null,
     val loading: Boolean = false,
     val creating: String? = null,
     val error: String? = null,
@@ -83,16 +89,33 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(loading = true, error = null) }
         val health = apiCall { api.health() }
         if (health is ApiOutcome.Ok) {
-            val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value.orEmpty()
+            // A failed list call keeps the device copy of the assets, marked with when it was fetched; it never empties them.
+            val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value
             val list = (apiCall { api.inspections() } as? ApiOutcome.Ok)?.value
             list?.let { snapshots.save(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
-            fixtures.takeIf { it.isNotEmpty() }?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
-            _state.update { it.copy(health = health.value, reachable = true, fixtures = fixtures, inspections = list ?: it.inspections, cachedAt = null, loading = false) }
+            // Every answer is saved, an empty list too, so a later failure never resurrects assets the server has removed.
+            fixtures?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
+            // After a failed call the list this run already fetched is the newest known (a snapshot save can fail and leave an
+            // older copy on disk); the saved copy is read only when nothing was fetched yet, on a cold start.
+            val kept = if (fixtures == null && _state.value.fixturesFetchedAt == null) snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
+            val now = java.time.Instant.now().toString()
+            _state.update {
+                val fetchedAt = if (fixtures != null) now else it.fixturesFetchedAt ?: kept?.fetchedAt
+                it.copy(health = health.value, reachable = true, fixtures = fixtures ?: (if (it.fixturesFetchedAt != null) it.fixtures else kept?.value ?: it.fixtures),
+                    // Kept assets are always dated: when this run fetched them, else the saved copy's time.
+                    fixturesCachedAt = if (fixtures != null) null else fetchedAt, fixturesFailed = fixtures == null, fixturesFetchedAt = fetchedAt,
+                    inspections = list ?: it.inspections, cachedAt = null, loading = false)
+            }
             loadFocus()
         } else {
             val list = snapshots.load(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
-            val fixtures = snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer()))
-            _state.update { it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt, loading = false) }
+            // Same rule: the list this run fetched outranks the saved copy.
+            val fixtures = if (_state.value.fixturesFetchedAt == null) snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
+            _state.update {
+                val fetchedAt = it.fixturesFetchedAt ?: fixtures?.fetchedAt
+                it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt,
+                    fixturesCachedAt = fetchedAt, fixturesFetchedAt = fetchedAt, fixturesFailed = true, loading = false)
+            }
         }
     }
 
