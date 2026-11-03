@@ -318,6 +318,12 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         // A create without a key is its own command every time, as before.
         Assert.NotEqual(await CreateInspection(), await CreateInspection());
 
+        // The same key with a different asset is refused, never answered with the first asset's inspection.
+        var other = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(new { fixtureId = "LAB-RACK-01", assetId = "LAB-NODE-A" }), Headers = { { "Idempotency-Key", "create-once" } } };
+        var refused = await _client.SendAsync(other);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal(InspectionErrorCodes.InvalidState, (await Json(refused)).GetProperty("code").GetString());
+
         // Overlapping creates under one key all answer with the same inspection; none sees it half published.
         var racing = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
         {

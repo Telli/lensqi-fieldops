@@ -89,7 +89,7 @@ public sealed class InspectionStore
     {
         lock (_createLock)
         {
-            if (requestId is not null && FindCreated(requestId) is { } earlier) return earlier;
+            if (requestId is not null && FindCreated(requestId) is { } earlier) return SameCreate(earlier, twin, assetId);
             var id = "I-" + Guid.NewGuid().ToString("N")[..12];
             var entry = new Entry(InspectionSession.Create(id, twin, assetId, now, requestId));
             try { Persist(entry); }
@@ -104,6 +104,12 @@ public sealed class InspectionStore
             return entry.Session;
         }
     }
+
+    /// <summary>The inspection a create key made, only when the retry asks for the same fixture and asset: a key reused for different inputs is refused, never answered with another asset's inspection.</summary>
+    public static InspectionSession SameCreate(InspectionSession earlier, LoadedExpectedTwin twin, string assetId) =>
+        earlier.State.FixtureId == twin.Twin.FixtureId && earlier.State.AssetId == assetId
+            ? earlier
+            : throw new InspectionConflictException(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
 
     /// <summary>Runs one command under the inspection's lock and appends any new events to the JSONL log, even when the command throws.</summary>
     public async Task<T> ExecuteAsync<T>(string inspectionId, Func<InspectionSession, Task<T>> command, CancellationToken ct)

@@ -58,7 +58,8 @@ export default function FreeformLive({ id }: { id: string }) {
   useEffect(() => { if (assist.enabled && assist.updatedAt) speech.speak(assist.recommendation); }, [assist.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask(question: string) {
-    if (!question.trim() || !open) return;
+    // One question at a time: a second submit while one is pending would replace the controller Cancel and unmount abort.
+    if (!question.trim() || !open || asking) return;
     setAsking(true);
     const controller = new AbortController();
     inflight.current = controller;
