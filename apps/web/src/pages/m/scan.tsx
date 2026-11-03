@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { X, Images, ChevronUp, Check, Loader2, AlertTriangle, Camera as CameraIcon, ArrowRight, Glasses } from "lucide-react";
-import { api, isCancelled, newKey, type Assessment, type ChangeAnalysis, type Inspection, type ObservationResponse, type SegmentationGeometry } from "@/lib/api";
+import { X, Images, ChevronUp, Check, Loader2, AlertTriangle, Camera as CameraIcon, ArrowRight, Glasses, RotateCcw } from "lucide-react";
+import { api, ApiError, isCancelled, newKey, type Assessment, type ChangeAnalysis, type Inspection, type ObservationResponse, type SegmentationGeometry } from "@/lib/api";
 import { friendlyError, qk, useElapsed } from "@/lib/hooks";
 import { useInspectionBundle } from "@/lib/inspection";
 import { changeLabel, featureName, isPostRepairItem, observationState, sentence } from "@/lib/labels";
 import { ArFrame } from "@/components/fo/ar-frame";
 import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
-import { cameraError, connectCamera } from "@/lib/camera";
+import { cameraError, connectCamera, takeStill } from "@/lib/camera";
+import { clearCapture, loadCapture, saveCapture, type SavedCapture } from "@/lib/captures";
+import { SavedAs } from "@/components/fo/verify-camera";
+import { fmtWhen } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { EvidenceBadge } from "@/components/fo/primitives";
@@ -36,7 +39,10 @@ export default function Scan({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<Step[]>([]);
   const [drawer, setDrawer] = useState(false);
-  const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; outlines: SegmentationGeometry[]; change?: ChangeAnalysis | null; state: Inspection } | null>(null);
+  const [result, setResult] = useState<{ evidenceId: string; assessment?: Assessment; outlines: SegmentationGeometry[]; change?: ChangeAnalysis | null; state: Inspection; saved: ObservationResponse; still?: boolean } | null>(null);
+  // A capture an earlier visit could not upload, kept on the device under its key so it can be sent again, not re-taken.
+  const [kept, setKept] = useState<SavedCapture | null>(null);
+  useEffect(() => { void loadCapture(id).then(setKept); }, [id]);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
@@ -78,7 +84,7 @@ export default function Scan({ id }: { id: string }) {
 
   const setStep = (n: number, state: Step["state"]) => setSteps((s) => s.map((x, k) => (k === n ? { ...x, state } : x)));
 
-  async function process(blob: Blob, name: string, source: "Phone" | "RecordedFixture") {
+  async function process(blob: Blob, name: string, source: "Phone" | "RecordedFixture", opts?: { still?: boolean; prior?: SavedCapture }) {
     if (!i || processing.current) return;
     processing.current = true;
     setBusy(true);
@@ -94,14 +100,16 @@ export default function Scan({ id }: { id: string }) {
     inflight.current = controller;
     const signal = controller.signal;
     // One key per capture: "try again" after a dropped connection finds the photo the server already recorded.
-    const key = newKey();
+    const key = opts?.prior?.key ?? newKey();
+    const observedAt = opts?.prior?.observedAt ?? new Date().toISOString();
     let up: ObservationResponse | undefined;
     let state: Inspection | undefined;
     let assessment: Assessment | undefined;
     const outlines: SegmentationGeometry[] = [];
     try {
-      up = await api.upload(id, blob, name, source, key, undefined, { signal });
+      up = await api.upload(id, blob, name, source, key, observedAt, { signal });
       setStep(0, "done");
+      void clearCapture(id); setKept(null);
       state = up.state;
       if (afterRepair) {
         setStep(1, "done");
@@ -134,18 +142,24 @@ export default function Scan({ id }: { id: string }) {
         }
         setStep(3, failed ? "skipped" : "done");
       }
-      setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
+      setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state, saved: up, still: opts?.still });
       qc.setQueryData(qk.inspection(id), state);
     } catch (e) {
       if (isCancelled(e) && up && state) {
         // The photo is saved; what the AI managed before the cancel is shown, the rest is marked as not done.
         setSteps((st) => st.map((x) => (x.state === "doing" || x.state === "todo" ? { ...x, state: "skipped" } : x)));
-        setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
+        setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state, saved: up, still: opts?.still });
         qc.setQueryData(qk.inspection(id), state);
       } else {
         setSteps([]);
         setPreview(null);
         if (!isCancelled(e)) toast.error(friendlyError(e));
+        // Unless the server refused the photo, it may never have arrived: keep it with its key for "try again".
+        const refused = e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
+        if (!up && !refused) {
+          const c: SavedCapture = { inspectionId: id, blob, name, source, key, observedAt, savedAt: Date.now() };
+          if (await saveCapture(c)) setKept(c);
+        }
       }
     } finally {
       processing.current = false;
@@ -165,11 +179,11 @@ export default function Scan({ id }: { id: string }) {
     }
     setShot(true);
     setTimeout(() => setShot(false), 180);
-    const c = document.createElement("canvas");
-    c.width = v.videoWidth; c.height = v.videoHeight;
-    c.getContext("2d")!.drawImage(v, 0, 0);
-    c.toBlob((b) => b && process(b, `capture-${Date.now()}.jpg`, "Phone"), "image/jpeg", 0.92);
+    // A full-resolution still from the camera where the browser offers one, else the preview frame.
+    void takeStill(v).then((r) => r && process(r.blob, `capture-${Date.now()}.jpg`, "Phone", { still: r.still }));
   }
+  const retryKept = () => { if (kept) void process(kept.blob, kept.name, kept.source as "Phone" | "RecordedFixture", { prior: kept }); };
+  const discardKept = () => { void clearCapture(id); setKept(null); };
 
   // A file from the native camera on a touch device is a capture; on a desktop it is an imported file and says so.
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -238,6 +252,15 @@ export default function Scan({ id }: { id: string }) {
           guide={target ? { concept: target, label: `Frame this part next · ${sentence(result?.assessment?.requestedView) || target}` } : null}
           className="w-full" imgClassName="max-h-[45dvh] object-contain" />}
         {!preview && live === "starting" && <p role="status" className="absolute inset-x-0 top-1/2 flex items-center justify-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Starting camera…</p>}
+        {kept && !preview && !busy && (
+          <div className="glass absolute inset-x-3 bottom-3 space-y-2 rounded-2xl p-3 text-xs" role="status" data-kept-capture>
+            <p>A photo from {fmtWhen(kept.observedAt)} didn't finish uploading. It's still on this device.</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={retryKept} className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-primary-foreground"><RotateCcw className="size-3.5" /> Try again with this photo</button>
+              <button type="button" onClick={discardKept} className="h-10 rounded-xl border border-overlay-foreground/30 px-3">Discard</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom: LensQi's prompt and the shutter, or what LensQi sees in the photo just taken */}
@@ -298,6 +321,7 @@ export default function Scan({ id }: { id: string }) {
                   {rejected ? "Photo not accepted" : afterRepair ? "Photo accepted" : nextMove(result.state, result.assessment)?.title}
                 </h2>
                 {steps.some((st) => st.state === "skipped") && <StepLine steps={steps} />}
+                <SavedAs r={result.saved} still={result.still} />
               </div>
             </div>
             {(findings.length > 0 || result.change) && (
