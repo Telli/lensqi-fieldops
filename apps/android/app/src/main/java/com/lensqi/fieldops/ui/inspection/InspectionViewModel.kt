@@ -24,6 +24,7 @@ import com.lensqi.fieldops.data.api.Segmentation
 import com.lensqi.fieldops.data.api.SimulationRequest
 import com.lensqi.fieldops.data.api.WorkOrderRequest
 import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.api.retryable
 import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.api.VisualAssessment
@@ -401,7 +402,11 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
-        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
+        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk {
+            local.update { it.copy(simUp = passed) }
+            // The demo outcome changed: a check whose answer was lost before must not replay the old measurement now.
+            keys.dropAll("diagnostic:$diagnosticId:")
+        }
     }
 
     fun workOrder(summary: String) = act("Drafting work order…") { keys.command(action("workOrder:$summary")) { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
@@ -411,7 +416,11 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
+        val outcome = keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }
+        // Any review the server may have applied clears the confirmation there, even one that repeats an answer: a
+        // confirmation whose answer was lost before is a new request now. A refused review changed nothing.
+        if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("acknowledge:")
+        outcome.onOk(::cacheView)
     }
 
     fun acknowledge() = act("Recording acknowledgement…") {

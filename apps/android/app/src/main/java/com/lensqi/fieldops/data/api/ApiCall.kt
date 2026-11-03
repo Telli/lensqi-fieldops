@@ -56,6 +56,8 @@ class RetryKeys(private val saved: androidx.lifecycle.SavedStateHandle? = null, 
     @Synchronized fun keyFor(action: String): String = keys.getOrPut(action) { java.util.UUID.randomUUID().toString() }.also { persist() }
     /** The action moved somewhere else (queued offline under its key, say): the next tap is a new request. */
     @Synchronized fun drop(action: String) { keys.remove(action); persist() }
+    /** Every pending action whose name starts with [prefix] is a new request from now on: the state it depended on changed elsewhere. */
+    @Synchronized fun dropAll(prefix: String) { keys.keys.removeAll { it.startsWith(prefix) }; persist() }
     @Synchronized fun <T> settle(action: String, outcome: ApiOutcome<T>): ApiOutcome<T> {
         if (!outcome.retryable) { keys.remove(action); persist() }
         return outcome
