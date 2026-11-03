@@ -40,6 +40,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.lensqi.fieldops.data.queue.CommandQueue
 import com.lensqi.fieldops.data.queue.PendingCommand
+import com.lensqi.fieldops.data.queue.hasQueuedCommands
 import com.lensqi.fieldops.data.settings.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,10 @@ data class InspectionUi(
     val latestAssessment: VisualAssessment? = null,
     /** Every verification decision so far, oldest first. */
     val attempts: List<VerificationResult> = emptyList(),
+    /** Each attempt as the record keeps it: decision, what was measured, what was confirmed. */
+    val history: List<Attempt> = emptyList(),
+    /** Something saved on the phone or sent later; cleared by the next action. Not an error. */
+    val notice: String? = null,
     /** The decision for the evidence on screen now, read from the events; null once a new claim, photo, review or confirmation follows it. */
     val attempt: Attempt? = null,
     /** Demo control state of the simulated endpoint (Simulated mode only). */
@@ -216,7 +221,7 @@ class InspectionViewModel @Inject constructor(
             ?.let { runCatching { json.decodeFromJsonElement(VisualAssessment.serializer(), it) }.getOrNull() }
         val attempts = events.filter { it["kind"]?.jsonPrimitive?.content == "VerificationEvaluated" }
             .mapNotNull { e -> e["decision"]?.jsonObject?.get("result")?.jsonPrimitive?.content?.let { r -> runCatching { VerificationResult.valueOf(r) }.getOrNull() } }
-        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json)) }
+        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
         val latest = view.segmentations.filter { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }.associateBy { it.concept }.values.toList()
@@ -277,12 +282,12 @@ class InspectionViewModel @Inject constructor(
      * (before a repair) or show the server's change check (after one). Offline, the photo stays queued and says so.
      */
 
-    fun captureForReview(file: File, origin: String) {
+    fun captureForReview(file: File, origin: String, measured: String? = null) {
         viewModelScope.launch {
             val afterRepair = state.value.view?.currentClaimId != null
             val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
             try {
-                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair == true)
+                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair, measured)
                 resumeReview(command)
             } catch (e: java.io.IOException) {
                 local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
@@ -410,25 +415,91 @@ class InspectionViewModel @Inject constructor(
         outcome.onOk { local.update { it.copy(simUp = passed) } }
     }
 
-    fun workOrder(summary: String) = act("Drafting work order…") { keys.command(action("workOrder:$summary")) { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
+    fun workOrder(summary: String) = act("Drafting work order…") {
+        val body = WorkOrderRequest(summary)
+        val action = action("workOrder:$summary")
+        val payload = json.encodeToString(WorkOrderRequest.serializer(), body)
+        if (enqueueBehindPending(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, payload)) return@act
+        keys.command(action) { k -> api.workOrder(inspectionId, k, body) }
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, payload)
+            ?.onOk(::cacheView)
+    }
 
+    /**
+     * A claim is never saved for later: the server stamps it with its own clock and counts as post-repair only photos taken
+     * after that stamp, so a claim sent minutes after the repair photo would make that photo pre-repair evidence. Offline,
+     * the claim is refused with the connection error and the technician records it once connected.
+     */
     fun claim(description: String) = act("Recording repair claim…") {
         keys.command(action("claim:$description")) { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        // Any review the server may have applied clears the confirmation there, even one that repeats an answer: a
-        // confirmation whose answer was lost before is a new request now. A review cancelled in flight may have reached the
-        // server, so it counts as applied too (its own key stays for the retry). A refused review changed nothing.
-        val outcome = try { keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) } }
+        val body = ChecklistRequest(requirementId, status, photoEvidenceId)
+        val action = action("review:$requirementId:$status:$photoEvidenceId")
+        val payload = json.encodeToString(ChecklistRequest.serializer(), body)
+        // Any review the server may have applied, or that is saved to be sent, clears the confirmation there, even one that
+        // repeats an answer: a confirmation whose answer was lost before is a new request now. A review cancelled in flight may
+        // have reached the server, so it counts as applied too (its own key stays for the retry). A refused review changed nothing.
+        if (enqueueBehindPending(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, payload)) { keys.dropAll("acknowledge:"); return@act }
+        val outcome = try { keys.command(action) { k -> api.checklist(inspectionId, k, body) } }
             catch (e: kotlinx.coroutines.CancellationException) { keys.dropAll("acknowledge:"); throw e }
         if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("acknowledge:")
-        outcome.onOk(::cacheView)
+        outcome.queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, payload)
+            ?.onOk(::cacheView)
     }
 
+    /**
+     * The confirmation is of the accepted photo and the review answers as they stand, so it is never saved for later: sent
+     * after the evidence changed (another client, a synced photo) it would confirm evidence the technician never saw. A
+     * revised answer needs a new confirmation; offline, the confirmation waits for the connection.
+     */
     fun acknowledge() = act("Recording acknowledgement…") {
-        // The confirmation is of the accepted photo and the review as they stand; a revised answer needs a new confirmation.
+        if (waitingForQueuedAnswers()) return@act
         keys.command(action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}:${reviewState()}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+    }
+
+    /**
+     * A confirmation or a verify is about the review as the server has it. While an answer still waits in the queue the
+     * server's review is not the technician's, so both wait too, and the queue is asked to send now.
+     */
+    private fun waitingForQueuedAnswers(): Boolean {
+        if (!state.value.pending.hasQueuedCommands()) return false
+        queue.requestSync()
+        local.update { it.copy(error = ANSWERS_WAITING) }
+        return true
+    }
+
+    /**
+     * While earlier commands for this inspection still wait in the queue, a new one goes behind them rather than ahead of
+     * them over the network, so the server always sees the technician's answers in the order they were given. True when
+     * the command was saved that way (the caller has nothing more to send).
+     */
+    private suspend fun enqueueBehindPending(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String): Boolean {
+        if (!state.value.pending.hasQueuedCommands()) return false
+        return try {
+            queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
+            keys.drop(action)
+            local.update { it.copy(notice = SAVED_BEHIND) }
+            true
+        } catch (e: java.io.IOException) { false }
+    }
+
+    /**
+     * A command the server did not answer (unreachable, timed out, 5xx, asked to slow down) is saved on the phone under the
+     * key it was just sent with and sent later in capture order, with the same body. Only review answers and work orders are
+     * saved: a claim or a confirmation sent late would mean something else (see [claim], [acknowledge]), and verify measures
+     * the equipment. A refusal is final and is shown instead. Null means it was saved, so the caller has nothing more to show;
+     * the server's answer or refusal still comes back through the queue.
+     */
+    private suspend fun <T> ApiOutcome<T>.queuedWhenOffline(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String): ApiOutcome<T>? {
+        if (!retryable) return this
+        return try {
+            queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
+            keys.drop(action)
+            local.update { it.copy(notice = SAVED_OFFLINE) }
+            null
+        } catch (e: java.io.IOException) { this }
     }
 
     /**
@@ -437,6 +508,7 @@ class InspectionViewModel @Inject constructor(
      * them changes it is a new request.
      */
     fun verify() = act("Server is verifying…") {
+        if (waitingForQueuedAnswers()) return@act
         val v = state.value.view
         keys.command(action("verify:${v?.acceptedPostRepairPhotoId}:${reviewState()}:ack=${v?.technicianAcknowledged}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
@@ -480,7 +552,7 @@ class InspectionViewModel @Inject constructor(
     private fun act(label: String, block: suspend () -> Unit) {
         if (local.value.busy != null) return
         running = viewModelScope.launch {
-            local.update { it.copy(busy = label, error = null) }
+            local.update { it.copy(busy = label, error = null, notice = null) }
             try { block() } finally { local.update { it.copy(busy = null) } }
             refresh()
         }
@@ -503,4 +575,10 @@ class InspectionViewModel @Inject constructor(
      * failed model call) so a retry replays rather than repeats; an answer drops it and the next tap is a new request.
      */
     private val keys = com.lensqi.fieldops.data.api.RetryKeys(savedState)
+
+    companion object {
+        const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
+        const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
+        const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."
+    }
 }

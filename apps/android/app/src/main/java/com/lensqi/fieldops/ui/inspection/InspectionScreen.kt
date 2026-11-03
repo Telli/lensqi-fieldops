@@ -81,6 +81,8 @@ import com.lensqi.fieldops.domain.Attempt
 import com.lensqi.fieldops.domain.VerifyCard
 import com.lensqi.fieldops.domain.measuredValue
 import com.lensqi.fieldops.domain.verifyCard
+import com.lensqi.fieldops.domain.verifyPreflight
+import com.lensqi.fieldops.domain.PreflightRow
 import androidx.compose.material.icons.outlined.Speed
 import com.lensqi.fieldops.ui.common.verifySteps
 import java.time.Instant
@@ -110,6 +112,7 @@ import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.queue.CommandState
+import com.lensqi.fieldops.data.queue.hasQueuedCommands
 import com.lensqi.fieldops.ui.common.Dot
 import com.lensqi.fieldops.ui.common.EvidenceBadge
 import com.lensqi.fieldops.ui.common.Expandable
@@ -189,7 +192,10 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
                 }
             }
             s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
-            // Saved photos are listed in both modes, also before the server has any photo, so a refused one can be retried or removed.
+            s.notice?.let { item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.CloudOff, null, tint = Fo.Warning, modifier = Modifier.size(16.dp)); Text(it, color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
+            } } }
+            // Saved photos and commands are listed in both modes, also before the server has any photo, so a refused one can be retried or removed.
             if (s.pending.any { it.state != CommandState.Uploaded }) item { PendingUploads(s, vm) }
             if (view != null) {
                 val asset = s.fixture?.assets?.firstOrNull { it.assetId == view.assetId }
@@ -294,6 +300,8 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     // The server's own answer for each item under this claim; the policy counts it whichever post-repair photo it cited.
     fun reviewed(req: String) = view.checklist.firstOrNull { it.requirementId == req }
     val running = s.busy?.startsWith("Server is verifying") == true
+    // Answers saved on the phone have not reached the server: its review is not yet the technician's.
+    val answersWaiting = s.pending.hasQueuedCommands()
     // The server's next step picks the card; nothing here works out the order itself.
     val card = verifyCard(view)
     val attempt = if (running) null else s.attempt
@@ -335,11 +343,13 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 SecondaryButton("Retake the photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             }
             card == VerifyCard.Confirm -> AiCard("Your review is in.", "Confirm it's your review", "The receipt records that you checked this evidence yourself. A new photo or review needs confirming again.") {
-                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.HowToReg)
+                if (answersWaiting) Muted("Your review answers are still waiting to be sent; confirm once they have gone through.")
+                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null && !answersWaiting, icon = Icons.Outlined.HowToReg)
             }
             card == VerifyCard.Run -> AiCard("Photo accepted, reviewed and confirmed.", "Ready to verify",
                 "Verify takes a fresh measurement of ${target ?: "the equipment"} now${if (check?.afterClaim == true && check.lastRunAt != null) "; the one from ${whenText(check.lastRunAt)} isn't reused" else ""}. Both proofs have to pass.") {
-                PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null, busy = running, icon = Icons.Outlined.Build)
+                if (answersWaiting) Muted("Your review answers are still waiting to be sent; verify once they have gone through.")
+                PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null && !answersWaiting, busy = running, icon = Icons.Outlined.Build)
             }
             card == VerifyCard.Claim -> AiCard("This repair attempt didn't pass.", "Fix it, then claim again", "Every attempt stays in the record.", tone = Fo.Failure) { claimAgain() }
             card == VerifyCard.Closed -> AiCard(plainReason(blocking.firstOrNull().orEmpty()), "Inspection closed", null)
@@ -348,6 +358,9 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",
             ) {
                 // Saved photos are listed once, above the cards, in both modes.
+                // The server refuses a repair photo whose device time is far behind the claim: say so before the shutter.
+                val skew by com.lensqi.fieldops.data.api.ClockSkew.offsetMs.collectAsStateWithLifecycle()
+                com.lensqi.fieldops.data.api.ClockSkew.warning(skew)?.let { Text(it, color = Fo.Warning, style = MaterialTheme.typography.bodySmall) }
                 PrimaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("Import", importPhoto, Modifier.weight(1f), icon = Icons.Outlined.Image)
@@ -359,10 +372,38 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     if (attempt == null && !running && waitingOn.size > 1 && card != VerifyCard.Closed) item {
         Expandable("Why verify can't run yet · ${waitingOn.size}") { waitingOn.forEach { Muted("· $it") } }
     }
+    // What verify will need, from the server's view, so a failed attempt is rarer and never a surprise.
+    if (attempt == null && !running && (card == VerifyCard.Review || card == VerifyCard.Confirm || card == VerifyCard.Run)) item {
+        Expandable("Before you verify · the three proofs") {
+            verifyPreflight(view, required.map { it.requirementId }).forEach { row -> PreflightLine(row) }
+            Muted("Verify measures the equipment again and decides on the server. This list only shows where things stand.")
+        }
+    }
     item { ProgressSegments(if (attempt?.decision?.result == VerificationResult.Verified) 4 else card.step, verifySteps) }
     if (attempt == null && accepted != null && (card == VerifyCard.Confirm || card == VerifyCard.Run)) item { Expandable("Your review · ${required.size} items") { reviewRows() } }
-    if (s.attempts.isNotEmpty()) item {
-        Muted("${s.attempts.size} attempts kept in the inspection record.")
+    if (s.history.isNotEmpty()) item {
+        Expandable("Attempts · ${s.history.size} kept in the inspection record") {
+            s.history.asReversed().forEachIndexed { i, a ->
+                if (i > 0) HorizontalDivider(color = Fo.Border)
+                val d = a.decision
+                val tone = when (d.result) { VerificationResult.Verified -> Fo.Success; VerificationResult.NeedsHumanReview -> Fo.Warning; else -> Fo.Failure }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Attempt ${s.history.size - i}", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Text(TechnicianText.outcome(d.result, d.outcomeKind), color = tone, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+                Muted(whenText(a.at))
+                if (!d.isVerified) d.reasons.firstOrNull()?.let { Muted(plainReason(it)) }
+                // Which proof decided it: the equipment check that ran, or the photo, review or confirmation before any check.
+                Muted(when {
+                    a.measured.any { it.passed == false } -> "Equipment check failed · ${a.measured.map { it.source }.distinct().joinToString { it.name.lowercase() }}"
+                    a.measured.isNotEmpty() -> "Equipment check ${if (a.measured.all { it.passed == true }) "passed" else "unavailable"} · ${a.measured.map { it.source }.distinct().joinToString { it.name.lowercase() }}"
+                    a.acknowledgedAt == null -> "Decided before the check: confirmation was missing"
+                    a.review.isEmpty() -> "Decided before the check: nothing was reviewed"
+                    a.review.any { it.status != ChecklistStatus.Satisfied } -> "Decided before the check: a review item was not right or undecided"
+                    else -> "Decided before the check ran"
+                })
+            }
+        }
     }
     if (view.stage != InspectionStage.VerifiedComplete) item { Expandable("Equipment check") { EquipmentCheck(s, vm, view) } }
 }
@@ -480,6 +521,16 @@ private fun BringNextStepIntoView(list: LazyListState, step: Any?) {
     }
 }
 
+/** One line of the preflight: the proof, where it stands, and why. */
+@Composable
+private fun PreflightLine(row: PreflightRow) {
+    val (color, icon) = when (row.ok) { true -> Fo.Success to Icons.Outlined.CheckCircle; false -> Fo.Failure to Icons.Outlined.HighlightOff; null -> Fo.Muted to Icons.Outlined.RadioButtonUnchecked }
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, tint = color, modifier = Modifier.padding(top = 2.dp).size(16.dp))
+        Column { Text(row.title, fontWeight = FontWeight.Medium, fontSize = 13.sp); Muted(row.detail) }
+    }
+}
+
 /** One of the three kinds of proof, labelled with where it came from. */
 @Composable
 private fun Part(icon: ImageVector, title: String, kind: String, pass: Boolean?, content: @Composable () -> Unit) {
@@ -586,6 +637,8 @@ private fun PhotoStrip(s: InspectionUi, vm: InspectionViewModel) {
             Column(Modifier.width(120.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 vm.artifactFor(p.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), null, Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop) }
                 Muted("${originLabel(p.origin)} · ${whenText(p.observedAt)}")
+                // What the phone measured at the shutter, labelled as measured; the still itself has no depth.
+                p.measured?.takeIf { it.isNotEmpty() }?.let { m -> Muted("Measured · " + m.joinToString("; ") { part -> part.part + listOfNotNull(part.distanceCm?.let { " ${it} cm away" }, part.heightAboveFloorCm?.let { " ${it} cm up" }).joinToString(",") }) }
             }
         }
     }
@@ -595,14 +648,22 @@ private fun PhotoStrip(s: InspectionUi, vm: InspectionViewModel) {
 private fun PendingUploads(s: InspectionUi, vm: InspectionViewModel) {
     s.pending.filter { it.state != CommandState.Uploaded }.forEach { c ->
         val rejected = c.state == CommandState.Rejected
-        if (rejected) androidx.compose.material3.TextButton(onClick = { vm.retryUpload(c) }) {
-            Text(if (c.serverBase == null) "Retry saved photo on this server" else "Retry saved photo")
+        val what = when (c.kind) {
+            com.lensqi.fieldops.data.queue.CommandKind.RepairClaim -> "repair claim"
+            com.lensqi.fieldops.data.queue.CommandKind.Checklist -> "review answer"
+            com.lensqi.fieldops.data.queue.CommandKind.Acknowledge -> "confirmation"
+            com.lensqi.fieldops.data.queue.CommandKind.WorkOrder -> "work order"
+            else -> "photo"
         }
-        if (c.state == CommandState.Rejected) TextButton(onClick = { vm.removeUpload(c) }) { Text("Remove saved photo") }
+        if (rejected) androidx.compose.material3.TextButton(onClick = { vm.retryUpload(c) }) {
+            Text(if (c.serverBase == null) "Retry saved $what on this server" else "Retry saved $what")
+        }
+        if (c.state == CommandState.Rejected) TextButton(onClick = { vm.removeUpload(c) }) { Text("Remove saved $what") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Dot(if (rejected) Fo.Failure else Fo.Warning)
             Text(
-                if (rejected) "Not uploaded. ${com.lensqi.fieldops.ui.common.friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())}" else "Awaiting upload · saved on this phone",
+                if (rejected) "${what.replaceFirstChar { it.uppercase() }} not sent. ${com.lensqi.fieldops.ui.common.friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())}"
+                else "${what.replaceFirstChar { it.uppercase() }} saved on this phone · sent when connected",
                 color = if (rejected) Fo.Failure else Fo.Warning, style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -665,11 +726,20 @@ private fun Knowledge(s: InspectionUi) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Dot(Fo.Primary)
                     Text(if (f.provenance == "SiteConfigured") "Site setup" else "Vendor documentation", style = Eyebrow)
+                    if (s.knowledgeCachedAt != null) Tag("CACHED", Fo.Warning)
+                    if (k.originKind == "Synthetic") Tag("SYNTHETIC", Fo.Warning)
                 }
                 Text(f.statement, fontSize = 13.sp)
-                Muted("${f.citation.documentTitle} — ${f.citation.sourceLocator}")
-                f.citation.sourceUrl?.takeIf { com.lensqi.fieldops.ui.receipt.webOrigin(it) != null }?.let { url ->
-                    androidx.compose.material3.TextButton(onClick = { runCatching { uri.openUri(url) } }) { Text("Open source") }
+                // The source sheet: document, section, publisher, when it was read, the pack revision, and what kind of claim it is.
+                Expandable("Source · ${f.citation.documentTitle}") {
+                    Muted("Section: ${f.citation.sourceLocator}")
+                    Muted("Publisher: ${f.citation.publisher} · read ${f.citation.accessedOn}")
+                    Muted("Pack revision ${k.packRevision ?: "—"}" + (k.packSha256?.let { " · digest ${it.take(12)}…" } ?: ""))
+                    Muted("${f.claimKind.replace(Regex("([a-z])([A-Z])"), "$1 $2")} · safety: ${f.safety.replace(Regex("([a-z])([A-Z])"), "$1 $2").lowercase()}" + if (f.tags.isNotEmpty()) " · ${f.tags.joinToString(", ")}" else "")
+                    Muted(if (s.knowledgeCachedAt != null) "Copy saved on this phone at ${whenText(s.knowledgeCachedAt)}; it may be out of date." else "Fetched from the server now.")
+                    f.citation.sourceUrl?.takeIf { com.lensqi.fieldops.ui.receipt.webOrigin(it) != null }?.let { url ->
+                        androidx.compose.material3.TextButton(onClick = { runCatching { uri.openUri(url) } }) { Text("Open source") }
+                    }
                 }
             }
         }

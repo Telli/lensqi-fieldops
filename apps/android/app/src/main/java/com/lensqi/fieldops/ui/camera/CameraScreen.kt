@@ -155,9 +155,11 @@ fun CameraScreen(
     reference: Bitmap? = null,
     /** The equipment to register with the printed marker and the port the step needs; null where there is none. */
     registration: RegistrationSubject? = null,
+    /** The shutter press itself, before live assist stops and before any confirmation of the still: what the photo is of is decided now. */
+    onShutter: () -> Unit = {},
 ) = ForceDark {
     CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept, liveAllowed, detailsSummary, showDetails, onObjects,
-        scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration)
+        scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter)
 }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
@@ -179,6 +181,7 @@ private fun CameraContent(
     capturePart: String?,
     reference: Bitmap?,
     registrationSubject: RegistrationSubject?,
+    onShutter: () -> Unit,
 ) {
     // The view stays clear: details start collapsed, and a tap on the picture hides every panel but the controls.
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -204,13 +207,17 @@ private fun CameraContent(
     var liveBeforeShutter by rememberSaveable { mutableStateOf(false) }
     var ghost by rememberSaveable { mutableStateOf(true) }
     val arActive = liveEnabled && spatialEnabled && arAvailability == ArAvailability.Ready && arFailure == null
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
+    var asked by rememberSaveable { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; asked = true }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
+    // Back from Settings: what was allowed there takes effect without reopening the camera.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED; onPauseOrDispose { } }
 
     if (!granted) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
             Text("Camera access is needed to capture evidence. Nothing is recorded without your tap.")
             PrimaryButton("Allow camera", { ask.launch(Manifest.permission.CAMERA) }, Modifier.fillMaxWidth())
+            com.lensqi.fieldops.ui.common.PermissionSettingsHint(context, Manifest.permission.CAMERA, asked, "Camera access", "Without it no photo can be taken, so nothing can be inspected or verified.")
             Text("Back", color = FoDark.Muted, modifier = Modifier.clickable(onClick = onClose).padding(8.dp))
         }
         return
@@ -624,6 +631,7 @@ private fun CameraContent(
                     capturing = true
                     status = null
                     stillPart = partToConfirm(capturePart, target)
+                    onShutter()
                     liveBeforeShutter = liveEnabled
                     if (arActive) pendingCapture = true else takePhoto()
                     // ARCore must hand the camera back for the photo; with CameraX, an embedding screen keeps its live coaching.

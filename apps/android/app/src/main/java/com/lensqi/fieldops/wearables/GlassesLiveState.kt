@@ -13,4 +13,6 @@ data class GlassesLiveState(val session: LiveSession? = null, val enabled: Boole
 @Singleton class GlassesLiveStore @Inject constructor() {
     internal val mutable = MutableStateFlow(GlassesLiveState())
     val state = mutable.asStateFlow()
+    /** The session live assist was running for when a shutter photo paused it; the glasses screen starts it again for that session. */
+    internal val resumeFor = MutableStateFlow<LiveSession?>(null)
 }

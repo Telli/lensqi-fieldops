@@ -5,6 +5,7 @@ import com.lensqi.fieldops.data.api.DiagnosticResult
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.VerificationDecision
+import com.lensqi.fieldops.data.api.VisualChangeVerdict
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -102,6 +103,15 @@ fun currentAttempt(events: List<JsonObject>, json: Json): Attempt? {
         k--
     }
     if (k < 0) return null
+    return attemptAt(events, k, json)
+}
+
+/** Every verify decision the record keeps, oldest first, each with what that call measured and the review it used. */
+fun attemptHistory(events: List<JsonObject>, json: Json): List<Attempt> =
+    events.indices.filter { events[it].kind == "VerificationEvaluated" }.mapNotNull { attemptAt(events, it, json) }
+
+/** The attempt decided by the VerificationEvaluated event at [k]. */
+private fun attemptAt(events: List<JsonObject>, k: Int, json: Json): Attempt? {
     val decided = events[k]
     val decision = decided["decision"]?.let { runCatching { json.decodeFromJsonElement(VerificationDecision.serializer(), it) }.getOrNull() } ?: return null
     val measured = ArrayDeque<DiagnosticResult>()
@@ -134,3 +144,58 @@ fun currentAttempt(events: List<JsonObject>, json: Json): Attempt? {
 /** What a check measured: the status a server answered with, else the closed-set value in words ("Reachable" → "reachable"). */
 fun measuredValue(r: DiagnosticResult): String =
     r.httpStatus?.let { "HTTP $it" } ?: r.normalizedValue?.replace(Regex("([a-z])([A-Z])"), "$1 $2")?.lowercase() ?: "—"
+
+/** One of the proofs verify needs, as the server's view has it now. [ok] null means pending, or a line that only informs. */
+data class PreflightRow(val title: String, val ok: Boolean?, val detail: String)
+
+private fun at(s: String?): java.time.Instant? = s?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+
+/**
+ * What stands between the technician and a verify that passes, read from the server's view: the accepted repair photo and
+ * its comparison, the checklist for this claim, the confirmation, and how the equipment check will be measured. Nothing
+ * here decides; verify measures again and the server's policy rules.
+ */
+fun verifyPreflight(v: InspectionView, required: List<String>): List<PreflightRow> {
+    val accepted = v.acceptedPostRepairPhotoId
+    val change = accepted?.let { id -> v.changeAnalyses.lastOrNull { it.photoEvidenceId == id } }
+    val photo = when {
+        accepted != null -> PreflightRow("Repair photo", true, when (change?.verdict) {
+            VisualChangeVerdict.Changed -> "Accepted · a change from the earlier view was seen"
+            VisualChangeVerdict.Unscorable -> "Accepted on your review · the photos could not be compared"
+            null -> "Accepted"
+            else -> "Accepted"
+        })
+        v.awaitingAnalysis.isNotEmpty() -> PreflightRow("Repair photo", null, "Being compared with the earlier view")
+        else -> PreflightRow("Repair photo", false, "Not taken yet")
+    }
+    // The policy's rule: an answer counts when it was given after the claim on a photo the change check did not reject;
+    // it need not cite the newest accepted photo.
+    val claimedAt = at(v.repairClaimedAt)
+    // Rejected as the server sees it: the last change check of each photo under the current claim; older claims do not count.
+    val rejected = v.changeAnalyses.filter { it.claimId == v.currentClaimId }.groupBy { it.photoEvidenceId }
+        .filterValues { it.last().verdict == VisualChangeVerdict.DuplicateImage || it.last().verdict == VisualChangeVerdict.NoVisualChange }.keys
+    val answers = required.mapNotNull { req ->
+        v.checklist.firstOrNull { it.requirementId == req }?.takeIf { e ->
+            val reviewed = at(e.reviewedAt)
+            (claimedAt == null || reviewed == null || !reviewed.isBefore(claimedAt)) && e.reviewedByEvidenceId !in rejected
+        }
+    }
+    val review = when {
+        required.isEmpty() -> PreflightRow("Your review", true, "No checklist items for this equipment")
+        answers.size == required.size && answers.all { it.status == ChecklistStatus.Satisfied } -> PreflightRow("Your review", true, "All ${required.size} items marked as looking right")
+        answers.any { it.status == ChecklistStatus.NotSatisfied } -> PreflightRow("Your review", false, "An item is marked not right: the repair is not finished")
+        answers.isEmpty() -> PreflightRow("Your review", false, "Nothing reviewed on the new photo yet")
+        else -> PreflightRow("Your review", null, "${answers.size} of ${required.size} reviewed" + if (answers.any { it.status != ChecklistStatus.Satisfied }) " · one needs you to decide" else "")
+    }
+    val confirm = PreflightRow("Your confirmation", v.technicianAcknowledged, if (v.technicianAcknowledged) "You confirmed this evidence is yours" else "Not confirmed yet · a new photo or review resets it")
+    val check = v.readiness?.checks?.firstOrNull()
+    val last = check?.lastRunAt?.let { " · last ${if (check.passed == true) "passed" else if (check.passed == false) "failed" else "unavailable"}${check.source?.let { s -> " (${s.name.lowercase()})" } ?: ""}" } ?: ""
+    val measure = when {
+        v.readiness == null -> PreflightRow("Equipment check", null, "Measured when you verify")
+        v.readiness.measuresOnVerify -> PreflightRow("Equipment check", null, "Measured again when you verify; an earlier result is not reused$last")
+        check?.afterClaim == true && check.passed == true -> PreflightRow("Equipment check", true, "Passed after the repair claim$last")
+        check?.afterClaim == true -> PreflightRow("Equipment check", false, "Ran after the claim but did not pass$last")
+        else -> PreflightRow("Equipment check", false, "Needs a run after the repair claim$last")
+    }
+    return listOf(photo, review, confirm, measure)
+}

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using LensQi.FieldOps.Core.Knowledge;
+using LensQi.FieldOps.Core.Tasks;
 
 namespace LensQi.FieldOps.Core.Inspection;
 
@@ -42,7 +43,9 @@ public sealed record InspectionCreated(long Sequence, string InspectionId, DateT
     string FixtureId, int FixtureRevision, string AssetId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record PhotoRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null, string? PerceptualHash = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null, string? PerceptualHash = null,
+    /// <summary>Parts the phone's ARCore measured at the shutter (distance, height above the floor). Measured, kept with the photo; never a verification input.</summary>
+    IReadOnlyList<MeasuredPart>? Measured = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record SegmentationRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, string? ModelId,

@@ -122,6 +122,7 @@ class GlassesLiveService : Service() {
         clearSession("Switching live assistance")
         speaker?.stop(); speechGate = SpokenFeedbackGate(); lastHud = null; lastSpokenLost = false
         store.mutable.update { it.copy(session = live) }
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
     }
 
     private fun clearSession(message: String) {
@@ -159,7 +160,8 @@ class GlassesLiveService : Service() {
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         fun action(name: String) = PendingIntent.getService(this, name.hashCode(), Intent(this, GlassesLiveService::class.java).setAction(name), PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("LensQi live glasses assistance").setContentText("Camera analysis active · sampled frames sent to AI")
+            .setContentTitle("LensQi live glasses assistance")
+            .setContentText((current?.label?.let { "Assist for: $it · " } ?: "") + "Camera analysis active · sampled frames sent to AI")
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
             .addAction(0, if (store.state.value.muted) "Unmute" else "Mute", action(MUTE))
             .addAction(0, "Stop camera", action(STOP)).build()
@@ -184,19 +186,20 @@ class GlassesLiveService : Service() {
         private const val SESSION = "session"
         private const val SESSION_KIND = "sessionKind"
         private const val TARGET = "targetConcept"
+        private const val LABEL = "label"
         private const val STOP = "com.lensqi.fieldops.STOP_GLASSES"
         private const val PAUSE = "com.lensqi.fieldops.PAUSE_GLASSES"
         private const val MUTE = "com.lensqi.fieldops.MUTE_GLASSES"
         fun start(context: Context, session: LiveSession) = ContextCompat.startForegroundService(context,
-            Intent(context, GlassesLiveService::class.java).putExtra(SESSION, session.id).putExtra(SESSION_KIND, session.kind.name).putExtra(TARGET, session.targetConcept))
+            Intent(context, GlassesLiveService::class.java).putExtra(SESSION, session.id).putExtra(SESSION_KIND, session.kind.name).putExtra(TARGET, session.targetConcept).putExtra(LABEL, session.label))
 
         /** A different inspection, task, or step target means the frames must be analysed for the new one. */
-        internal fun switchNeeded(current: LiveSession?, requested: LiveSession): Boolean = current != requested
+        internal fun switchNeeded(current: LiveSession?, requested: LiveSession): Boolean = !requested.sameAs(current)
 
         private fun sessionOf(intent: Intent?): LiveSession? {
             val id = intent?.getStringExtra(SESSION) ?: return null
             val kind = intent.getStringExtra(SESSION_KIND)?.let { k -> LiveSessionKind.entries.firstOrNull { it.name == k } } ?: return null
-            return LiveSession(id, kind, intent.getStringExtra(TARGET))
+            return LiveSession(id, kind, intent.getStringExtra(TARGET), intent.getStringExtra(LABEL))
         }
         /**
          * Whether the live-assist notification can show at all: the permission (Android 13+), app notifications on, and

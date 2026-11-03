@@ -107,3 +107,70 @@ class CommandQueueTest {
         }
     }
 }
+
+/** The inspection's small JSON commands wait on the phone like photos: same key, capture order, the server's answer wins. */
+class QueuedCommandTest {
+    private val json = NetworkModule.json()
+    private fun api(base: String) = NetworkModule.retrofit(OkHttpClient(), json, base).create(FieldOpsApi::class.java)
+    private val original = byteArrayOf(-1, -40, -1) + "original camera bytes".toByteArray()
+
+    @Test fun `a claim saved offline is sent after the photo before it, under its key, and the view it returns is cached`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val dao = MemoryCommands(); val cache = InspectionCache()
+            val queue = CommandQueue(File(dir, "saved"), dao, ::api, cache) {}
+            val base = server.url("/").toString()
+            val photo = queue.enqueuePhoto("I-1", File(dir, "shot.jpg").apply { writeBytes(original) }, "Phone", base, measured = """[{"part":"switch","distanceCm":80}]""")
+            val claim = queue.enqueueCommand("I-1", CommandKind.RepairClaim, "claim-key", """{"description":"Reseated the yellow cable"}""", base)
+            server.enqueue(MockResponse().setResponseCode(503).setBody("{}"))
+            assertEquals(DrainResult.Offline, queue.drain())
+            assertEquals(1, server.requestCount, "the claim waits behind the photo while the server is down")
+            server.takeRequest()
+
+            server.enqueue(MockResponse().setBody(Recordings.text("observation-initial").replace(Regex("\"sha256\"\\s*:\\s*\"[^\"]+\""), "\"sha256\":\"${CommandQueue.sha256(original)}\"")))
+            server.enqueue(MockResponse().setBody(Recordings.text("repair-claim-1")))
+            assertEquals(DrainResult.Empty, queue.drain())
+            val upload = server.takeRequest()
+            assertTrue(String(upload.body.readByteArray(), Charsets.ISO_8859_1).contains("name=\"measured\""), "what the phone measured rides with the photo")
+            val sent = server.takeRequest()
+            assertEquals("/v1/inspections/I-1/repair-claims", sent.path)
+            assertEquals("claim-key", sent.getHeader("Idempotency-Key"))
+            assertEquals("""{"description":"Reseated the yellow cable"}""", sent.body.readUtf8())
+            assertNull(dao.rows.value.firstOrNull { it.id == claim.id }, "a sent command leaves the queue")
+            assertEquals(CommandState.Uploaded, dao.rows.value.single { it.id == photo.id }.state)
+            val claimed = json.decodeFromString(RepairClaimResponse.serializer(), Recordings.text("repair-claim-1")).state
+            assertEquals(claimed.currentClaimId, cache.observe(claimed.inspectionId, base).first()?.currentClaimId)
+        }
+    }
+
+    @Test fun `a refused command keeps the server's code and an unreadable body is refused on the phone`(@TempDir dir: File): Unit = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val dao = MemoryCommands()
+            val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val base = server.url("/").toString()
+            queue.enqueueCommand("I-1", CommandKind.Acknowledge, "ack-key", null, base)
+            queue.enqueueCommand("I-1", CommandKind.Checklist, "bad-key", "not json", base)
+            server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"invalid_state","message":"nothing to confirm"}"""))
+            assertEquals(DrainResult.Empty, queue.drain())
+            assertEquals("/v1/inspections/I-1/acknowledge", server.takeRequest().path)
+            val rows = dao.rows.value.associateBy { it.id }
+            assertEquals(CommandState.Rejected, rows["ack-key"]!!.state); assertEquals("invalid_state", rows["ack-key"]!!.errorCode)
+            assertEquals(CommandState.Rejected, rows["bad-key"]!!.state); assertEquals("payload_unreadable", rows["bad-key"]!!.errorCode)
+            assertEquals(1, server.requestCount, "an unreadable body never reaches the server")
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { queue.enqueueCommand("I-1", CommandKind.UploadPhoto, "k", null, base) } }
+        }
+    }
+}
+
+/** A new answer never overtakes an older one still waiting in the queue. */
+class QueuedBehindTest {
+    private fun row(kind: CommandKind, state: CommandState) = PendingCommand("k-$kind-$state", "I-1", kind, 0, state = state)
+    @Test fun `only pending JSON commands hold a new one behind them`() {
+        assertFalse(emptyList<PendingCommand>().hasQueuedCommands())
+        assertFalse(listOf(row(CommandKind.UploadPhoto, CommandState.Pending)).hasQueuedCommands(), "a photo upload has its own identity; an answer may go ahead of it")
+        assertFalse(listOf(row(CommandKind.Checklist, CommandState.Rejected)).hasQueuedCommands(), "a refused answer is finished")
+        assertTrue(listOf(row(CommandKind.Checklist, CommandState.Pending)).hasQueuedCommands())
+        assertTrue(listOf(row(CommandKind.WorkOrder, CommandState.Pending), row(CommandKind.UploadPhoto, CommandState.Uploaded)).hasQueuedCommands())
+    }
+}

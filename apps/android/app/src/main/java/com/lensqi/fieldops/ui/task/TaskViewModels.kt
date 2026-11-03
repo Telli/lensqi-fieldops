@@ -97,7 +97,8 @@ data class TaskUi(
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
 @HiltViewModel
-class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: SpeechOutput, private val queue: StepCheckQueue) : ViewModel() {
+class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api: FieldOpsApi, val speaker: SpeechOutput, private val queue: StepCheckQueue,
+    private val spoken: SpokenChecks = SpokenChecks()) : ViewModel() {
     val taskId: String = checkNotNull(saved["taskId"])
     /** Decodes and shrinks a shutter photo; Android's bitmap decoder in the app, a stand-in in JVM tests. */
     internal var reduce: (File, Int) -> ByteArray? = ::downscaledJpeg
@@ -126,7 +127,19 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun refresh() = viewModelScope.launch {
         val r = apiCall { api.task(taskId) }
         _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
+        (r as? ApiOutcome.Ok)?.value?.let(::speakNewChecks)
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
+    }
+
+    /**
+     * Check photos whose verdict has been spoken. A check saved offline is spoken when its verdict first appears after a
+     * sync, once; the checks already in the record when the task opened are not read out again.
+     */
+    private var seeded = false
+    private fun speakNewChecks(task: TaskView) {
+        val checks = task.plan?.steps?.mapNotNull { it.lastCheck }.orEmpty()
+        if (!seeded) { spoken.seed(checks.map { it.photoId }); seeded = true; return }
+        checks.filter { spoken.firstTime(it.photoId) }.forEach { c -> speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
     // One idempotency key per pending action (RetryKeys): a retry after a lost response, a server error or a failed model
@@ -187,7 +200,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         settle(action, r)
-        (r as? ApiOutcome.Ok)?.value?.check?.let { c -> speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
+        (r as? ApiOutcome.Ok)?.value?.check?.let { c -> spoken.firstTime(c.photoId); speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
     /** A question by voice or text, with the latest camera frame when live coaching has one. The answer is spoken. */

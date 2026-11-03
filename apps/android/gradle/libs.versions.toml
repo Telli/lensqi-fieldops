@@ -71,6 +71,8 @@ mwdat-display = { module = "com.meta.wearable:mwdat-display", version.ref = "mwd
 mwdat-mockdevice = { module = "com.meta.wearable:mwdat-mockdevice", version.ref = "mwdat" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 google-ar-core = { module = "com.google.ar:core", version.ref = "arcore" }
+# Bundled barcode model: asset labels scan without Google Play Services (the arm64 emulator has none).
+mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -1,8 +1,10 @@
 using LensQi.FieldOps.Core.Knowledge;
+using LensQi.FieldOps.Core.Tasks;
 
 namespace LensQi.FieldOps.Core.Inspection;
 
-public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, ImageQualitySignals? Quality = null, string? PerceptualHash = null, DateTimeOffset? RecordedAt = null);
+public sealed record PhotoEvidence(string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, ImageQualitySignals? Quality = null, string? PerceptualHash = null, DateTimeOffset? RecordedAt = null,
+    IReadOnlyList<MeasuredPart>? Measured = null);
 public sealed record DiagnosticEvidence(string EvidenceId, DiagnosticResult Result, DateTimeOffset RecordedAt);
 public sealed record ChecklistEntry(string RequirementId, ChecklistStatus Status, DateTimeOffset ReviewedAt, string? ReviewedByEvidenceId = null);
 public sealed record SegmentationEvidence(string EvidenceId, string SourcePhotoEvidenceId, string Concept, bool Matched, string? MaskSha256, DateTimeOffset RecordedAt);
@@ -63,7 +65,7 @@ public sealed record InspectionState
             PhotoRecorded p => this with
             {
                 TechnicianAcknowledged = false,
-                Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt)],
+                Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt, p.Measured)],
                 EvidenceRequests = [.. EvidenceRequests.Select(r => r.AnsweredByPhotoId is null ? r with { AnsweredByPhotoId = p.EvidenceId, AnsweredAt = p.OccurredAt } : r)],
             },
             EvidenceRequested q => this with { EvidenceRequests = [.. EvidenceRequests, new EvidenceRequest(q.RequestId, q.Note, q.RequestedBy, q.OccurredAt)] },

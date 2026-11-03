@@ -95,17 +95,19 @@ public static class InspectionEndpoints
             if ((long)width * height > limits.MaxImagePixels)
                 return ApiResults.BadRequest("image_too_large", $"image is {width}x{height}; at most {limits.MaxImagePixels} pixels are accepted");
             if (!TryCaptureOrigin(form["source"].ToString(), out var origin)) return InvalidSource();
+            // What the phone's ARCore measured at the shutter travels with the photo as a measured note; malformed is refused, never guessed.
+            if (MeasuredParts.Parse(form["measured"]) is not { } measured) return MeasuredParts.Invalid();
             var observedAt = DateTimeOffset.TryParse(form["observedAt"], out var obs) ? obs : clock.GetUtcNow();
             var evidenceId = "photo-" + Guid.NewGuid().ToString("N")[..10];
             var artifact = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
             // Blur and luminance are signals beside the evidence; a missing measurement never blocks the upload.
             var artifactPath = Path.Combine(files.DataDirectoryPath, artifact.RelativePath);
-            var measured = await imaging.MeasureAsync(artifactPath, ct);
+            var signals = await imaging.MeasureAsync(artifactPath, ct);
             var requestId = RequestId(http, "observation:" + artifact.Sha256);
             return await GuardAsync(async () =>
             {
                 var events = await store.ExecuteAsync(id, s => Task.FromResult(
-                    s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), measured?.Quality, measured?.PerceptualHash)), ct);
+                    s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), signals?.Quality, signals?.PerceptualHash, measured)), ct);
                 // A replayed Idempotency-Key returns the earlier events and records no new photo: the answer is about the photo
                 // recorded the first time, and the copy this attempt saved is dropped.
                 if (events.OfType<PhotoRecorded>().FirstOrDefault() is { } recorded && recorded.EvidenceId != evidenceId)
@@ -137,7 +139,7 @@ public static class InspectionEndpoints
                     }
                 }
                 var st = store.Find(id)!;
-                return Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = measured?.Quality, perceptualHash = measured?.PerceptualHash,
+                return Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals?.Quality, perceptualHash = signals?.PerceptualHash,
                     changeAnalysis = analysis, origin = origin.ToString(), events = events.Count, state = View(st) });
             });
         }).DisableAntiforgery();
