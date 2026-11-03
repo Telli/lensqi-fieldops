@@ -37,7 +37,8 @@ export default function ScanLabel() {
   const create = useMutation({
     mutationFn: (a: ScannedAsset) => api.create(a.fixtureId, a.assetId),
     onSuccess: (i) => nav(`/m/i/${i.inspectionId}/scan`),
-    onError: (e) => toast.error(friendlyError(e)),
+    // A failed create releases the lock so the technician can try again here.
+    onError: (e) => { started.current = false; toast.error(friendlyError(e)); },
   });
   const started = useRef(false);
   const start = (a: ScannedAsset) => { if (started.current) return; started.current = true; create.mutate(a); };
@@ -58,13 +59,16 @@ export default function ScanLabel() {
     if (live !== "on") return;
     const detector = barcodeDetector();
     if (!detector) return;
-    let busy = false;
+    let busy = false, left = false;
     const t = setInterval(async () => {
       const v = video.current;
       if (busy || !v || !v.videoWidth || started.current) return;
       busy = true;
       try {
-        for (const code of await detector.detect(v)) {
+        const codes = await detector.detect(v);
+        // A read that finishes after the page was left must not start an inspection.
+        if (left) return;
+        for (const code of codes) {
           const value = code.rawValue?.trim();
           if (!value) continue;
           setRead(value);
@@ -73,7 +77,7 @@ export default function ScanLabel() {
         }
       } catch { /* a frame the detector could not read; the next one is tried */ } finally { busy = false; }
     }, 350);
-    return () => clearInterval(t);
+    return () => { left = true; clearInterval(t); };
   }, [live, fixtures.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typedAsset = assetFromScan(typed, fixtures.data);

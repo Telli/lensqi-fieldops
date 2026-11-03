@@ -22,16 +22,19 @@ function open(): Promise<IDBDatabase | null> {
   });
 }
 
+/** Runs one request; a write resolves only when its transaction has committed, so a reported save is really on the device. */
 function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | null> {
   return open().then((db) => new Promise<T | null>((resolve) => {
     if (!db) { resolve(null); return; }
     try {
       const tx = db.transaction(STORE, mode);
       const req = act(tx.objectStore(STORE));
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      tx.oncomplete = () => db.close();
+      let result: T | null = null;
+      req.onsuccess = () => { result = req.result; };
+      req.onerror = () => { result = null; };
+      tx.oncomplete = () => { db.close(); resolve(result); };
       tx.onabort = () => { db.close(); resolve(null); };
+      tx.onerror = () => { result = null; };
     } catch { db.close(); resolve(null); }
   }));
 }

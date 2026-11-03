@@ -40,11 +40,14 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose, photoU
   const [answer, setAnswer] = useState<ObservationResponse | null>(null);
   const saving = useRef(false);
   const inflight = useRef<AbortController | null>(null);
+  // One shutter at a time, and a still that finishes after the camera closed is dropped rather than uploaded.
+  const shuttering = useRef(false);
+  const gone = useRef(false);
   const assist = useLiveAssist(video, live === "on" && !capture, `/v1/inspections/${encodeURIComponent(id)}`);
   const elapsed = useElapsed(phase === "saving");
 
   // Leaving the camera ends the upload here; the server may still record the photo, and the capture's key finds it.
-  useEffect(() => () => inflight.current?.abort(), []);
+  useEffect(() => () => { gone.current = true; inflight.current?.abort(); }, []);
 
   useEffect(() => {
     if (capture) return;
@@ -100,7 +103,9 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose, photoU
     const v = video.current;
     if (live !== "on" || !v || !v.videoWidth) { fileCamera.current?.click(); return; }
     // A full-resolution still from the camera where the browser offers one, else the preview frame.
-    void takeStill(v).then((r) => r && take(r.blob, `verify-${Date.now()}.jpg`, "Phone", r.still));
+    if (shuttering.current) return;
+    shuttering.current = true;
+    void takeStill(v).then((r) => { if (r && !gone.current) take(r.blob, `verify-${Date.now()}.jpg`, "Phone", r.still); }).finally(() => { shuttering.current = false; });
   }
 
   // A file from the native camera on a touch device is a capture; on a desktop it is an imported file and says so.

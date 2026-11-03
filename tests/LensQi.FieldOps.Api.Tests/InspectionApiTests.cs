@@ -312,6 +312,26 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Jpeg(640, 480)));                      // APP0 only
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Png(640, 480)));
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation([0xFF, 0xD8, 0xFF, 0xE1, 0x00]));                 // truncated
+        // An IFD offset near int.MaxValue is out of range, never an overflow into the bounds check.
+        var huge = TestImages.JpegWithOrientation(640, 480, 6);
+        huge[16] = 0x7F; huge[17] = 0xFF; huge[18] = 0xFF; huge[19] = 0xFE;
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(huge));
+    }
+
+    [Fact]
+    public async Task A_turned_copy_over_the_upload_limit_is_not_stored()
+    {
+        var id = await CreateInspection();
+        _factory.FakeOrienter.Oversize = true;
+        try
+        {
+            var turned = TestImages.JpegWithOrientation(640, 480, 6);
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(turned), "image", "portrait.jpg" }, { new StringContent("Phone"), "source" } };
+            var r = await Json(await _client.PostAsync($"/v1/inspections/{id}/observations", form));
+            Assert.Equal(640, r.GetProperty("width").GetInt32());
+            Assert.Equal(r.GetProperty("uploadedSha256").GetString(), r.GetProperty("sha256").GetString());
+        }
+        finally { _factory.FakeOrienter.Oversize = false; }
     }
 
     [Fact]

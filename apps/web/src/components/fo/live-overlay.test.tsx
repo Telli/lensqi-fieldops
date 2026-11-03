@@ -23,5 +23,7 @@ it("marks every label as AI and says how long ago an ageing box was last confirm
 
 it("boxes can be tapped only when the page asks to know", () => {
   expect(renderToStaticMarkup(<LiveOverlay {...feedback} />)).not.toContain('role="button"');
-  expect(renderToStaticMarkup(<LiveOverlay {...feedback} onSelect={() => undefined} />)).toContain('aria-label="Ask about the Yellow cable"');
+  const tappable = renderToStaticMarkup(<LiveOverlay {...feedback} onSelect={() => undefined} />);
+  expect(tappable).toContain('aria-label="Ask about the Yellow cable"');
+  expect(tappable).toContain('tabindex="0"');
 });

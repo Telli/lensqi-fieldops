@@ -83,13 +83,14 @@ public sealed class EvidenceFileStore(string dataDirectory)
         if (tiff.Length < 8) return 1;
         var little = tiff[0] == (byte)'I' && tiff[1] == (byte)'I';
         if (!little && !(tiff[0] == (byte)'M' && tiff[1] == (byte)'M')) return 1;
-        var ifd = (int)U32(tiff, 4, little);
-        if (ifd <= 0 || ifd + 2 > tiff.Length) return 1;
+        var ifdOffset = U32(tiff, 4, little);
+        if (ifdOffset == 0 || ifdOffset > (uint)(tiff.Length - 2)) return 1;   // compared before any addition, so a huge offset cannot overflow past the check
+        var ifd = (int)ifdOffset;
         var entries = U16(tiff, ifd, little);
         for (var e = 0; e < entries; e++)
         {
             var at = ifd + 2 + e * 12;
-            if (at + 12 > tiff.Length) return 1;
+            if (at > tiff.Length - 12) return 1;
             if (U16(tiff, at, little) != 0x0112) continue;
             var value = U16(tiff, at + 8, little);
             return value is >= 1 and <= 8 ? value : 1;
