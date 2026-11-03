@@ -148,6 +148,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       case "check":
         // A voice command is not a tap, so the browser would block opening the photo picker.
         if (live !== "on") { toast.info("Turn the camera on, or tap the camera button to add a photo."); return; }
+        if (!video.current?.videoWidth) { toast.info("The camera is still starting. Say “check” again in a moment."); return; }
         return void check();
       case "repeat": return void readStep(true);
       case "mute": return speech.toggle(false);
