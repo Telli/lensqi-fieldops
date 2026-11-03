@@ -257,9 +257,12 @@ public static class TaskEndpoints
             var requestId = RequestId(http, "ask");
             // Two requests under one key never both save a frame and call the model: the second waits and then replays the first.
             using var _ = await keys.EnterAsync("tasks:ask:" + id, requestId, ct);
-            // A retried request returns the recorded answer: no new frame, no new model call.
+            // A retried request returns the recorded answer: no new frame, no new model call. The same key with another
+            // question is another command, never answered with the first question's answer.
             if (store.Execute(id, s => s.Replayed(requestId))?.OfType<QuestionAnswered>().FirstOrDefault() is { } earlier)
-                return Results.Ok(new { answer = earlier.Answer, focus = Array.Empty<string>(), stepId = earlier.StepId, photoId = earlier.PhotoId, earlier.ModelId, source = "AI inference" });
+                return earlier.Question == question
+                    ? Results.Ok(new { answer = earlier.Answer, focus = Array.Empty<string>(), stepId = earlier.StepId, photoId = earlier.PhotoId, earlier.ModelId, source = "AI inference" })
+                    : DifferentCommand();
             if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Questions need a started task, or free-form help");
             return await GuardAsync(async () =>
             {

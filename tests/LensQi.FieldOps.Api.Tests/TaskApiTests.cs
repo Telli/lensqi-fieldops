@@ -575,9 +575,14 @@ public class TaskApiTests
         var (id, _) = await Create(c, new { mode = "Freeform" });
         f.FakeChat.Responses.Enqueue(JsonSerializer.Serialize(new { answer = "First answer.", focus = Array.Empty<string>() }));
         f.FakeChat.Responses.Enqueue(JsonSerializer.Serialize(new { answer = "Second answer.", focus = Array.Empty<string>() }));
-        HttpRequestMessage Ask() { var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/tasks/{id}/ask") { Content = new MultipartFormDataContent { { new StringContent("What is this?"), "question" } } }; m.Headers.Add("Idempotency-Key", "ask-1"); return m; }
+        HttpRequestMessage Ask(string question = "What is this?") { var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/tasks/{id}/ask") { Content = new MultipartFormDataContent { { new StringContent(question), "question" } } }; m.Headers.Add("Idempotency-Key", "ask-1"); return m; }
         Assert.Equal("First answer.", (await Body(await c.SendAsync(Ask()))).GetProperty("answer").GetString());
-        Assert.Equal("First answer.", (await Body(await c.SendAsync(Ask()))).GetProperty("answer").GetString());
+        Assert.Equal("First answer.", (await Body(await c.SendAsync(Ask(" What is this? ")))).GetProperty("answer").GetString());
+        Assert.Equal(1, f.FakeChat.Calls);
+        // The same key with another question is refused, never answered with the first question's answer.
+        var other = await c.SendAsync(Ask("Is it safe to touch?"));
+        Assert.Equal(HttpStatusCode.Conflict, other.StatusCode);
+        Assert.Equal("invalid_state", (await Body(other)).GetProperty("code").GetString());
         Assert.Equal(1, f.FakeChat.Calls);
     }
 
