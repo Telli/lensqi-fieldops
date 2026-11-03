@@ -80,7 +80,9 @@ export interface Box { objectId: string; left: number; top: number; right: numbe
 export interface Mask { objectId: string; width: number; height: number; left: number; top: number; right: number; bottom: number; rle: { size: [number, number]; counts: string }; confidence?: number | null }
 export interface SegmentationGeometry {
   segmentationId: string; photoEvidenceId: string; concept: string; model: string; elapsedSeconds: number; matched: boolean;
-  boxes: Box[]; masks: Mask[]; crop?: { file: string } | null; label: string; purpose?: string;
+  /** The stored photo's pixel size, the frame every box and mask is placed in (a JPEG's size before EXIF rotation). */
+  photoWidth?: number | null; photoHeight?: number | null;
+  boxes: Box[]; masks: Mask[]; crop?: { file: string; transform?: { sourceWidth: number; sourceHeight: number } | null } | null; label: string; purpose?: string;
 }
 export interface ObservationResponse { evidenceId: string; sha256: string; width: number; height: number; quality?: ImageQuality | null; changeAnalysis?: ChangeAnalysis | null; state: Inspection }
 export interface KnowledgeFact {

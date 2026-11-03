@@ -67,8 +67,19 @@ it("passes the caller's abort signal to the request", async () => {
   const fetch = vi.fn().mockImplementation((_u: string, init: RequestInit) => new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))));
   vi.stubGlobal("fetch", fetch);
   const controller = new AbortController();
-  const call = tasks.ask("T-1", "Slow question", null, controller.signal);
+  const call = tasks.ask("T-1", "Slow question", null, { signal: controller.signal });
   await Promise.resolve(); await Promise.resolve();
   controller.abort();
   await expect(call).rejects.toMatchObject({ code: "cancelled" });
+});
+
+it("keys a question by the step it is asked on, so a lost answer on one step is not replayed on the next", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 503 })).mockImplementation(async () => new Response(JSON.stringify({ answer: "Yes." })));
+  vi.stubGlobal("fetch", fetch);
+  await expect(tasks.ask("T-1", "Is this done?", null, { stepId: "a" })).rejects.toMatchObject({ status: 503 });
+  await tasks.ask("T-1", "Is this done?", null, { stepId: "a" });
+  await tasks.ask("T-1", "Is this done?", null, { stepId: "b" });
+  const keys = fetch.mock.calls.map(keyOf);
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).not.toBe(keys[0]);
 });

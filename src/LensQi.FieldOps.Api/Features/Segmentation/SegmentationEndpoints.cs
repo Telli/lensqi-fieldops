@@ -70,9 +70,12 @@ public static class SegmentationEndpoints
                 cropSha = Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(outPath, ct)));
             }
 
+            // The stored pixels' size (a JPEG's before EXIF rotation): the frame every box and mask below is placed in.
+            var framed = EvidenceFileStore.TryReadDimensions(bytes, out var photoWidth, out var photoHeight);
             var geometry = new
             {
                 segmentationId = segId, photoEvidenceId = photo.EvidenceId, photoSha256 = photo.ArtifactSha256, concept,
+                photoWidth = framed ? photoWidth : (int?)null, photoHeight = framed ? photoHeight : (int?)null,
                 model = outcome.ModelId, responseId = outcome.ResponseId, rawSha256 = outcome.RawSha256, parser = outcome.ParserVersion, elapsedSeconds = outcome.ElapsedSeconds,
                 matched = outcome.Matched, boxes = outcome.Boxes, masks = outcome.Masks, maskSha256 = maskSha,
                 crop = crop is null ? null : new { file = cropName, sha256 = cropSha, transform = crop.Transform },

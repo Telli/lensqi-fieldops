@@ -39,8 +39,9 @@ public abstract record InspectionEvent(long Sequence, string InspectionId, DateT
     [JsonIgnore] public string EventKind => GetType().Name;
 }
 
+/// <summary><paramref name="RequestId"/> is the client's Idempotency-Key when it sent one, so a retried create finds this inspection after a restart too.</summary>
 public sealed record InspectionCreated(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
-    string FixtureId, int FixtureRevision, string AssetId) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
+    string FixtureId, int FixtureRevision, string AssetId, string? RequestId = null) : InspectionEvent(Sequence, InspectionId, OccurredAt, FixtureDigest);
 
 public sealed record PhotoRecorded(long Sequence, string InspectionId, DateTimeOffset OccurredAt, string FixtureDigest,
     string EvidenceId, EvidenceOrigin Origin, string ArtifactSha256, DateTimeOffset ObservedAt, int Width, int Height, ImageQualitySignals? Quality = null, string? PerceptualHash = null,

@@ -301,6 +301,25 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
     }
 
     [Fact]
+    public async Task A_retried_create_returns_the_inspection_the_first_attempt_made()
+    {
+        var body = new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" };
+        var first = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(body), Headers = { { "Idempotency-Key", "create-once" } } };
+        var second = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(body), Headers = { { "Idempotency-Key", "create-once" } } };
+        var fresh = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(body), Headers = { { "Idempotency-Key", "create-twice" } } };
+        var r1 = await _client.SendAsync(first);
+        var r2 = await _client.SendAsync(second);
+        var r3 = await _client.SendAsync(fresh);
+        Assert.Equal(HttpStatusCode.Created, r1.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, r2.StatusCode);
+        var made = (await Json(r1)).GetProperty("inspectionId").GetString();
+        Assert.Equal(made, (await Json(r2)).GetProperty("inspectionId").GetString());
+        Assert.NotEqual(made, (await Json(r3)).GetProperty("inspectionId").GetString());
+        // A create without a key is its own command every time, as before.
+        Assert.NotEqual(await CreateInspection(), await CreateInspection());
+    }
+
+    [Fact]
     public async Task Segment_records_match_with_crop_and_no_match_without_mask()
     {
         var id = await CreateInspection();
@@ -311,6 +330,9 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.True(seg.GetProperty("matched").GetBoolean());
         Assert.Equal(1, seg.GetProperty("boxes").GetArrayLength());
         Assert.Equal(64, seg.GetProperty("maskSha256").GetString()!.Length);
+        // The frame every box and mask is placed in: the stored pixels' size, which the clients need to place outlines on a rotated photo.
+        Assert.Equal(640, seg.GetProperty("photoWidth").GetInt32());
+        Assert.Equal(480, seg.GetProperty("photoHeight").GetInt32());
         var cropFile = seg.GetProperty("crop").GetProperty("file").GetString()!;
         Assert.Equal(p0, seg.GetProperty("crop").GetProperty("transform").GetProperty("sourceEvidenceId").GetString());
         var artifact = await _client.GetAsync($"/v1/inspections/{id}/artifacts/{cropFile}");
