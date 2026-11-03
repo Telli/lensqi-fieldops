@@ -46,7 +46,7 @@ public sealed record StepStarted(long Sequence, string TaskId, DateTimeOffset Oc
 public sealed record StepChecked(long Sequence, string TaskId, DateTimeOffset OccurredAt, string StepId, string PhotoId, StepCheckVerdict Verdict, string Reason, string ModelId)
     : TaskEvent(Sequence, TaskId, OccurredAt);
 
-public sealed record QuestionAnswered(long Sequence, string TaskId, DateTimeOffset OccurredAt, string? StepId, string Question, string Answer, string? PhotoId, string ModelId)
+public sealed record QuestionAnswered(long Sequence, string TaskId, DateTimeOffset OccurredAt, string? StepId, string Question, string Answer, string? PhotoId, string ModelId, string? SessionTitle = null)
     : TaskEvent(Sequence, TaskId, OccurredAt);
 
 public sealed record StepCompleted(long Sequence, string TaskId, DateTimeOffset OccurredAt, string StepId) : TaskEvent(Sequence, TaskId, OccurredAt);

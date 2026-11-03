@@ -111,7 +111,7 @@ public sealed class TaskSession
             return Commit([new StepChecked(0, State.TaskId, now, stepId, photoId, verdict, reason, modelId)]);
         });
 
-    public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now) =>
+    public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now, string? sessionTitle = null) =>
         Idempotent(requestId, () =>
         {
             // Coaching starts only once the plan's safety notes are accepted (free-form help is in progress from the start).
@@ -120,7 +120,12 @@ public sealed class TaskSession
             if (photoId is not null) Require(State.Photos.Any(p => p.EvidenceId == photoId), $"Photo '{photoId}' is not part of this task");
             if (string.IsNullOrWhiteSpace(question) || question.Length > 500) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Questions are 1 to 500 characters");
             if (string.IsNullOrWhiteSpace(answer) || answer.Length > 1200) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Answers are 1 to 1200 characters");
-            return Commit([new QuestionAnswered(0, State.TaskId, now, stepId, question.Trim(), answer.Trim(), photoId, modelId)]);
+            var title = sessionTitle?.Trim();
+            if (State.Mode != TaskMode.Freeform || title is not { Length: > 0 and <= 80 } ||
+                title.Any(char.IsControl) || TaskPlanValidator.HasLink(title) ||
+                title.Equals("Just ask", StringComparison.OrdinalIgnoreCase) || title.Equals(FreeformGoal, StringComparison.OrdinalIgnoreCase))
+                title = null;
+            return Commit([new QuestionAnswered(0, State.TaskId, now, stepId, question.Trim(), answer.Trim(), photoId, modelId, title)]);
         });
 
     /// <summary>

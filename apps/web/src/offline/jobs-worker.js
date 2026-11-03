@@ -56,7 +56,7 @@ async function saveTask(t) {
   await cache.put(url, Response.json(t));
   const list = await cache.match("/v1/tasks");
   const steps = t.plan?.steps ?? [];
-  const summary = {taskId:t.taskId, mode:t.mode, goal:t.goal, title:t.plan?.title, phase:t.phase,
+  const summary = {taskId:t.taskId, mode:t.mode, goal:t.goal, title:t.title ?? t.plan?.title, phase:t.phase,
     site:t.site, updatedAt:t.updatedAt, currentStepTitle:steps.find(s=>s.id===t.currentStepId)?.title,
     steps:steps.length, finished:steps.filter(s=>s.status==="Done" || s.status==="Skipped").length};
   const other = list ? (await list.json()).filter(s=>s.taskId!==t.taskId) : [];

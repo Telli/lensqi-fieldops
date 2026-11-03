@@ -274,7 +274,8 @@ public static class TaskEndpoints
                 // Professionals-only work (the plan's, the goal's or the question's) gets the referral, and any hands-on
                 // instruction in the answer is replaced by it, whatever the model wrote.
                 var answer = TaskSafety.Guard(state, a.Answer, question);
-                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow()));
+                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow(),
+                    answer == a.Answer && a.SessionTitle is { } title && TaskSafety.Guard(state, title, question) == title ? title : null));
                 return Results.Ok(new { answer, focus = a.Focus, stepId = state.CurrentStepId, photoId, result.ModelId, source = "AI inference" });
             });
         }).DisableAntiforgery().AsModelCall();
@@ -394,7 +395,7 @@ public static class TaskEndpoints
 
     public sealed record TaskSummary(string TaskId, TaskMode Mode, string Goal, string? Title, TaskPhase Phase, int Steps, int Finished, string? CurrentStepTitle, SiteLink? Site, string? InspectionId, DateTimeOffset UpdatedAt);
 
-    private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.Plan?.Title, s.Phase, s.Plan?.Steps.Count ?? 0,
+    private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.DisplayTitle, s.Phase, s.Plan?.Steps.Count ?? 0,
         s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt);
 
     private static object CheckResult(StepChecked c, TaskSession session) => new
@@ -410,7 +411,7 @@ public static class TaskEndpoints
         var plan = s.Plan;
         return new
         {
-            s.TaskId, s.Mode, s.Goal, s.Details, s.Site, s.Phase, s.Handoff,
+            s.TaskId, s.Mode, s.Goal, title = s.DisplayTitle, s.Details, s.Site, s.Phase, s.Handoff,
             person = s.Person is { } p ? new { p.HeightCm, p.StandingReachCm, p.Tools } : null, s.CurrentStepId, s.InspectionId, s.CreatedAt, s.UpdatedAt, s.SafetyAcknowledged, s.AbandonReason,
             plan = plan is null ? null : new
             {

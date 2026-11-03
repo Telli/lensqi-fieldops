@@ -22,9 +22,10 @@ internal static class TaskPackage
             {
                 var html = new StringBuilder("<!doctype html><meta charset=utf-8><title>Work package</title>");
                 void Line(string tag, string? value) => html.Append('<').Append(tag).Append('>').Append(WebUtility.HtmlEncode(value)).Append("</").Append(tag).Append('>');
-                Line("h1", job.Plan?.Title ?? job.Goal);
+                Line("h1", job.DisplayTitle ?? job.Goal);
                 Line("p", $"{job.TaskId} · {job.Phase} · {job.UpdatedAt:u}");
-                Line("p", job.Goal); Line("p", job.Details);
+                if (job.Goal != TaskSession.FreeformGoal) Line("p", job.Goal);
+                Line("p", job.Details);
                 if (job.Site is { } site) Line("p", $"Equipment: {site.FixtureId} / {site.AssetId}");
                 Line("h2", "Verification scope");
                 Line("p", inspection is null ? "No linked verification record." : $"{inspection.InspectionId} · {inspection.Stage} · {inspection.LastDecision?.OutcomeKind}");

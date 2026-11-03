@@ -20,7 +20,7 @@ class TaskLibrary(private val snapshots: SnapshotStore, private val directory: F
             if (previous != null && java.time.Instant.parse(previous.value.updatedAt) > java.time.Instant.parse(t.updatedAt)) return@synchronized
             snapshots.save(key("task", t.taskId), TaskView.serializer(), t)
             val steps = t.plan?.steps.orEmpty()
-            val summary = TaskSummary(t.taskId, t.mode, t.goal, t.plan?.title, t.phase, steps.size,
+            val summary = TaskSummary(t.taskId, t.mode, t.goal, t.title ?: t.plan?.title, t.phase, steps.size,
                 steps.count { it.status == StepStatus.Done || it.status == StepStatus.Skipped }, t.currentStep?.title, t.inspectionId, t.updatedAt)
             val list = snapshots.load(key("tasks"), summaries)?.value.orEmpty()
             snapshots.save(key("tasks"), summaries, listOf(summary) + list.filter { it.taskId != t.taskId })
