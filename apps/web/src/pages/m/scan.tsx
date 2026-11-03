@@ -12,6 +12,7 @@ import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlin
 import { cameraError, connectCamera, takeStill } from "@/lib/camera";
 import { clearCapture, loadCapture, saveCapture, type SavedCapture } from "@/lib/captures";
 import { SavedAs } from "@/components/fo/verify-camera";
+import { WhyNotAccepted } from "@/components/fo/why-not-accepted";
 import { fmtWhen } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { boxAge, LiveOverlay } from "@/components/fo/live-overlay";
@@ -326,6 +327,11 @@ export default function Scan({ id }: { id: string }) {
                 </h2>
                 {steps.some((st) => st.state === "skipped") && <StepLine steps={steps} />}
                 <SavedAs r={result.saved} still={result.still} />
+                {rejected && result.change && (
+                  <div className="mt-2">
+                    <WhyNotAccepted change={result.change} yours={photoUrl(result.evidenceId) ?? preview ?? undefined} reference={result.change.referencePhotoEvidenceId ? photoUrl(result.change.referencePhotoEvidenceId) : undefined} />
+                  </div>
+                )}
               </div>
             </div>
             {(findings.length > 0 || result.change) && (
