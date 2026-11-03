@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ListChecks, Loader2, Mic, Radio, Send, Square, Volume2, VolumeX, X } from "lucide-react";
+import { Ear, ListChecks, Loader2, Mic, Radio, Send, Square, Volume2, VolumeX, X } from "lucide-react";
 import { LensQiMark } from "@/components/fo/ai";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
@@ -10,7 +10,7 @@ import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
 import { taskKeys, tasks, useTask } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { parseCommand, speechNotice, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
+import { parseCommand, speechNotice, useHandsFree, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 const LOOK = "What am I looking at, and is anything wrong?";
@@ -83,6 +83,7 @@ export default function FreeformLive({ id }: { id: string }) {
       default: return void ask(text);
     }
   });
+  const handsFree = useHandsFree(voice, speech, asking || !open);
 
   async function end() {
     try { qc.setQueryData(taskKeys.one(id), await tasks.finish(id)); qc.invalidateQueries({ queryKey: taskKeys.list }); nav("/m"); }
@@ -135,6 +136,7 @@ export default function FreeformLive({ id }: { id: string }) {
           </button>
         )}
         {voice.listening && <p className="text-center text-sm text-primary" aria-live="polite">{voice.heard || "Listening…"}</p>}
+        {handsFree.on && !voice.listening && <p className="text-center text-[11px] opacity-60">Hands-free: the microphone opens again after each answer.</p>}
         {voice.error && <p className="text-center text-xs text-warning">{voice.error}</p>}
 
         <form onSubmit={(e) => { e.preventDefault(); ask(typed); }} className="flex items-center gap-2">
@@ -142,6 +144,12 @@ export default function FreeformLive({ id }: { id: string }) {
             <button type="button" onClick={voice.listening ? voice.stop : voice.start} disabled={asking || !open} aria-label={voice.listening ? "Stop listening" : "Ask by voice"}
               className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20", voice.listening && "border-primary bg-primary text-primary-foreground")}>
               {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
+            </button>
+          )}
+          {voice.supported && (
+            <button type="button" onClick={handsFree.toggle} disabled={!open} aria-pressed={handsFree.on} aria-label={handsFree.on ? "Turn hands-free off" : "Hands-free: keep listening"}
+              className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-40", handsFree.on && "border-primary text-primary")}>
+              <Ear className="size-5" />
             </button>
           )}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={!open} placeholder={open ? "Ask anything about what you see…" : "This session has ended"} aria-label="Ask a question"
