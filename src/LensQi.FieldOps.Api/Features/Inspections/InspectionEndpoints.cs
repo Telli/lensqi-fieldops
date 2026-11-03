@@ -53,16 +53,17 @@ public static class InspectionEndpoints
             t.Twin.VerificationPolicy,
         })));
 
-        // A retried create (same Idempotency-Key) returns the inspection the first attempt made, never a second one.
+        // A retried create (same Idempotency-Key, same fixture and asset) returns the inspection the first attempt made,
+        // never a second one; the same key with different inputs is refused.
         g.MapPost("/inspections", (CreateInspectionRequest req, HttpRequest http, ExpectedTwinStore twins, InspectionStore store, TimeProvider clock) =>
         {
             var key = Key(http);
-            if (key is not null && store.FindCreated(key) is { } earlier)
-                return Results.Ok(View(earlier));
             var twin = twins.Find(req.FixtureId);
             if (twin is null) return ApiResults.NotFound($"Fixture '{req.FixtureId}' is not installed");
             return Guard(() =>
             {
+                if (key is not null && store.FindCreated(key) is { } earlier)
+                    return Results.Ok(View(InspectionStore.SameCreate(earlier, twin, req.AssetId)));
                 var session = store.Create(twin, req.AssetId, clock.GetUtcNow(), key);
                 return Results.Created($"/v1/inspections/{session.State.InspectionId}", View(session));
             });

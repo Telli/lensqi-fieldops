@@ -92,7 +92,8 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   useEffect(() => { if (assist.enabled && assist.updatedAt) speech.speak(assist.recommendation); }, [assist.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask(question: string) {
-    if (!question.trim()) return;
+    // One command at a time: a question during a photo check would take over the check's controller and its Cancel.
+    if (!question.trim() || busy) return;
     if (reviewing) { toast.info("Questions are about the current step. Go to it to ask."); return; }
     setBusy("ask");
     const controller = new AbortController();
@@ -107,7 +108,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   }
 
   async function check(photo?: Blob | null) {
-    if (!step) return;
+    if (!step || busy) return;
     const blob = photo ?? (live === "on" ? await grab(video.current, 4096) : null);
     if (!blob) { file.current?.click(); return; }
     setBusy("check");
@@ -125,7 +126,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   }
 
   async function move(kind: "complete" | "skip" | "back") {
-    if (!step) return;
+    if (!step || busy) return;
     if (kind === "back") { const prev = steps[n - 1]; if (prev) nav(`/m/t/${id}/step/${prev.id}`); return; }
     setBusy("move");
     try {
