@@ -275,7 +275,16 @@ fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
                 }
             }
         }
-        if (s.fixtures.isEmpty()) item { Panel { Text(if (s.reachable == false) "The server is unreachable, so assets can't be loaded. Check the connection in Settings." else "Loading assets…", style = MaterialTheme.typography.bodySmall) } }
+        if (s.fixtures.isEmpty()) item {
+            Panel {
+                Text(when {
+                    s.loading -> "Loading assets…"
+                    s.reachable == false -> "The server is unreachable, so assets can't be loaded. Check the connection in Settings."
+                    s.fixturesCachedAt != null -> "The server did not answer for the site records and no copy is saved on this phone. Refresh to try again."
+                    else -> "The site records list no assets. Ask the site administrator to add the equipment before inspecting it."
+                }, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
