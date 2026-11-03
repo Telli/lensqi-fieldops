@@ -112,6 +112,7 @@ import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.queue.CommandState
+import com.lensqi.fieldops.data.queue.hasQueuedCommands
 import com.lensqi.fieldops.ui.common.Dot
 import com.lensqi.fieldops.ui.common.EvidenceBadge
 import com.lensqi.fieldops.ui.common.Expandable
@@ -299,6 +300,8 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
     // The server's own answer for each item under this claim; the policy counts it whichever post-repair photo it cited.
     fun reviewed(req: String) = view.checklist.firstOrNull { it.requirementId == req }
     val running = s.busy?.startsWith("Server is verifying") == true
+    // Answers saved on the phone have not reached the server: its review is not yet the technician's.
+    val answersWaiting = s.pending.hasQueuedCommands()
     // The server's next step picks the card; nothing here works out the order itself.
     val card = verifyCard(view)
     val attempt = if (running) null else s.attempt
@@ -340,11 +343,13 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 SecondaryButton("Retake the photo", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             }
             card == VerifyCard.Confirm -> AiCard("Your review is in.", "Confirm it's your review", "The receipt records that you checked this evidence yourself. A new photo or review needs confirming again.") {
-                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.HowToReg)
+                if (answersWaiting) Muted("Your review answers are still waiting to be sent; confirm once they have gone through.")
+                SecondaryButton("I reviewed this evidence myself", vm::acknowledge, Modifier.fillMaxWidth(), enabled = s.busy == null && !answersWaiting, icon = Icons.Outlined.HowToReg)
             }
             card == VerifyCard.Run -> AiCard("Photo accepted, reviewed and confirmed.", "Ready to verify",
                 "Verify takes a fresh measurement of ${target ?: "the equipment"} now${if (check?.afterClaim == true && check.lastRunAt != null) "; the one from ${whenText(check.lastRunAt)} isn't reused" else ""}. Both proofs have to pass.") {
-                PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null, busy = running, icon = Icons.Outlined.Build)
+                if (answersWaiting) Muted("Your review answers are still waiting to be sent; verify once they have gone through.")
+                PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null && !answersWaiting, busy = running, icon = Icons.Outlined.Build)
             }
             card == VerifyCard.Claim -> AiCard("This repair attempt didn't pass.", "Fix it, then claim again", "Every attempt stays in the record.", tone = Fo.Failure) { claimAgain() }
             card == VerifyCard.Closed -> AiCard(plainReason(blocking.firstOrNull().orEmpty()), "Inspection closed", null)

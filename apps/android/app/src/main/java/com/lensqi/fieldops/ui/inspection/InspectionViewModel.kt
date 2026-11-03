@@ -455,7 +455,19 @@ class InspectionViewModel @Inject constructor(
      * revised answer needs a new confirmation; offline, the confirmation waits for the connection.
      */
     fun acknowledge() = act("Recording acknowledgement…") {
+        if (waitingForQueuedAnswers()) return@act
         keys.command(action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}:${reviewState()}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+    }
+
+    /**
+     * A confirmation or a verify is about the review as the server has it. While an answer still waits in the queue the
+     * server's review is not the technician's, so both wait too, and the queue is asked to send now.
+     */
+    private fun waitingForQueuedAnswers(): Boolean {
+        if (!state.value.pending.hasQueuedCommands()) return false
+        queue.requestSync()
+        local.update { it.copy(error = ANSWERS_WAITING) }
+        return true
     }
 
     /**
@@ -496,6 +508,7 @@ class InspectionViewModel @Inject constructor(
      * them changes it is a new request.
      */
     fun verify() = act("Server is verifying…") {
+        if (waitingForQueuedAnswers()) return@act
         val v = state.value.view
         keys.command(action("verify:${v?.acceptedPostRepairPhotoId}:${reviewState()}:ack=${v?.technicianAcknowledged}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
@@ -566,5 +579,6 @@ class InspectionViewModel @Inject constructor(
     companion object {
         const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
         const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
+        const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."
     }
 }
