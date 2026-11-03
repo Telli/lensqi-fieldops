@@ -103,7 +103,13 @@ data class PhotoEvidence(
     val artifactSha256: String,
     val observedAt: String,
     val quality: ImageQuality? = null,
+    /** Parts the phone's ARCore measured at the shutter; measured, kept with the photo, never a verification input. */
+    val measured: List<MeasuredPart>? = null,
 )
+
+/** One part the phone measured with ARCore: camera distance and height above the floor the technician set. */
+@Serializable
+data class MeasuredPart(val part: String, val distanceCm: Int? = null, val heightAboveFloorCm: Int? = null)
 
 @Serializable
 data class DiagnosticResult(

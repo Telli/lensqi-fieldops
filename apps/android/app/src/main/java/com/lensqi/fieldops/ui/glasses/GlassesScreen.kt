@@ -132,9 +132,9 @@ fun GlassesScreen(
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     // One service runs live assist; it is "here" only while it serves this inspection or step. Starting it here switches.
-    val liveHere = live.enabled && live.session == session
+    val liveHere = live.enabled && session.sameAs(live.session)
     val captured by rememberUpdatedState(onCaptured)
-    val capture = { vm.capture { photo -> captured(photo.file, photo.origin) } }
+    val capture = { vm.capture(session) { photo -> captured(photo.file, photo.origin) } }
     // Without the notification (permission refused, app notifications off, or the channel blocked) the service still runs,
     // but its Stop and Mute actions are not on the lock screen; the screen says so instead of promising them. Checked again
     // each time the screen resumes, since Settings can change it meanwhile.
@@ -145,6 +145,8 @@ fun GlassesScreen(
         if (Build.VERSION.SDK_INT >= 33 && !granted(context, Manifest.permission.POST_NOTIFICATIONS)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         else vm.startLive(session)
     }
+    // A shutter photo paused live assist for this session: once the camera streams again here, it carries on by itself.
+    LaunchedEffect(s.streaming, live.enabled) { if (s.streaming && !live.enabled && vm.consumeResume(session)) startLive() }
 
     var bluetoothDenied by remember { mutableStateOf(false) }
     val askBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -190,7 +192,8 @@ fun GlassesScreen(
             PreviewPanel(s, vm, if (liveHere) live.feedback else null)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (liveHere) {
-                    // The session's status says when guidance has stalled (no fresh frames, analysis paused).
+                    // What the assistance is about, then the session's status (it says when guidance has stalled).
+                    session.label?.let { Text("Assist for: $it", style = MaterialTheme.typography.bodySmall) }
                     Text(live.feedback.status, color = Fo.Primary, fontWeight = FontWeight.Medium)
                     if (com.lensqi.fieldops.ui.common.LocalDiagnostics.current) Text("${live.feedback.fps} tracking updates/s · AI guidance ${live.feedback.guidanceAge?.let { "from ${it}s ago" } ?: "updating"}", style = MaterialTheme.typography.bodySmall)
                     SecondaryButton("Pause live assist", vm::pauseLive, Modifier.fillMaxWidth())
@@ -198,7 +201,7 @@ fun GlassesScreen(
                         else "Active with the phone locked. Notifications are off, so there is no Stop or Mute on the lock screen: pause live assist from this screen.",
                         style = MaterialTheme.typography.bodySmall)
                 } else {
-                    if (live.enabled) Text("Live assist is still running for another inspection or step. Start it here to switch.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
+                    if (live.enabled) Text("Live assist is still running for ${live.session?.label ?: "another inspection or step"}. Start it here to switch.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
                     PrimaryButton("Start live assist", startLive, Modifier.fillMaxWidth(), enabled = s.streaming)
                     Text("Tracks what your glasses see and speaks guidance. Sampled frames go to AI, including with the phone locked. Only shutter photos are saved.", style = MaterialTheme.typography.bodySmall)
                 }

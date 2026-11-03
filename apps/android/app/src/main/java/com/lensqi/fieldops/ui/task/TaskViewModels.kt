@@ -126,7 +126,19 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun refresh() = viewModelScope.launch {
         val r = apiCall { api.task(taskId) }
         _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, error = r.errorText()) }
+        (r as? ApiOutcome.Ok)?.value?.let(::speakNewChecks)
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
+    }
+
+    /**
+     * Check photos whose verdict has been spoken. A check saved offline is spoken when its verdict first appears after a
+     * sync, once; the checks already in the record when the task opened are not read out again.
+     */
+    private var spokenChecks: MutableSet<String>? = null
+    private fun speakNewChecks(task: TaskView) {
+        val checks = task.plan?.steps?.mapNotNull { it.lastCheck }.orEmpty()
+        val known = spokenChecks ?: run { spokenChecks = checks.map { it.photoId }.toMutableSet(); return }
+        checks.filter { it.photoId !in known }.forEach { c -> known += c.photoId; speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
     // One idempotency key per pending action (RetryKeys): a retry after a lost response, a server error or a failed model
@@ -187,7 +199,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         settle(action, r)
-        (r as? ApiOutcome.Ok)?.value?.check?.let { c -> speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
+        (r as? ApiOutcome.Ok)?.value?.check?.let { c -> spokenChecks?.add(c.photoId); speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
     /** A question by voice or text, with the latest camera frame when live coaching has one. The answer is spoken. */

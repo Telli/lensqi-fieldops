@@ -125,7 +125,7 @@ fun InspectionCard(s: InspectionSummary, assetName: String?, onOpen: (String) ->
 }
 
 @Composable
-fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onAssets: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit, onProfile: () -> Unit = {}) {
+fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onAssets: () -> Unit, onOpen: (String) -> Unit, onAll: () -> Unit, onProfile: () -> Unit = {}, onScan: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val queue = needsYou(s.inspections)
     val focus = queue.firstOrNull { it.inspectionId == s.focusId } ?: queue.firstOrNull { it.photos > 0 }
@@ -147,6 +147,7 @@ fun HomeScreen(vm: HomeViewModel, onStart: () -> Unit, onAssets: () -> Unit, onO
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(onClick = onStart) { Text("Start inspection") }
+                TextButton(onClick = onScan) { Text("Scan label") }
                 TextButton(onClick = onAssets) { Text("Assets") }
             }
         }
@@ -253,11 +254,12 @@ fun InspectionsScreen(vm: HomeViewModel, onOpen: (String) -> Unit) {
 }
 
 @Composable
-fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
+fun StartScreen(vm: HomeViewModel, onScan: () -> Unit = {}, onCreated: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Start an inspection", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
-        item { Text("Pick the equipment from its asset label. LensQi checks it against the site's expected setup.", style = MaterialTheme.typography.bodySmall) }
+        item { Text("Scan the asset label, or pick the equipment below. LensQi checks it against the site's expected setup.", style = MaterialTheme.typography.bodySmall) }
+        item { SecondaryButton("Scan the asset label", onScan, Modifier.fillMaxWidth(), enabled = s.fixtures.isNotEmpty(), icon = Icons.Outlined.QrCodeScanner) }
         s.fixturesCachedAt?.let { at -> item { AssetsCachedNote(at) } }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         s.fixtures.forEach { f ->

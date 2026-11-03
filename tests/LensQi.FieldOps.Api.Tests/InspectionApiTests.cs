@@ -129,11 +129,39 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         return (await Json(r)).GetProperty("inspectionId").GetString()!;
     }
 
-    private async Task<string> Upload(string id, byte[]? bytes = null, string source = "Phone")
+    [Fact]
+    public async Task A_photo_keeps_what_the_phone_measured_and_refuses_a_malformed_measurement()
+    {
+        var id = await CreateInspection();
+        using var bad = new MultipartFormDataContent();
+        bad.Add(new ByteArrayContent(Png), "image", "frame.png");
+        bad.Add(new StringContent("[{\"part\":\"switch\",\"distanceCm\":99999}]"), "measured");
+        var refused = await _client.PostAsync($"/v1/inspections/{id}/observations", bad);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal("invalid_measured", (await Json(refused)).GetProperty("code").GetString());
+
+        var photoId = await Upload(id, measured: "[{\"part\":\"network switch\",\"distanceCm\":84,\"heightAboveFloorCm\":152}]");
+        var view = await Json(await _client.GetAsync($"/v1/inspections/{id}"));
+        var photo = view.GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == photoId);
+        var part = photo.GetProperty("measured").EnumerateArray().Single();
+        Assert.Equal("network switch", part.GetProperty("part").GetString());
+        Assert.Equal(84, part.GetProperty("distanceCm").GetInt32());
+        Assert.Equal(152, part.GetProperty("heightAboveFloorCm").GetInt32());
+
+        var plain = await Upload(id, TestImages.Png(640, 480, salt: 9));
+        var plainPhoto = view.GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == photoId);
+        Assert.NotEqual(plain, plainPhoto.GetProperty("evidenceId").GetString());
+        var after = await Json(await _client.GetAsync($"/v1/inspections/{id}"));
+        var unmeasured = after.GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == plain);
+        Assert.True(!unmeasured.TryGetProperty("measured", out var m) || m.ValueKind == JsonValueKind.Null, "a photo without measurement carries none");
+    }
+
+    private async Task<string> Upload(string id, byte[]? bytes = null, string source = "Phone", string? measured = null)
     {
         using var form = new MultipartFormDataContent();
         form.Add(new ByteArrayContent(bytes ?? Png), "image", "frame.png");
         form.Add(new StringContent(source), "source");
+        if (measured is not null) form.Add(new StringContent(measured), "measured");
         var r = await _client.PostAsync($"/v1/inspections/{id}/observations", form);
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         return (await Json(r)).GetProperty("evidenceId").GetString()!;

@@ -45,14 +45,27 @@ class GlassesViewModel @Inject constructor(
     fun showHud(prompt: String, status: String?) = source.showHud(prompt, status)
     fun report(message: String?) = source.reportError(message)
 
-    fun capture(onCaptured: (GlassesPhoto) -> Unit) {
+    /**
+     * Takes the glasses photo. Live assist pauses for the shutter; when it was running for [session], the glasses screen
+     * starts it again the next time it shows that session with the camera streaming (see [consumeResume]).
+     */
+    fun capture(session: LiveSession? = null, onCaptured: (GlassesPhoto) -> Unit) {
         if (state.value.capturing || !state.value.streaming) return
+        if (session != null && live.value.enabled && session.sameAs(live.value.session)) liveStore.resumeFor.value = session
         pauseLive()
         viewModelScope.launch {
             runCatching { source.capturePhoto() }
                 .onSuccess(onCaptured)
                 .onFailure { source.reportError("The photo couldn’t be taken. Check the glasses connection and try again.") }
         }
+    }
+
+    /** True once, when live assist should start again for [session] after a shutter photo paused it. */
+    fun consumeResume(session: LiveSession): Boolean {
+        val pending = liveStore.resumeFor.value ?: return false
+        if (!session.sameAs(pending)) return false
+        liveStore.resumeFor.value = null
+        return true
     }
 
     fun enableMock(withDisplay: Boolean) { stop(); source.enableMock(withDisplay) }

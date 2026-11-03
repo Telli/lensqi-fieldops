@@ -23,7 +23,7 @@ import javax.inject.Singleton
 object StorageModule {
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): QueueDatabase =
-        Room.databaseBuilder(context, QueueDatabase::class.java, "fieldops-queue.db").addMigrations(QueueDatabase.MIGRATION_1_2, QueueDatabase.MIGRATION_2_3).build()
+        Room.databaseBuilder(context, QueueDatabase::class.java, "fieldops-queue.db").addMigrations(QueueDatabase.MIGRATION_1_2, QueueDatabase.MIGRATION_2_3, QueueDatabase.MIGRATION_3_4).build()
 
     @Provides @Singleton
     fun snapshots(@ApplicationContext context: Context, json: Json): SnapshotStore = SnapshotStore(File(context.filesDir, "snapshots"), json)

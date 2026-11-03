@@ -104,7 +104,8 @@ private fun CapturePanel(vm: TeachingViewModel, ui: TeachingUi, creating: Boolea
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
+    var cameraAsked by remember { mutableStateOf(false) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; cameraAsked = true }
     var cameraReady by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     val controller = remember {
@@ -149,6 +150,7 @@ private fun CapturePanel(vm: TeachingViewModel, ui: TeachingUi, creating: Boolea
             ) else Column {
                 Text(cameraError ?: "Allow camera access to preview and record.")
                 if (!granted) Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+                if (!granted) com.lensqi.fieldops.ui.common.PermissionSettingsHint(context, Manifest.permission.CAMERA, cameraAsked, "Camera access", "Without it no demonstration can be recorded.")
             }
         }
         if (creating) {

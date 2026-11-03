@@ -39,5 +39,6 @@ class LiveSessionSwitchTest {
         val step1 = LiveSession("T-1", LiveSessionKind.Task, "drain plug")
         assertEquals(true, GlassesLiveService.switchNeeded(step1, LiveSession("T-1", LiveSessionKind.Task, "oil filter")))
         assertEquals(true, GlassesLiveService.switchNeeded(null, step1), "nothing served yet counts as a switch to the request")
+        assertEquals(false, GlassesLiveService.switchNeeded(step1, step1.copy(label = "Step 1 · Drain plug")), "a label is for people; it is not another session")
     }
 }

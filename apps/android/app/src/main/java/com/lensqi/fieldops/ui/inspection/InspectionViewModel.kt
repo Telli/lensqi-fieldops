@@ -106,6 +106,10 @@ data class InspectionUi(
     val latestAssessment: VisualAssessment? = null,
     /** Every verification decision so far, oldest first. */
     val attempts: List<VerificationResult> = emptyList(),
+    /** Each attempt as the record keeps it: decision, what was measured, what was confirmed. */
+    val history: List<Attempt> = emptyList(),
+    /** Something saved on the phone or sent later; cleared by the next action. Not an error. */
+    val notice: String? = null,
     /** The decision for the evidence on screen now, read from the events; null once a new claim, photo, review or confirmation follows it. */
     val attempt: Attempt? = null,
     /** Demo control state of the simulated endpoint (Simulated mode only). */
@@ -215,7 +219,7 @@ class InspectionViewModel @Inject constructor(
             ?.let { runCatching { json.decodeFromJsonElement(VisualAssessment.serializer(), it) }.getOrNull() }
         val attempts = events.filter { it["kind"]?.jsonPrimitive?.content == "VerificationEvaluated" }
             .mapNotNull { e -> e["decision"]?.jsonObject?.get("result")?.jsonPrimitive?.content?.let { r -> runCatching { VerificationResult.valueOf(r) }.getOrNull() } }
-        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json)) }
+        local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
         val latest = view.segmentations.filter { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }.associateBy { it.concept }.values.toList()
@@ -272,12 +276,12 @@ class InspectionViewModel @Inject constructor(
      * (before a repair) or show the server's change check (after one). Offline, the photo stays queued and says so.
      */
 
-    fun captureForReview(file: File, origin: String) {
+    fun captureForReview(file: File, origin: String, measured: String? = null) {
         viewModelScope.launch {
             val afterRepair = state.value.view?.currentClaimId != null
             val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
             try {
-                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair == true)
+                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair, measured)
                 resumeReview(command)
             } catch (e: java.io.IOException) {
                 local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
@@ -399,18 +403,50 @@ class InspectionViewModel @Inject constructor(
         apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk { local.update { it.copy(simUp = passed) } }
     }
 
-    fun workOrder(summary: String) = act("Drafting work order…") { keys.command(action("workOrder:$summary")) { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
+    fun workOrder(summary: String) = act("Drafting work order…") {
+        val body = WorkOrderRequest(summary)
+        val action = action("workOrder:$summary")
+        keys.command(action) { k -> api.workOrder(inspectionId, k, body) }
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, json.encodeToString(WorkOrderRequest.serializer(), body))
+            ?.onOk(::cacheView)
+    }
 
     fun claim(description: String) = act("Recording repair claim…") {
-        keys.command(action("claim:$description")) { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
+        val body = RepairClaimRequest(description)
+        val action = action("claim:$description")
+        keys.command(action) { k -> api.repairClaim(inspectionId, k, body) }
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.RepairClaim, json.encodeToString(RepairClaimRequest.serializer(), body))
+            ?.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }.onOk(::cacheView)
+        val body = ChecklistRequest(requirementId, status, photoEvidenceId)
+        val action = action("review:$requirementId:$status:$photoEvidenceId")
+        keys.command(action) { k -> api.checklist(inspectionId, k, body) }
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, json.encodeToString(ChecklistRequest.serializer(), body))
+            ?.onOk(::cacheView)
     }
 
     fun acknowledge() = act("Recording acknowledgement…") {
-        keys.command(action("acknowledge:${state.value.view?.currentClaimId}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+        val action = action("acknowledge:${state.value.view?.currentClaimId}")
+        keys.command(action) { k -> api.acknowledge(inspectionId, k) }
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Acknowledge, null)
+            ?.onOk(::cacheView)
+    }
+
+    /**
+     * A command the server could not be reached for is saved on the phone under the key it was just sent with and sent
+     * later in capture order (verify is never saved: it measures the equipment). Null means it was saved, so the caller
+     * has nothing more to show; the server's refusal or answer still comes back through the queue.
+     */
+    private suspend fun <T> ApiOutcome<T>.queuedWhenOffline(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String?): ApiOutcome<T>? {
+        if (this !is ApiOutcome.Unreachable) return this
+        return try {
+            queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
+            keys.drop(action)
+            local.update { it.copy(notice = SAVED_OFFLINE) }
+            null
+        } catch (e: java.io.IOException) { this }
     }
 
     /**
@@ -460,7 +496,7 @@ class InspectionViewModel @Inject constructor(
     private fun act(label: String, block: suspend () -> Unit) {
         if (local.value.busy != null) return
         running = viewModelScope.launch {
-            local.update { it.copy(busy = label, error = null) }
+            local.update { it.copy(busy = label, error = null, notice = null) }
             try { block() } finally { local.update { it.copy(busy = null) } }
             refresh()
         }
@@ -483,4 +519,8 @@ class InspectionViewModel @Inject constructor(
      * failed model call) so a retry replays rather than repeats; an answer drops it and the next tap is a new request.
      */
     private val keys = com.lensqi.fieldops.data.api.RetryKeys(savedState)
+
+    companion object {
+        const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
+    }
 }
