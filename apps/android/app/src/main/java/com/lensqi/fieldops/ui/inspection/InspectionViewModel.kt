@@ -402,11 +402,12 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
-        apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) }.onOk {
-            local.update { it.copy(simUp = passed) }
-            // The demo outcome changed: a check whose answer was lost before must not replay the old measurement now.
-            keys.dropAll("diagnostic:$diagnosticId:")
-        }
+        // The demo outcome may have changed (answered, lost, or cancelled in flight): a check whose answer was lost before
+        // must not replay the old measurement now. Only a refusal leaves the pending check as it was.
+        val outcome = try { apiCall { api.setSimulatedOutcome(diagnosticId, SimulationRequest(passed)) } }
+            catch (e: kotlinx.coroutines.CancellationException) { keys.dropAll("diagnostic:$diagnosticId:"); throw e }
+        if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("diagnostic:$diagnosticId:")
+        outcome.onOk { local.update { it.copy(simUp = passed) } }
     }
 
     fun workOrder(summary: String) = act("Drafting work order…") { keys.command(action("workOrder:$summary")) { k -> api.workOrder(inspectionId, k, WorkOrderRequest(summary)) }.onOk(::cacheView) }
@@ -416,9 +417,11 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
-        val outcome = keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) }
         // Any review the server may have applied clears the confirmation there, even one that repeats an answer: a
-        // confirmation whose answer was lost before is a new request now. A refused review changed nothing.
+        // confirmation whose answer was lost before is a new request now. A review cancelled in flight may have reached the
+        // server, so it counts as applied too (its own key stays for the retry). A refused review changed nothing.
+        val outcome = try { keys.command(action("review:$requirementId:$status:$photoEvidenceId")) { k -> api.checklist(inspectionId, k, ChecklistRequest(requirementId, status, photoEvidenceId)) } }
+            catch (e: kotlinx.coroutines.CancellationException) { keys.dropAll("acknowledge:"); throw e }
         if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("acknowledge:")
         outcome.onOk(::cacheView)
     }
