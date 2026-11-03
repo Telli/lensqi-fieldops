@@ -32,8 +32,10 @@ export function useSpeak(initiallyOn = true) {
   const [on, setOn] = useState(initiallyOn && supported);
   // Held while the person said "pause": nothing is spoken, without turning the voice off.
   const [held, setHeld] = useState(false);
-  // While the microphone is open nothing is spoken, so the voice is never heard as a command or a question.
-  const [listening, setListeningState] = useState(false);
+  // While the microphone is open nothing is spoken, so the voice is never heard as a command or a question. Kept in a ref
+  // as well, because the recogniser reports the close synchronously, right before it delivers a command that may speak.
+  const listeningRef = useRef(false);
+  const [, setListeningState] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const last = useRef("");
   // The utterance in flight and its time limit; callbacks and timers from an earlier one are ignored.
@@ -45,7 +47,7 @@ export function useSpeak(initiallyOn = true) {
     setSpeaking(false);
   }, []);
   const speak = useCallback((text: string, force = false) => {
-    if (!supported || !on || held || listening || !text || (!force && text === last.current)) return;
+    if (!supported || !on || held || listeningRef.current || !text || (!force && text === last.current)) return;
     last.current = text;
     finish();
     speechSynthesis.cancel();
@@ -58,11 +60,11 @@ export function useSpeak(initiallyOn = true) {
     u.onerror = () => finish(u);
     setSpeaking(true);
     speechSynthesis.speak(u);
-  }, [on, held, listening, supported, finish]);
+  }, [on, held, supported, finish]);
   const interrupt = useCallback(() => { finish(); if (supported) speechSynthesis.cancel(); }, [supported, finish]);
   const hold = useCallback((value: boolean) => { setHeld(value); if (value) interrupt(); }, [interrupt]);
   /** Tells the voice the microphone is open: what is playing stops and nothing new is spoken until it closes. */
-  const setListening = useCallback((value: boolean) => { setListeningState(value); if (value) interrupt(); }, [interrupt]);
+  const setListening = useCallback((value: boolean) => { listeningRef.current = value; setListeningState(value); if (value) interrupt(); }, [interrupt]);
   useEffect(() => () => { if (supported) speechSynthesis.cancel(); }, [supported]);
   const toggle = useCallback((value?: boolean) => {
     setOn((now) => { const next = value ?? !now; if (!next) interrupt(); return next; });
@@ -113,7 +115,7 @@ const noticeSeen = () => { try { return localStorage.getItem(NOTICE_KEY) === "1"
  * Push-to-talk speech recognition in the browser (Web Speech API). The browser may use a remote speech provider; only the final text is
  * used. Unsupported browsers report it so the page can offer typing instead.
  */
-export function usePushToTalk(onFinal: (text: string) => void) {
+export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told synchronously when the microphone opens and closes, before any final text is delivered. */ onListening?: (on: boolean) => void }) {
   const Ctor = typeof window !== "undefined" ? ((window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor }).SpeechRecognition
     ?? (window as unknown as { webkitSpeechRecognition?: RecognitionCtor }).webkitSpeechRecognition) : undefined;
   const [listening, setListening] = useState(false);
@@ -123,6 +125,8 @@ export function usePushToTalk(onFinal: (text: string) => void) {
   const final = useRef("");
   const deliver = useRef(onFinal);
   deliver.current = onFinal;
+  const tell = useRef(opts?.onListening);
+  tell.current = opts?.onListening;
   const [seen, setSeen] = useState(noticeSeen);
 
   const start = useCallback(() => {
@@ -147,36 +151,34 @@ export function usePushToTalk(onFinal: (text: string) => void) {
     r.onend = () => {
       // Nothing is delivered after the page let go of the recognizer (unmount or abort), and nothing of a newer one is touched.
       if (rec.current !== r) return;
-      rec.current = null; setListening(false);
+      rec.current = null; setListening(false); tell.current?.(false);
       const text = final.current.trim();
       if (text) deliver.current(text);
     };
     rec.current = r;
-    setListening(true);
+    setListening(true); tell.current?.(true);
     // A recogniser that refuses to start never fires onend, so the button would stay on "listening" without this.
-    try { r.start(); } catch { rec.current = null; setListening(false); setError("Voice input couldn't start. Try again."); }
+    try { r.start(); } catch { rec.current = null; setListening(false); tell.current?.(false); setError("Voice input couldn't start. Try again."); }
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
   /** Ends an open listen and delivers nothing from it, unlike `stop`, which still hands over the final text. */
-  const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); }, []);
+  const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); tell.current?.(false); }, []);
   useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
   return { supported: !!Ctor, listening, heard, error, start, stop, abort, notice: !!Ctor && !seen };
 }
 
 /**
  * Hands-free: the microphone opens again by itself after each utterance, once the answer has been spoken and nothing is
- * pending, so the technician never touches the phone between questions. Speech is interrupted whenever listening starts,
- * so the voice never talks into the microphone. Off again when the microphone is blocked.
+ * pending, so the technician never touches the phone between questions. The recogniser tells the voice when the
+ * microphone is open (`usePushToTalk`'s `onListening`), so nothing is spoken into it. Off again when the microphone is blocked.
  */
 export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void; abort: () => void },
-  speech: { speaking: boolean; setListening: (on: boolean) => void }, busy: boolean) {
+  speech: { speaking: boolean }, busy: boolean) {
   const [on, setOn] = useState(false);
   const blocked = voiceBlocked(voice.error);
   // Turning hands-free on allows one attempt even after a denial, in case access was granted since; a second denial ends it.
   const retried = useRef(false);
-  // The voice learns when the microphone is open, whether it was opened by hand or by hands-free.
-  useEffect(() => { speech.setListening(voice.listening); }, [voice.listening]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!on || !voice.supported) return;
     if (blocked) {

@@ -82,7 +82,7 @@ export default function FreeformLive({ id }: { id: string }) {
       case "check": return void ask(LOOK);
       default: return void ask(text);
     }
-  });
+  }, { onListening: speech.setListening });
   const handsFree = useHandsFree(voice, speech, asking || !open);
 
   async function end() {

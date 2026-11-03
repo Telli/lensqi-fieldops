@@ -85,13 +85,21 @@ function attemptAt(events: EventRecord[], k: number): Attempt {
   return { sequence: decided.sequence, at: decided.occurredAt, decision: decided["decision"] as Decision, measured, acknowledgedAt: ack?.occurredAt, review: [...review.values()] };
 }
 
-/** Which proof decided an attempt, in a word for a list: the measurement, the review, the confirmation or the photo. */
+/**
+ * Which proof decided an attempt, in a word for a list: the measurement, the review, the confirmation or the photo. Read
+ * from the server's recorded reason first, in the order its policy checks (confirmation, then the photo, then the review,
+ * then the measurement); the attempt's own evidence is only the fallback for a reason in other words.
+ */
 export function attemptFailedOn(a: Attempt): "measurement" | "review" | "confirmation" | "photo" | null {
   if (a.decision.result === "Verified") return null;
+  const reason = (a.decision.reasons[0] ?? "").toLowerCase();
+  if (reason.includes("acknowledged")) return "confirmation";
+  if (reason.includes("post-repair image") || reason.includes("being compared") || reason.includes("photo")) return "photo";
+  if (reason.includes("checklist") || reason.includes("requirement") || reason.includes("review")) return "review";
+  if (reason.includes("diagnostic") || reason.includes("measured")) return "measurement";
+  if (!a.acknowledgedAt) return "confirmation";
   if (a.measured.length) return a.measured.some((m) => m.passed !== true) ? "measurement" : null;
-  if (a.review.some((r) => r.status !== "Satisfied")) return "review";
-  if (!a.acknowledgedAt) return a.review.length ? "confirmation" : "photo";
-  return "review";
+  return a.review.some((r) => r.status !== "Satisfied") ? "review" : "photo";
 }
 
 /** One of the proofs verify needs, as the server's view has it now. `ok` null means pending, or a line that only informs. */

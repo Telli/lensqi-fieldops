@@ -55,7 +55,10 @@ it("lists every attempt in the record with the proof that decided it", () => {
     e("ChecklistReviewed", { requirementId: "switch_chassis_visible", status: "Satisfied", reviewedByEvidenceId: "p2" }), e("TechnicianAcknowledged", { claimId: "c2" }), probe("verify-diag-def", true), decision("Verified")];
   const history = attemptHistory(events);
   expect(history.map((a) => a.decision.result)).toEqual(["Denied", "Denied", "Verified"]);
-  expect(history.map(attemptFailedOn)).toEqual(["measurement", "photo", null]);
+  // The second attempt was denied for the missing confirmation: the server checks that before the photo, and the reason says so.
+  expect(history.map(attemptFailedOn)).toEqual(["measurement", "confirmation", null]);
+  expect(attemptFailedOn({ ...history[1]!, decision: { ...history[1]!.decision, reasons: ["A new post-repair image is required"] }, acknowledgedAt: "x" })).toBe("photo");
+  expect(attemptFailedOn({ ...history[1]!, decision: { ...history[1]!.decision, reasons: ["Checklist requirement switch_chassis_visible is Unknown"] }, acknowledgedAt: "x" })).toBe("review");
   expect(history[1]!.review).toEqual([]);
   expect(history[2]!.measured.map((m) => m.passed)).toEqual([true]);
   // The newest attempt is the one the screen shows

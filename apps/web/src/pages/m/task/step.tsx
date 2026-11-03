@@ -161,7 +161,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       case "resume": return pauser.resume();
       default: return void ask(text);
     }
-  });
+  }, { onListening: speech.setListening });
   const handsFree = useHandsFree(voice, speech, !!busy);
 
   if (!t || !step)
