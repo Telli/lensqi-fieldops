@@ -117,7 +117,7 @@ fun InspectionCard(s: InspectionSummary, assetName: String?, onOpen: (String) ->
     Panel(Modifier.clickable { onOpen(s.inspectionId) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(whenText(s.updatedAt), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            EvidenceBadge(stageState(s.stage), stageLabel(s.stage))
+            EvidenceBadge(stageState(s.stage), stageLabel(s.stage, s.outcomeKind))
         }
         Text(s.workOrder ?: assetName ?: s.assetId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         Text("${if (s.workOrder != null) assetName ?: s.assetId else s.fixtureId} · ${s.photos} photo${if (s.photos == 1) "" else "s"}" + if (s.diagnostics > 0) " · ${s.diagnostics} check${if (s.diagnostics == 1) "" else "s"}" else "", style = MaterialTheme.typography.bodySmall)
@@ -195,7 +195,7 @@ private fun FocusHero(s: InspectionSummary, photoUrl: String?, assetName: String
         else Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.QrCodeScanner, null, tint = FoDark.Muted, modifier = Modifier.size(40.dp)) }
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             GlassChip(assetName ?: s.assetId)
-            GlassChip(stageLabel(s.stage))
+            GlassChip(stageLabel(s.stage, s.outcomeKind))
         }
         Row(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -325,7 +325,7 @@ fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
                             }
                             Column(Modifier.weight(1f)) {
                                 Text(a.displayName, fontWeight = FontWeight.Medium, maxLines = 1)
-                                Text(latest?.let { "${stageLabel(it.stage)} · ${whenText(it.updatedAt)}" } ?: "Not inspected yet", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                Text(latest?.let { "${stageLabel(it.stage, it.outcomeKind)} · ${whenText(it.updatedAt)}" } ?: "Not inspected yet", style = MaterialTheme.typography.bodySmall, maxLines = 1)
                             }
                             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Fo.Muted)
                         }

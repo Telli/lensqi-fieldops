@@ -88,6 +88,10 @@ it("preflight counts an answer only when given after the claim on a photo the ch
   const rejected = view({ checklist: [{ requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p1" }] as Inspection["checklist"],
     changeAnalyses: [{ claimId: "c1", photoEvidenceId: "p1", verdict: "NoVisualChange", reason: "", thresholdsVersion: "v" }] });
   expect(verifyPreflight(rejected, ["a"])[1]).toMatchObject({ ok: false, detail: "Nothing reviewed on the new photo yet" });
+  // A review made after the claim against a photo from well before it shows the fault, not the repair (policy 1.5).
+  const preClaim = view({ photos: [{ evidenceId: "p0", observedAt: "2026-11-02T09:00:00Z" }, { evidenceId: "p1", observedAt: "2026-11-02T10:04:00Z" }] as Inspection["photos"],
+    checklist: [{ requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p0" }] as Inspection["checklist"] });
+  expect(verifyPreflight(preClaim, ["a"])[1]).toMatchObject({ ok: false, detail: "Nothing reviewed on the new photo yet" });
   const done = view({ technicianAcknowledged: true, checklist: [{ requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p1" }] as Inspection["checklist"] });
   expect(verifyPreflight(done, ["a"]).map((r) => r.ok)).toEqual([true, true, true, null]);
   expect(verifyPreflight(view({ acceptedPostRepairPhotoId: null, awaitingAnalysis: ["p2"] }), [])[0]).toMatchObject({ ok: null });

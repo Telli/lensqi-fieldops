@@ -65,6 +65,17 @@ async function saveTask(t) {
   const other = list ? (await list.json()).filter(s=>s.taskId!==t.taskId) : [];
   const kept = await prune(cache, [summary,...other]);
   await cache.put("/v1/tasks",Response.json(kept));
+  // A list filtered by mode is cached under its own URL and holds rows the full list may never have seen, so this job's
+  // row is replaced or inserted in each rather than rebuilding the list.
+  for (const k of await cache.keys()) {
+    const u = new URL(k.url);
+    const mode = u.pathname === "/v1/tasks" && u.searchParams.get("mode");
+    if (!mode) continue;
+    const rows = ((await (await cache.match(k))?.json()) ?? []).filter(s=>s.taskId!==t.taskId);
+    const updated = summary.mode===mode ? [summary,...rows] : rows;
+    updated.sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+    await cache.put(k, Response.json(updated));
+  }
   if (!kept.some(s=>s.taskId===t.taskId)) return;
   for (const p of t.photos.filter(p=>p.purpose === "Manual")) {
     const page = url + "/artifacts/" + encodeURIComponent(p.evidenceId);
@@ -130,35 +141,42 @@ async function queue(req, taskId) {
 self.addEventListener("sync", e => { if (e.tag === "sync-jobs") e.waitUntil(serialized(async()=>{ await drain(); if ((await pending()).some(r=>!r.error)) throw Error("Retry queued updates"); })); });
 self.addEventListener("message", e => { if (e.data?.type === "sync-jobs") e.waitUntil(serialized(()=>drain())); });
 
+// The task as this device knows it: queued step updates that the server has not confirmed are laid over its record.
+async function overlay(task, cached) {
+  const updates = (await pending()).filter(r=>!r.error && r.taskId===task.taskId);
+  for (const row of updates) {
+    const m = /\/steps\/([^/:]+):(complete|skip)$/.exec(new URL(row.url).pathname);
+    const step = m && task.plan?.steps.find(s=>s.id===decodeURIComponent(m[1]));
+    if (step) step.status = m[2]==="complete" ? "Done" : "Skipped";
+  }
+  let pendingCompletion = false;
+  if (updates.length && task.phase === "InProgress") {
+    const next = task.plan?.steps.find(s=>s.status==="Active"||s.status==="Todo");
+    // Every step finished on this device: the task is not Completed until the server says so, but there is no step left to show.
+    if (next) task.currentStepId = next.id; else if (task.plan) { task.currentStepId = null; pendingCompletion = true; }
+  }
+  return Response.json({...task,cached,pendingUpdates:updates.length,pendingCompletion});
+}
 async function readJob(req) {
   const cache = await caches.open(recordCache);
+  const single = /^\/v1\/tasks\/[^/]+$/.test(new URL(req.url).pathname);
   try {
     const r = await fetch(req);
     if (!transient(r.status)) {
       if (r.ok) {
-        if (/^\/v1\/tasks\/[^/]+$/.test(new URL(req.url).pathname)) await remember(await r.clone().json());
-        else await cache.put(req,r.clone());
+        if (single) {
+          const task = await r.clone().json();
+          await remember(task);
+          // Updates still queued (the server was unreachable a moment ago, or refused a model call for now) stay visible
+          // online as well, so a step marked done on this device does not reappear as open until the queue drains.
+          if ((await pending()).some(x=>!x.error && x.taskId===task.taskId)) return overlay(task, false);
+        } else await cache.put(req,r.clone());
       } else if (r.status === 404) await cache.delete(req);
       return r;
     }
   } catch {}
   const saved = await cache.match(req);
-  if (saved && /^\/v1\/tasks\/[^/]+$/.test(new URL(req.url).pathname)) {
-    const task = await saved.json();
-    const updates = (await pending()).filter(r=>!r.error && r.taskId===task.taskId);
-    for (const row of updates) {
-      const m = /\/steps\/([^/:]+):(complete|skip)$/.exec(new URL(row.url).pathname);
-      const step = m && task.plan?.steps.find(s=>s.id===decodeURIComponent(m[1]));
-      if (step) step.status = m[2]==="complete" ? "Done" : "Skipped";
-    }
-    let pendingCompletion = false;
-    if (updates.length && task.phase === "InProgress") {
-      const next = task.plan?.steps.find(s=>s.status==="Active"||s.status==="Todo");
-      // Every step finished on this device: the task is not Completed until the server says so, but there is no step left to show.
-      if (next) task.currentStepId = next.id; else if (task.plan) { task.currentStepId = null; pendingCompletion = true; }
-    }
-    return Response.json({...task,cached:true,pendingUpdates:updates.length,pendingCompletion});
-  }
+  if (saved && single) return overlay(await saved.json(), true);
   // The offline history lists only jobs whose record is still saved here, so no row opens onto the offline error.
   if (saved && new URL(req.url).pathname === "/v1/tasks") {
     const rows = await saved.clone().json();

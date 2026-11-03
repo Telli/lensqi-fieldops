@@ -12,6 +12,15 @@ it("pins outlining to the selected photo even when another client captures a new
   expect(JSON.parse(options.body)).toEqual({ concept: "yellow cable", photoEvidenceId: "photo-before-concurrent-upload" });
 });
 
+it("names the photo an assessment is about, so the server refuses when a newer photo has arrived", async () => {
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ state: {} }))));
+  vi.stubGlobal("fetch", fetch);
+  await api.investigate("inspection", "photo/with slash");
+  expect(fetch.mock.calls[0]![0]).toBe("/v1/inspections/inspection/investigate?photoEvidenceId=photo%2Fwith%20slash");
+  await api.investigate("inspection", null);
+  expect(fetch.mock.calls[1]![0]).toBe("/v1/inspections/inspection/investigate");
+});
+
 const keyOf = (call: unknown[]) => (call[1] as RequestInit & { headers: Record<string, string> }).headers["Idempotency-Key"];
 const inspection = (extra: Partial<Inspection> = {}) =>
   ({ currentClaimId: "claim-1", acceptedPostRepairPhotoId: "photo-9", technicianAcknowledged: false, checklist: [], ...extra }) as Inspection;

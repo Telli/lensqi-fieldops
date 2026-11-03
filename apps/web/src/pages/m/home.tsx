@@ -114,6 +114,7 @@ export default function Home() {
           <h1 className="text-[22px] font-semibold tracking-tight">{focus ? "Pick up where you left off" : "Ready when you are"}</h1>
         </div>
         <ConnBadge reachable={!health.isError} />
+        <Link href="/m/start" aria-label="New inspection" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><Camera className="size-4" /></Link>
         <Link href="/m/assets" aria-label="Assets" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><Boxes className="size-4" /></Link>
         <Link href="/m/profile" aria-label="Profile" className="grid size-9 place-items-center rounded-full border border-border bg-surface"><User className="size-4" /></Link>
       </header>

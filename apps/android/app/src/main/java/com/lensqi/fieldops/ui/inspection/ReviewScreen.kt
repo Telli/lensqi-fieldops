@@ -2,7 +2,11 @@ package com.lensqi.fieldops.ui.inspection
 
 import com.lensqi.fieldops.ui.common.TechnicianText
 
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import androidx.compose.runtime.produceState
+import com.lensqi.fieldops.ui.camera.uprightBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -82,13 +86,31 @@ fun ReviewScreen(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -
 @Composable
 private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRetake: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
-    val r = s.review ?: return
+    val r = s.review
+    if (r == null) {
+        // The camera opens this screen while its photo is still being saved; a photo that could not be saved or read says
+        // why, with a way back, instead of a blank screen.
+        Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (s.preparingReview) {
+                Text("Saving photo…", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FoDark.Foreground)
+                Text("The review opens as soon as the photo is saved on this phone.", fontSize = 13.sp, color = FoDark.Muted)
+            } else {
+                Text("Nothing to review", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FoDark.Foreground)
+                Text(s.error ?: "The photo could not be prepared for review.", fontSize = 13.sp, color = FoDark.Muted)
+                SecondaryButton("Close", onContinue, Modifier.fillMaxWidth())
+            }
+        }
+        return
+    }
     val view = s.view
-    val local = remember(r.file) { runCatching { BitmapFactory.decodeFile(r.file.path, BitmapFactory.Options().apply { inSampleSize = 2 }) }.getOrNull() }
-    val outlinesReady = r.done && s.outlinePhotoId == r.photoId && s.outlineImage != null
+    // Decoded off the main thread, upright (EXIF applied) and bounded, so a portrait capture is not shown sideways while the outlines load.
+    val local by produceState<Bitmap?>(null, r.file) { value = withContext(Dispatchers.IO) { runCatching { uprightBitmap(r.file.readBytes(), 1600) }.getOrNull() } }
+    val set = r.photoId?.let { s.outlineSets[it] }
+    val outlinesReady = r.done && set != null
+    val outlines = set?.outlines.orEmpty()
     val change = view?.changeAnalyses?.lastOrNull { it.photoEvidenceId == r.photoId }
     val assessment = if (r.afterRepair) null else assessmentForPhoto(s.latestAssessment, r.photoId)
-    val tags = if (outlinesReady) arTags(s.fixture, assessment, s.outlines, change) else emptyList()
+    val tags = if (outlinesReady) arTags(s.fixture, assessment, outlines, change) else emptyList()
     val target = if (outlinesReady) targetConcept(s.fixture, assessment) else null
     val rejected = r.refused != null || change?.verdict == VisualChangeVerdict.DuplicateImage || change?.verdict == VisualChangeVerdict.NoVisualChange
     val expected = s.fixture?.assets?.firstOrNull { it.assetId == view?.assetId }?.displayName ?: view?.assetId.orEmpty()
@@ -127,7 +149,7 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                 )
             }
             Box(Modifier.fillMaxWidth()) {
-                if (outlinesReady) ArOverlay(s.outlineImage!!, s.outlines, tags, guide = target, guideLabel = "Target region")
+                if (set != null && outlinesReady) ArOverlay(set.image, outlines, tags, guide = target, guideLabel = "Target region", sourceWidth = set.sourceWidth)
                 else local?.let { Image(it.asImageBitmap(), "Captured photo", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
                 if (!r.done && !r.awaitingUpload) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = FoDark.Primary, trackColor = Color.Transparent)
             }
@@ -175,7 +197,7 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                 Text("No connection to the inspection server. The original photo is queued and uploads automatically; LensQi looks at it once it's there.", fontSize = 12.sp, color = FoDark.Warning)
             }
             val findings = assessment?.hypotheses?.filterNot { isPostRepairItem(it.featureId) }.orEmpty()
-            if (r.done && (findings.isNotEmpty() || change != null || (!r.afterRepair && s.outlines.isEmpty()))) {
+            if (r.done && (findings.isNotEmpty() || change != null || (!r.afterRepair && outlines.isEmpty()))) {
                 var open by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (open) "Hide details" else if (tags.isNotEmpty()) "Details · tap a label on the photo for the reason" else "Details", fontSize = 12.sp, color = FoDark.Muted, modifier = Modifier.weight(1f))
@@ -196,7 +218,7 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
                             }
                         }
                     }
-                    if (!r.afterRepair && s.outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
+                    if (!r.afterRepair && outlines.isEmpty()) Text("No part could be outlined in this photo. Nothing was guessed.", fontSize = 12.sp, color = FoDark.Muted)
                 }
             }
             if (rejected || target != null) {

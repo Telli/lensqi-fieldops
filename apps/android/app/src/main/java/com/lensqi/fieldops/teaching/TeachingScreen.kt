@@ -254,6 +254,8 @@ private fun ReviewPanel(vm: TeachingViewModel, ui: TeachingUi, onExport: () -> U
                 OutlinedTextField(correctedObject, { correctedObject = it.take(200) }, label = { Text("Corrected object / tool") })
             }
         } },
-        confirmButton = { TextButton(onClick = { vm.annotate(TeachingKind.Correction, replacement, refersTo = event.sequence, actionType = if (event.kind == TeachingKind.ActionStart) correctedAction else null, objectName = if (event.kind == TeachingKind.ActionStart) correctedObject else null); correction = null }, enabled = replacement.isNotBlank()) { Text("Save correction") } },
+        confirmButton = { TextButton(onClick = { vm.annotate(TeachingKind.Correction, replacement, refersTo = event.sequence, actionType = if (event.kind == TeachingKind.ActionStart) correctedAction else null, objectName = if (event.kind == TeachingKind.ActionStart) correctedObject else null); correction = null },
+            // The store requires an object for an action correction; refusing here keeps the typed text instead of losing it after the dialog closes.
+            enabled = replacement.isNotBlank() && (event.kind != TeachingKind.ActionStart || correctedObject.isNotBlank())) { Text("Save correction") } },
         dismissButton = { TextButton(onClick = { correction = null }) { Text("Cancel") } }) }
 }

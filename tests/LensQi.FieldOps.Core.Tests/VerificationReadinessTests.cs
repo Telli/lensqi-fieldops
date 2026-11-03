@@ -71,6 +71,27 @@ public class VerificationReadinessTests
     }
 
     [Fact]
+    public void A_review_citing_a_pre_claim_photo_sends_the_technician_back_to_the_checklist()
+    {
+        var k = new InspectionTestKit();
+        var pre = k.ReachRepairClaim();
+        k.Tick();
+        var post = k.Photo();
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("rv-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, pre, k.Now);
+        k.Session.Acknowledge("ack", k.Now);
+        var r = Of(k);
+        Assert.False(r.Ready);
+        Assert.Equal(NextVerifyAction.ReviewChecklist, r.Next);   // the photo is there; the review is what cites the wrong one
+        Assert.Contains(r.Blocking, b => b.Contains("taken before the repair claim"));
+
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("rv2-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, post, k.Now);
+        k.Session.Acknowledge("ack-2", k.Now);
+        Assert.Equal(NextVerifyAction.Verify, Of(k).Next);
+    }
+
+    [Fact]
     public void A_closed_inspection_has_nothing_next()
     {
         var k = new InspectionTestKit();

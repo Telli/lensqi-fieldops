@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { filterHistory, tasks, type TaskSummary } from "./tasks";
+import { filterHistory, taskRoute, tasks, type TaskSummary } from "./tasks";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -98,4 +98,10 @@ it("reports a refused work package as an error instead of a saved error body", a
   vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { status: 200, headers: { "content-type": "application/zip" } })));
   const zip = await tasks.package("T-1");
   expect(zip.size).toBe(4);
+});
+
+it("opens a job on its current step, or on the summary once every step was finished on this device", () => {
+  expect(taskRoute({ taskId: "T-1", currentStepId: "s2" })).toBe("/m/t/T-1/step/s2");
+  expect(taskRoute({ taskId: "T-1", currentStepId: null, pendingCompletion: true })).toBe("/m/t/T-1/done");
+  expect(taskRoute({ taskId: "T-1", currentStepId: null })).toBe("/m/t/T-1");
 });

@@ -65,6 +65,32 @@ public sealed class TaskStore
     public TaskSession? FindCreated(string? requestKey) =>
         requestKey is not null && _created.TryGetValue(requestKey, out var id) ? Find(id) : null;
 
+    /// <summary>
+    /// The task a create key made, only when the retry asks for the very same job: mode, goal, details, site, person, hand-off
+    /// source and manual photos. A key reused for different inputs is refused, never answered with another job's task (the
+    /// inspection store's <c>SameCreate</c> rule).
+    /// </summary>
+    public static TaskSession SameCreate(TaskSession earlier, TaskMode mode, string goal, string? details, SiteLink? site, PersonContext? person,
+        string? handoffSourceTaskId, IReadOnlyCollection<string> manualDigests)
+    {
+        // The same normalisation the session applies on create, so a retry of the very same request matches its record.
+        goal = goal.Trim();
+        if (mode == TaskMode.Freeform && goal.Length == 0) goal = TaskSession.FreeformGoal;
+        details = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
+        var s = earlier.State;
+        var samePerson = (s.Person, person) switch
+        {
+            (null, null) => true,
+            ({ } a, { } b) => a.HeightCm == b.HeightCm && a.Tools.SequenceEqual(b.Tools, StringComparer.Ordinal),
+            _ => false,
+        };
+        var sameManuals = s.Photos.Where(p => p.Purpose == TaskPhotoPurpose.Manual).Select(p => p.Sha256).ToHashSet(StringComparer.Ordinal).SetEquals(manualDigests);
+        return s.Mode == mode && string.Equals(s.Goal, goal, StringComparison.Ordinal) && string.Equals(s.Details, details, StringComparison.Ordinal)
+            && s.Site == site && samePerson && s.Handoff?.SourceTaskId == handoffSourceTaskId && sameManuals
+            ? earlier
+            : throw new TaskConflictException(TaskErrorCodes.InvalidState, TaskSession.DifferentCommandMessage);
+    }
+
     /// <summary>Creates a task, or returns the one an earlier request with the same key created (<c>Created</c> false).</summary>
     public (TaskSession Session, bool Created) Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestKey = null,
         PersonContext? person = null, TaskHandoff? handoff = null)

@@ -145,8 +145,9 @@ fun GlassesScreen(
         if (Build.VERSION.SDK_INT >= 33 && !granted(context, Manifest.permission.POST_NOTIFICATIONS)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         else vm.startLive(session)
     }
-    // A shutter photo paused live assist for this session: once the camera streams again here, it carries on by itself.
-    LaunchedEffect(s.streaming, live.enabled) { if (s.streaming && !live.enabled && vm.consumeResume(session)) startLive() }
+    // A shutter photo paused live assist for this session: once the camera streams again here, and the photo is taken, it
+    // carries on by itself. Keyed on capturing too, so the check runs again when the shutter finishes.
+    LaunchedEffect(s.streaming, live.enabled, s.capturing) { if (vm.consumeResume(session)) startLive() }
 
     var bluetoothDenied by remember { mutableStateOf(false) }
     val askBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -366,7 +367,8 @@ private fun Controls(
         GlassesPhase.Registering -> PrimaryButton("Waiting for Meta AI…", {}, busy = true)
         GlassesPhase.NoGlasses, GlassesPhase.Connected -> PrimaryButton("Start glasses camera", onStart, icon = Icons.Outlined.Videocam)
         GlassesPhase.Starting, GlassesPhase.Paused, GlassesPhase.Streaming -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            val needsImage = s.mode == GlassesMode.Mock && !s.mockCapturedImageSet
+            // With the phone camera as the mock feed the kit returns a phone-camera still, so no chosen image is needed.
+            val needsImage = s.mode == GlassesMode.Mock && !s.mockCapturedImageSet && s.mockFeed != "Phone camera"
             val enabled = s.streaming && !s.capturing && !needsImage
             Box(
                 Modifier.size(78.dp).border(3.dp, if (enabled) Fo.Foreground else Fo.Muted, CircleShape).padding(6.dp).clip(CircleShape)

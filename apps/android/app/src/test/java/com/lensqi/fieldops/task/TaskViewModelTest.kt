@@ -13,7 +13,9 @@ import com.lensqi.fieldops.di.NetworkModule
 import com.lensqi.fieldops.ui.task.TaskUi
 import com.lensqi.fieldops.ui.task.TaskViewModel
 import com.lensqi.fieldops.voice.SpeechOutput
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,6 +72,8 @@ class TaskViewModelTest {
         val commands = MutableStateFlow<List<PendingCommand>>(emptyList())
         val queued: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
         val dismissed: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val withdrawn: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        override suspend fun withdraw(command: PendingCommand) { withdrawn += command.id }
         override suspend fun enqueueStepAction(command: PendingCommand) { commands.value += command }
         override fun observe(sessionId: String): Flow<List<PendingCommand>> = commands
         override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String): PendingCommand =
@@ -79,10 +83,12 @@ class TaskViewModelTest {
 
     private lateinit var server: MockWebServer
     private val requests = ConcurrentLinkedQueue<RecordedRequest>()
-    /** Scripted answers for commands, by path suffix; anything unscripted answers with the task. */
+    /** Scripted answers by path suffix, one use each; anything unscripted answers with the task. */
     private val scripted = ConcurrentLinkedQueue<Pair<String, MockResponse>>()
     private val speech = FakeSpeech()
     private val queue = FakeQueue()
+    /** Every view model made here, so its work is cancelled before the server and the main dispatcher go (nothing resumes into the next class). */
+    private val created = Collections.synchronizedList(mutableListOf<TaskViewModel>())
 
     @BeforeEach
     fun setUp() {
@@ -92,7 +98,7 @@ class TaskViewModelTest {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     requests += request
                     val path = request.path.orEmpty()
-                    scripted.firstOrNull { path.endsWith(it.first) && request.method == "POST" }?.let { scripted.remove(it); return it.second }
+                    scripted.firstOrNull { path.endsWith(it.first) }?.let { scripted.remove(it); return it.second }
                     return MockResponse().setBody(taskJson)
                 }
             }
@@ -101,13 +107,20 @@ class TaskViewModelTest {
     }
 
     @AfterEach
-    fun tearDown() { server.shutdown(); Dispatchers.resetMain() }
+    fun tearDown() {
+        // Cancel, then wait: a file write already running on the IO dispatcher finishes after cancellation, and it must be
+        // over before JUnit deletes the temp directory and before the main dispatcher is reset.
+        created.forEach { it.viewModelScope.cancel() }
+        kotlinx.coroutines.runBlocking { created.forEach { it.viewModelScope.coroutineContext[kotlinx.coroutines.Job]?.join() } }
+        server.shutdown(); Dispatchers.resetMain()
+    }
 
     private fun api(base: okhttp3.HttpUrl = server.url("/")): FieldOpsApi =
         NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { base }).build(), json).create(FieldOpsApi::class.java)
 
-    private fun viewModel(api: FieldOpsApi = api(), spoken: com.lensqi.fieldops.ui.task.SpokenChecks = com.lensqi.fieldops.ui.task.SpokenChecks()) =
-        TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue, spoken, com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp, "test"))
+    private fun library() = com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp, "test")
+    private fun viewModel(api: FieldOpsApi = api(), spoken: com.lensqi.fieldops.ui.task.SpokenChecks = com.lensqi.fieldops.ui.task.SpokenChecks(), library: com.lensqi.fieldops.data.TaskLibrary = library()) =
+        TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue, spoken, library).also { created += it }
 
     @Test
     fun `a check that synced while two screens hold the task is spoken once`() {
@@ -145,6 +158,53 @@ class TaskViewModelTest {
         assertEquals(1, queue.commands.value.size)
         assertEquals(1, keysFor(":complete").size)
 
+    }
+
+    @Test
+    fun `a refused step update left on the phone does not hold back a new attempt, a waiting one does and says so`() {
+        val vm = viewModel()
+        await(vm) { it.task != null }
+        queue.commands.value = listOf(PendingCommand("old", task.taskId, CommandKind.TaskComplete, 0, stepId = stepId, state = CommandState.Rejected, errorCode = "invalid_state", errorMessage = "already done"))
+        until { vm.state.value.refusedChecks.size == 1 }
+        vm.complete(stepId) {}
+        until { keysFor(":complete").size == 1 && vm.state.value.busy == null }
+        // A waiting update for the step holds the tap, and the hold is said rather than silent.
+        queue.commands.value = listOf(PendingCommand("waiting", task.taskId, CommandKind.TaskComplete, 0, stepId = stepId))
+        until { vm.state.value.pendingSteps.size == 1 }
+        vm.complete(stepId) {}
+        assertTrue(await(vm) { it.notice != null }.notice!!.contains("already saved"))
+        assertEquals(1, keysFor(":complete").size)
+    }
+
+    @Test
+    fun `a check's verdict is kept in the offline copy of the task`() {
+        val library = library()
+        val vm = viewModel(library = library)
+        await(vm) { it.task != null }
+        val checked = task.copy(updatedAt = "2099-01-01T00:00:00+00:00", plan = task.plan!!.copy(steps = task.plan!!.steps.mapIndexed { i, s ->
+            if (i == 0) s.copy(lastCheck = com.lensqi.fieldops.data.api.TaskStepCheck(stepId, "p-new", com.lensqi.fieldops.data.api.StepVerdict.LooksDone, "The plug is out.")) else s }))
+        scripted += "/check" to MockResponse().setBody("""{"check":{"stepId":"$stepId","photoId":"p-new","verdict":"LooksDone","reason":"The plug is out."},"task":${json.encodeToString(TaskView.serializer(), checked)}}""")
+        val photo = File.createTempFile("capture-check", ".jpg").apply { writeBytes(byteArrayOf(-1, -40, -1, 1)) }
+        vm.check(stepId, photo)
+        await(vm) { it.task?.currentStep?.lastCheck?.photoId == "p-new" }
+        until { runBlocking { library.job(task.taskId)?.value?.currentStep?.lastCheck?.photoId == "p-new" } }
+        assertFalse(photo.exists(), "the one-off shutter file goes once its bytes are sent")
+        until { speech.spoken.any { it.startsWith("Looks done. The plug is out.") } }
+    }
+
+    @Test
+    fun `a failed work package export is shown on the task, and a question with a frame names its device`() {
+        val vm = viewModel()
+        await(vm) { it.task != null }
+        scripted += "/package.zip" to error(404, "not_found", "no package")
+        assertNull(runBlocking { vm.exportPackage(File(temp, "exports")) })
+        assertTrue(await(vm) { it.error != null }.error!!.isNotBlank())
+        assertTrue(File(temp, "exports").listFiles().orEmpty().isEmpty(), "a failed export leaves no file behind")
+        scripted += "/ask" to MockResponse().setBody("""{"answer":"A hex bolt.","modelId":"fake"}""")
+        vm.ask("What is this?", byteArrayOf(-1, -40, -1, 9))
+        assertNull(await(vm) { it.answer != null }.error, "the next action clears the export error")
+        val body = requests.single { it.path.orEmpty().endsWith("/ask") }.body.clone().readUtf8()
+        assertTrue(body.contains("name=\"source\"") && body.contains("Phone"), body)
     }
 
     @Test
@@ -256,9 +316,18 @@ class TaskViewModelTest {
         until { gets() > loads }
         queue.commands.value = listOf(check("b", CommandState.Rejected, "The step is already done"))
         assertTrue(await(vm) { it.error?.contains("Refresh and review where things stand") == true }.queuedChecks == 0)
+        // A reload a moment later (the plan screen resuming, say) does not wipe the refusal before it is read.
+        val before = gets()
+        vm.refresh()
+        until { gets() > before && vm.state.value.busy == null }
+        assertTrue(vm.state.value.error?.contains("Refresh and review where things stand") == true, vm.state.value.error)
         assertTrue(queue.dismissed.isEmpty())
         vm.removeCheck(vm.state.value.refusedChecks.single())
         until { queue.dismissed == listOf("b") }
+        // A photo still waiting can be withdrawn from the step screen.
+        queue.commands.value = listOf(check("c"))
+        vm.withdrawCheck(await(vm) { it.pendingChecks.size == 1 }.pendingChecks.single())
+        until { queue.withdrawn == listOf("c") }
     }
 
     @Test

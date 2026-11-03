@@ -8,6 +8,7 @@ using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Core.Tasks;
 using LensQi.FieldOps.Core.Knowledge;
+using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Tasks;
 
 namespace LensQi.FieldOps.Api.Features.Tasks;
@@ -27,7 +28,7 @@ public static class TaskEndpoints
         var g = app.MapGroup("/v1/tasks");
 
         // Create a task and write its plan. JSON {mode, goal, details, fixtureId?, assetId?} or multipart with up to 3 manual photos.
-        g.MapPost("", async (HttpRequest http, TaskStore store, ExpectedTwinStore twins, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, EvidenceFileStore files, TaskPlanner planner, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("", async (HttpRequest http, TaskStore store, ExpectedTwinStore twins, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, EvidenceFileStore files, IImageOrienter orienter, TaskPlanner planner, KeyedGate gate, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             string? mode, goal, details, fixtureId, assetId, height;
             IReadOnlyList<string> tools;
@@ -70,7 +71,7 @@ public static class TaskEndpoints
                 if (photos.Count > 3) return ApiResults.BadRequest("too_many_photos", "Attach at most 3 manual photos");
                 foreach (var f in photos)
                 {
-                    var image = await ReadImage(f, limits, ct);
+                    var image = await ReadImage(f, limits, orienter, ct);
                     if (image.Error is { } bad) return bad;
                     // The same page attached twice is one manual photo.
                     if (!manuals.Any(m => m.Bytes.AsSpan().SequenceEqual(image.Value!.Value.Bytes))) { var m = image.Value!.Value; manuals.Add((m.Bytes, m.MediaType, m.Width, m.Height, EvidenceOrigin.Phone)); }
@@ -85,9 +86,11 @@ public static class TaskEndpoints
                 (mode, goal, details, fixtureId, assetId) = (body.Mode, body.Goal, body.Details, body.FixtureId, body.AssetId);
                 (height, tools) = (body.HeightCm?.ToString(), body.Tools ?? []);
             }
-            // GT-R01.5: a repeated creation key returns the task it made, with no new task, photos or plan call.
+            // GT-R01.5: a repeated creation key returns the task it made, with no new task, photos or plan call. The key's gate is
+            // held until the plan is written, so a retry that overlaps the first request (a lost response during the planner
+            // call) waits and replays the task with its plan, instead of a planless copy. The replay itself is checked below.
             var creationKey = http.Headers.TryGetValue("Idempotency-Key", out var k) && !string.IsNullOrWhiteSpace(k) ? "create:" + k : null;
-            if (store.FindCreated(creationKey) is { } earlier) return Results.Ok(new { task = View(earlier), planError = (PlanError?)null, replayed = true });
+            using var _ = await gate.EnterAsync("tasks:create", creationKey, ct);
             if (!Enum.TryParse<TaskMode>(mode, ignoreCase: true, out var taskMode)) return ApiResults.BadRequest("invalid_mode", "mode must be Diy, Technician or Freeform");
             int? heightCm = null;
             if (!string.IsNullOrWhiteSpace(height))
@@ -106,11 +109,16 @@ public static class TaskEndpoints
                 site = new SiteLink(twin.Twin.FixtureId, asset.AssetId);
                 siteContext = SiteContext(twins, site, bindings, resolver);
             }
+            // What a replay must match, in full: a key reused for a different job (another goal, other details or tools, other
+            // reference photos) is refused, never given this task.
+            var manualDigests = manuals.Select(m => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(m.Bytes))).ToHashSet(StringComparer.Ordinal);
+            TaskSession Same(TaskSession earlier) => TaskStore.SameCreate(earlier, taskMode, goal ?? "", details, site, person, handoff?.SourceTaskId, manualDigests);
             return await GuardAsync(async () =>
             {
+                if (store.FindCreated(creationKey) is { } earlier) return Replayed(Same(earlier));
                 var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey, person, handoff);
                 var id = task.State.TaskId;
-                if (!created) return Results.Ok(new { task = View(task), planError = (PlanError?)null, replayed = true });
+                if (!created) return Replayed(Same(task));
                 var manualIds = new List<string>();
                 foreach (var m in manuals)
                 {
@@ -123,6 +131,7 @@ public static class TaskEndpoints
                 var planError = taskMode == TaskMode.Freeform ? null : await Plan(store, planner, id, siteContext, [.. manuals.Select(m => (m.Bytes, m.MediaType))], manualIds, clock, ct);
                 return Results.Created($"/v1/tasks/{id}", new { task = View(store.Find(id)!), planError });
             });
+            static IResult Replayed(TaskSession task) => Results.Ok(new { task = View(task), planError = (PlanError?)null, replayed = true });
         }).DisableAntiforgery().AsModelCall();
 
         g.MapGet("", (TaskStore store, string? mode) => Results.Ok(store.All
@@ -182,24 +191,27 @@ public static class TaskEndpoints
             Guard(() => { store.Execute(id, s => s.Abandon(RequestId(http, "abandon"), req.Reason, clock.GetUtcNow())); return Results.Ok(View(store.Find(id)!)); }));
 
         // A step photo, saved as the task's record, then a suggested verdict. The user still decides.
-        g.MapPost("/{id}/steps/{stepId}/check", async (string id, string stepId, HttpRequest http, TaskStore store, EvidenceFileStore files, StepCoach coach, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/{id}/steps/{stepId}/check", async (string id, string stepId, HttpRequest http, TaskStore store, EvidenceFileStore files, IImageOrienter orienter, StepCoach coach, KeyedGate keys, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
             if (task.State.Plan?.Steps.FirstOrDefault(s => s.Id == stepId) is not { } step) return ApiResults.NotFound($"Step '{stepId}' not found");
             if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Start the plan before checking a step");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
             var form = await http.ReadFormAsync(ct);
-            var image = await ReadImage(form.Files.GetFile("image"), limits, ct);
+            var image = await ReadImage(form.Files.GetFile("image"), limits, orienter, ct);
             if (image.Error is { } bad) return bad;
             var (bytes, mediaType, width, height) = image.Value!.Value;
             // The capture device travels with the photo, so a mock-glasses check is never shown as a phone or real-glasses photo.
             if (!Inspections.InspectionEndpoints.TryCaptureOrigin(form["source"].ToString(), out var origin)) return Inspections.InspectionEndpoints.InvalidSource();
             var requestId = RequestId(http, "check");
+            // Two requests under one key never both save a photo and call the model: the second waits and then replays the first.
+            using var _ = await keys.EnterAsync("tasks:check:" + id, requestId, ct);
             return await GuardAsync(async () =>
             {
-                // A retried key returns the recorded check; after a failed model call it re-checks the photo already saved.
-                if (store.Execute(id, s => s.Replayed(requestId))?.OfType<StepChecked>().FirstOrDefault() is { } earlier)
-                    return Results.Ok(CheckResult(earlier, store.Find(id)!));
+                // A retried key returns the recorded check; after a failed model call it re-checks the photo already saved. A key
+                // that recorded another command is refused before any photo is saved or model call made.
+                if (store.Execute(id, s => s.Replayed(requestId)) is { } done)
+                    return done.OfType<StepChecked>().FirstOrDefault() is { } earlier && earlier.StepId == stepId ? Results.Ok(CheckResult(earlier, store.Find(id)!)) : DifferentCommand();
                 var photo = store.Execute(id, s => s.Replayed(requestId + ":photo"))?.OfType<TaskPhotoRecorded>().FirstOrDefault();
                 if (photo is not null && ArtifactPath(files, id, photo.EvidenceId) is { } savedPath)
                 {
@@ -218,14 +230,14 @@ public static class TaskEndpoints
                     return ModelFailure(result.Error, "The step check is unavailable; the photo is saved, try again or decide yourself");
                 var reason = TaskSafety.Guard(store.Find(id)!.State, check.Reason);
                 if (reason.Length > 400) reason = TaskSafety.Referral;
-                var recorded = store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, reason, result.ModelId, clock.GetUtcNow()))
-                    .OfType<StepChecked>().Single();
-                return Results.Ok(CheckResult(recorded, store.Find(id)!));
+                // The session replays whatever the key recorded first; only a check is answered as one.
+                return store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, reason, result.ModelId, clock.GetUtcNow()))
+                    .OfType<StepChecked>().FirstOrDefault() is { } recorded && recorded.StepId == stepId ? Results.Ok(CheckResult(recorded, store.Find(id)!)) : DifferentCommand();
             });
         }).DisableAntiforgery().AsModelCall();
 
         // A question by voice or text, optionally with the current camera frame (kept as the task's record).
-        g.MapPost("/{id}/ask", async (string id, HttpRequest http, TaskStore store, EvidenceFileStore files, StepCoach coach, LiveVisionGate gate, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/{id}/ask", async (string id, HttpRequest http, TaskStore store, EvidenceFileStore files, IImageOrienter orienter, StepCoach coach, LiveVisionGate gate, KeyedGate keys, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is not { } task) return ApiResults.NotFound($"Task '{id}' not found");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with a 'question' is required");
@@ -233,20 +245,29 @@ public static class TaskEndpoints
             var question = form["question"].ToString().Trim();
             if (question.Length is < 1 or > 500) return ApiResults.BadRequest("invalid_question", "Ask in 1 to 500 characters");
             if (MeasuredParts.Parse(form["measured"]) is not { } measured) return MeasuredParts.Invalid();
+            // The frame's capture device is recorded as for a step check: no source is the phone, an unknown one is refused.
+            if (!Inspections.InspectionEndpoints.TryCaptureOrigin(form["source"].ToString(), out var origin)) return Inspections.InspectionEndpoints.InvalidSource();
             (byte[] Bytes, string MediaType, int Width, int Height)? frame = null;
             if (form.Files.GetFile("image") is { } file)
             {
-                var image = await ReadImage(file, limits, ct, minShortSide: 120);
+                var image = await ReadImage(file, limits, orienter, ct, minShortSide: 120);
                 if (image.Error is { } bad) return bad;
                 frame = image.Value;
             }
             var requestId = RequestId(http, "ask");
-            // A retried request returns the recorded answer: no new frame, no new model call.
+            // Two requests under one key never both save a frame and call the model: the second waits and then replays the first.
+            using var _ = await keys.EnterAsync("tasks:ask:" + id, requestId, ct);
+            // A retried request returns the recorded answer: no new frame, no new model call. The same key with another
+            // question is another command, never answered with the first question's answer.
             if (store.Execute(id, s => s.Replayed(requestId))?.OfType<QuestionAnswered>().FirstOrDefault() is { } earlier)
-                return Results.Ok(new { answer = earlier.Answer, focus = Array.Empty<string>(), stepId = earlier.StepId, photoId = earlier.PhotoId, earlier.ModelId, source = "AI inference" });
+                return earlier.Question == question
+                    ? Results.Ok(new { answer = earlier.Answer, focus = Array.Empty<string>(), stepId = earlier.StepId, photoId = earlier.PhotoId, earlier.ModelId, source = "AI inference" })
+                    : DifferentCommand();
             if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Questions need a started task, or free-form help");
             return await GuardAsync(async () =>
             {
+                // A key that recorded another command is refused before any frame is saved or model call made.
+                if (store.Execute(id, s => s.Replayed(requestId)) is { } other && !other.OfType<QuestionAnswered>().Any()) return DifferentCommand();
                 string? photoId = null;
                 // A retry after a failed model call keeps the photo the first attempt recorded under this request, and
                 // asks about that photo rather than a newer frame.
@@ -264,7 +285,7 @@ public static class TaskEndpoints
                     photoId = "ask-" + Guid.NewGuid().ToString("N")[..10];
                     var stored = files.SaveImage(id, photoId, f.Bytes, f.MediaType, f.Width, f.Height);
                     var pid = photoId;
-                    store.Execute(id, s => s.RecordPhoto(requestId + ":photo", pid, stored.Sha256, f.Width, f.Height, TaskPhotoPurpose.Question, s.State.CurrentStepId, clock.GetUtcNow()));
+                    store.Execute(id, s => s.RecordPhoto(requestId + ":photo", pid, stored.Sha256, f.Width, f.Height, TaskPhotoPurpose.Question, s.State.CurrentStepId, clock.GetUtcNow(), origin));
                 }
                 var state = store.Find(id)!.State;
                 var result = await coach.AskAsync(state, question, frame is { } fr ? (fr.Bytes, fr.MediaType) : null, ct, measured);
@@ -287,14 +308,18 @@ public static class TaskEndpoints
             if (task.State.Phase == TaskPhase.Abandoned) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "A stopped task cannot be verified");
             if (task.State.Site is not { } site || twins.Find(site.FixtureId) is not { } twin)
                 return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Only a technician task on an installed site record can be verified with FieldProof");
+            var requestId = RequestId(http, "link");
             return Guard(() =>
             {
-                // Check and create under the task's lock, so concurrent calls link one inspection and leave no orphan.
+                // Check and create under the task's lock, so concurrent calls link one inspection and leave no orphan. A key that
+                // recorded another command is refused before an inspection is created, so none is left unlinked.
                 var inspectionId = store.Execute(id, s =>
                 {
+                    if (s.Replayed(requestId) is { } done)
+                        return done.OfType<InspectionLinked>().FirstOrDefault()?.InspectionId ?? throw new TaskConflictException(TaskErrorCodes.InvalidState, DifferentCommandMessage);
                     if (s.State.InspectionId is { } existing) return existing;
                     var inspection = inspections.Create(twin, site.AssetId, clock.GetUtcNow());
-                    s.LinkInspection(RequestId(http, "link"), inspection.State.InspectionId, clock.GetUtcNow());
+                    s.LinkInspection(requestId, inspection.State.InspectionId, clock.GetUtcNow());
                     return inspection.State.InspectionId;
                 });
                 return Results.Ok(new { inspectionId, task = View(store.Find(id)!) });
@@ -373,12 +398,22 @@ public static class TaskEndpoints
         return Directory.Exists(dir) ? Directory.EnumerateFiles(dir, evidenceId + "-*").FirstOrDefault() : null;
     }
 
+    /// <summary>A key answers the command it recorded, whatever that was; asking it for another is refused (the inspection endpoints' rule and code).</summary>
+    private const string DifferentCommandMessage = "This Idempotency-Key was used for a different command";
+    private static IResult DifferentCommand() => ApiResults.Conflict(TaskErrorCodes.InvalidState, DifferentCommandMessage);
+
     private static IResult ModelFailure(string? error, string message) =>
         ApiResults.Conflict(error?.StartsWith("provider_unavailable") == true ? "provider_unavailable" : "invalid_model_output", message);
 
     private sealed record ImageRead((byte[] Bytes, string MediaType, int Width, int Height)? Value, IResult? Error);
 
-    private static async Task<ImageRead> ReadImage(IFormFile? file, HardeningOptions limits, CancellationToken ct, int? minShortSide = null)
+    /// <summary>
+    /// Reads an uploaded photo and turns a JPEG the way its EXIF orientation says, as the inspection upload does: phones send
+    /// the sensor's bytes with a tag, and the model, the stored file and every client must see the same upright pixels.
+    /// The pixel limit is checked on the header before anything is decoded; the turned copy is used only when it is a JPEG
+    /// within the upload and pixel limits, otherwise the bytes as uploaded are kept.
+    /// </summary>
+    private static async Task<ImageRead> ReadImage(IFormFile? file, HardeningOptions limits, IImageOrienter orienter, CancellationToken ct, int? minShortSide = null)
     {
         if (file is null || file.Length == 0) return new(null, ApiResults.BadRequest("'image' file is required"));
         if (file.Length > EvidenceFileStore.MaxImageBytes) return new(null, ApiResults.BadRequest($"image exceeds {EvidenceFileStore.MaxImageBytes} bytes"));
@@ -388,7 +423,16 @@ public static class TaskEndpoints
         var mediaType = EvidenceFileStore.DetectImageType(bytes);
         if (mediaType is null || !EvidenceFileStore.TryReadDimensions(bytes, out var width, out var height))
             return new(null, ApiResults.BadRequest("image must be a readable JPEG or PNG"));
-        if (Math.Min(width, height) < (minShortSide ?? limits.MinImageShortSide) || (long)width * height > limits.MaxImagePixels)
+        if ((long)width * height > limits.MaxImagePixels)
+            return new(null, ApiResults.BadRequest("image_size", $"image is {width}x{height}, outside the accepted size"));
+        var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
+        if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, limits.MaxImagePixels, ct) is { Length: > 0 } turned
+            && turned.LongLength <= EvidenceFileStore.MaxImageBytes && EvidenceFileStore.DetectImageType(turned) == "image/jpeg"
+            && EvidenceFileStore.TryReadDimensions(turned, out var turnedWidth, out var turnedHeight) && (long)turnedWidth * turnedHeight <= limits.MaxImagePixels)
+        {
+            bytes = turned; width = turnedWidth; height = turnedHeight;
+        }
+        if (Math.Min(width, height) < (minShortSide ?? limits.MinImageShortSide))
             return new(null, ApiResults.BadRequest("image_size", $"image is {width}x{height}, outside the accepted size"));
         return new((bytes, mediaType, width, height), null);
     }

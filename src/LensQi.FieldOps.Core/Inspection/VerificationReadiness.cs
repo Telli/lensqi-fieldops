@@ -46,7 +46,7 @@ public static class VerificationReadiness
                     : "The latest photo was not accepted; take a new one");
             return new(false, NextVerifyAction.CapturePhoto, reasons);
         }
-        if (Has(VerifyBlocker.ReviewCitesRejectedPhoto, VerifyBlocker.ReviewMissing, VerifyBlocker.ReviewConflicting,
+        if (Has(VerifyBlocker.ReviewCitesRejectedPhoto, VerifyBlocker.ReviewCitesPreClaimPhoto, VerifyBlocker.ReviewMissing, VerifyBlocker.ReviewConflicting,
                 VerifyBlocker.ReviewUnknown, VerifyBlocker.ReviewNotSatisfied, VerifyBlocker.ReviewInvalid))
             return new(false, NextVerifyAction.ReviewChecklist, reasons);
         if (Has(VerifyBlocker.NotAcknowledged)) return new(false, NextVerifyAction.Acknowledge, reasons);

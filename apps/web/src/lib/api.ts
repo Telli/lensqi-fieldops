@@ -204,7 +204,7 @@ export const api = {
   },
   /** The assessment is about the latest photo; naming it keeps a retry on the same photo and a newer photo a new command. */
   investigate: (id: string, photoEvidenceId?: string | null, signal?: AbortSignal) =>
-    once(`${id}:investigate:${photoEvidenceId ?? ""}`, (k) => request<InvestigateResponse>("POST", `${I(id)}/investigate`, undefined, undefined, k, { signal })),
+    once(`${id}:investigate:${photoEvidenceId ?? ""}`, (k) => request<InvestigateResponse>("POST", `${I(id)}/investigate${photoEvidenceId ? `?photoEvidenceId=${encodeURIComponent(photoEvidenceId)}` : ""}`, undefined, undefined, k, { signal })),
   segment: (id: string, concept?: string, photoEvidenceId?: string, signal?: AbortSignal) =>
     once(`${id}:segment:${photoEvidenceId ?? ""}:${concept ?? ""}`, (k) => request<{ segmentation: SegmentationGeometry; state: Inspection }>("POST", `${I(id)}/segment`, { concept, photoEvidenceId }, undefined, k, { signal })),
   knowledge: (id: string) => request<Knowledge>("GET", `${I(id)}/knowledge`),

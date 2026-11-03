@@ -121,7 +121,7 @@ export default function TaskPlanPage({ id }: { id: string }) {
           <p className="rounded-2xl border border-border p-3.5 text-sm text-muted-foreground">You stopped this task{t.abandonReason && t.abandonReason !== "Stopped by the user" ? `: ${t.abandonReason}` : ""}. Its record is kept.</p>
         ) : started ? (
           <Button asChild size="lg" className="h-12 w-full rounded-2xl">
-            <Link href={t.phase === "InProgress" ? `/m/t/${id}/step` : `/m/t/${id}/done`}>{t.phase === "InProgress" ? "Continue" : "See the summary"} <ArrowRight /></Link>
+            <Link href={t.phase === "InProgress" && !t.pendingCompletion ? `/m/t/${id}/step` : `/m/t/${id}/done`}>{t.phase === "InProgress" && !t.pendingCompletion ? "Continue" : "See the summary"} <ArrowRight /></Link>
           </Button>
         ) : (
           <div className="space-y-3">

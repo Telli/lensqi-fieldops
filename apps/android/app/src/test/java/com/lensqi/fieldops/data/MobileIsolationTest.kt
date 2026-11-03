@@ -6,6 +6,9 @@ import com.lensqi.fieldops.ui.receipt.sameWebOrigin
 import com.lensqi.fieldops.ui.task.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -28,6 +31,33 @@ class MobileIsolationTest {
         cache.put(view, "https://a.test/")
         assertEquals(view, cache.observe(view.inspectionId, "https://a.test/").first())
         assertNull(cache.observe(view.inspectionId, "https://b.test/").first())
+    }
+    @Test fun `a request made after a server switch goes to the new server`() = runBlocking {
+        MockWebServer().use { a -> MockWebServer().use { b ->
+            a.start(); b.start()
+            var base = a.url("/")
+            // The screens' client: built once on the placeholder base, pointed at the selected server when each request is sent.
+            val api = NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { base }).build(), NetworkModule.json()).create(FieldOpsApi::class.java)
+            a.enqueue(MockResponse().setBody("[]")); b.enqueue(MockResponse().setBody("[]"))
+            api.tasks()
+            base = b.url("/")
+            api.tasks()
+            assertEquals(1, a.requestCount); assertEquals(1, b.requestCount)
+            assertEquals("/v1/tasks", b.takeRequest().path)
+        } }
+    }
+    @Test fun `saving a new server forgets the old server's clock offset and is read back without the preferences file`(@TempDir dir: File) = runBlocking {
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        try {
+            val settings = com.lensqi.fieldops.data.settings.SettingsStore(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") })
+            ClockSkew.record(5_000)
+            assertTrue(settings.setApiBase("https://b.test"))
+            assertNull(ClockSkew.offsetMs.value)
+            assertEquals("https://b.test/", settings.currentBase().toString())
+            ClockSkew.record(7_000)
+            assertTrue(settings.setApiBase("https://b.test/"), "the same server again keeps what was measured against it")
+            assertEquals(7_000L, ClockSkew.offsetMs.value)
+        } finally { ClockSkew.reset(); scope.coroutineContext[kotlinx.coroutines.Job]?.cancel() }
     }
     @Test fun `receipt links require an exact scheme host and port`() {
         val origin = "https://records.example.test"
