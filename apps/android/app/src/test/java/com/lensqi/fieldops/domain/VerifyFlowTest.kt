@@ -223,6 +223,10 @@ class VerifyHistoryAndPreflightTest {
         val onRejected = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p1") },
             changes = listOf(VisualChangeAnalysis("c1", "p1", "p0", null, 0, "p0", null, null, VisualChangeVerdict.DuplicateImage, "same", "v1")))
         assertEquals(false, verifyPreflight(onRejected, required)[1].ok, "a review of a photo the change check rejected does not count")
+        val olderClaim = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p1") },
+            changes = listOf(VisualChangeAnalysis("c0", "p1", "p0", null, 0, "p0", null, null, VisualChangeVerdict.DuplicateImage, "same", "v1"),
+                VisualChangeAnalysis("c1", "p1", "p0", null, 12, null, null, null, VisualChangeVerdict.Changed, "moved", "v1")))
+        assertEquals(true, verifyPreflight(olderClaim, required)[1].ok, "a rejection under an earlier claim does not count against the current one")
     }
 
     @Test fun `a half review or a not-right answer is named, and a comparison still running is pending`() {

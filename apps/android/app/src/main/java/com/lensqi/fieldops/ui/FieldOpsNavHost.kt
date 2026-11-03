@@ -207,9 +207,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         scopeKey = vm.inspectionId,
                         targetMemory = vm.spatialTarget,
                         onObjects = { measured.seen(com.lensqi.fieldops.ui.task.measuredJson(it)) },
+                        onShutter = { measured.freeze() },
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
-                            vm.captureForReview(file, origin = "Phone", measured = measured.recent())
+                            vm.captureForReview(file, origin = "Phone", measured = measured.take())
                             nav.navigate("review") { popUpTo("camera") { inclusive = true } }
                         },
                     )

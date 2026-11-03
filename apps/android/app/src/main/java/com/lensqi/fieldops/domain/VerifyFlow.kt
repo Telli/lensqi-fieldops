@@ -171,7 +171,9 @@ fun verifyPreflight(v: InspectionView, required: List<String>): List<PreflightRo
     // The policy's rule: an answer counts when it was given after the claim on a photo the change check did not reject;
     // it need not cite the newest accepted photo.
     val claimedAt = at(v.repairClaimedAt)
-    val rejected = v.changeAnalyses.filter { it.verdict == VisualChangeVerdict.DuplicateImage || it.verdict == VisualChangeVerdict.NoVisualChange }.map { it.photoEvidenceId }.toSet()
+    // Rejected as the server sees it: the last change check of each photo under the current claim; older claims do not count.
+    val rejected = v.changeAnalyses.filter { it.claimId == v.currentClaimId }.groupBy { it.photoEvidenceId }
+        .filterValues { it.last().verdict == VisualChangeVerdict.DuplicateImage || it.last().verdict == VisualChangeVerdict.NoVisualChange }.keys
     val answers = required.mapNotNull { req ->
         v.checklist.firstOrNull { it.requirementId == req }?.takeIf { e ->
             val reviewed = at(e.reviewedAt)
