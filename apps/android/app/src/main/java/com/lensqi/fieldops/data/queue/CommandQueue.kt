@@ -171,19 +171,24 @@ class CommandQueue internal constructor(
     /** A queued JSON command: the body it was saved with, under its original key; the server's view replaces the cached one. */
     private suspend fun sendCommand(api: FieldOpsApi, c: PendingCommand, server: String): ApiOutcome<String?> {
         val id = c.sessionId
-        val body = c.payload
-        val r: ApiOutcome<com.lensqi.fieldops.data.api.InspectionView> = try {
+        // The saved body is read before the call, so an unreadable row is refused on the phone and never reaches the server.
+        val body: Any? = try {
             when (c.kind) {
-                CommandKind.RepairClaim -> apiCall { api.repairClaim(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.RepairClaimRequest.serializer(), requireNotNull(body))).state }
-                CommandKind.Checklist -> apiCall { api.checklist(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.ChecklistRequest.serializer(), requireNotNull(body))) }
-                CommandKind.WorkOrder -> apiCall { api.workOrder(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.WorkOrderRequest.serializer(), requireNotNull(body))) }
-                CommandKind.Acknowledge -> apiCall { api.acknowledge(id, c.id) }
+                CommandKind.RepairClaim -> json.decodeFromString(com.lensqi.fieldops.data.api.RepairClaimRequest.serializer(), requireNotNull(c.payload))
+                CommandKind.Checklist -> json.decodeFromString(com.lensqi.fieldops.data.api.ChecklistRequest.serializer(), requireNotNull(c.payload))
+                CommandKind.WorkOrder -> json.decodeFromString(com.lensqi.fieldops.data.api.WorkOrderRequest.serializer(), requireNotNull(c.payload))
+                CommandKind.Acknowledge -> null
                 else -> error("not a JSON command: ${c.kind}")
             }
         } catch (e: IllegalArgumentException) {
             return ApiOutcome.Rejected(0, "payload_unreadable", "The saved command could not be read; enter it again")
-        } catch (e: kotlinx.serialization.SerializationException) {
-            return ApiOutcome.Rejected(0, "payload_unreadable", "The saved command could not be read; enter it again")
+        }
+        val r: ApiOutcome<com.lensqi.fieldops.data.api.InspectionView> = when (c.kind) {
+            CommandKind.RepairClaim -> apiCall { api.repairClaim(id, c.id, body as com.lensqi.fieldops.data.api.RepairClaimRequest).state }
+            CommandKind.Checklist -> apiCall { api.checklist(id, c.id, body as com.lensqi.fieldops.data.api.ChecklistRequest) }
+            CommandKind.WorkOrder -> apiCall { api.workOrder(id, c.id, body as com.lensqi.fieldops.data.api.WorkOrderRequest) }
+            CommandKind.Acknowledge -> apiCall { api.acknowledge(id, c.id) }
+            else -> error("not a JSON command: ${c.kind}")
         }
         return when (r) {
             is ApiOutcome.Ok -> { cache.put(r.value, server); ApiOutcome.Ok(null) }

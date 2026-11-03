@@ -13,14 +13,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /**
- * UploadPhoto is inspection evidence; StepCheckPhoto is a guided-task step check (GT-R09.5). RepairClaim, Checklist,
- * Acknowledge and WorkOrder are the inspection's small JSON commands, saved on the phone while offline and sent in
- * capture order; Verify is never queued, it measures the equipment and needs the server now.
+ * UploadPhoto is inspection evidence; StepCheckPhoto is a guided-task step check (GT-R09.5). Checklist and WorkOrder are
+ * the inspection's small JSON commands, saved on the phone while offline and sent in capture order. RepairClaim and
+ * Acknowledge are sent if a row holds one, but the screens no longer save them: a claim is stamped by the server's clock
+ * and decides which photos count as post-repair, and a confirmation is of the evidence as the technician saw it, so both
+ * mean something else when sent late. Verify is never queued: it measures the equipment and needs the server now.
  */
 enum class CommandKind { UploadPhoto, StepCheckPhoto, RepairClaim, Checklist, Acknowledge, WorkOrder }
 
 /** The JSON commands the queue can hold. */
 val CommandKind.isJsonCommand: Boolean get() = this == CommandKind.RepairClaim || this == CommandKind.Checklist || this == CommandKind.Acknowledge || this == CommandKind.WorkOrder
+
+/** Whether JSON commands for this session still wait to be sent; a new one must then go behind them, not ahead over the network. */
+fun List<PendingCommand>.hasQueuedCommands(): Boolean = any { it.state == CommandState.Pending && it.kind.isJsonCommand }
 
 enum class CommandState { Pending, Rejected, Uploaded }
 

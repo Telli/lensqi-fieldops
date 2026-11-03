@@ -40,6 +40,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.lensqi.fieldops.data.queue.CommandQueue
 import com.lensqi.fieldops.data.queue.PendingCommand
+import com.lensqi.fieldops.data.queue.hasQueuedCommands
 import com.lensqi.fieldops.data.settings.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -417,47 +418,69 @@ class InspectionViewModel @Inject constructor(
     fun workOrder(summary: String) = act("Drafting work order…") {
         val body = WorkOrderRequest(summary)
         val action = action("workOrder:$summary")
+        val payload = json.encodeToString(WorkOrderRequest.serializer(), body)
+        if (enqueueBehindPending(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, payload)) return@act
         keys.command(action) { k -> api.workOrder(inspectionId, k, body) }
-            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, json.encodeToString(WorkOrderRequest.serializer(), body))
+            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.WorkOrder, payload)
             ?.onOk(::cacheView)
     }
 
+    /**
+     * A claim is never saved for later: the server stamps it with its own clock and counts as post-repair only photos taken
+     * after that stamp, so a claim sent minutes after the repair photo would make that photo pre-repair evidence. Offline,
+     * the claim is refused with the connection error and the technician records it once connected.
+     */
     fun claim(description: String) = act("Recording repair claim…") {
-        val body = RepairClaimRequest(description)
-        val action = action("claim:$description")
-        keys.command(action) { k -> api.repairClaim(inspectionId, k, body) }
-            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.RepairClaim, json.encodeToString(RepairClaimRequest.serializer(), body))
-            ?.onOk { cacheView(it.state) }
+        keys.command(action("claim:$description")) { k -> api.repairClaim(inspectionId, k, RepairClaimRequest(description)) }.onOk { cacheView(it.state) }
     }
 
     fun review(requirementId: String, status: ChecklistStatus, photoEvidenceId: String) = act("Recording checklist…") {
         val body = ChecklistRequest(requirementId, status, photoEvidenceId)
         val action = action("review:$requirementId:$status:$photoEvidenceId")
+        val payload = json.encodeToString(ChecklistRequest.serializer(), body)
         // Any review the server may have applied, or that is saved to be sent, clears the confirmation there, even one that
         // repeats an answer: a confirmation whose answer was lost before is a new request now. A review cancelled in flight may
         // have reached the server, so it counts as applied too (its own key stays for the retry). A refused review changed nothing.
+        if (enqueueBehindPending(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, payload)) { keys.dropAll("acknowledge:"); return@act }
         val outcome = try { keys.command(action) { k -> api.checklist(inspectionId, k, body) } }
             catch (e: kotlinx.coroutines.CancellationException) { keys.dropAll("acknowledge:"); throw e }
         if (outcome !is ApiOutcome.Rejected || outcome.retryable) keys.dropAll("acknowledge:")
-        outcome.queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, json.encodeToString(ChecklistRequest.serializer(), body))
-            ?.onOk(::cacheView)
-    }
-
-    fun acknowledge() = act("Recording acknowledgement…") {
-        // The confirmation is of the accepted photo and the review as they stand; a revised answer needs a new confirmation.
-        val action = action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}:${reviewState()}")
-        keys.command(action) { k -> api.acknowledge(inspectionId, k) }
-            .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Acknowledge, null)
+        outcome.queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Checklist, payload)
             ?.onOk(::cacheView)
     }
 
     /**
+     * The confirmation is of the accepted photo and the review answers as they stand, so it is never saved for later: sent
+     * after the evidence changed (another client, a synced photo) it would confirm evidence the technician never saw. A
+     * revised answer needs a new confirmation; offline, the confirmation waits for the connection.
+     */
+    fun acknowledge() = act("Recording acknowledgement…") {
+        keys.command(action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}:${reviewState()}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+    }
+
+    /**
+     * While earlier commands for this inspection still wait in the queue, a new one goes behind them rather than ahead of
+     * them over the network, so the server always sees the technician's answers in the order they were given. True when
+     * the command was saved that way (the caller has nothing more to send).
+     */
+    private suspend fun enqueueBehindPending(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String): Boolean {
+        if (!state.value.pending.hasQueuedCommands()) return false
+        return try {
+            queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
+            keys.drop(action)
+            local.update { it.copy(notice = SAVED_BEHIND) }
+            true
+        } catch (e: java.io.IOException) { false }
+    }
+
+    /**
      * A command the server did not answer (unreachable, timed out, 5xx, asked to slow down) is saved on the phone under the
-     * key it was just sent with and sent later in capture order, with the same body (verify is never saved: it measures the
-     * equipment). A refusal is final and is shown instead. Null means it was saved, so the caller has nothing more to show;
+     * key it was just sent with and sent later in capture order, with the same body. Only review answers and work orders are
+     * saved: a claim or a confirmation sent late would mean something else (see [claim], [acknowledge]), and verify measures
+     * the equipment. A refusal is final and is shown instead. Null means it was saved, so the caller has nothing more to show;
      * the server's answer or refusal still comes back through the queue.
      */
-    private suspend fun <T> ApiOutcome<T>.queuedWhenOffline(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String?): ApiOutcome<T>? {
+    private suspend fun <T> ApiOutcome<T>.queuedWhenOffline(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String): ApiOutcome<T>? {
         if (!retryable) return this
         return try {
             queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
@@ -542,5 +565,6 @@ class InspectionViewModel @Inject constructor(
 
     companion object {
         const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
+        const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
     }
 }
