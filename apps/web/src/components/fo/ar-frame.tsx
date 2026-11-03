@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Eye, EyeOff, X, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { decodeRle } from "@/lib/rle";
-import type { SegmentationGeometry } from "@/lib/api";
-import type { ArTag, Tone } from "@/lib/ar";
+import type { SegmentationGeometry, Mask } from "@/lib/api";
+import { containedRect, outlineFrame, outlinesInRawOrientation, type ArTag, type Tone } from "@/lib/ar";
 
 const tagTone: Record<Tone, string> = {
   primary: "border-primary/60 text-primary",
@@ -12,7 +12,60 @@ const tagTone: Record<Tone, string> = {
   success: "border-success/60 text-success",
 };
 
-type FrameSize = { src: string; w: number; h: number; left: number; top: number; width: number; height: number };
+/** The photo as laid out: its size on first load (before any orientation change, see below) and the box it is shown in. */
+type Measured = { src: string; nw: number; nh: number; cw: number; ch: number };
+
+/** Browsers refuse canvases past about 16.7 million pixels; a 12 MP photo's outlines look the same drawn at this size. */
+const MAX_CANVAS_SIDE = 4096;
+
+/**
+ * Decoded, tinted mask tiles, so a re-render or a polling refresh never decodes the RLE or repaints a tile again. SAM
+ * returns each mask cropped to its object, so most tiles are small; one covering a whole 12 MP photo is drawn at the
+ * display cap, and the cache keeps a byte budget rather than an entry count.
+ */
+const tiles = new Map<string, HTMLCanvasElement>();
+const TILE_BUDGET_BYTES = 64 * 1024 * 1024;
+let tileBytes = 0;
+const bytesOf = (c: HTMLCanvasElement) => c.width * c.height * 4;
+function remember(key: string, tile: HTMLCanvasElement) {
+  const size = bytesOf(tile);
+  if (size > TILE_BUDGET_BYTES) return;
+  const old = tiles.get(key);
+  if (old) { tiles.delete(key); tileBytes -= bytesOf(old); }
+  for (const [k, c] of tiles) {
+    if (tileBytes + size <= TILE_BUDGET_BYTES) break;
+    tiles.delete(k); tileBytes -= bytesOf(c);
+  }
+  tiles.set(key, tile); tileBytes += size;
+}
+function tintedTile(segmentationId: string, m: Mask, color: string): HTMLCanvasElement | null {
+  const key = `${segmentationId}:${m.objectId}:${color}`;
+  const hit = tiles.get(key);
+  if (hit) return hit;
+  const [mh, mw] = m.rle.size;
+  const bits = decodeRle(m.rle.counts, mh, mw);
+  const full = document.createElement("canvas");
+  full.width = mw; full.height = mh;
+  const f = full.getContext("2d");
+  if (!f) return null;
+  const pixels = f.createImageData(mw, mh);
+  for (let p = 0; p < bits.length; p++) pixels.data[p * 4 + 3] = bits[p] ? 255 : 0;
+  f.putImageData(pixels, 0, 0);
+  // Tint, scaling down to the display cap; the full-size decode above is let go once drawn.
+  const scale = Math.min(1, MAX_CANVAS_SIDE / Math.max(mw, mh));
+  const tile = scale === 1 ? full : document.createElement("canvas");
+  if (tile !== full) {
+    tile.width = Math.max(1, Math.round(mw * scale)); tile.height = Math.max(1, Math.round(mh * scale));
+    tile.getContext("2d")?.drawImage(full, 0, 0, tile.width, tile.height);
+  }
+  const t = tile.getContext("2d");
+  if (!t) return null;
+  t.globalCompositeOperation = "source-in";
+  t.fillStyle = color;
+  t.fillRect(0, 0, tile.width, tile.height);
+  remember(key, tile);
+  return tile;
+}
 
 function resolveCropUrl(src: string, cropFile?: string | null): string | null {
   if (!cropFile) return null;
@@ -32,7 +85,7 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, intera
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const img = useRef<HTMLImageElement>(null);
-  const [size, setSize] = useState<FrameSize | null>(null);
+  const [measured, setMeasured] = useState<Measured | null>(null);
   const [selection, setSelection] = useState<{ src: string; concept: string | null } | null>(null);
   const [hidden, setHidden] = useState(false);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -44,17 +97,26 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, intera
   const cropUrl = resolveCropUrl(src, active?.cropFile);
   const showCrop = !!cropUrl && failedCrop !== cropUrl;
   const select = (concept: string | null) => { setSelection({ src, concept }); setZoomedCrop(false); onSelect?.(concept); };
-  const ready = size?.src === src ? size : null;
+
+  // The outlines were computed on the stored pixels. When the browser would show the photo rotated (EXIF), it is shown
+  // raw instead, so the outlines land where SAM drew them; the frame then takes the outlines' size.
+  const m = measured?.src === src ? measured : null;
+  const frame = outlineFrame(outlines);
+  const rawOrientation = !!m && outlinesInRawOrientation(frame, m.nw, m.nh);
+  const ready = m ? { w: rawOrientation ? frame!.w : m.nw, h: rawOrientation ? frame!.h : m.nh, ...containedRect(rawOrientation ? frame!.w : m.nw, rawOrientation ? frame!.h : m.nh, m.cw, m.ch) } : null;
 
   useEffect(() => {
     const i = img.current;
     if (!i) return;
     const measure = () => {
       if (!i.complete || !i.naturalWidth || !i.clientWidth || !i.clientHeight) return;
-      const scale = Math.min(i.clientWidth / i.naturalWidth, i.clientHeight / i.naturalHeight);
-      const width = i.naturalWidth * scale, height = i.naturalHeight * scale;
-      const next = { src, w: i.naturalWidth, h: i.naturalHeight, left: (i.clientWidth - width) / 2, top: (i.clientHeight - height) / 2, width, height };
-      setSize((prev) => prev && Object.keys(next).every((k) => prev[k as keyof FrameSize] === next[k as keyof FrameSize]) ? prev : next);
+      setMeasured((prev) => {
+        // The natural size is kept from the first load of a photo: once it is shown in its raw orientation, browsers
+        // report the size transposed, and that must not flip the decision back.
+        const same = prev?.src === src;
+        const next = { src, nw: same ? prev.nw : i.naturalWidth, nh: same ? prev.nh : i.naturalHeight, cw: i.clientWidth, ch: i.clientHeight };
+        return prev && (Object.keys(next) as (keyof Measured)[]).every((k) => prev[k] === next[k]) ? prev : next;
+      });
     };
     i.addEventListener("load", measure);
     const observer = new ResizeObserver(measure);
@@ -63,32 +125,28 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, intera
     return () => { i.removeEventListener("load", measure); observer.disconnect(); };
   }, [src]);
 
+  // Repaint only when the outlines, their tones, the frame or the selection change, not on every render: the
+  // hands-free view refreshes its queries every few seconds and the arrays are new each time.
+  const outlineIds = outlines.map((g) => g.segmentationId).join("|");
+  const toneKey = tags.map((t) => `${t.concept}=${t.tone}`).join("|");
   useEffect(() => {
     const c = canvas.current;
     if (!c || !ready) return;
-    c.width = ready.w; c.height = ready.h;
+    const scale = Math.min(1, MAX_CANVAS_SIDE / Math.max(ready.w, ready.h));
+    c.width = Math.round(ready.w * scale); c.height = Math.round(ready.h * scale);
     const ctx = c.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     const css = getComputedStyle(c);
     for (const g of outlines) {
       const tone = tags.find((t) => t.concept === g.concept)?.tone ?? "primary";
       const color = css.getPropertyValue(`--${tone}`).trim() || "#35d6e8";
       const dim = current && current !== g.concept;
-      for (const m of g.masks) {
-        const [mh, mw] = m.rle.size;
-        const bits = decodeRle(m.rle.counts, mh, mw);
-        const tile = document.createElement("canvas");
-        tile.width = mw; tile.height = mh;
-        const t = tile.getContext("2d");
-        if (!t) continue;
-        const pixels = t.createImageData(mw, mh);
-        for (let p = 0; p < bits.length; p++) pixels.data[p * 4 + 3] = bits[p] ? 255 : 0;
-        t.putImageData(pixels, 0, 0);
-        t.globalCompositeOperation = "source-in";
-        t.fillStyle = color;
-        t.fillRect(0, 0, mw, mh);
+      for (const mask of g.masks) {
+        const tile = tintedTile(g.segmentationId, mask, color);
+        if (!tile) continue;
         ctx.globalAlpha = dim ? 0.08 : 0.28;
-        ctx.drawImage(tile, m.left, m.top, m.right - m.left, m.bottom - m.top);
+        ctx.drawImage(tile, mask.left, mask.top, mask.right - mask.left, mask.bottom - mask.top);
       }
       ctx.globalAlpha = dim ? 0.3 : 1;
       ctx.strokeStyle = color;
@@ -97,7 +155,7 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, intera
       for (const b of g.boxes) ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
     }
     ctx.globalAlpha = 1;
-  }, [outlines, tags, ready, current]);
+  }, [outlineIds, toneKey, ready?.w, ready?.h, current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pct = (v: number, of: number) => `${(100 * v) / of}%`;
   const guideBox = guide ? tags.find((t) => t.concept === guide.concept)?.box : undefined;
@@ -106,7 +164,8 @@ export function ArFrame({ src, outlines, tags, guide, selected, onSelect, intera
   return (
     <figure className={cn("dark relative overflow-hidden bg-overlay text-overlay-foreground", className)}>
       <div className="relative overflow-hidden" data-ar-photo>
-        <img ref={img} src={src} alt="Inspection photo" className={cn("block w-full object-contain", imgClassName)} onError={() => setFailedSrc(src)} />
+        <img ref={img} src={src} alt="Inspection photo" className={cn("block w-full object-contain", imgClassName)} onError={() => setFailedSrc(src)}
+          style={rawOrientation ? { imageOrientation: "none" } : undefined} />
         {failed && <p role="status" className="p-4 text-sm">Photo could not load. Reopen the inspection to try again.</p>}
         {ready && !failed && (
           <div data-ar-overlay className={cn("pointer-events-none absolute", hidden && "invisible")} style={{ left: ready.left, top: ready.top, width: ready.width, height: ready.height }}>

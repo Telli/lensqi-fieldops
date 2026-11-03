@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, ApiError, type Assessment, type EventRecord, type Inspection } from "./api";
+import { api, ApiError, isCancelled, type Assessment, type EventRecord, type Inspection } from "./api";
 
 export const qk = {
   health: ["health"] as const,
@@ -35,6 +36,8 @@ export function friendlyError(e: unknown): string {
   if (e instanceof ApiError) {
     const map: Record<string, string> = {
       offline: "Can't reach the inspection server. Your work is safe; try again when you're connected.",
+      cancelled: "Cancelled.",
+      bad_response: "The server's answer could not be read. Try again.",
       rate_limited: "Too many AI requests for this inspection right now. Wait a minute and try again.",
       model_timeout: "The AI took too long to answer. Try again.",
       provider_unavailable: "The AI service is unavailable right now. Try again shortly.",
@@ -48,18 +51,25 @@ export function friendlyError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** A command against an inspection: shows the server's answer, refreshes the views that depend on it. */
+/**
+ * A command against an inspection: shows the server's answer, refreshes the views that depend on it. `signal()` is the
+ * abort signal of the command in flight and `cancel()` aborts it; the server ignores a cancel once the model or probe has
+ * answered, so the views refresh either way and a retry under the same key finds the recorded outcome.
+ */
 export function useAct<A extends unknown[], R>(id: string, fn: (...args: A) => Promise<R>, opts?: { success?: string | ((r: R) => string) }) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args: A) => fn(...args),
+  const controller = useRef<AbortController | null>(null);
+  // Leaving the screen ends the command here: no further call in a chain starts and no toast lands on the next screen.
+  useEffect(() => () => controller.current?.abort(), []);
+  const m = useMutation({
+    mutationFn: (args: A) => { controller.current = new AbortController(); return fn(...args); },
     onSuccess: (r) => {
       const s = r as { state?: Inspection } | Inspection;
       if (s && "inspectionId" in (s as Inspection)) qc.setQueryData(qk.inspection(id), s);
       else if (s && "state" in s && s.state) qc.setQueryData(qk.inspection(id), s.state);
       if (opts?.success) toast.success(typeof opts.success === "function" ? opts.success(r) : opts.success);
     },
-    onError: (e) => toast.error(friendlyError(e)),
+    onError: (e) => { if (!isCancelled(e)) toast.error(friendlyError(e)); },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: qk.inspection(id) });
       qc.invalidateQueries({ queryKey: qk.events(id) });
@@ -67,4 +77,17 @@ export function useAct<A extends unknown[], R>(id: string, fn: (...args: A) => P
       qc.invalidateQueries({ queryKey: qk.inspections });
     },
   });
+  return { ...m, signal: () => controller.current?.signal, cancel: () => controller.current?.abort() };
+}
+
+/** Whole seconds since `active` became true, 0 otherwise. Real elapsed time, never an estimate of progress. */
+export function useElapsed(active: boolean) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!active) { setSeconds(0); return; }
+    const start = Date.now();
+    const t = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 500);
+    return () => clearInterval(t);
+  }, [active]);
+  return seconds;
 }

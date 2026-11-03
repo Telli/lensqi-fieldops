@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arTags, assessmentForPhoto, nextStep } from "./ar";
+import { arTags, assessmentForPhoto, containedRect, nextStep, outlineFrame, outlinesInRawOrientation } from "./ar";
 import { nextMove } from "./ai";
 import type { Assessment, ChangeAnalysis, Fixture, Inspection, SegmentationGeometry } from "./api";
 
@@ -64,5 +64,25 @@ describe("honest AR guidance", () => {
     const i = inspection("Inconclusive", { evidenceRequests: [{ requestId: "r", note: "Take a photo", requestedBy: "Operator", requestedAt: "now" }] });
     expect(nextStep(i).text).toBe("Inspection closed — inconclusive");
     expect(nextMove(i)).toBeNull();
+  });
+});
+
+describe("outline orientation", () => {
+  const cropped = { objectId: "o", width: 326, height: 382, left: 414, top: 586, right: 740, bottom: 968, rle: { size: [382, 326] as [number, number], counts: "" } };
+  it("reads the frame from the photo size the server recorded, never from a mask cropped to its object", () => {
+    expect(outlineFrame([{ ...outline, photoWidth: 4000, photoHeight: 3000, masks: [cropped] }])).toEqual({ w: 4000, h: 3000 });
+    expect(outlineFrame([{ ...outline, masks: [cropped], crop: { file: "c.jpg", transform: { sourceWidth: 1600, sourceHeight: 1000 } } }])).toEqual({ w: 1600, h: 1000 });
+    expect(outlineFrame([{ ...outline, masks: [cropped] }])).toBeUndefined();
+  });
+  it("shows a photo raw only when the browser would turn it a quarter turn against its outlines", () => {
+    const frame = { w: 4000, h: 3000 };
+    expect(outlinesInRawOrientation(frame, 3000, 4000)).toBe(true);
+    expect(outlinesInRawOrientation(frame, 4000, 3000)).toBe(false);
+    expect(outlinesInRawOrientation({ w: 2000, h: 2000 }, 2000, 2000)).toBe(false);
+    expect(outlinesInRawOrientation(undefined, 3000, 4000)).toBe(false);
+  });
+  it("letterboxes a picture inside its box", () => {
+    expect(containedRect(4000, 3000, 400, 400)).toEqual({ left: 0, top: 50, width: 400, height: 300 });
+    expect(containedRect(3000, 4000, 400, 400)).toEqual({ left: 50, top: 0, width: 300, height: 400 });
   });
 });

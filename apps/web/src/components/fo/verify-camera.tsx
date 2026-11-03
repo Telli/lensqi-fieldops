@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Camera as CameraIcon, Images, Layers, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
-import { api, ApiError, newKey, type ObservationResponse } from "@/lib/api";
+import { api, ApiError, isCancelled, newKey, type ObservationResponse } from "@/lib/api";
 import { cameraError, connectCamera } from "@/lib/camera";
-import { friendlyError, qk } from "@/lib/hooks";
+import { friendlyError, qk, useElapsed } from "@/lib/hooks";
 import { changeLabel } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { LiveOverlay } from "@/components/fo/live-overlay";
@@ -36,7 +36,12 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
   const [problem, setProblem] = useState<string | null>(null);
   const [answer, setAnswer] = useState<ObservationResponse | null>(null);
   const saving = useRef(false);
+  const inflight = useRef<AbortController | null>(null);
   const assist = useLiveAssist(video, live === "on" && !capture, `/v1/inspections/${encodeURIComponent(id)}`);
+  const elapsed = useElapsed(phase === "saving");
+
+  // Leaving the camera ends the upload here; the server may still record the photo, and the capture's key finds it.
+  useEffect(() => () => inflight.current?.abort(), []);
 
   useEffect(() => {
     if (capture) return;
@@ -61,15 +66,18 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
     saving.current = true;
     setPhase("saving");
     setProblem(null);
+    const controller = new AbortController();
+    inflight.current = controller;
     try {
-      const r = await api.upload(id, c.blob, c.name, c.source, c.key, c.observedAt);
+      const r = await api.upload(id, c.blob, c.name, c.source, c.key, c.observedAt, { signal: controller.signal });
       qc.setQueryData(qk.inspection(id), r.state);
       setAnswer(r);
       if (r.changeAnalysis && (r.changeAnalysis.verdict === "DuplicateImage" || r.changeAnalysis.verdict === "NoVisualChange")) setPhase("rejected");
       else onAccepted(r);
     } catch (e) {
-      // A refusal is final for this photo; anything else may not have reached the server, so the same capture is offered again.
-      setProblem(friendlyError(e));
+      // A refusal is final for this photo; a cancel or anything else may not have reached the server, so the same
+      // capture is offered again under the same key.
+      setProblem(isCancelled(e) ? "Cancelled. The photo may still have reached the server." : `The photo didn't reach the server. ${friendlyError(e)}`);
       setPhase(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429 ? "rejected" : "failed");
     } finally {
       saving.current = false;
@@ -107,11 +115,12 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
   return (
     <div className="dark relative overflow-hidden rounded-[26px] bg-overlay text-overlay-foreground shadow-lg shadow-black/15" data-verify-camera>
       <div className="relative aspect-[3/4] max-h-[62dvh] w-full sm:aspect-[4/3]">
+        {/* The video covers the frame, so the live boxes are drawn with the same cover fit (see LiveOverlay). */}
         <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-cover", (live !== "on" || capture) && "hidden")} />
         {!capture && live === "on" && guide && guideSrc && (
           <img src={guideSrc} alt="" aria-hidden className="pointer-events-none absolute inset-0 size-full object-cover opacity-30 mix-blend-screen" />
         )}
-        {!capture && assist.enabled && <LiveOverlay {...assist} />}
+        {!capture && assist.enabled && <LiveOverlay {...assist} fit="cover" />}
         {capture && <img src={capture.url} alt="The photo you just took" className="absolute inset-0 size-full object-cover" />}
         {phase === "saving" && <div className="pointer-events-none absolute inset-x-0 top-0 h-[9%] animate-scan bg-gradient-to-b from-transparent via-primary/25 to-transparent" />}
         {!capture && live === "off" && (
@@ -163,11 +172,14 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
           </>
         )}
         {phase === "saving" && (
-          <p role="status" className="flex items-center justify-center gap-2 py-3 text-sm"><Loader2 className="size-4 animate-spin" /> Comparing with the photo from before…</p>
+          <div className="space-y-2">
+            <p role="status" className="flex items-center justify-center gap-2 py-1 text-sm"><Loader2 className="size-4 animate-spin" /> Comparing with the photo from before…{elapsed > 1 && <span className="font-mono text-xs text-overlay-foreground/70">{elapsed}s</span>}</p>
+            <button type="button" onClick={() => inflight.current?.abort()} className="min-h-11 w-full rounded-xl text-xs text-overlay-foreground/80">Cancel</button>
+          </div>
         )}
         {phase === "failed" && capture && (
           <div className="space-y-2" role="alert">
-            <p className="text-sm">The photo didn't reach the server. {problem}</p>
+            <p className="text-sm">{problem}</p>
             <button type="button" onClick={() => save(capture)} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground"><RotateCcw className="size-4" /> Try again with this photo</button>
             <button type="button" onClick={retake} className="min-h-11 w-full rounded-xl text-xs text-overlay-foreground/80">Take a different photo</button>
           </div>

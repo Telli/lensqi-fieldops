@@ -192,6 +192,13 @@
 @utility animate-rise {
   animation: rise 420ms cubic-bezier(.2,.8,.2,1) both;
 }
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+@utility animate-indeterminate {
+  animation: indeterminate 1.4s cubic-bezier(.4,0,.2,1) infinite;
+}
 @keyframes ring-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 50%, transparent); }
   100% { box-shadow: 0 0 0 14px transparent; }

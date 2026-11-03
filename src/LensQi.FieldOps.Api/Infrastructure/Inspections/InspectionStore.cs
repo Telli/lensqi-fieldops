@@ -19,6 +19,9 @@ public sealed class StorageOptions
 public sealed class InspectionStore
 {
     private readonly ConcurrentDictionary<string, Entry> _sessions = new(StringComparer.Ordinal);
+    /// <summary>The inspection each client create key made, so a retried create returns it instead of a second inspection.</summary>
+    private readonly ConcurrentDictionary<string, string> _createdByKey = new(StringComparer.Ordinal);
+    private readonly object _createLock = new();
     private readonly string _root;
 
     private sealed class Entry(InspectionSession session)
@@ -62,6 +65,7 @@ public sealed class InspectionStore
                 if (events.Any(e => e.FixtureDigest != twin.Sha256)) { skipped.Add(new(file, $"fixture digest differs from the installed {created.FixtureId}")); continue; }
                 var session = InspectionSession.Rehydrate(twin, events);
                 _sessions[created.InspectionId] = new Entry(session) { PersistedCount = events.Count };
+                if (created.RequestId is { } key) _createdByKey.TryAdd(key, created.InspectionId);
             }
             catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or InspectionConflictException)
             {
@@ -73,15 +77,39 @@ public sealed class InspectionStore
 
     public InspectionSession? Find(string inspectionId) => _sessions.TryGetValue(inspectionId, out var e) ? e.Session : null;
 
-    public InspectionSession Create(LoadedExpectedTwin twin, string assetId, DateTimeOffset now)
+    /// <summary>The inspection an earlier create under <paramref name="requestId"/> made, if any.</summary>
+    public InspectionSession? FindCreated(string requestId) => _createdByKey.TryGetValue(requestId, out var id) ? Find(id) : null;
+
+    /// <summary>
+    /// Creates an inspection; with a <paramref name="requestId"/>, a concurrent or later create under the same key returns this
+    /// one. Creation is serialised and the first event is on disk before the inspection or its key can be seen, so a retry
+    /// never finds a half-published or unpersisted inspection; a failed write leaves no log behind.
+    /// </summary>
+    public InspectionSession Create(LoadedExpectedTwin twin, string assetId, DateTimeOffset now, string? requestId = null)
     {
-        var id = "I-" + Guid.NewGuid().ToString("N")[..12];
-        var session = InspectionSession.Create(id, twin, assetId, now);
-        var entry = new Entry(session);
-        _sessions[id] = entry;
-        Persist(entry);
-        return session;
+        lock (_createLock)
+        {
+            if (requestId is not null && FindCreated(requestId) is { } earlier) return SameCreate(earlier, twin, assetId);
+            var id = "I-" + Guid.NewGuid().ToString("N")[..12];
+            var entry = new Entry(InspectionSession.Create(id, twin, assetId, now, requestId));
+            try { Persist(entry); }
+            catch
+            {
+                var path = Path.Combine(_root, id + ".jsonl");
+                if (File.Exists(path)) File.Delete(path);
+                throw;
+            }
+            _sessions[id] = entry;
+            if (requestId is not null) _createdByKey[requestId] = id;
+            return entry.Session;
+        }
     }
+
+    /// <summary>The inspection a create key made, only when the retry asks for the same fixture and asset: a key reused for different inputs is refused, never answered with another asset's inspection.</summary>
+    public static InspectionSession SameCreate(InspectionSession earlier, LoadedExpectedTwin twin, string assetId) =>
+        earlier.State.FixtureId == twin.Twin.FixtureId && earlier.State.AssetId == assetId
+            ? earlier
+            : throw new InspectionConflictException(InspectionErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
 
     /// <summary>Runs one command under the inspection's lock and appends any new events to the JSONL log, even when the command throws.</summary>
     public async Task<T> ExecuteAsync<T>(string inspectionId, Func<InspectionSession, Task<T>> command, CancellationToken ct)
