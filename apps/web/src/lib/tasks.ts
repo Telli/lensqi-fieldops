@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { newKey, once, request } from "./api";
+import { ApiError, newKey, once, request } from "./api";
 import { friendlyError } from "./hooks";
 
 export type TaskMode = "Diy" | "Technician" | "Freeform";
@@ -17,8 +17,11 @@ export interface TaskStep {
   check: { required: boolean; whatDoneLooksLike: string } | null; status: StepStatus; lastCheck: StepCheck | null;
   /** On a ladder or step-stool step: the part it reaches. */
   accessFor?: string | null;
+  /** Vendor facts the step rests on (guidance, not evidence). */
+  sourceFacts?: import("./api").KnowledgeFact[];
+  /** Reference pages the step cites, by photo id. */
+  referencePhotoIds?: string[];
   /** Why the step was skipped, with measured numbers when the phone took them. */
-  sourceFacts?: import("./api").KnowledgeFact[]; referencePhotoIds?: string[];
   skipReason?: { text: string; partHeightCm: number | null; reachCm: number | null } | null;
 }
 export interface TaskPlan {
@@ -28,14 +31,17 @@ export interface TaskPlan {
 export interface TaskPhoto { evidenceId: string; sha256: string; width: number; height: number; purpose: "StepCheck" | "Manual" | "Question"; stepId: string | null; recordedAt: string }
 export interface TaskAnswer { stepId: string | null; question: string; answer: string; photoId: string | null; modelId: string; at: string }
 export interface Task {
-  title?: string | null; cached?: boolean; pendingUpdates?: number;
+  title?: string | null;
+  /** The title was named by the AI from the conversation (a free-form session), not by the person. */
+  titleByAi?: boolean;
+  cached?: boolean; pendingUpdates?: number;
   taskId: string; mode: TaskMode; goal: string; details: string | null; site: { fixtureId: string; assetId: string } | null; phase: TaskPhase;
   currentStepId: string | null; inspectionId: string | null; createdAt: string; updatedAt: string; safetyAcknowledged: boolean; abandonReason: string | null;
   plan: TaskPlan | null; photos: TaskPhoto[]; answers: TaskAnswer[];
   person?: { heightCm: number | null; standingReachCm: number | null; tools: string[] } | null;
 }
 export interface TaskSummary {
-  taskId: string; mode: TaskMode; goal: string; title: string | null; phase: TaskPhase; steps: number; finished: number; currentStepTitle: string | null;
+  taskId: string; mode: TaskMode; goal: string; title: string | null; titleByAi?: boolean; phase: TaskPhase; steps: number; finished: number; currentStepTitle: string | null;
   site: { fixtureId: string; assetId: string } | null; inspectionId: string | null; updatedAt: string;
 }
 export interface PlanError { code: string; message: string }
@@ -64,6 +70,17 @@ export async function digestOf(blob: Blob): Promise<string> {
 
 export const tasks = {
   list: (mode?: TaskMode) => request<TaskSummary[]>("GET", `/v1/tasks${mode ? `?mode=${mode}` : ""}`),
+  /** The work-package ZIP as a blob. A refusal (409 `invalid_evidence`: a job photo missing or altered, a damaged receipt) is an `ApiError`, never a saved error body. */
+  package: async (id: string): Promise<Blob> => {
+    let r: Response;
+    try { r = await fetch(`${T(id)}/package.zip`, { headers: { Accept: "application/zip, application/json" } }); }
+    catch { throw new ApiError(0, "offline", "Can't reach the server."); }
+    if (!r.ok) {
+      const body = await r.json().catch(() => null) as { code?: string; message?: string } | null;
+      throw new ApiError(r.status, body?.code ?? `http_${r.status}`, body?.message ?? `The server answered ${r.status}.`);
+    }
+    return r.blob();
+  },
   get: (id: string) => request<Task>("GET", T(id)),
   create: (input: { mode: TaskMode; goal: string; details?: string; fixtureId?: string; assetId?: string; manuals?: File[]; sourceId?: string; sourcePhotos?: string[]; sourceAnswers?: string[]; heightCm?: number | null; tools?: string[] }) => {
     const f = new FormData();

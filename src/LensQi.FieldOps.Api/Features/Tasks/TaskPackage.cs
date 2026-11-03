@@ -23,6 +23,7 @@ internal static class TaskPackage
                 var html = new StringBuilder("<!doctype html><meta charset=utf-8><title>Work package</title>");
                 void Line(string tag, string? value) => html.Append('<').Append(tag).Append('>').Append(WebUtility.HtmlEncode(value)).Append("</").Append(tag).Append('>');
                 Line("h1", job.DisplayTitle ?? job.Goal);
+                if (job.TitleByAi) Line("p", "Title named by the AI from the conversation; it is a label, not a finding.");
                 Line("p", $"{job.TaskId} · {job.Phase} · {job.UpdatedAt:u}");
                 if (job.Goal != TaskSession.FreeformGoal) Line("p", job.Goal);
                 Line("p", job.Details);

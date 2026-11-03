@@ -48,6 +48,7 @@ public class TaskApiTests
         using var factory = new FieldOpsApiFactory(); using var client = factory.CreateClient();
         var (id, created) = await Create(client, new { mode = "Freeform" });
         Assert.Equal("Just ask", created.GetProperty("task").GetProperty("title").GetString());
+        Assert.False(created.GetProperty("task").GetProperty("titleByAi").GetBoolean());
         async Task Ask(string question, string? title)
         {
             factory.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "Inspect the switch label.", focus = Array.Empty<string>(), sessionTitle = title });
@@ -63,11 +64,17 @@ public class TaskApiTests
         using var restart = FieldOpsApiFactory.Over(factory.DataDir); using var after = restart.CreateClient();
         var job = await Body(await after.GetAsync($"/v1/tasks/{id}"));
         Assert.Equal(topic, job.GetProperty("title").GetString());
+        // The AI named it, so every place that shows it says so.
+        Assert.True(job.GetProperty("titleByAi").GetBoolean());
         var history = await Body(await after.GetAsync("/v1/tasks"));
-        Assert.Equal(topic, history.EnumerateArray().Single(t => t.GetProperty("taskId").GetString() == id).GetProperty("title").GetString());
+        var row = history.EnumerateArray().Single(t => t.GetProperty("taskId").GetString() == id);
+        Assert.Equal(topic, row.GetProperty("title").GetString());
+        Assert.True(row.GetProperty("titleByAi").GetBoolean());
         using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await after.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
         using var html = new StreamReader(zip.GetEntry("summary.html")!.Open());
-        Assert.Contains($"<h1>{topic}</h1>", await html.ReadToEndAsync());
+        var summary = await html.ReadToEndAsync();
+        Assert.Contains($"<h1>{topic}</h1>", summary);
+        Assert.Contains("named by the AI", summary);
     }
 
     [Fact]

@@ -45,6 +45,9 @@ public sealed record TaskState
     public long LastSequence { get; init; }
 
     public string? SessionTitle { get; init; }
+    /// <summary>The shown title was named by the AI from a free-form conversation, not written by the person or taken from
+    /// their words; clients and the work package label it so it is never read as a finding.</summary>
+    public bool TitleByAi => Mode == TaskMode.Freeform && SessionTitle is not null && DisplayTitle == SessionTitle;
     public string? DisplayTitle
     {
         get

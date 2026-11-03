@@ -145,12 +145,16 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       qc.invalidateQueries({ queryKey: taskKeys.list });
       nav(next.phase === "Completed" ? `/m/t/${id}/done` : `/m/t/${id}/step/${next.currentStepId}`);
     } catch (e) {
-      toast.error(friendlyError(e));
       if (e instanceof Error && "code" in e && e.code === "job_update_saved") {
+        // Saved on this device for later: a delay, not a failure, so it is not shown as one.
+        toast.message(e.message);
         const saved = await tasks.get(id);
         save(saved);
         if (saved.currentStepId) nav(`/m/t/${id}/step/${saved.currentStepId}`);
-      } else qc.invalidateQueries({ queryKey: taskKeys.one(id) });
+      } else {
+        toast.error(friendlyError(e));
+        qc.invalidateQueries({ queryKey: taskKeys.one(id) });
+      }
     } finally { setBusy(null); }
   }
 

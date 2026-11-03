@@ -4,7 +4,7 @@ import { ArrowRight, Camera, ChevronRight, Loader2, MessageCircle, Mic, Square, 
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { friendlyError } from "@/lib/hooks";
-import { ConnBadge, Page } from "@/components/fo/mobile-shell";
+import { ConnBadge, Page, useOnline } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { useHealth } from "@/lib/hooks";
 import { fmtWhen, greeting } from "@/lib/labels";
@@ -28,7 +28,7 @@ export function TaskRow({ t }: { t: TaskSummary }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{t.title ?? t.goal}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : t.phase === "Abandoned" ? "stopped" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
+          {t.titleByAi ? "AI-named · " : ""}{t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : t.phase === "Abandoned" ? "stopped" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
           {t.steps > 0 && t.phase === "InProgress" ? ` · ${t.finished}/${t.steps}` : ""} · {fmtWhen(t.updatedAt)}
         </span>
         {t.phase === "InProgress" && <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-border"><span className="block h-full bg-primary" style={{ width: `${pct}%` }} /></span>}
@@ -41,6 +41,7 @@ export function TaskRow({ t }: { t: TaskSummary }) {
 /** Two ways in: say what you want to do yourself, or go to technician work. */
 export default function ModeHome() {
   const health = useHealth();
+  const online = useOnline();
   const list = useTasks();
   const [, nav] = useLocation();
   const [goal, setGoal] = useState("");
@@ -140,7 +141,7 @@ export default function ModeHome() {
         <ChevronRight className="size-4 text-muted-foreground" />
       </Link>
 
-      {!navigator.onLine && <p>Offline · showing jobs saved on this device</p>}
+      {!online && <p>Offline · showing jobs saved on this device</p>}
       {updates.length > 0 && <section><h2>Saved step updates</h2>{updates.map(u=><p key={u.id}>{u.taskId} · {u.action} · {u.error ?? "Waiting for sync"}
         {u.error && <button onClick={async()=>{await fetch(`/job-updates?id=${u.id}`,{method:"DELETE"});await loadUpdates();}}>Dismiss</button>}</p>)}</section>}
       <label className="block">Search all jobs<input className="block w-full border rounded-xl p-2" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Title, goal, asset or job ID" /></label>

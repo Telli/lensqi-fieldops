@@ -1,6 +1,9 @@
 // Vite injects the exact list of generated assets.
 const shell = "fieldops-shell-" + assets.join("|");
 const recordCache = "fieldops-jobs-v1";
+// Saved jobs are bounded: the newest records stay, and a finished or stopped job is dropped after this long, with its
+// reference pages, unless it still has a queued update. Nothing is kept indefinitely on a shared device.
+const keepJobs = 50, keepFinishedMs = 14 * 24 * 60 * 60 * 1000;
 const readPath = /^\/v1\/tasks(?:\/[^/]+(?:\/artifacts\/[^/]+)?)?$/;
 const writePath = /^\/v1\/tasks\/([^/]+)\/steps\/[^/]+(?::(?:skip|complete)|\/check)$/;
 const transient = status => status === 408 || status === 429 || status >= 500;
@@ -56,15 +59,29 @@ async function saveTask(t) {
   await cache.put(url, Response.json(t));
   const list = await cache.match("/v1/tasks");
   const steps = t.plan?.steps ?? [];
-  const summary = {taskId:t.taskId, mode:t.mode, goal:t.goal, title:t.title ?? t.plan?.title, phase:t.phase,
+  const summary = {taskId:t.taskId, mode:t.mode, goal:t.goal, title:t.title ?? t.plan?.title, titleByAi:!!t.titleByAi, phase:t.phase,
     site:t.site, updatedAt:t.updatedAt, currentStepTitle:steps.find(s=>s.id===t.currentStepId)?.title,
     steps:steps.length, finished:steps.filter(s=>s.status==="Done" || s.status==="Skipped").length};
   const other = list ? (await list.json()).filter(s=>s.taskId!==t.taskId) : [];
-  await cache.put("/v1/tasks",Response.json([summary,...other]));
+  const kept = await prune(cache, [summary,...other]);
+  await cache.put("/v1/tasks",Response.json(kept));
+  if (!kept.some(s=>s.taskId===t.taskId)) return;
   for (const p of t.photos.filter(p=>p.purpose === "Manual")) {
     const page = url + "/artifacts/" + encodeURIComponent(p.evidenceId);
     if (!await cache.match(page)) await cache.add(page).catch(()=>{});
   }
+}
+async function prune(cache, summaries) {
+  const queued = new Set((await pending()).map(r=>r.taskId));
+  const stale = s => (s.phase === "Completed" || s.phase === "Abandoned") && Date.now() - Date.parse(s.updatedAt) > keepFinishedMs;
+  const ordered = [...summaries].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+  const kept = ordered.filter((s,i)=>queued.has(s.taskId) || (i < keepJobs && !stale(s)));
+  const dropped = new Set(ordered.filter(s=>!kept.includes(s)).map(s=>"/v1/tasks/" + encodeURIComponent(s.taskId)));
+  if (dropped.size) for (const req of await cache.keys()) {
+    const path = new URL(req.url).pathname;
+    if (dropped.has(path) || [...dropped].some(d=>path.startsWith(d + "/"))) await cache.delete(req);
+  }
+  return kept;
 }
 async function drain(wanted) {
   let result;
@@ -161,6 +178,9 @@ self.addEventListener("fetch", e => {
     e.respondWith((async()=>{
       try { const r=await fetch(req); if (!transient(r.status)) return r; } catch {}
       const saved=await (await caches.open(shell)).match("/");
+      // No shell saved (the install stopped part-way, or the browser evicted it): say so instead of the browser's error page.
+      if (!saved) return new Response("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>Offline</title><p>You're offline and LensQi hasn't been saved on this device yet. Connect to the network and reload.</p>",
+        {status:503, headers:{"content-type":"text/html; charset=utf-8"}});
       return new Response(saved.body,{headers:saved.headers});
     })()); return;
   }

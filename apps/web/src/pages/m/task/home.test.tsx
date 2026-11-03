@@ -14,3 +14,12 @@ it("uses the session topic as the row title for finished free-form jobs", () => 
   expect(row).toContain("Diagnosing a switch cable");
   expect(row).toContain("/m/t/T-42/done");
 });
+
+it("labels a title the AI named so it is not read as the person's words", () => {
+  const t: TaskSummary = {
+    taskId: "T-43", mode: "Freeform", phase: "Completed", goal: "Free-form help", title: "Loose patch cable", titleByAi: true,
+    updatedAt: "2026-11-03T00:00:00Z", steps: 0, finished: 0, currentStepTitle: null, inspectionId: null, site: null,
+  };
+  expect(renderToStaticMarkup(<Router ssrPath="/m"><TaskRow t={t} /></Router>)).toContain("AI-named");
+  expect(renderToStaticMarkup(<Router ssrPath="/m"><TaskRow t={{ ...t, titleByAi: false }} /></Router>)).not.toContain("AI-named");
+});

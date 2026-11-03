@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
@@ -465,7 +466,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpokenErrors(vm.speaker, s.error, voice.error)
+    SpokenErrors(vm.speaker, s.error ?: s.notice, voice.error)
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
@@ -480,7 +481,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -500,7 +501,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null)
+            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice)
         },
         controls = { handle ->
             camera.value = handle
@@ -686,7 +687,7 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
-private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null) {
+private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null, notice: String? = null) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TaskSources(step, vm)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
@@ -698,6 +699,8 @@ private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops
         answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
+        // Saved for later is a delay, not a failure: shown in the plain colour, not the warning one.
+        notice?.let { Text(it, color = FoDark.Muted, fontSize = 12.sp) }
         onOpenSettings?.let { TextButton(onClick = it, contentPadding = PaddingValues(0.dp)) { Text("Open settings for the microphone", color = FoDark.Primary, fontSize = 12.sp) } }
     }
 }
@@ -728,6 +731,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
         if (plan == null) {
             item { Panel {
                 Text(t.title ?: t.goal)
+                if (t.titleByAi) Text("Topic named by AI from the conversation", style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
                 Text(if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase == TaskPhase.Completed) "Session ended · record retained" else "No plan was recorded")
                 Text("${t.photos.size} saved photos")
                 t.answers.forEach { answer -> Text("You asked: ${answer.question}"); Text(answer.answer) }
@@ -837,9 +841,13 @@ private fun TaskSources(step: TaskStep, vm: TaskViewModel) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     step.referencePhotoIds.forEach { id ->
         Expandable("Reference page · $id") {
-            val file = vm.library.reference(vm.taskId, id)
-            coil.compose.AsyncImage(if (file.isFile) file else vm.library.server.trimEnd('/') + "/v1/tasks/${vm.taskId}/artifacts/$id",
-                "Supporting reference page", Modifier.fillMaxWidth().height(280.dp))
+            // Whether the page is cached is read off the main thread, once per page, not on every recomposition.
+            val remote = vm.library.server.trimEnd('/') + "/v1/tasks/${vm.taskId}/artifacts/$id"
+            val model by produceState<Any>(remote, id) {
+                val file = vm.library.reference(vm.taskId, id)
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { if (file.isFile) file else remote }
+            }
+            coil.compose.AsyncImage(model, "Supporting reference page", Modifier.fillMaxWidth().height(280.dp))
         }
     }
     if (step.sourceFacts.isNotEmpty()) Expandable("Sources · guidance, not evidence") {

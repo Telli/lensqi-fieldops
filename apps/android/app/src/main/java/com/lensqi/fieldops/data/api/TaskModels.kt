@@ -47,6 +47,8 @@ data class TaskView(
     val currentStepId: String? = null, val inspectionId: String? = null, val updatedAt: String, val safetyAcknowledged: Boolean = false,
     val plan: TaskPlan? = null, val photos: List<TaskPhoto> = emptyList(), val answers: List<TaskAnswer> = emptyList(),
     val person: TaskPerson? = null, val title: String? = null,
+    /** The title was named by the AI from a free-form conversation; shown with a label, never as a finding. */
+    val titleByAi: Boolean = false,
 ) {
     val currentStep: TaskStep? get() = plan?.steps?.firstOrNull { it.id == currentStepId }
     /** The capture device of one of the task's photos, as the server recorded it. */
@@ -63,7 +65,7 @@ fun checkPhotoNote(task: TaskView, check: TaskStepCheck): String = when (task.ph
 @Serializable
 data class TaskSummary(
     val taskId: String, val mode: TaskMode, val goal: String, val title: String? = null, val phase: TaskPhase, val steps: Int, val finished: Int,
-    val currentStepTitle: String? = null, val inspectionId: String? = null, val updatedAt: String,
+    val currentStepTitle: String? = null, val inspectionId: String? = null, val updatedAt: String, val titleByAi: Boolean = false,
 )
 
 @Serializable data class PlanError(val code: String, val message: String)

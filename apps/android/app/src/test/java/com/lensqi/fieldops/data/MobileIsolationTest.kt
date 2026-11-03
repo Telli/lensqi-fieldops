@@ -43,6 +43,7 @@ class MobileIsolationTest {
         assertTrue(taskHistory(rows, TaskFilter.Completed, "").isEmpty())
         val stopped = rows.last().copy(mode = TaskMode.Freeform)
         assertEquals("Stopped", taskStatus(stopped))
+        assertEquals("AI-named · Stopped", taskStatus(stopped.copy(title = "Loose patch cable", titleByAi = true)))
         assertEquals("task/t12/done", taskRoute(stopped))
         assertEquals("task/t12/done", taskRoute(stopped.copy(phase = TaskPhase.Completed)))
         assertEquals("task/t12/live", taskRoute(stopped.copy(phase = TaskPhase.InProgress)))

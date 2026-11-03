@@ -91,3 +91,11 @@ it("recovers older stopped jobs and searches their equipment across the whole hi
   expect(filterHistory(rows,"Stopped"," rack-b ").map(t=>t.taskId)).toEqual(["T-8"]);
   expect(filterHistory(rows,"Active","Rack-B")).toEqual([]);
 });
+
+it("reports a refused work package as an error instead of a saved error body", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ code: "invalid_evidence", message: "A job photo failed digest verification" }), { status: 409 })));
+  await expect(tasks.package("T-1")).rejects.toMatchObject({ status: 409, code: "invalid_evidence", message: "A job photo failed digest verification" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { status: 200, headers: { "content-type": "application/zip" } })));
+  const zip = await tasks.package("T-1");
+  expect(zip.size).toBe(4);
+});
