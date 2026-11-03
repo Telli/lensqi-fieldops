@@ -143,7 +143,7 @@ class QueuedCommandTest {
         }
     }
 
-    @Test fun `a refused command keeps the server's code and an unreadable body is refused on the phone`(@TempDir dir: File) = runBlocking {
+    @Test fun `a refused command keeps the server's code and an unreadable body is refused on the phone`(@TempDir dir: File): Unit = runBlocking {
         MockWebServer().use { server ->
             server.start()
             val dao = MemoryCommands()
@@ -160,5 +160,17 @@ class QueuedCommandTest {
             assertEquals(1, server.requestCount, "an unreadable body never reaches the server")
             assertThrows(IllegalArgumentException::class.java) { runBlocking { queue.enqueueCommand("I-1", CommandKind.UploadPhoto, "k", null, base) } }
         }
+    }
+}
+
+/** A new answer never overtakes an older one still waiting in the queue. */
+class QueuedBehindTest {
+    private fun row(kind: CommandKind, state: CommandState) = PendingCommand("k-$kind-$state", "I-1", kind, 0, state = state)
+    @Test fun `only pending JSON commands hold a new one behind them`() {
+        assertFalse(emptyList<PendingCommand>().hasQueuedCommands())
+        assertFalse(listOf(row(CommandKind.UploadPhoto, CommandState.Pending)).hasQueuedCommands(), "a photo upload has its own identity; an answer may go ahead of it")
+        assertFalse(listOf(row(CommandKind.Checklist, CommandState.Rejected)).hasQueuedCommands(), "a refused answer is finished")
+        assertTrue(listOf(row(CommandKind.Checklist, CommandState.Pending)).hasQueuedCommands())
+        assertTrue(listOf(row(CommandKind.WorkOrder, CommandState.Pending), row(CommandKind.UploadPhoto, CommandState.Uploaded)).hasQueuedCommands())
     }
 }

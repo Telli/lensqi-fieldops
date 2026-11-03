@@ -32,7 +32,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * created only for an asset the site record lists, and only when the technician taps Inspect. Decoding runs on the phone
  * with the bundled ML Kit model; no frame leaves the device.
  */
-@OptIn(ExperimentalGetImage::class)
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
 @Composable
 fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
@@ -75,9 +74,9 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
     // Back from Settings: what was allowed there takes effect without reopening the screen.
     LifecycleResumeEffect(Unit) { granted = hasPermission(context, Manifest.permission.CAMERA); onPauseOrDispose { } }
-    val fixtures by rememberUpdatedState(s.fixtures)
     var payload by remember { mutableStateOf<String?>(null) }
-    var found by remember { mutableStateOf<ScannedAsset?>(null) }
+    // Matched from the code and the site records as they are now: a label read before the records arrived matches once they do.
+    val found = remember(payload, s.fixtures) { payload?.let { assetFromScan(it, s.fixtures) } }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -112,7 +111,7 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
                     scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes ->
                             codes.firstNotNullOfOrNull { it.rawValue }?.let { raw ->
-                                ContextCompat.getMainExecutor(context).execute { if (raw != payload) { payload = raw; found = assetFromScan(raw, fixtures) } }
+                                ContextCompat.getMainExecutor(context).execute { if (raw != payload) payload = raw }
                             }
                         }
                         .addOnCompleteListener { proxy.close(); busy.set(false) }
