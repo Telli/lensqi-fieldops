@@ -38,9 +38,23 @@ fun rationaleShown(context: Context, permission: String): Boolean =
 /**
  * Whether a refusal just returned was the last one Android will ask about. The rationale flag alone cannot tell: it is
  * off before the first request and off again after a prompt dismissed with Back, so "will not ask again" would be
- * shown wrongly. Only a flag that was on before the request and off after it means Android stopped asking.
+ * shown wrongly. A flag that was on before the request and off after it means Android stopped asking; so does a refusal
+ * with the flag off on both sides once Android has explained a request to this install before ([explainedBefore]), since
+ * a prompt that was never shown is refused at once with nothing to explain.
  */
-fun deniedForGood(rationaleBefore: Boolean, rationaleAfter: Boolean): Boolean = rationaleBefore && !rationaleAfter
+fun deniedForGood(rationaleBefore: Boolean, rationaleAfter: Boolean, explainedBefore: Boolean = false): Boolean =
+    (rationaleBefore && !rationaleAfter) || (explainedBefore && !rationaleBefore && !rationaleAfter)
+
+private const val PERMISSION_PREFS = "lensqi.permissions"
+
+/** Whether Android has ever shown this install the rationale for [permission] (recorded by [noteRationale]). */
+fun rationaleEverShown(context: Context, permission: String): Boolean =
+    context.getSharedPreferences(PERMISSION_PREFS, Context.MODE_PRIVATE).getBoolean("rationale:$permission", false)
+
+/** Records that Android is explaining requests for [permission] now, so a later refusal without explanation is known to be final. */
+fun noteRationale(context: Context, permission: String) {
+    if (rationaleShown(context, permission)) context.getSharedPreferences(PERMISSION_PREFS, Context.MODE_PRIVATE).edit().putBoolean("rationale:$permission", true).apply()
+}
 
 /** The app's page in Android Settings, where a permission Android no longer asks about can be allowed. */
 fun openAppSettings(context: Context) {

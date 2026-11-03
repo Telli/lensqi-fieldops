@@ -62,6 +62,10 @@ The review's one failing automated gate did not reproduce: `./gradlew :app:testD
 
 An independent read of the combined change found five regressions, all fixed before commit: the five-attempt cap counted sync runs made while the server was unreachable; the microphone Settings hint disappeared once Android stopped asking; a hands-free pause could only be ended by a tap; a review valid for the previous claim was denied instead of asked for again; and a saved job rebuilt the mode-filtered history lists from a list that may never have been cached.
 
+## Third pass
+
+CodeRabbit's twelve inline findings on the pull request and four more from a second external read all held, most as narrow edges, and are fixed: a task idempotency key that recorded another command is now refused by every task command (the session checks the replayed batch's event kind), including `/ask` and a step check replayed under another step's key; the free-form live page honours "pause" like the step page; the web and Android verify preflight and reason labels know a review of a pre-claim photo; the camera restores live coaching after a failed or timed-out shutter; the queue checks a row is readable before sending rather than catching failures after the server accepted; a teaching stop asked during start-up is kept from the moment the start is accepted; an asset id that itself ends in punctuation still matches; the first matching label is taken on the analyzer thread; no post-claim photo is ever shown as "before"; the accepted after photo keeps its outlines; the review screen says "Saving photo…" while the shutter photo is prepared; forced speech lines keep their order during engine start-up; the microphone Settings hint survives leaving the screen; and mode-filtered histories stay in update order. The write-time acceptance of a pre-claim review in `InspectionSession.ReviewChecklist` stays as it is: the gate refuses it, and an existing API test depends on the command recording it.
+
 ## Not adopted
 
 - Priority-list features (grounded advisor and prediction cards on Android, hands-free mode on Android, tap-to-ask on live outlines, site pack download, OCR tags, `decline-view`) are product scope, not defects. They remain open in `.kiro/specs`.
@@ -69,4 +73,4 @@ An independent read of the combined change found five regressions, all fixed bef
 
 ## Gates on the branch
 
-.NET 330 tests (Core 158, Meta 18, Api 154); web typecheck, 67 tests, production build reproducing `wwwroot`, worker smoke in headless Chrome; Android 270 unit tests with debug assembly and debug and release lint; secret scan PASS. No physical Android device, live model or production deployment was used.
+.NET 331 tests (Core 159, Meta 18, Api 154); web typecheck, 68 tests, production build reproducing `wwwroot`, worker smoke in headless Chrome; Android 271 unit tests with debug assembly and debug and release lint; secret scan PASS. No physical Android device, live model or production deployment was used.

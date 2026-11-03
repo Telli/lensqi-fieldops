@@ -428,6 +428,15 @@ public class TaskApiTests
         Assert.Empty((await Body(await c.GetAsync("/v1/inspections"))).EnumerateArray());
         Assert.Equal(JsonValueKind.Null, (await Body(await c.GetAsync($"/v1/tasks/{id}"))).GetProperty("inspectionId").ValueKind);
 
+        var ask = await c.SendAsync(Keyed($"/v1/tasks/{id}/ask", "k1", Photo(TestImages.Jpeg(640, 480), question: "What is this?")));
+        Assert.Equal(HttpStatusCode.Conflict, ask.StatusCode);
+        Assert.DoesNotContain(await Events(c, id), e => e.GetProperty("kind").GetString() is "TaskPhotoRecorded" or "QuestionAnswered");
+        Assert.Equal(calls, f.FakeChat.Calls);
+        // A step command replayed under another step's key is refused too, instead of answering with the other step's batch.
+        var skip = await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s2:skip", "k1"));
+        Assert.Equal(HttpStatusCode.Conflict, skip.StatusCode);
+        Assert.Equal("invalid_state", (await Body(skip)).GetProperty("code").GetString());
+
         // The same key on its own command still replays it, and a fresh key still links.
         Assert.Equal(HttpStatusCode.OK, (await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1:complete", "k1"))).StatusCode);
         var linked = await c.SendAsync(Keyed($"/v1/tasks/{id}/link-inspection", "k2"));

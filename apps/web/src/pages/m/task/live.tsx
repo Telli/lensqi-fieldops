@@ -76,7 +76,10 @@ export default function FreeformLive({ id }: { id: string }) {
   }
 
   const voice = usePushToTalk((text) => {
-    switch (parseCommand(text)) {
+    const command = parseCommand(text);
+    // While paused nothing said is a command or a question; only "resume" is heard, so ambient speech never reaches the server.
+    if (pauser.paused && command !== "resume") return;
+    switch (command) {
       case "repeat": return answers[0] && speech.speak(answers[0].answer, true);
       case "mute": return speech.toggle(false);
       case "unmute": return speech.toggle(true);

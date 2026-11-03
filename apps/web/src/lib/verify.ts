@@ -126,12 +126,16 @@ export function verifyPreflight(i: Inspection, required: string[]): PreflightRow
   const lastByPhoto = new Map<string, ChangeVerdict>();
   for (const c of i.changeAnalyses) if (c.claimId === i.currentClaimId) lastByPhoto.set(c.photoEvidenceId, c.verdict);
   const rejected = new Set([...lastByPhoto].filter(([, v]) => v === "DuplicateImage" || v === "NoVisualChange").map(([id]) => id));
+  // Policy 1.5: a review against a photo taken before the claim shows the fault, not the repair. The server decides by
+  // its own receipt time; here a photo observed more than two minutes before the claim is certainly pre-claim.
+  const preClaim = new Set(claimedAt === null ? [] : i.photos.filter((p) => (at(p.observedAt) ?? Infinity) < claimedAt - 120_000).map((p) => p.evidenceId));
   const answers = required.flatMap((req) => {
     const e = i.checklist.find((c) => c.requirementId === req);
     if (!e) return [];
     const reviewed = at(e.reviewedAt);
     const afterClaim = claimedAt === null || reviewed === null || reviewed >= claimedAt;
-    return afterClaim && !(e.reviewedByEvidenceId && rejected.has(e.reviewedByEvidenceId)) ? [e] : [];
+    const cited = e.reviewedByEvidenceId;
+    return afterClaim && !(cited && (rejected.has(cited) || preClaim.has(cited))) ? [e] : [];
   });
   const review: PreflightRow = required.length === 0 ? { title: "Your review", ok: true, detail: "No checklist items for this equipment" }
     : answers.length === required.length && answers.every((a) => a.status === "Satisfied") ? { title: "Your review", ok: true, detail: `All ${required.length} items marked as looking right` }

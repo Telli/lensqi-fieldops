@@ -82,6 +82,7 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
     val found = remember(payload, s.fixtures) { payload?.let { assetFromScan(it, s.fixtures) } }
     // Read by the analyzer thread: once a label matched, later frames are dropped so another code cannot swap the asset under the Inspect button.
     val matched = rememberUpdatedState(found)
+    val fixturesNow = rememberUpdatedState(s.fixtures)
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -111,13 +112,18 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
             }
             DisposableEffect(controller, owner) {
                 val busy = AtomicBoolean(false)
+                // The first code that names an asset wins, decided here on the analyzer thread: Compose state follows a frame
+                // later, and two labels in consecutive frames must not both pass the gate with the later one replacing the first.
+                // A code that names no asset is shown but does not end scanning, so the right label can still be read.
+                val taken = java.util.concurrent.atomic.AtomicReference<String?>(null)
                 controller.setImageAnalysisAnalyzer(executor) { proxy ->
                     val media = proxy.image
-                    if (media == null || matched.value != null || !busy.compareAndSet(false, true)) { proxy.close(); return@setImageAnalysisAnalyzer }
+                    if (media == null || taken.get() != null || matched.value != null || !busy.compareAndSet(false, true)) { proxy.close(); return@setImageAnalysisAnalyzer }
                     scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes ->
                             codes.firstNotNullOfOrNull { it.rawValue }?.let { raw ->
-                                ContextCompat.getMainExecutor(context).execute { if (raw != payload) payload = raw }
+                                val names = assetFromScan(raw, fixturesNow.value) != null
+                                if (!names || taken.compareAndSet(null, raw)) ContextCompat.getMainExecutor(context).execute { if (raw != payload) payload = raw }
                             }
                         }
                         .addOnCompleteListener { proxy.close(); busy.set(false) }

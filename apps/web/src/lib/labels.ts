@@ -91,6 +91,7 @@ export function plainReason(reason: string): string {
   if (reason.includes("remains unknown") || reason.includes("conflicting")) return "A checklist item needs a person to decide.";
   if (reason.includes("unavailable")) return "The equipment check could not reach the endpoint.";
   if (reason.includes("change analysis rejected")) return "The reviewed photo was not accepted. Review against the new photo.";
+  if (reason.includes("taken before the repair claim")) return "The reviewed photo was taken before the repair. Review against the new photo.";
   return reason;
 }
 

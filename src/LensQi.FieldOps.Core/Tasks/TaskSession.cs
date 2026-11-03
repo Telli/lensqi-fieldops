@@ -57,7 +57,7 @@ public sealed class TaskSession
 
     public IReadOnlyList<TaskEvent> RecordPhoto(string requestId, string evidenceId, string sha256, int width, int height, TaskPhotoPurpose purpose, string? stepId, DateTimeOffset now,
         EvidenceOrigin origin = EvidenceOrigin.Phone) =>
-        Idempotent(requestId, () =>
+        Idempotent<TaskPhotoRecorded>(requestId, () =>
         {
             Require(!State.IsClosed, "The task is closed");
             if (State.Photos.Any(p => p.EvidenceId == evidenceId)) throw new TaskConflictException(TaskErrorCodes.DuplicateEvidence, $"Photo '{evidenceId}' is already recorded");
@@ -67,7 +67,7 @@ public sealed class TaskSession
 
     /// <summary>Records the AI-written plan after <see cref="TaskPlanValidator"/> accepts it. One plan per task.</summary>
     public IReadOnlyList<TaskEvent> ProposePlan(string requestId, TaskPlan plan, string modelId, string promptDigest, string responseDigest, IReadOnlyList<string> manualPhotoIds, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<PlanProposed>(requestId, () =>
         {
             Require(State.Mode != TaskMode.Freeform, "Free-form help has no plan; start a planned task instead");
             Require(State.Phase == TaskPhase.Planned && State.Plan is null, "This task already has a plan");
@@ -81,7 +81,7 @@ public sealed class TaskSession
 
     /// <summary>Starting a plan with any risk or caution needs the user's acknowledgement of its safety notes.</summary>
     public IReadOnlyList<TaskEvent> AcceptPlan(string requestId, bool safetyAcknowledged, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<PlanAccepted>(requestId, () =>
         {
             var plan = State.Plan;
             Require(plan is not null && State.Phase == TaskPhase.Planned, "There is no plan waiting to start");
@@ -91,7 +91,7 @@ public sealed class TaskSession
         });
 
     public IReadOnlyList<TaskEvent> StartStep(string requestId, string stepId, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<StepStarted>(requestId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -102,7 +102,7 @@ public sealed class TaskSession
 
     /// <summary>Stores the AI's suggestion about a step photo. It never finishes the step.</summary>
     public IReadOnlyList<TaskEvent> RecordCheck(string requestId, string stepId, string photoId, StepCheckVerdict verdict, string reason, string modelId, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<StepChecked>(requestId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -112,7 +112,7 @@ public sealed class TaskSession
         });
 
     public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now, string? sessionTitle = null) =>
-        Idempotent(requestId, () =>
+        Idempotent<QuestionAnswered>(requestId, () =>
         {
             // Coaching starts only once the plan's safety notes are accepted (free-form help is in progress from the start).
             Require(State.Phase == TaskPhase.InProgress, "Questions need a started task, or free-form help");
@@ -133,7 +133,7 @@ public sealed class TaskSession
     /// suggestion, so it never stands between the user and the next step.
     /// </summary>
     public IReadOnlyList<TaskEvent> CompleteStep(string requestId, string stepId, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<StepCompleted>(requestId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -143,7 +143,7 @@ public sealed class TaskSession
 
     /// <param name="reason">Why, when the person gave a reason; a measured reason (the part within reach) keeps its numbers.</param>
     public IReadOnlyList<TaskEvent> SkipStep(string requestId, string stepId, DateTimeOffset now, SkipReason? reason = null) =>
-        Idempotent(requestId, () =>
+        Idempotent<StepSkipped>(requestId, () =>
         {
             RequireInProgress();
             Step(stepId);
@@ -156,21 +156,21 @@ public sealed class TaskSession
 
     /// <summary>Ends a free-form session; planned tasks finish by completing or skipping their steps.</summary>
     public IReadOnlyList<TaskEvent> Finish(string requestId, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<TaskCompleted>(requestId, () =>
         {
             Require(State.Mode == TaskMode.Freeform && !State.IsClosed, "Only open free-form help is ended this way");
             return Commit([new TaskCompleted(0, State.TaskId, now)]);
         });
 
     public IReadOnlyList<TaskEvent> Abandon(string requestId, string? reason, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<TaskAbandoned>(requestId, () =>
         {
             Require(!State.IsClosed, "The task is closed");
             return Commit([new TaskAbandoned(0, State.TaskId, now, string.IsNullOrWhiteSpace(reason) ? null : reason.Trim()[..Math.Min(reason.Trim().Length, 300)])]);
         });
 
     public IReadOnlyList<TaskEvent> LinkInspection(string requestId, string inspectionId, DateTimeOffset now) =>
-        Idempotent(requestId, () =>
+        Idempotent<InspectionLinked>(requestId, () =>
         {
             Require(State.Mode == TaskMode.Technician && State.Site is not null, "Only a technician task on a site record can be verified with FieldProof");
             Require(State.InspectionId is null, "This task is already linked to an inspection");
@@ -213,9 +213,20 @@ public sealed class TaskSession
         return numbered;
     }
 
-    private IReadOnlyList<TaskEvent> Idempotent(string requestId, Func<IReadOnlyList<TaskEvent>> action)
+    public const string DifferentCommandMessage = "This Idempotency-Key was used for a different command";
+
+    /// <summary>
+    /// A request id replays what it recorded first. A batch recorded by another kind of command (a key reused by mistake) is
+    /// never passed off as this one's answer: the caller is told so instead of getting a stale batch, or a silent no-op.
+    /// An empty batch (a start that changed nothing) is replayed as it was, since nothing in it says which command it was.
+    /// </summary>
+    private IReadOnlyList<TaskEvent> Idempotent<TEvent>(string requestId, Func<IReadOnlyList<TaskEvent>> action) where TEvent : TaskEvent
     {
-        if (_outcomes.TryGetValue(requestId, out var earlier)) return earlier;
+        if (_outcomes.TryGetValue(requestId, out var earlier))
+        {
+            if (earlier.Count > 0 && !earlier.OfType<TEvent>().Any()) throw new TaskConflictException(TaskErrorCodes.InvalidState, DifferentCommandMessage);
+            return earlier;
+        }
         _requestId = requestId;
         try
         {

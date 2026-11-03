@@ -229,6 +229,15 @@ class VerifyHistoryAndPreflightTest {
         assertEquals(true, verifyPreflight(olderClaim, required)[1].ok, "a rejection under an earlier claim does not count against the current one")
     }
 
+    @Test fun `a review made after the claim against a photo from before it does not count`() {
+        // Policy 1.5: p0 shows the fault. p2 was taken just before the claim's time, within the server's clock tolerance, so it is not ruled out here.
+        val photos = listOf(PhotoEvidence("p0", EvidenceOrigin.Phone, "a", "2026-10-30T09:00:00Z"), PhotoEvidence("p2", EvidenceOrigin.Phone, "b", "2026-10-30T09:59:00Z"))
+        val onFault = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p0") }).copy(photos = photos)
+        assertEquals(false, verifyPreflight(onFault, required)[1].ok, "a review of the pre-claim photo shows the fault, not the repair")
+        val onRepair = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p2") }).copy(photos = photos)
+        assertEquals(true, verifyPreflight(onRepair, required)[1].ok)
+    }
+
     @Test fun `a half review or a not-right answer is named, and a comparison still running is pending`() {
         val half = verifyPreflight(view(accepted = "p2", awaiting = emptyList(), checklist = listOf(entry("switch_chassis_visible", ChecklistStatus.Unknown))), required)
         assertNull(half[1].ok); assertEquals(true, half[1].detail.startsWith("1 of 2"))

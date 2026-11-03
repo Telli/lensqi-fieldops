@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { countPhotos, measuredValue, predictionOutcome, probeValue } from "./labels";
+import { countPhotos, measuredValue, plainReason, predictionOutcome, probeValue } from "./labels";
 
 it("reads closed-set probe values as words", () => {
   expect(probeValue("Reachable")).toBe("reachable");
@@ -20,4 +20,8 @@ it("labels every prediction outcome, including one still waiting for its check",
 
 it("counts a photo once even when its original bytes are preserved beside the turned copy", () => {
   expect(countPhotos([{ kind: "photo" }, { kind: "original" }, { kind: "segmentation" }, {}])).toBe(2);
+});
+
+it("explains a review of a pre-claim photo in plain words", () => {
+  expect(plainReason("Visual requirement 'a' was reviewed against p0, which was taken before the repair claim")).toContain("taken before the repair");
 });

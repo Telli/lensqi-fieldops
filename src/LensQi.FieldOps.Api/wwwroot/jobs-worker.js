@@ -1,4 +1,4 @@
-const assets = ["/assets/index-DfjH6H4_.js","/assets/index-CLmx1Cmg.css","/assets/live-tracker.worker-BZOZts3G.js"];
+const assets = ["/assets/index-DAaJcn3Q.js","/assets/index-CLmx1Cmg.css","/assets/live-tracker.worker-BZOZts3G.js"];
 // Vite injects the exact list of generated assets.
 const shell = "fieldops-shell-" + assets.join("|");
 const recordCache = "fieldops-jobs-v1";
@@ -73,7 +73,9 @@ async function saveTask(t) {
     const mode = u.pathname === "/v1/tasks" && u.searchParams.get("mode");
     if (!mode) continue;
     const rows = ((await (await cache.match(k))?.json()) ?? []).filter(s=>s.taskId!==t.taskId);
-    await cache.put(k, Response.json(summary.mode===mode ? [summary,...rows] : rows));
+    const updated = summary.mode===mode ? [summary,...rows] : rows;
+    updated.sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+    await cache.put(k, Response.json(updated));
   }
   if (!kept.some(s=>s.taskId===t.taskId)) return;
   for (const p of t.photos.filter(p=>p.purpose === "Manual")) {

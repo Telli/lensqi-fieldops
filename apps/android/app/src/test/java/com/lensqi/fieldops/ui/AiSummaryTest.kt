@@ -76,5 +76,7 @@ class AiSummaryTest {
         // Without a claim time the first photo stands in; with no photos there is none.
         assertEquals("P1", beforePhoto(v.copy(repairClaimedAt = null))?.evidenceId)
         assertNull(beforePhoto(v.copy(photos = emptyList())))
+        // Every photo taken after the claim: none of them is a "before" view, whatever the server allowed.
+        assertNull(beforePhoto(v.copy(photos = listOf(photo("P2", "2026-11-03T09:20:00Z"), photo("P3", "2026-11-03T09:30:00Z")))))
     }
 }
