@@ -44,7 +44,18 @@ fun uprightBitmap(bytes: ByteArray, maxSide: Int): Bitmap? {
 class MeasuredNote(private val maxAgeMs: Long = 10_000, private val clock: () -> Long = android.os.SystemClock::elapsedRealtime) {
     private var json: String? = null
     private var at = 0L
+    private var frozen: String? = null
+    private var hasFrozen = false
     /** A new measurement replaces the last; an empty frame leaves the last one in place. */
     fun seen(measuredJson: String?) { if (measuredJson != null) { json = measuredJson; at = clock() } }
+    /** What is fresh now. */
     fun recent(): String? = json?.takeIf { clock() - at <= maxAgeMs }
+    /** The shutter: the photo's note is what was fresh at this moment, however long its confirmation takes afterwards. */
+    fun freeze() { frozen = recent(); hasFrozen = true }
+    /** The note for the photo just taken: the one frozen at the shutter, else what is fresh now. Used once per photo. */
+    fun take(): String? {
+        val note = if (hasFrozen) frozen else recent()
+        frozen = null; hasFrozen = false
+        return note
+    }
 }
