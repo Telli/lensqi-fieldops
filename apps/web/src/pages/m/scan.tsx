@@ -14,7 +14,8 @@ import { clearCapture, loadCapture, saveCapture, type SavedCapture } from "@/lib
 import { SavedAs } from "@/components/fo/verify-camera";
 import { fmtWhen } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { LiveOverlay } from "@/components/fo/live-overlay";
+import { boxAge, LiveOverlay } from "@/components/fo/live-overlay";
+import type { LiveObject } from "@/lib/live-tracker";
 import { EvidenceBadge } from "@/components/fo/primitives";
 import { LensQiMark } from "@/components/fo/ai";
 import { aiSummary, assetMatch, nextMove } from "@/lib/ai";
@@ -51,6 +52,9 @@ export default function Scan({ id }: { id: string }) {
   const inflight = useRef<AbortController | null>(null);
   const assist = useLiveAssist(video, live === "on" && !preview && !busy, `/v1/inspections/${encodeURIComponent(id)}`);
   const elapsed = useElapsed(busy);
+  // A tracked box the technician tapped: its label and freshness take the status line while it is still tracked.
+  const [picked, setPicked] = useState<LiveObject | null>(null);
+  const pickedNow = picked && assist.objects.find((o) => o.id === picked.id) ? picked : null;
 
   // Closing the camera ends the model calls here, so nothing toasts or lands on the next screen. The server may still
   // finish a call that reached it; the inspection view shows that on its next refresh.
@@ -212,7 +216,7 @@ export default function Scan({ id }: { id: string }) {
     <div className="dark relative flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       {/* Feed: live camera, or the photo just taken with its outline */}
       <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-contain", (live !== "on" || preview) && "hidden")} />
-      {!preview && assist.enabled && <LiveOverlay {...assist} targetConcept={!afterRepair ? targetConcept(fixture, prior) : undefined} />}
+      {!preview && assist.enabled && <LiveOverlay {...assist} targetConcept={!afterRepair ? targetConcept(fixture, prior) : undefined} selectedId={picked?.id} onSelect={(o) => setPicked(picked?.id === o.id ? null : o)} />}
       <div className={cn("pointer-events-none absolute inset-0 bg-overlay transition-opacity", shot ? "opacity-80" : "opacity-0")} />
       {busy && <div className="pointer-events-none absolute inset-x-0 top-0 h-[9%] animate-scan bg-gradient-to-b from-transparent via-primary/25 to-transparent" />}
 
@@ -269,7 +273,7 @@ export default function Scan({ id }: { id: string }) {
           <>
             {!preview && live === "on" && <div className="glass mb-3 rounded-2xl px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-primary" role="status">{assist.enabled ? assist.status : "Live camera assistance"}</span>
+                <span className="text-xs text-primary" role="status">{pickedNow ? `${pickedNow.label} · AI detected${(() => { const a = boxAge(assist.detectedAt, pickedNow.id, performance.now()); return a !== null ? ` · seen ${a}s ago` : ""; })()}` : assist.enabled ? assist.status : "Live camera assistance"}</span>
                 <button type="button" className="min-h-11 rounded-xl border border-primary/50 px-3 text-xs" onClick={() => assist.setEnabled(!assist.enabled)}>{assist.enabled ? "Pause live assist" : "Start live assist"}</button>
               </div>
               <p className="text-[11px] opacity-70">{assist.enabled ? `${assist.fps} tracking updates/s · AI guidance${assist.updatedAt ? ` from ${Math.max(0, Math.round((performance.now() - assist.updatedAt) / 1000))}s ago` : ' updating'}` : "Sampled frames go to AI for live guidance. Only shutter photos are saved to the inspection."}</p>
