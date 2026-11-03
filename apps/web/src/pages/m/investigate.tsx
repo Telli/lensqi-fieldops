@@ -7,10 +7,10 @@ import { EvidenceBadge, Expandable, TechDetails } from "@/components/fo/primitiv
 import { ExpectedState } from "@/components/fo/expected-state";
 import { ArFrame } from "@/components/fo/ar-frame";
 import { AiCard, Progress } from "@/components/fo/ai";
-import { api } from "@/lib/api";
+import { api, commandScope } from "@/lib/api";
 import { aiSummary, nextMove, progress } from "@/lib/ai";
 import { arTags, assessmentForPhoto, outlineOrder, targetConcept, usePhotoOutlines } from "@/lib/ar";
-import { useAct } from "@/lib/hooks";
+import { useAct, useElapsed } from "@/lib/hooks";
 import { lastPhoto, latestDiagnostic, useInspectionBundle } from "@/lib/inspection";
 import { featureName, fmtWhen, isPostRepairItem, observationState, stageLabel, stageState } from "@/lib/labels";
 
@@ -28,13 +28,15 @@ export default function Investigate({ id }: { id: string }) {
   const diag = latestDiagnostic(i);
   const look = useAct(id, async () => {
     const photoId = latest?.evidenceId;
-    const inv = await api.investigate(id);
+    const signal = look.signal();
+    const inv = await api.investigate(id, photoId, signal);
     let state = inv.state;
-    for (const c of outlineOrder(fixture, inv.assessment)) state = (await api.segment(id, c, photoId)).state;
+    for (const c of outlineOrder(fixture, inv.assessment)) state = (await api.segment(id, c, photoId, signal)).state;
     return state;
   });
+  const looking = useElapsed(look.isPending);
   const workOrder = useAct(id, (s: string) => api.workOrder(id, s), { success: "Plan saved" });
-  const claim = useAct(id, (d: string) => api.claim(id, d));
+  const claim = useAct(id, (d: string) => api.claim(id, d, commandScope(i)));
 
   if (!i) return <><TopBar title="Inspection" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
@@ -48,7 +50,12 @@ export default function Investigate({ id }: { id: string }) {
   const action = (() => {
     switch (move?.kind) {
       case "scan": return <Button asChild size="lg" className="h-12 w-full rounded-2xl"><Link href={`/m/i/${id}/scan`}><Camera /> Open camera</Link></Button>;
-      case "assess": return <Button size="lg" className="h-12 w-full rounded-2xl" disabled={busy} onClick={() => look.mutate([])}>{look.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />} {look.isPending ? "Looking…" : "Look at the photo"}</Button>;
+      case "assess": return (
+        <div className="flex gap-2">
+          <Button size="lg" className="h-12 flex-1 rounded-2xl" disabled={busy} onClick={() => look.mutate([])}>{look.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />} {look.isPending ? `Looking…${looking > 1 ? ` ${looking}s` : ""}` : "Look at the photo"}</Button>
+          {look.isPending && <Button size="lg" variant="outline" className="h-12 rounded-2xl" onClick={look.cancel}>Cancel</Button>}
+        </div>
+      );
       case "check": return <Button asChild size="lg" className="h-12 w-full rounded-2xl"><Link href={`/m/i/${id}/diagnostics`}><Terminal /> Run the check</Link></Button>;
       case "plan": case "repair": return (
         <>

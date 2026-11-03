@@ -60,9 +60,9 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
             return new(VisualChangeAnalyzer.Unscorable(claimId, photo, referencePhoto, reference.Concept, $"Reference segmentation {reference.EvidenceId} has no stored mask", thresholds), null);
 
         SegmentationOutcome outcome;
+        var bytes = await File.ReadAllBytesAsync(photoPath, ct);
         try
         {
-            var bytes = await File.ReadAllBytesAsync(photoPath, ct);
             outcome = await segmenter.SegmentAsync(bytes, EvidenceFileStore.DetectImageType(bytes) ?? "image/jpeg", reference.Concept, ct);
         }
         catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or InvalidOperationException or TimeoutException) && !ct.IsCancellationRequested)
@@ -73,7 +73,7 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
         var segId = "seg-" + Guid.NewGuid().ToString("N")[..10];
         var afterMask = outcome.Masks.OrderByDescending(m => m.Confidence ?? 0).FirstOrDefault();
         var afterSha = MaskDigest(outcome.Masks);
-        var geometrySha = await SaveGeometryAsync(state.InspectionId, segId, photo, outcome, afterSha, ct);
+        var geometrySha = await SaveGeometryAsync(state.InspectionId, segId, photo, bytes, outcome, afterSha, ct);
         var analysis = VisualChangeAnalyzer.Compare(claimId, referencePhoto, photo, reference.Concept,
             before, reference.MaskSha256, afterMask is null ? null : Place(afterMask), afterSha, thresholds);
         return new(analysis, new ChangeSegmentation(segId, reference.Concept, outcome.Matched, afterSha, outcome.ModelId, geometrySha));
@@ -106,13 +106,16 @@ public sealed class ChangeEvidenceService(ISegmenter segmenter, EvidenceFileStor
     }
 
     /// <summary>Writes the geometry beside the evidence and returns the SHA-256 of the bytes written, for the event and the receipt.</summary>
-    private async Task<string> SaveGeometryAsync(string inspectionId, string segId, PhotoEvidence photo, SegmentationOutcome o, string? maskSha, CancellationToken ct)
+    private async Task<string> SaveGeometryAsync(string inspectionId, string segId, PhotoEvidence photo, byte[] photoBytes, SegmentationOutcome o, string? maskSha, CancellationToken ct)
     {
         var dir = Path.Combine(files.DataDirectoryPath, "evidence", inspectionId);
         Directory.CreateDirectory(dir);
+        // The stored pixels' size (a JPEG's before EXIF rotation): the frame every box and mask is placed in, as in SegmentationEndpoints.
+        var framed = EvidenceFileStore.TryReadDimensions(photoBytes, out var photoWidth, out var photoHeight);
         var geometry = new
         {
             segmentationId = segId, photoEvidenceId = photo.EvidenceId, photoSha256 = photo.ArtifactSha256, concept = o.Concept,
+            photoWidth = framed ? photoWidth : (int?)null, photoHeight = framed ? photoHeight : (int?)null,
             model = o.ModelId, responseId = o.ResponseId, rawSha256 = o.RawSha256, parser = o.ParserVersion, elapsedSeconds = o.ElapsedSeconds,
             matched = o.Matched, boxes = o.Boxes, masks = o.Masks, maskSha256 = maskSha, crop = (object?)null,
             purpose = "change-evidence", label = "LIVE_META", note = "Boxes and masks are model interpretations of the photo; change metrics are computed by code.",

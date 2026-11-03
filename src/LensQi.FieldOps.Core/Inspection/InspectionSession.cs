@@ -33,14 +33,14 @@ public sealed class InspectionSession
     public IReadOnlyList<InspectionEvent> Events => _events;
     public LoadedExpectedTwin Twin => _twin;
 
-    public static InspectionSession Create(string inspectionId, LoadedExpectedTwin twin, string assetId, DateTimeOffset now)
+    public static InspectionSession Create(string inspectionId, LoadedExpectedTwin twin, string assetId, DateTimeOffset now, string? requestId = null)
     {
         var invariants = ExpectedTwinInvariants.Check(twin.Twin);
         if (invariants.Count > 0)
             throw new InspectionConflictException(InspectionErrorCodes.FixtureMismatch, string.Join("; ", invariants));
         if (twin.Twin.FindAsset(assetId) is null)
             throw new InspectionConflictException(InspectionErrorCodes.UnknownAsset, $"Asset '{assetId}' is not declared in fixture {twin.Twin.FixtureId}");
-        var created = new InspectionCreated(1, inspectionId, now, twin.Sha256, twin.Twin.FixtureId, twin.Twin.FixtureRevision, assetId);
+        var created = new InspectionCreated(1, inspectionId, now, twin.Sha256, twin.Twin.FixtureId, twin.Twin.FixtureRevision, assetId, requestId);
         return new InspectionSession(twin, [created]);
     }
 
