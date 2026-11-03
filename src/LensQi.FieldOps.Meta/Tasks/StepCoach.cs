@@ -6,7 +6,7 @@ using Microsoft.Extensions.AI;
 
 namespace LensQi.FieldOps.Meta.Tasks;
 
-public sealed record StepAnswer(string Answer, IReadOnlyList<string> Focus);
+public sealed record StepAnswer(string Answer, IReadOnlyList<string> Focus, string? SessionTitle = null);
 
 public sealed record StepCheckResult(StepCheckVerdict Verdict, string Reason);
 
@@ -45,10 +45,11 @@ public sealed class StepCoach(IChatClient chat)
         ["type"] = "object", ["additionalProperties"] = false,
         ["properties"] = new JsonObject
         {
+            ["sessionTitle"] = new JsonObject { ["type"] = "string" },
             ["answer"] = new JsonObject { ["type"] = "string" },
             ["focus"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
         },
-        ["required"] = new JsonArray("answer", "focus"),
+        ["required"] = new JsonArray("answer", "focus", "sessionTitle"),
     }));
 
     public static readonly Lazy<JsonElement> CheckSchema = new(() => JsonSerializer.SerializeToElement(new JsonObject
@@ -76,7 +77,12 @@ public sealed class StepCoach(IChatClient chat)
 
             8. answer: reply to the question in at most 4 short sentences, spoken aloud to someone whose hands are busy.
                If the photo does not show enough to answer, say what to point the camera at.
-            """, new { task = Context(task, measured: measured), question, restrictedTopic = Restricted(question) }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
+            9. For free-form help, sessionTitle names the actual job or equipment in a few searchable words
+               (for example "Diagnosing a loose switch cable"). Use the conversation and what is visible.
+               Retain the existing topic on follow-up questions unless the work changes. No instructions,
+               claims of completion, or invented model details. Otherwise return an empty sessionTitle.
+            """, new { task = Context(task, measured: measured), question, previousTitle = task.Mode == TaskMode.Freeform ? task.DisplayTitle : null,
+                recentQuestions = task.Mode == TaskMode.Freeform ? task.Answers.TakeLast(3).Select(a => a.Question).ToArray() : null, restrictedTopic = Restricted(question) }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
 
     private static string? Restricted(string text) => RestrictedTopics.Classify(text) is var c && c != RestrictedCategory.None ? c.ToString() : null;
 

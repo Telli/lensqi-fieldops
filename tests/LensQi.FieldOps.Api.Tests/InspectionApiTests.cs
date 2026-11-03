@@ -303,6 +303,53 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal(first.GetProperty("decision").ToString(), second.GetProperty("decision").ToString());
     }
 
+    private async Task<JsonElement> SendKeyedPhoto(string id, byte[] jpeg)
+    {
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(jpeg), "image", "original.jpg" }, { new StringContent("Phone"), "source" } };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/inspections/{id}/observations")
+        { Headers = { { "Idempotency-Key", "repeat-identical-original" } }, Content = form };
+        using var result = await _client.SendAsync(request);
+        result.EnsureSuccessStatusCode();
+        return await Json(result);
+    }
+
+    [Fact]
+    public async Task Original_image_must_remain_recoverable()
+    {
+        var id = await CreateInspection();
+        var original = TestImages.JpegWithOrientation(640, 480, 6);
+        var first = await SendKeyedPhoto(id, original);
+        Assert.NotEqual(first.GetProperty("uploadedSha256").GetString(), first.GetProperty("sha256").GetString());
+        using var restarted = FieldOpsApiFactory.Over(_factory.DataDir);
+        using var client = restarted.CreateClient();
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await client.GetByteArrayAsync($"/v1/inspections/{id}/receipt.zip")));
+        var entry = Assert.Single(zip.Entries, e => e.FullName.StartsWith("artifacts/original-", StringComparison.Ordinal));
+        using var input = entry.Open();
+        using var copy = new MemoryStream(); await input.CopyToAsync(copy);
+        Assert.Equal(original, copy.ToArray());
+        using var json = JsonDocument.Parse(zip.GetEntry("receipt.json")!.Open());
+        var linked = Assert.Single(json.RootElement.GetProperty("artifacts").EnumerateArray(), e => e.GetProperty("kind").GetString() == "original");
+        Assert.Equal(first.GetProperty("uploadedSha256").GetString(), linked.GetProperty("sha256").GetString());
+    }
+
+    [Fact]
+    public async Task Replay_metadata_must_describe_the_retained_evidence()
+    {
+        var id = await CreateInspection();
+        var original = TestImages.JpegWithOrientation(640, 480, 6);
+        var first = await SendKeyedPhoto(id, original);
+        _factory.FakeOrienter.Oversize = true;
+        try
+        {
+            var retry = await SendKeyedPhoto(id, original);
+            Assert.Equal(first.GetProperty("evidenceId").GetString(), retry.GetProperty("evidenceId").GetString());
+            Assert.True(first.GetProperty("width").GetInt32() == retry.GetProperty("width").GetInt32()
+                && first.GetProperty("sha256").GetString() == retry.GetProperty("sha256").GetString(),
+                $"One evidence ID, first width {first.GetProperty("width")} and retry width {retry.GetProperty("width")}. First digest {first.GetProperty("sha256")}, retry digest {retry.GetProperty("sha256")}");
+        }
+        finally { _factory.FakeOrienter.Oversize = false; }
+    }
+
     [Fact]
     public void Exif_orientation_is_read_from_the_first_app1_segment_only()
     {

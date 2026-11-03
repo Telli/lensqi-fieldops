@@ -1,20 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, Camera, ChevronRight, Loader2, MessageCircle, Mic, Square, User, Wrench, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { friendlyError } from "@/lib/hooks";
-import { ConnBadge, Page } from "@/components/fo/mobile-shell";
+import { ConnBadge, Page, useOnline } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { useHealth } from "@/lib/hooks";
 import { fmtWhen, greeting } from "@/lib/labels";
-import { taskKeys, tasks, useTasks, type TaskSummary } from "@/lib/tasks";
+import { filterHistory, taskKeys, tasks, useTasks, type TaskSummary } from "@/lib/tasks";
 import { speechNotice, usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 export function taskHref(t: Pick<TaskSummary, "taskId" | "phase" | "mode">) {
+  if (t.phase === "Abandoned" || t.phase === "Completed") return `/m/t/${t.taskId}/done`;
   if (t.mode === "Freeform") return `/m/t/${t.taskId}/live`;
-  return t.phase === "InProgress" ? `/m/t/${t.taskId}/step` : t.phase === "Completed" ? `/m/t/${t.taskId}/done` : `/m/t/${t.taskId}`;
+  return t.phase === "InProgress" ? `/m/t/${t.taskId}/step` : `/m/t/${t.taskId}`;
 }
 
 export function TaskRow({ t }: { t: TaskSummary }) {
@@ -25,9 +26,9 @@ export function TaskRow({ t }: { t: TaskSummary }) {
         {t.mode === "Diy" ? <Sparkles className="size-[18px]" /> : t.mode === "Freeform" ? <MessageCircle className="size-[18px]" /> : <Wrench className="size-[18px]" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{t.mode === "Freeform" ? "Just ask" : t.title ?? t.goal}</span>
+        <span className="block truncate text-sm font-medium">{t.title ?? t.goal}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
+          {t.titleByAi ? "AI-named · " : ""}{t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : t.phase === "Abandoned" ? "stopped" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
           {t.steps > 0 && t.phase === "InProgress" ? ` · ${t.finished}/${t.steps}` : ""} · {fmtWhen(t.updatedAt)}
         </span>
         {t.phase === "InProgress" && <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-border"><span className="block h-full bg-primary" style={{ width: `${pct}%` }} /></span>}
@@ -40,11 +41,26 @@ export function TaskRow({ t }: { t: TaskSummary }) {
 /** Two ways in: say what you want to do yourself, or go to technician work. */
 export default function ModeHome() {
   const health = useHealth();
+  const online = useOnline();
   const list = useTasks();
   const [, nav] = useLocation();
   const [goal, setGoal] = useState("");
   const voice = usePushToTalk((text) => setGoal(text));
-  const recent = (list.data ?? []).filter((t) => t.phase !== "Abandoned").slice(0, 5);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("All");
+  const recent = filterHistory(list.data ?? [], filter, search);
+  const [updates,setUpdates] = useState<{id:number;taskId:string;action:string;error?:string}[]>([]);
+  async function loadUpdates() {
+    if (!navigator.serviceWorker?.controller) return;
+    const r = await fetch("/job-updates");
+    if (r.headers.get("content-type")?.includes("application/json")) setUpdates(await r.json());
+  }
+  useEffect(()=>{
+    void loadUpdates();
+    const changed=()=>void loadUpdates();
+    navigator.serviceWorker?.addEventListener("message",changed);
+    return ()=>navigator.serviceWorker?.removeEventListener("message",changed);
+  },[]);
   const qc = useQueryClient();
   const [opening, setOpening] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -125,6 +141,12 @@ export default function ModeHome() {
         <ChevronRight className="size-4 text-muted-foreground" />
       </Link>
 
+      {!online && <p>Offline · showing jobs saved on this device</p>}
+      {updates.length > 0 && <section><h2>Saved step updates</h2>{updates.map(u=><p key={u.id}>{u.taskId} · {u.action} · {u.error ?? "Waiting for sync"}
+        {u.error && <button onClick={async()=>{await fetch(`/job-updates?id=${u.id}`,{method:"DELETE"});await loadUpdates();}}>Dismiss</button>}</p>)}</section>}
+      <label className="block">Search all jobs<input className="block w-full border rounded-xl p-2" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Title, goal, asset or job ID" /></label>
+      <select aria-label="Job status" value={filter} onChange={e=>setFilter(e.target.value)}>{["All","Active","Completed","Stopped"].map(v=><option key={v}>{v}</option>)}</select>
+      {list.isSuccess && !recent.length && <p>No jobs match this search.</p>}
       {recent.length > 0 && (
         <section className="space-y-1">
           <h2 className="px-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Your tasks</h2>

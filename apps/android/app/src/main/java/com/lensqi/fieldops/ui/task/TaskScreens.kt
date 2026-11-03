@@ -9,6 +9,7 @@ import com.lensqi.fieldops.voice.SpeechOutput
 import com.lensqi.fieldops.voice.mute
 import com.lensqi.fieldops.voice.unmute
 import kotlinx.coroutines.delay
+import com.lensqi.fieldops.data.queue.CommandState
 import androidx.compose.runtime.DisposableEffect
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
@@ -197,6 +199,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
         item { TextButton(onClick = onTeaching) { Text("Teaching recordings") } }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (s.cached) Text("Saved task history · connect to refresh")
                 Text("All tasks", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(search, { search = it }, label = { Text("Search tasks") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -221,12 +224,22 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
 
 /** State the goal; LensQi writes and safety-checks the plan. Manual photos and a site asset ground it. */
 @Composable
-fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: TaskMode, initialGoal: String, onBack: () -> Unit, onCreated: (String) -> Unit) {
+fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: TaskMode, initialGoal: String, sourceId: String, onBack: () -> Unit, onCreated: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var mode by remember { mutableStateOf(initialMode) }
     var goal by remember { mutableStateOf(initialGoal) }
+    var equipment by remember { mutableStateOf("") }
     var details by remember { mutableStateOf("") }
+    var source by remember(sourceId) { mutableStateOf<com.lensqi.fieldops.data.api.TaskView?>(null) }
+    val selectedPhotos = remember(sourceId) { mutableStateListOf<String>() }
+    val selectedAnswers = remember(sourceId) { mutableStateListOf<String>() }
+    LaunchedEffect(sourceId) {
+        if (sourceId.isNotBlank()) {
+            source = vm.loadSource(sourceId)
+            if (details.isBlank()) details = source?.details.orEmpty()
+        }
+    }
     var asset by remember { mutableStateOf<Pair<String, String>?>(null) }
     val manuals = remember { mutableStateListOf<File>() }
     val voice = rememberVoiceInput { goal = it }
@@ -245,7 +258,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
                     File(context.cacheDir, "manual-${System.currentTimeMillis()}.jpg").apply { writeBytes(jpeg) }
                 }.getOrNull()
             }
-            if (f == null) pickError = "That image couldn't be read. Try a JPEG or PNG photo." else { pickError = null; if (manuals.size < 3) manuals.add(f) }
+            if (f == null) pickError = "That image couldn't be read. Try a JPEG or PNG photo." else { pickError = null; if (manuals.size + selectedPhotos.size < 3) manuals.add(f) }
         }
     }
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -265,7 +278,26 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
                 if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
             }
         }
-        item { OutlinedTextField(details, { details = it }, Modifier.fillMaxWidth(), label = { Text("Details (optional)") }, placeholder = { Text(if (mode == TaskMode.Diy) "Engine size, tools you have" else "Site notes, access") }, minLines = 2) }
+        source?.let { session -> item {
+            Column {
+                Text("Carry forward from Just ask")
+                session.answers.forEach { a ->
+                    TextButton(onClick = {
+                        if (!selectedAnswers.remove(a.at) && selectedAnswers.size < 10) selectedAnswers.add(a.at)
+                    }) { Text((if (a.at in selectedAnswers) "✓ " else "") + a.question + " · " + a.answer) }
+                }
+                session.photos.forEach { p ->
+                    coil.compose.AsyncImage(vm.photoUrl(session.taskId, p.evidenceId), "Session photo " + p.evidenceId,
+                        Modifier.fillMaxWidth().height(110.dp))
+                    TextButton(onClick = {
+                        if (!selectedPhotos.remove(p.evidenceId) && selectedPhotos.size + manuals.size < 3) selectedPhotos.add(p.evidenceId)
+                    }) { Text((if (p.evidenceId in selectedPhotos) "✓ " else "") + "Photo " + p.evidenceId) }
+                }
+            }
+        } }
+        item { OutlinedTextField(equipment, { equipment = it.take(180) }, Modifier.fillMaxWidth(),
+            label = { Text("Make, model and variant") }, placeholder = { Text("Check the equipment label if unsure") }) }
+        item { OutlinedTextField(details, { details = it }, Modifier.fillMaxWidth(), label = { Text("Equipment model, variant and job details") }, placeholder = { Text(if (mode == TaskMode.Diy) "Engine size, tools you have" else "Site notes, access") }, minLines = 2) }
         if (mode == TaskMode.Technician && fixtures.isNotEmpty()) {
             item { SectionTitle("Equipment on a site record (optional)") }
             items(fixtures.flatMap { f -> f.assets.map { f.fixtureId to it } }) { (fixtureId, a) ->
@@ -279,14 +311,14 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Manual photos (optional, up to 3)", fontWeight = FontWeight.Medium)
                 manuals.forEachIndexed { i, f -> Row(verticalAlignment = Alignment.CenterVertically) { Text(f.name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)); TextButton(onClick = { manuals.removeAt(i) }) { Text("Remove") } } }
-                if (manuals.size < 3) TextButton(onClick = { pick.launch("image/*") }) { Text("Add a manual page or label") }
+                if (manuals.size + selectedPhotos.size < 3) TextButton(onClick = { pick.launch("image/*") }) { Text("Add a manual page or label") }
                 pickError?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 Text("A photo of the owner's manual or product label lets LensQi use its exact specs.", style = MaterialTheme.typography.bodySmall)
             }
         }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
-            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { val selected = siteForMode(mode, asset); vm.create(mode, goal, details, selected?.first, selected?.second, manuals.toList(), onCreated) },
+            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { val selected = siteForMode(mode, asset); vm.create(mode, goal, listOf(equipment.trim(), details.trim()).filter { it.isNotEmpty() }.joinToString("\n"), selected?.first, selected?.second, manuals.toList(), sourceId.takeIf { it.isNotBlank() }, selectedPhotos.toList(), selectedAnswers.toList(), onCreated) },
                 Modifier.fillMaxWidth(), enabled = !s.creating && goal.trim().length >= 3, icon = Icons.Outlined.AutoAwesome, busy = s.creating)
         }
         if (s.creating) item { Text("This takes up to half a minute. The plan is checked for safety before you see it.", style = MaterialTheme.typography.bodySmall) }
@@ -295,7 +327,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
 }
 
 @Composable
-private fun StepRow(step: TaskStep, n: Int) {
+private fun StepRow(step: TaskStep, n: Int, vm: TaskViewModel) {
     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(28.dp).background(when (step.status) { StepStatus.Done -> Fo.Success.copy(alpha = .2f); StepStatus.Active -> Fo.Primary; else -> Fo.Surface }, CircleShape), contentAlignment = Alignment.Center) {
             Text("$n", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (step.status == StepStatus.Active) Fo.OnPrimary else Fo.Foreground)
@@ -303,7 +335,7 @@ private fun StepRow(step: TaskStep, n: Int) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(step.title + if (step.handsOn) " · hands-on" else "", fontWeight = FontWeight.Medium)
             Text(TechnicianText.guidance(step.instruction), style = MaterialTheme.typography.bodySmall)
-            TaskSources(step)
+            TaskSources(step, vm)
             step.cautions.forEach { Text("${it.kind} · ${it.text}", color = Fo.Warning, fontSize = 12.sp) }
             if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = Fo.Failure, fontSize = 12.sp)
         }
@@ -316,11 +348,12 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
     val s by vm.state.collectAsStateWithLifecycle()
     // Step statuses change in the step runner; reload when coming back.
     LifecycleResumeEffect(Unit) { vm.refresh(); onPauseOrDispose { } }
-    val t = s.task
+    val t = s.displayed
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("Back", color = Fo.Muted) }; Text(if (t?.mode == TaskMode.Technician) "Job plan" else "Your plan", style = MaterialTheme.typography.titleLarge) } }
         if (t == null) { item { TaskLoading(s.error, Fo.Failure) { vm.clearError(); vm.refresh() } }; return@LazyColumn }
         val plan = t.plan
+        item { WorkPackageButton(vm) }
         if (plan == null) {
             item {
                 AiCard(t.goal, "The plan isn't ready", "The planner's answer failed its checks or the service was busy. A new attempt is checked the same way.") {
@@ -352,9 +385,11 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
         }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Fo.Surface).border(1.dp, Fo.Border, RoundedCornerShape(18.dp))) {
-                plan.steps.forEachIndexed { i, step -> if (i > 0) HorizontalDivider(color = Fo.Border); StepRow(step, i + 1) }
+                plan.steps.forEachIndexed { i, step -> if (i > 0) HorizontalDivider(color = Fo.Border); StepRow(step, i + 1, vm) }
             }
         }
+        if (s.cachedAt != null) item { Text("Saved plan · ${s.cachedAt}") }
+        if (s.pendingSteps.isNotEmpty()) item { Text("${s.pendingSteps.size} saved step updates") }
         if (s.queuedChecks > 0) item {
             Panel(border = Fo.Warning) {
                 Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on this phone, waiting for the network", style = MaterialTheme.typography.bodySmall)
@@ -389,7 +424,7 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
 @Composable
 fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGlasses: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
-    val t = s.task
+    val t = s.displayed
     val current = t?.currentStep
     val steps = t?.plan?.steps.orEmpty()
     // Back shows an earlier step read-only; it never restarts a finished step (the server refuses that).
@@ -404,7 +439,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     val n = steps.indexOfFirst { it.id == step?.id }
     // Not state: the camera hands this over on every composition, and voice commands only read it.
     val camera = remember { HandleRef() }
-    LaunchedEffect(t?.phase) { if (t?.phase == TaskPhase.Completed) onDone() }
+    LaunchedEffect(t?.phase, s.pendingCompletion) { if (t?.phase == TaskPhase.Completed || s.pendingCompletion) onDone() }
     LaunchedEffect(step?.id) {
         vm.clearAnswer()
         step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true, replace = true) }
@@ -413,7 +448,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
     val voice = rememberVoiceInput(vm.speaker) { said ->
         val now = vm.state.value
-        val current = now.task?.currentStep ?: return@rememberVoiceInput
+        val current = now.displayed?.currentStep ?: return@rememberVoiceInput
         val idle = now.busy == null
         // A command that can't run now says why; one that runs is heard through the next step being read.
         when (parseCommand(said)) {
@@ -431,7 +466,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    SpokenErrors(vm.speaker, s.error, voice.error)
+    SpokenErrors(vm.speaker, s.error ?: s.notice, voice.error)
     if (t == null || step == null) { TaskLoading(if (t == null) s.error else null, FoDark.Failure) { vm.clearError(); vm.refresh() }; return }
     val needsCheck = step.check?.required == true && step.lastCheck == null
     // An access step (a ladder or stool to reach a part): the phone measures the part's height against the person's reach.
@@ -446,7 +481,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voice.error != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -455,6 +490,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
+            if (s.cachedAt != null) Text("Saved plan · ${s.cachedAt}")
+            s.pendingSteps.filter { it.state == CommandState.Pending }.forEach { Text("Step ${it.stepId}: update waiting for sync") }
             if (s.queuedChecks > 0) Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp))
             s.refusedChecks.forEach { command ->
@@ -464,7 +501,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null)
+            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice)
         },
         controls = { handle ->
             camera.value = handle
@@ -650,9 +687,9 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
-private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null) {
+private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null, notice: String? = null) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        TaskSources(step)
+        TaskSources(step, vm)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
         if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
         step.lastCheck?.let { c ->
@@ -662,6 +699,8 @@ private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView,
         answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
+        // Saved for later is a delay, not a failure: shown in the plain colour, not the warning one.
+        notice?.let { Text(it, color = FoDark.Muted, fontSize = 12.sp) }
         onOpenSettings?.let { TextButton(onClick = it, contentPadding = PaddingValues(0.dp)) { Text("Open settings for the microphone", color = FoDark.Primary, fontSize = 12.sp) } }
     }
 }
@@ -672,7 +711,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
     val s by vm.state.collectAsStateWithLifecycle()
     // Back from the FieldProof inspection: reload so the linked stage and outcome are current.
     LifecycleResumeEffect(Unit) { vm.refresh(); onPauseOrDispose { } }
-    val t = s.task
+    val t = s.displayed
     val plan = t?.plan
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onHome) { Text("Home", color = Fo.Muted) }; Text("Summary", style = MaterialTheme.typography.titleLarge) } }
@@ -688,9 +727,11 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                 }
             }
         }
+        item { WorkPackageButton(vm) }
         if (plan == null) {
             item { Panel {
-                Text(t.goal)
+                Text(t.title ?: t.goal)
+                if (t.titleByAi) Text("Topic named by AI from the conversation", style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
                 Text(if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase == TaskPhase.Completed) "Session ended · record retained" else "No plan was recorded")
                 Text("${t.photos.size} saved photos")
                 t.answers.forEach { answer -> Text("You asked: ${answer.question}"); Text(answer.answer) }
@@ -699,7 +740,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
         }
         val skipped = plan.steps.count { it.status == StepStatus.Skipped }
         item {
-            AiCard(plan.title, if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase != TaskPhase.Completed) "In progress" else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
+            AiCard(plan.title, if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase != TaskPhase.Completed) (if (s.pendingCompletion) "All steps marked done on this phone · waiting for server confirmation" else "In progress") else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
                 if (t.mode == TaskMode.Diy) "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." else null,
                 tone = if (skipped > 0) Fo.Warning else Fo.Success) {
                 if (t.site != null) {
@@ -741,7 +782,7 @@ private const val LOOK = "What am I looking at, and is anything wrong?"
 @Composable
 fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
-    val t = s.task
+    val t = s.displayed
     val camera = remember { HandleRef() }
     val open = t?.phase == TaskPhase.InProgress
     val answers = t?.answers.orEmpty().asReversed()
@@ -764,7 +805,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         analyzeLive = vm::analyzeLiveFrame,
         onClose = onClose,
         onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
-        header = "Camera assistant",
+        header = t?.title ?: "Just ask",
         onGuidance = pace::guidance,
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
@@ -787,7 +828,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onPlan(answers.firstOrNull()?.question?.takeIf { it != LOOK }.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
+                TextButton(onClick = { onPlan(t?.title?.takeUnless { it == "Just ask" } ?: answers.firstOrNull { it.question != LOOK }?.question.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
                 Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }
             }
@@ -796,8 +837,19 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
 }
 
 @Composable
-private fun TaskSources(step: TaskStep) {
+private fun TaskSources(step: TaskStep, vm: TaskViewModel) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    step.referencePhotoIds.forEach { id ->
+        Expandable("Reference page · $id") {
+            // Whether the page is cached is read off the main thread, once per page, not on every recomposition.
+            val remote = vm.library.server.trimEnd('/') + "/v1/tasks/${vm.taskId}/artifacts/$id"
+            val model by produceState<Any>(remote, id) {
+                val file = vm.library.reference(vm.taskId, id)
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { if (file.isFile) file else remote }
+            }
+            coil.compose.AsyncImage(model, "Supporting reference page", Modifier.fillMaxWidth().height(280.dp))
+        }
+    }
     if (step.sourceFacts.isNotEmpty()) Expandable("Sources · guidance, not evidence") {
         step.sourceFacts.forEach { fact ->
             Text("${fact.provenance} · ${fact.statement}", style = MaterialTheme.typography.bodySmall)
@@ -807,4 +859,28 @@ private fun TaskSources(step: TaskStep) {
             }
         }
     }
+}
+
+@Composable
+private fun WorkPackageButton(vm: TaskViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    TextButton(enabled = !busy, onClick = {
+        busy = true
+        scope.launch {
+            try {
+                vm.exportPackage(File(context.cacheDir, "receipt-exports"))?.let { file ->
+                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", file)
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        clipData = android.content.ClipData.newRawUri("Job package", uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "Share work package"))
+                }
+            } finally { busy = false }
+        }
+    }) { Text(if (busy) "Preparing package…" else "Share work package") }
 }

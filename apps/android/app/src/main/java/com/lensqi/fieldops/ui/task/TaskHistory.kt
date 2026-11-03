@@ -21,7 +21,7 @@ fun taskRoute(task: TaskSummary): String = when {
     task.phase == TaskPhase.InProgress -> "task/${task.taskId}/step"
     else -> "task/${task.taskId}"
 }
-fun taskStatus(task: TaskSummary): String = when (task.phase) {
+fun taskStatus(task: TaskSummary): String = (if (task.titleByAi) "AI-named · " else "") + when (task.phase) {
     TaskPhase.Completed -> "Done"
     TaskPhase.Abandoned -> "Stopped"
     TaskPhase.Planned -> if (task.title != null) "Plan ready" else "No plan yet"

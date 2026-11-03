@@ -46,6 +46,22 @@ const m = (node: React.ReactNode, immersive = false) => <MobileFrame immersive={
 const ops = (node: React.ReactNode) => <OpsShell>{node}</OpsShell>;
 
 initTheme();
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/jobs-worker.js").then(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    navigator.serviceWorker.addEventListener("controllerchange", () => queryClient.invalidateQueries());
+    const sync = () => registration.active?.postMessage({type: "sync-jobs"});
+    window.addEventListener("online", sync);
+    window.setInterval(() => { if (navigator.onLine && !document.hidden) sync(); }, 30000);
+    sync();
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener("message", e => {
+    if (e.data?.type === "job-updated") {
+      queryClient.invalidateQueries({queryKey: ["task", e.data.taskId]});
+      queryClient.invalidateQueries({queryKey: ["tasks"]});
+    }
+  });
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

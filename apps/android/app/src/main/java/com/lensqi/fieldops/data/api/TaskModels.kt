@@ -20,6 +20,7 @@ data class TaskStep(
     /** On a ladder or step-stool step: the part it reaches, so the phone can check whether it is needed. */
     val accessFor: String? = null, val skipReason: SkipReason? = null,
     val sourceFacts: List<KnowledgeFact> = emptyList(),
+    val referencePhotoIds: List<String> = emptyList(),
 )
 
 /** Why a step was skipped, with the measured numbers when the phone took them. */
@@ -36,16 +37,18 @@ data class TaskPlan(
 )
 
 @Serializable data class TaskSite(val fixtureId: String, val assetId: String)
-@Serializable data class TaskAnswer(val stepId: String? = null, val question: String, val answer: String, val photoId: String? = null, val modelId: String = "")
+@Serializable data class TaskAnswer(val stepId: String? = null, val question: String, val answer: String, val photoId: String? = null, val modelId: String = "", val at: String = "")
 /** [origin] is the capture device the client declared; an older server leaves it out, which means a phone photo. */
-@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null, val origin: EvidenceOrigin? = null)
+@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null, val origin: EvidenceOrigin? = null, val sha256: String? = null)
 
 @Serializable
 data class TaskView(
     val taskId: String, val mode: TaskMode, val goal: String, val details: String? = null, val site: TaskSite? = null, val phase: TaskPhase,
     val currentStepId: String? = null, val inspectionId: String? = null, val updatedAt: String, val safetyAcknowledged: Boolean = false,
     val plan: TaskPlan? = null, val photos: List<TaskPhoto> = emptyList(), val answers: List<TaskAnswer> = emptyList(),
-    val person: TaskPerson? = null,
+    val person: TaskPerson? = null, val title: String? = null,
+    /** The title was named by the AI from a free-form conversation; shown with a label, never as a finding. */
+    val titleByAi: Boolean = false,
 ) {
     val currentStep: TaskStep? get() = plan?.steps?.firstOrNull { it.id == currentStepId }
     /** The capture device of one of the task's photos, as the server recorded it. */
@@ -62,7 +65,7 @@ fun checkPhotoNote(task: TaskView, check: TaskStepCheck): String = when (task.ph
 @Serializable
 data class TaskSummary(
     val taskId: String, val mode: TaskMode, val goal: String, val title: String? = null, val phase: TaskPhase, val steps: Int, val finished: Int,
-    val currentStepTitle: String? = null, val inspectionId: String? = null, val updatedAt: String,
+    val currentStepTitle: String? = null, val inspectionId: String? = null, val updatedAt: String, val titleByAi: Boolean = false,
 )
 
 @Serializable data class PlanError(val code: String, val message: String)

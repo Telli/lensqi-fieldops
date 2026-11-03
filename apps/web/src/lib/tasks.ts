@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { newKey, once, request } from "./api";
+import { ApiError, newKey, once, request } from "./api";
 import { friendlyError } from "./hooks";
 
 export type TaskMode = "Diy" | "Technician" | "Freeform";
@@ -17,6 +17,10 @@ export interface TaskStep {
   check: { required: boolean; whatDoneLooksLike: string } | null; status: StepStatus; lastCheck: StepCheck | null;
   /** On a ladder or step-stool step: the part it reaches. */
   accessFor?: string | null;
+  /** Vendor facts the step rests on (guidance, not evidence). */
+  sourceFacts?: import("./api").KnowledgeFact[];
+  /** Reference pages the step cites, by photo id. */
+  referencePhotoIds?: string[];
   /** Why the step was skipped, with measured numbers when the phone took them. */
   skipReason?: { text: string; partHeightCm: number | null; reachCm: number | null } | null;
 }
@@ -27,16 +31,31 @@ export interface TaskPlan {
 export interface TaskPhoto { evidenceId: string; sha256: string; width: number; height: number; purpose: "StepCheck" | "Manual" | "Question"; stepId: string | null; recordedAt: string }
 export interface TaskAnswer { stepId: string | null; question: string; answer: string; photoId: string | null; modelId: string; at: string }
 export interface Task {
+  title?: string | null;
+  /** The title was named by the AI from the conversation (a free-form session), not by the person. */
+  titleByAi?: boolean;
+  cached?: boolean; pendingUpdates?: number;
+  /** Served from this device with every step finished here; the server has not confirmed the task is complete. */
+  pendingCompletion?: boolean;
   taskId: string; mode: TaskMode; goal: string; details: string | null; site: { fixtureId: string; assetId: string } | null; phase: TaskPhase;
   currentStepId: string | null; inspectionId: string | null; createdAt: string; updatedAt: string; safetyAcknowledged: boolean; abandonReason: string | null;
   plan: TaskPlan | null; photos: TaskPhoto[]; answers: TaskAnswer[];
   person?: { heightCm: number | null; standingReachCm: number | null; tools: string[] } | null;
 }
 export interface TaskSummary {
-  taskId: string; mode: TaskMode; goal: string; title: string | null; phase: TaskPhase; steps: number; finished: number; currentStepTitle: string | null;
+  taskId: string; mode: TaskMode; goal: string; title: string | null; titleByAi?: boolean; phase: TaskPhase; steps: number; finished: number; currentStepTitle: string | null;
   site: { fixtureId: string; assetId: string } | null; inspectionId: string | null; updatedAt: string;
 }
 export interface PlanError { code: string; message: string }
+
+export function filterHistory(rows: TaskSummary[], filter: string, search: string) {
+  const query = search.trim().toLowerCase();
+  return rows.filter(t => {
+    const phase = t.phase === "Abandoned" ? "Stopped" : t.phase === "Completed" ? "Completed" : "Active";
+    return (filter === "All" || filter === phase) &&
+      [t.taskId, t.title, t.goal, t.site?.assetId].some(value => value?.toLowerCase().includes(query));
+  });
+}
 
 const T = (id: string) => `/v1/tasks/${encodeURIComponent(id)}`;
 
@@ -53,18 +72,32 @@ export async function digestOf(blob: Blob): Promise<string> {
 
 export const tasks = {
   list: (mode?: TaskMode) => request<TaskSummary[]>("GET", `/v1/tasks${mode ? `?mode=${mode}` : ""}`),
+  /** The work-package ZIP as a blob. A refusal (409 `invalid_evidence`: a job photo missing or altered, a damaged receipt) is an `ApiError`, never a saved error body. */
+  package: async (id: string): Promise<Blob> => {
+    let r: Response;
+    try { r = await fetch(`${T(id)}/package.zip`, { headers: { Accept: "application/zip, application/json" } }); }
+    catch { throw new ApiError(0, "offline", "Can't reach the server."); }
+    if (!r.ok) {
+      const body = await r.json().catch(() => null) as { code?: string; message?: string } | null;
+      throw new ApiError(r.status, body?.code ?? `http_${r.status}`, body?.message ?? `The server answered ${r.status}.`);
+    }
+    return r.blob();
+  },
   get: (id: string) => request<Task>("GET", T(id)),
-  create: (input: { mode: TaskMode; goal: string; details?: string; fixtureId?: string; assetId?: string; manuals?: File[]; heightCm?: number | null; tools?: string[] }) => {
+  create: (input: { mode: TaskMode; goal: string; details?: string; fixtureId?: string; assetId?: string; manuals?: File[]; sourceId?: string; sourcePhotos?: string[]; sourceAnswers?: string[]; heightCm?: number | null; tools?: string[] }) => {
     const f = new FormData();
     f.append("mode", input.mode); f.append("goal", input.goal);
     if (input.details) f.append("details", input.details);
     if (input.fixtureId && input.assetId) { f.append("fixtureId", input.fixtureId); f.append("assetId", input.assetId); }
+    if (input.sourceId) f.append("sourceTaskId", input.sourceId);
+    input.sourcePhotos?.forEach(id=>f.append("sourcePhotoId",id));
+    input.sourceAnswers?.forEach(at=>f.append("sourceAnswerAt",at));
     input.manuals?.forEach((m) => f.append("manual", m));
     // The person's height and tools, so the plan fits who is doing the job.
     if (input.heightCm) f.append("heightCm", String(input.heightCm));
     input.tools?.forEach((t) => f.append("tools", t));
     // A retried create returns the task the first attempt made, not a second one.
-    return once(`create:${input.mode}:${input.goal}`, (k) => request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f, k));
+    return once(`create:${JSON.stringify({...input,manuals:input.manuals?.map(f=>[f.name,f.size,f.lastModified])})}`, (k) => request<{ task: Task; planError: PlanError | null }>("POST", "/v1/tasks", undefined, f, k));
   },
   plan: (id: string) => request<Task>("POST", `${T(id)}/plan`),
   accept: (id: string, safetyAcknowledged: boolean) => once(`${id}:accept`, (k) => request<Task>("POST", `${T(id)}/accept`, { safetyAcknowledged }, undefined, k)),
@@ -93,11 +126,11 @@ export const tasks = {
 export const taskKeys = { list: ["tasks"] as const, one: (id: string) => ["task", id] as const };
 
 export function useTask(id: string) {
-  return useQuery({ queryKey: taskKeys.one(id), queryFn: () => tasks.get(id) });
+  return useQuery({ queryKey: taskKeys.one(id), networkMode: "always", queryFn: () => tasks.get(id), enabled: !!id });
 }
 
 export function useTasks(mode?: TaskMode) {
-  return useQuery({ queryKey: [...taskKeys.list, mode ?? "all"], queryFn: () => tasks.list(mode) });
+  return useQuery({ queryKey: [...taskKeys.list, mode ?? "all"], networkMode: "always", queryFn: () => tasks.list(mode) });
 }
 
 /** A task command: the returned task replaces the cached one; errors become a toast in plain words. */

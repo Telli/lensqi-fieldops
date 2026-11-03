@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.Flow
  * and decides which photos count as post-repair, and a confirmation is of the evidence as the technician saw it, so both
  * mean something else when sent late. Verify is never queued: it measures the equipment and needs the server now.
  */
-enum class CommandKind { UploadPhoto, StepCheckPhoto, RepairClaim, Checklist, Acknowledge, WorkOrder }
+enum class CommandKind { UploadPhoto, StepCheckPhoto, RepairClaim, Checklist, Acknowledge, WorkOrder, TaskComplete, TaskSkip }
 
 /** The JSON commands the queue can hold. */
 val CommandKind.isJsonCommand: Boolean get() = this == CommandKind.RepairClaim || this == CommandKind.Checklist || this == CommandKind.Acknowledge || this == CommandKind.WorkOrder
@@ -69,7 +69,7 @@ interface PendingCommandDao {
     fun observe(sessionId: String, serverBase: String): Flow<List<PendingCommand>>
 
     /** The oldest pending command whose server is not in [skip]; unbound legacy rows always qualify (they are refused). */
-    @Query("SELECT * FROM pending_command WHERE state = 'Pending' AND (serverBase IS NULL OR serverBase NOT IN (:skip)) ORDER BY createdAtMillis LIMIT 1")
+    @Query("SELECT * FROM pending_command WHERE state = 'Pending' AND (serverBase IS NULL OR serverBase NOT IN (:skip)) ORDER BY createdAtMillis, rowid LIMIT 1")
     suspend fun nextPending(skip: List<String>): PendingCommand?
 
     @Query("UPDATE pending_command SET attempts = attempts + 1 WHERE id = :id")

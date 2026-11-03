@@ -102,6 +102,9 @@ public static class InspectionEndpoints
                 return ApiResults.BadRequest("image_unreadable", "image header has no readable pixel size");
             if ((long)width * height > limits.MaxImagePixels)
                 return ApiResults.BadRequest("image_too_large", $"image is {width}x{height}; at most {limits.MaxImagePixels} pixels are accepted");
+            var original = bytes;
+            var originalWidth = width;
+            var originalHeight = height;
             var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
             // Re-encoding can grow the file; a turned copy over the upload limit is not stored, the bytes as uploaded are.
             if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, limits.MaxImagePixels, ct) is { Length: > 0 } turned
@@ -118,48 +121,68 @@ public static class InspectionEndpoints
             var observedAt = DateTimeOffset.TryParse(form["observedAt"], out var obs) ? obs : clock.GetUtcNow();
             var evidenceId = "photo-" + Guid.NewGuid().ToString("N")[..10];
             var artifact = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
-            // Blur and luminance are signals beside the evidence; a missing measurement never blocks the upload.
-            var artifactPath = Path.Combine(files.DataDirectoryPath, artifact.RelativePath);
-            var signals = await imaging.MeasureAsync(artifactPath, ct);
-            var requestId = RequestId(http, "observation:" + artifact.Sha256);
-            return await GuardAsync(async () =>
+            var candidateId = evidenceId;
+            string? sourcePath = null;
+            try
             {
-                var events = await store.ExecuteAsync(id, s => Task.FromResult(
-                    s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), signals?.Quality, signals?.PerceptualHash, measured)), ct);
-                // A replayed Idempotency-Key returns the earlier events and records no new photo: the answer is about the photo
-                // recorded the first time, and the copy this attempt saved is dropped.
-                if (events.OfType<PhotoRecorded>().FirstOrDefault() is { } recorded && recorded.EvidenceId != evidenceId)
+                var source = ReferenceEquals(bytes, original) ? null : files.SaveImage(id, "original-" + evidenceId, original, mediaType, originalWidth, originalHeight);
+                sourcePath = source is null ? null : Path.Combine(files.DataDirectoryPath, source.RelativePath);
+                // Blur and luminance are signals beside the evidence; a missing measurement never blocks the upload.
+                var artifactPath = Path.Combine(files.DataDirectoryPath, artifact.RelativePath);
+                var signals = await imaging.MeasureAsync(artifactPath, ct);
+                var requestId = RequestId(http, "observation:" + uploadedSha256);
+                return await GuardAsync(async () =>
                 {
-                    File.Delete(artifactPath);
-                    evidenceId = recorded.EvidenceId;
-                    artifactPath = Directory.EnumerateFiles(Path.Combine(files.DataDirectoryPath, "evidence", id))
-                        .First(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal));
-                }
-                // VK-T26: a photo taken after the current claim gets change evidence before anyone can review or verify it,
-                // and is not post-repair evidence until then. A retry finishes an analysis an earlier attempt did not record.
-                VisualChangeAnalysis? analysis = null;
-                var session = store.Find(id)!;
-                if (session.State.Photos.FirstOrDefault(p => p.EvidenceId == evidenceId) is { } photo && ChangeEvidenceService.Applies(session.State, photo))
-                {
-                    analysis = session.State.ChangeAnalyses.LastOrDefault(a => a.ClaimId == session.State.CurrentClaimId && a.PhotoEvidenceId == photo.EvidenceId);
-                    if (analysis is null)
+                    var events = await store.ExecuteAsync(id, s => Task.FromResult(
+                        s.RecordPhoto(requestId, evidenceId, origin, artifact.Sha256, observedAt, width, height, clock.GetUtcNow(), signals?.Quality, signals?.PerceptualHash, measured, source?.Sha256)), ct);
+                    // A replayed Idempotency-Key returns the earlier events and records no new photo: the answer is about the photo
+                    // recorded the first time, and the copy this attempt saved is dropped.
+                    var recorded = events.OfType<PhotoRecorded>().FirstOrDefault();
+                    if (recorded?.EvidenceId != evidenceId)
                     {
-                        // Once the photo is recorded its analysis is finished even if the client goes away: a photo left
-                        // half-analysed would hold verification until a newer photo arrived.
-                        var result = await change.AnalyzeAsync(session.State, photo, artifactPath, CancellationToken.None);
-                        analysis = result.Analysis;
-                        await store.ExecuteAsync(id, s =>
-                        {
-                            if (result.AfterSegmentation is { } seg)
-                                s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow(), seg.GeometrySha256);
-                            return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
-                        }, CancellationToken.None);
+                        if (recorded is null) return DifferentCommand();
+                        // Its own code, so a client can tell "this key already carried another photo" from a stage conflict.
+                        if (recorded.OriginalSha256 is { } expected ? expected != uploadedSha256 : recorded.ArtifactSha256 != uploadedSha256 && recorded.ArtifactSha256 != artifact.Sha256)
+                            return ApiResults.Conflict(InspectionErrorCodes.KeyReused, "This Idempotency-Key was already used for a different photo; retry with the same photo or a new key");
+                        evidenceId = recorded.EvidenceId;
+                        artifactPath = Directory.EnumerateFiles(Path.Combine(files.DataDirectoryPath, "evidence", id))
+                            .First(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal));
                     }
+                    // VK-T26: a photo taken after the current claim gets change evidence before anyone can review or verify it,
+                    // and is not post-repair evidence until then. A retry finishes an analysis an earlier attempt did not record.
+                    VisualChangeAnalysis? analysis = null;
+                    var session = store.Find(id)!;
+                    if (session.State.Photos.FirstOrDefault(p => p.EvidenceId == evidenceId) is { } photo && ChangeEvidenceService.Applies(session.State, photo))
+                    {
+                        analysis = session.State.ChangeAnalyses.LastOrDefault(a => a.ClaimId == session.State.CurrentClaimId && a.PhotoEvidenceId == photo.EvidenceId);
+                        if (analysis is null)
+                        {
+                            // Once the photo is recorded its analysis is finished even if the client goes away: a photo left
+                            // half-analysed would hold verification until a newer photo arrived.
+                            var result = await change.AnalyzeAsync(session.State, photo, artifactPath, CancellationToken.None);
+                            analysis = result.Analysis;
+                            await store.ExecuteAsync(id, s =>
+                            {
+                                if (result.AfterSegmentation is { } seg)
+                                    s.RecordSegmentation("change-seg:" + evidenceId, seg.SegmentationId, evidenceId, seg.Concept, seg.Matched, seg.MaskSha256, seg.ModelId, clock.GetUtcNow(), seg.GeometrySha256);
+                                return Task.FromResult(s.RecordVisualChange("change:" + evidenceId, result.Analysis, clock.GetUtcNow()));
+                            }, CancellationToken.None);
+                        }
+                    }
+                    var st = store.Find(id)!;
+                    return Results.Ok(new { evidenceId, sha256 = recorded!.ArtifactSha256, uploadedSha256, artifact.MediaType, bytes = new FileInfo(artifactPath).Length, recorded.Width, recorded.Height, quality = recorded.Quality, perceptualHash = recorded.PerceptualHash,
+                        changeAnalysis = analysis, origin = recorded.Origin.ToString(), events = events.Count, state = View(st) });
+                });
+            }
+            finally
+            {
+                // Only an event owns these files. A refusal, cancelled write, or replay must release its candidate.
+                if (store.Find(id)?.State.Photos.Any(p => p.EvidenceId == candidateId) != true)
+                {
+                    File.Delete(Path.Combine(files.DataDirectoryPath, artifact.RelativePath));
+                    if (sourcePath is not null) File.Delete(sourcePath);
                 }
-                var st = store.Find(id)!;
-                return Results.Ok(new { evidenceId, artifact.Sha256, uploadedSha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals?.Quality, perceptualHash = signals?.PerceptualHash,
-                    changeAnalysis = analysis, origin = origin.ToString(), events = events.Count, state = View(st) });
-            });
+            }
         }).DisableAntiforgery();
 
         // FR-04: genuine Muse assessment of a photo already in the inspection; the Core validates and decides the stage.

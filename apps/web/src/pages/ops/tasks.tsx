@@ -29,7 +29,7 @@ export function TasksList() {
           <tbody>
             {rows.map((t) => (
               <tr key={t.taskId} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
-                <td className="max-w-[280px] truncate px-4 py-2.5"><Link href={t.mode === "Freeform" ? `/m/t/${t.taskId}/live` : `/m/t/${t.taskId}`} className="font-medium hover:text-primary">{t.mode === "Freeform" ? "Just ask" : t.title ?? t.goal}</Link></td>
+                <td className="max-w-[280px] truncate px-4 py-2.5"><Link href={t.mode === "Freeform" ? `/m/t/${t.taskId}/live` : `/m/t/${t.taskId}`} className="font-medium hover:text-primary">{t.title ?? t.goal}</Link></td>
                 <td className="px-4 py-2.5 text-xs">{modeLabel[t.mode]}</td>
                 <td className="px-4 py-2.5 text-xs">{t.phase === "Planned" && !t.title ? "No plan yet" : phaseLabel[t.phase]}{t.steps && t.phase !== "Planned" ? ` · ${t.finished}/${t.steps}` : ""}</td>
                 <td className="max-w-[220px] truncate px-4 py-2.5 text-xs text-muted-foreground">{t.currentStepTitle ?? "—"}</td>

@@ -31,13 +31,41 @@ public static class TaskEndpoints
         {
             string? mode, goal, details, fixtureId, assetId, height;
             IReadOnlyList<string> tools;
-            var manuals = new List<(byte[] Bytes, string MediaType, int Width, int Height)>();
+            TaskHandoff? handoff = null;
+            var manuals = new List<(byte[] Bytes, string MediaType, int Width, int Height, EvidenceOrigin Origin)>();
             if (http.HasFormContentType)
             {
                 var form = await http.ReadFormAsync(ct);
                 (mode, goal, details, fixtureId, assetId) = (form["mode"], form["goal"], form["details"], form["fixtureId"], form["assetId"]);
                 // The person, when they said: height in cm and the tools they have, so the plan fits them.
                 (height, tools) = (form["heightCm"], [.. form["tools"].Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim())]);
+                if (form["sourceTaskId"].ToString() is { Length: > 0 } sourceId)
+                {
+                    var previous = store.Find(sourceId)?.State;
+                    if (previous is null || previous.Mode != TaskMode.Freeform)
+                        return ApiResults.BadRequest("invalid_source_task", "Select a Just ask session");
+                    var selected = form["sourcePhotoId"].Select(x => x ?? "").Distinct().ToList();
+                    if (selected.Count + form.Files.Count > 3)
+                        return ApiResults.BadRequest("too_many_photos", "Select up to three reference photos");
+                    var answers = new List<AnswerRecord>();
+                    foreach (var value in form["sourceAnswerAt"].Distinct())
+                    {
+                        if (!DateTimeOffset.TryParse(value, out var at) || previous.Answers.FirstOrDefault(a => a.At == at) is not { } answer || answers.Count >= 10)
+                            return ApiResults.BadRequest("invalid_source_answer", "Select up to ten answers from this session");
+                        answers.Add(answer);
+                    }
+                    foreach (var photoId in selected)
+                    {
+                        if (previous.Photos.FirstOrDefault(p => p.EvidenceId == photoId) is not { } photo ||
+                            ArtifactPath(files, sourceId, photoId) is not { } path)
+                            return ApiResults.BadRequest("invalid_source_photo", "The selected photo is unavailable");
+                        var image = await File.ReadAllBytesAsync(path, ct);
+                        if (!string.Equals(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(image)), photo.Sha256, StringComparison.Ordinal))
+                            return ApiResults.Conflict("source_digest_mismatch", "The reference photo has changed");
+                        manuals.Add((image, EvidenceFileStore.DetectImageType(image)!, photo.Width, photo.Height, photo.Origin));
+                    }
+                    handoff = new TaskHandoff(sourceId, previous.Details, answers, selected, previous.Site);
+                }
                 var photos = form.Files.GetFiles("manual");
                 if (photos.Count > 3) return ApiResults.BadRequest("too_many_photos", "Attach at most 3 manual photos");
                 foreach (var f in photos)
@@ -45,7 +73,7 @@ public static class TaskEndpoints
                     var image = await ReadImage(f, limits, ct);
                     if (image.Error is { } bad) return bad;
                     // The same page attached twice is one manual photo.
-                    if (!manuals.Any(m => m.Bytes.AsSpan().SequenceEqual(image.Value!.Value.Bytes))) manuals.Add(image.Value!.Value);
+                    if (!manuals.Any(m => m.Bytes.AsSpan().SequenceEqual(image.Value!.Value.Bytes))) { var m = image.Value!.Value; manuals.Add((m.Bytes, m.MediaType, m.Width, m.Height, EvidenceOrigin.Phone)); }
                 }
             }
             else
@@ -80,7 +108,7 @@ public static class TaskEndpoints
             }
             return await GuardAsync(async () =>
             {
-                var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey, person);
+                var (task, created) = store.Create(taskMode, goal ?? "", details, site, clock.GetUtcNow(), creationKey, person, handoff);
                 var id = task.State.TaskId;
                 if (!created) return Results.Ok(new { task = View(task), planError = (PlanError?)null, replayed = true });
                 var manualIds = new List<string>();
@@ -88,7 +116,7 @@ public static class TaskEndpoints
                 {
                     var evidenceId = "manual-" + Guid.NewGuid().ToString("N")[..10];
                     var stored = files.SaveImage(id, evidenceId, m.Bytes, m.MediaType, m.Width, m.Height);
-                    store.Execute(id, s => s.RecordPhoto("manual:" + stored.Sha256, evidenceId, stored.Sha256, m.Width, m.Height, TaskPhotoPurpose.Manual, null, clock.GetUtcNow()));
+                    store.Execute(id, s => s.RecordPhoto("manual:" + stored.Sha256, evidenceId, stored.Sha256, m.Width, m.Height, TaskPhotoPurpose.Manual, null, clock.GetUtcNow(), m.Origin));
                     manualIds.Add(evidenceId);
                 }
                 // Free-form help starts at once with the camera; there is no plan to write.
@@ -114,6 +142,7 @@ public static class TaskEndpoints
             if (task.State.Mode == TaskMode.Freeform) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Free-form help has no plan; start a planned task instead");
             if (task.State.Plan is not null || task.State.Phase != TaskPhase.Planned) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "This task already has a plan or is closed");
             var manuals = task.State.Photos.Where(p => p.Purpose == TaskPhotoPurpose.Manual).ToList();
+            if (manuals.Any(p => ArtifactPath(files, id, p.EvidenceId) is null)) return ApiResults.Conflict("missing_reference", "A reference photo is missing");
             var images = manuals.Select(p => ArtifactPath(files, id, p.EvidenceId)).Where(p => p is not null)
                 .Select(p => { var b = File.ReadAllBytes(p!); return (b, EvidenceFileStore.DetectImageType(b)!); }).ToList();
             var site = task.State.Site is { } link ? SiteContext(twins, link, bindings, resolver) : null;
@@ -245,7 +274,8 @@ public static class TaskEndpoints
                 // Professionals-only work (the plan's, the goal's or the question's) gets the referral, and any hands-on
                 // instruction in the answer is replaced by it, whatever the model wrote.
                 var answer = TaskSafety.Guard(state, a.Answer, question);
-                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow()));
+                store.Execute(id, s => s.RecordAnswer(requestId, state.CurrentStepId, question, answer, photoId, result.ModelId, clock.GetUtcNow(),
+                    answer == a.Answer && a.SessionTitle is { } title && TaskSafety.Guard(state, title, question) == title ? title : null));
                 return Results.Ok(new { answer, focus = a.Focus, stepId = state.CurrentStepId, photoId, result.ModelId, source = "AI inference" });
             });
         }).DisableAntiforgery().AsModelCall();
@@ -269,6 +299,14 @@ public static class TaskEndpoints
                 });
                 return Results.Ok(new { inspectionId, task = View(store.Find(id)!) });
             });
+        });
+
+        g.MapGet("/{id}/package.zip", (string id, TaskStore store, InspectionStore inspections, EvidenceFileStore files, Features.Receipts.ReceiptService receipts) =>
+        {
+            if (store.Find(id) is not { } session) return ApiResults.NotFound("Task not found");
+            var state = session.State;
+            var inspection = state.InspectionId is { } linked ? inspections.Find(linked)?.State : null;
+            return TaskPackage.Export(state, inspection, files.DataDirectoryPath, receipts);
         });
 
         g.MapGet("/{id}/artifacts/{name}", (string id, string name, TaskStore store, EvidenceFileStore files) =>
@@ -313,7 +351,7 @@ public static class TaskEndpoints
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var state = store.Find(id)!.State;
-            var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct, error?.Message, state.Person);
+            var result = await planner.PlanAsync(state.Mode, state.Goal, state.Details, site, manuals, ct, error?.Message, state.Person, manualIds, state.Handoff);
             if (result.Value is not { } plan)
                 return result.Error?.StartsWith("provider_unavailable") == true
                     ? new PlanError("provider_unavailable", "The planner is unavailable; try again shortly")
@@ -355,10 +393,10 @@ public static class TaskEndpoints
         return new((bytes, mediaType, width, height), null);
     }
 
-    public sealed record TaskSummary(string TaskId, TaskMode Mode, string Goal, string? Title, TaskPhase Phase, int Steps, int Finished, string? CurrentStepTitle, SiteLink? Site, string? InspectionId, DateTimeOffset UpdatedAt);
+    public sealed record TaskSummary(string TaskId, TaskMode Mode, string Goal, string? Title, TaskPhase Phase, int Steps, int Finished, string? CurrentStepTitle, SiteLink? Site, string? InspectionId, DateTimeOffset UpdatedAt, bool TitleByAi = false);
 
-    private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.Plan?.Title, s.Phase, s.Plan?.Steps.Count ?? 0,
-        s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt);
+    private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.DisplayTitle, s.Phase, s.Plan?.Steps.Count ?? 0,
+        s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt, s.TitleByAi);
 
     private static object CheckResult(StepChecked c, TaskSession session) => new
     {
@@ -373,7 +411,7 @@ public static class TaskEndpoints
         var plan = s.Plan;
         return new
         {
-            s.TaskId, s.Mode, s.Goal, s.Details, s.Site, s.Phase,
+            s.TaskId, s.Mode, s.Goal, title = s.DisplayTitle, titleByAi = s.TitleByAi, s.Details, s.Site, s.Phase, s.Handoff,
             person = s.Person is { } p ? new { p.HeightCm, p.StandingReachCm, p.Tools } : null, s.CurrentStepId, s.InspectionId, s.CreatedAt, s.UpdatedAt, s.SafetyAcknowledged, s.AbandonReason,
             plan = plan is null ? null : new
             {
@@ -382,7 +420,7 @@ public static class TaskEndpoints
                 needsSafetyAck = plan.Risk != RiskLevel.Low || plan.ProfessionalRequired || plan.Steps.Any(x => x.Cautions.Count > 0),
                 steps = plan.Steps.Select(step => new
                 {
-                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.AccessFor, step.Cautions, step.StopIf, step.Check, sourceFacts = step.SourceFacts ?? [],
+                    step.Id, step.Title, step.Instruction, step.HandsOn, step.LookFor, step.AccessFor, step.Cautions, step.StopIf, step.Check, sourceFacts = step.SourceFacts ?? [], referencePhotoIds = step.ReferencePhotoIds ?? [],
                     skipReason = s.SkipReasons.GetValueOrDefault(step.Id),
                     status = s.CompletedStepIds.Contains(step.Id) ? "Done" : s.SkippedStepIds.Contains(step.Id) ? "Skipped" : s.CurrentStepId == step.Id ? "Active" : "Todo",
                     lastCheck = s.Checks.LastOrDefault(c => c.StepId == step.Id),

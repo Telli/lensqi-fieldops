@@ -108,6 +108,10 @@ From the code review of `044c906`. None breaks the FieldProof gate; the first th
 - If the technician link fails on Nov 1, demo the FieldProof loop on its own and do not claim the link.
 - Never add a "verified" label outside FieldProof, and never relax a restricted category to make the demo work.
 
+## Field job follow-up
+
+- [x] GT-T19 follow-up (2026-11-03): durable job recovery and pending step replay, searchable mobile history, validated per-step reference pages, work-package ZIPs, and selected Just ask handoff. Regression coverage includes a production-browser offline reload and native API/Android tests.
+
 ## Definition of done
 
 - [ ] DIY task end to end on web and Android with genuine plans and SAM outlines

@@ -29,6 +29,10 @@ object StorageModule {
     fun snapshots(@ApplicationContext context: Context, json: Json): SnapshotStore = SnapshotStore(File(context.filesDir, "snapshots"), json)
 
     @Provides
+    fun library(@ApplicationContext context: Context, snapshots: SnapshotStore, settings: com.lensqi.fieldops.data.settings.SettingsStore) =
+        com.lensqi.fieldops.data.TaskLibrary(snapshots, File(context.filesDir, "job-references")) { settings.currentBase().toString() }
+
+    @Provides
     fun commands(db: QueueDatabase): PendingCommandDao = db.commands()
 
     @Provides
