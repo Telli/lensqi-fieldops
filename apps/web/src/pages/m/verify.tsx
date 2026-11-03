@@ -192,7 +192,7 @@ export default function Verify({ id }: { id: string }) {
       <TopBar title="Repair verification" back={`/m/i/${id}`} right={check?.source && <SourceBadge source={check.source} />} />
       <Page className="space-y-4">
         {showCamera ? (
-          <VerifyCamera key={i.currentClaimId} id={id} guideSrc={before && photoUrl(before.evidenceId)}
+          <VerifyCamera key={i.currentClaimId} id={id} guideSrc={before && photoUrl(before.evidenceId)} photoUrl={photoUrl}
             prompt={asked ? `Requested: ${asked.note}` : "Frame the repaired connection the same way as before"}
             onAccepted={() => setCameraOpen(false)} onClose={card === "photo" && !attempt ? undefined : () => setCameraOpen(false)} />
         ) : (

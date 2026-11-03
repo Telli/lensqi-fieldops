@@ -8,6 +8,7 @@ import { changeLabel } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { EvidenceBadge } from "@/components/fo/primitives";
+import { WhyNotAccepted } from "@/components/fo/why-not-accepted";
 import { cn } from "@/lib/utils";
 
 /** One capture: the original bytes and the key that identifies it, kept until the server has answered. */
@@ -19,9 +20,11 @@ interface Capture { blob: Blob; url: string; name: string; source: "Phone" | "Re
  * under one key per capture, so "Try again" after a dropped connection cannot record it twice. The server compares it
  * with the earlier view inside the upload request; this shows its verdict and never decides one.
  */
-export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
+export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose, photoUrl }: {
   id: string; prompt: string; guideSrc?: string;
   onAccepted: (r: ObservationResponse) => void; onClose?: () => void;
+  /** Where a stored photo can be shown from, for the earlier view a rejected photo was compared with. */
+  photoUrl?: (evidenceId: string) => string | undefined;
 }) {
   const qc = useQueryClient();
   const video = useRef<HTMLVideoElement>(null);
@@ -189,6 +192,7 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
             </div>
             <p className="text-sm text-overlay-foreground/85">{change ? `${change.reason.trim().replace(/\.?$/, ".")} Nothing was checked on the equipment.` : problem}</p>
             {answer && <SavedAs r={answer} still={capture?.still} />}
+            {change && <WhyNotAccepted change={change} yours={capture?.url} reference={change.referencePhotoEvidenceId ? photoUrl?.(change.referencePhotoEvidenceId) : undefined} />}
             <button type="button" onClick={retake} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground"><CameraIcon className="size-4" /> Take a new photo</button>
           </div>
         )}
