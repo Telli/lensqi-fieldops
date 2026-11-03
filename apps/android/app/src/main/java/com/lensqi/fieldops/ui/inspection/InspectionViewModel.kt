@@ -259,12 +259,13 @@ class InspectionViewModel @Inject constructor(
     }
 
     /**
-     * The name a command's retry key is kept under: the command, what it is about (a photo, a claim, a review answer) and
-     * the server's event sequence as the screen saw it. A new photo, a new claim or any other change of state makes a new
-     * name, so a key kept after a lost answer is only ever replayed for the very same request; it can never hand a new
-     * photo an old photo's assessment or a new claim an old claim's decision.
+     * The name a command's retry key is kept under: the command, what it is about (a photo, a review answer, a summary)
+     * and the claim it belongs to. A new claim or a new photo makes a new name, so a key kept after a lost answer is only
+     * ever replayed for the very same request and can never hand a new photo an old assessment or a new claim an old
+     * decision. The server's event sequence is deliberately not part of the name: a command the server applied before its
+     * answer was lost advances the sequence, and its retry must still replay the recorded outcome, not run again.
      */
-    private fun action(name: String) = "$name@${state.value.view?.lastSequence ?: local.value.view?.lastSequence ?: 0}"
+    private fun action(name: String) = "$name@claim=${state.value.view?.currentClaimId}"
     private fun latestPhotoId() = state.value.view?.photos?.lastOrNull()?.evidenceId
 
     /**
@@ -410,15 +411,15 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun acknowledge() = act("Recording acknowledgement…") {
-        keys.command(action("acknowledge:${state.value.view?.currentClaimId}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
+        keys.command(action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}")) { k -> api.acknowledge(inspectionId, k) }.onOk(::cacheView)
     }
 
     /**
      * A verify that times out on the phone and is tapped again replays the server's decision instead of recording a second
-     * attempt. The key is for this claim at this state: after a new claim, a new photo or any other change it is a new request.
+     * attempt. The key is for this claim and this accepted photo: after a new claim or a new photo it is a new request.
      */
     fun verify() = act("Server is verifying…") {
-        keys.command(action("verify:${state.value.view?.currentClaimId}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
+        keys.command(action("verify:${state.value.view?.acceptedPostRepairPhotoId}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
 
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
