@@ -40,5 +40,9 @@ class AssetScanTest {
         assertNull(assetFromScan(asset.assetId.dropLast(1), fixtures))
         assertNull(assetFromScan("${asset.assetId}X", fixtures))
         assertNull(assetFromScan(asset.assetId, emptyList()))
+        // A code made of punctuation, or a very long one, is answered at once rather than peeled a character at a time.
+        assertNull(assetFromScan(".".repeat(5000), fixtures))
+        assertEquals(asset.assetId, assetFromScan("x".repeat(5000) + " " + asset.assetId + ".", fixtures)!!.assetId, "a long token is skipped, the id beside it is found")
+        assertEquals(asset.assetId, assetFromScan("${asset.assetId}...", fixtures)!!.assetId)
     }
 }

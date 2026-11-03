@@ -70,6 +70,8 @@ public class TaskSessionTests
         Assert.Equal(TaskErrorCodes.InvalidState, e.Code);
         Assert.Throws<TaskConflictException>(() => s.Abandon("k", "changed my mind", T0));
         Assert.Throws<TaskConflictException>(() => s.RecordCheck("k", "s2", "p", StepCheckVerdict.LooksDone, "ok", "m", T0));
+        // The same kind of command about another step is another command too.
+        Assert.Throws<TaskConflictException>(() => s.CompleteStep("k", "s2", T0));
         Assert.Equal(TaskPhase.InProgress, s.State.Phase);
         Assert.Single(s.State.CompletedStepIds);
         // Its own command still replays; a start that changed nothing replays its empty batch under any command.

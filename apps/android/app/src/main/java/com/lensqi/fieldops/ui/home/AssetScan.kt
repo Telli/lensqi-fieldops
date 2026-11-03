@@ -12,10 +12,19 @@ data class ScannedAsset(val fixtureId: String, val assetId: String, val displayN
  */
 private val EDGE_PUNCTUATION = setOf('.', '-', '_')
 
-/** [token] with zero or more edge punctuation characters removed from its start and from its end, in every combination. */
+/** Asset ids are short; a longer token is not one, and peeling it would only cost time on the scan screen. */
+private const val MAX_TOKEN = 64
+/** At most this many punctuation characters are peeled from each end: a label's full stop, a bracket's dash, no more. */
+private const val MAX_PEEL = 3
+
+/**
+ * [token] with up to [MAX_PEEL] edge punctuation characters removed from its start and from its end, in every combination.
+ * Bounded, so a code made of punctuation cannot stall the scan screen (the scanner's listener runs on the main thread).
+ */
 internal fun peeled(token: String): List<String> {
-    val fronts = generateSequence(token) { t -> t.takeIf { it.isNotEmpty() && it.first() in EDGE_PUNCTUATION }?.drop(1) }
-    return fronts.flatMap { f -> generateSequence(f) { t -> t.takeIf { it.isNotEmpty() && it.last() in EDGE_PUNCTUATION }?.dropLast(1) } }
+    if (token.length > MAX_TOKEN) return emptyList()
+    val fronts = generateSequence(token) { t -> t.takeIf { it.isNotEmpty() && it.first() in EDGE_PUNCTUATION }?.drop(1) }.take(MAX_PEEL + 1)
+    return fronts.flatMap { f -> generateSequence(f) { t -> t.takeIf { it.isNotEmpty() && it.last() in EDGE_PUNCTUATION }?.dropLast(1) }.take(MAX_PEEL + 1) }
         .filter { it.isNotEmpty() }.distinct().toList()
 }
 

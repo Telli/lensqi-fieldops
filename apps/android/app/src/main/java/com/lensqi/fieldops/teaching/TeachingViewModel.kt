@@ -89,11 +89,14 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
         val now = Instant.now().toString()
         val elapsed = SystemClock.elapsedRealtimeNanos()
         work {
-            val root = File(getApplication<Application>().filesDir, "teaching")
-            require(root.usableSpace > 300L * 1024 * 1024) { "Free at least 300 MB before recording." }
-            require(root.walkTopDown().filter { it.isFile }.sumOf { it.length() } < 768L * 1024 * 1024) { "Export and delete older sessions before recording more." }
-            val record = store.create(goal, equipment, demonstrator, TeachingConsent(permission, training, now), now, elapsed,
-                "${if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone") || Build.MODEL.contains("Emulator")) "Emulator" else "Phone camera"} · ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}", taskId)
+            // A failed pre-check (free space, the sessions kept) ends this start: the next tap must be able to start again.
+            val record = try {
+                val root = File(getApplication<Application>().filesDir, "teaching")
+                require(root.usableSpace > 300L * 1024 * 1024) { "Free at least 300 MB before recording." }
+                require(root.walkTopDown().filter { it.isFile }.sumOf { it.length() } < 768L * 1024 * 1024) { "Export and delete older sessions before recording more." }
+                store.create(goal, equipment, demonstrator, TeachingConsent(permission, training, now), now, elapsed,
+                    "${if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone") || Build.MODEL.contains("Emulator")) "Emulator" else "Phone camera"} · ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}", taskId)
+            } catch (e: Exception) { starting = false; pendingStop = null; throw e }
             activeId = record.id; lastSampleNs = 0
             try {
                 // Snapshot the visible plan immediately; live frames, personal profiles and server audio are not uploaded.
