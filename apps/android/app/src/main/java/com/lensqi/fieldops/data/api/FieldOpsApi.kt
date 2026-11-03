@@ -46,6 +46,8 @@ interface FieldOpsApi {
         @Part image: MultipartBody.Part,
         @Part("source") source: RequestBody,
         @Part("observedAt") observedAt: RequestBody,
+        /** What the phone's ARCore measured at the shutter, as a JSON array of parts; kept with the photo as a measured note. */
+        @Part("measured") measured: RequestBody? = null,
     ): ObservationResponse
 
     @POST("v1/inspections/{id}/investigate")

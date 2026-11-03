@@ -49,7 +49,9 @@ class TaskViewModelTest {
     /** The recorded genuine Muse plan, started at its first step. */
     private val task: TaskView = json.decodeFromString(CreateTaskResponse.serializer(), File("../../../docs/evidence/tasks/plan-oil.json").readText()).task
         .let { it.copy(phase = TaskPhase.InProgress, currentStepId = it.plan!!.steps.first().id) }
-    private val taskJson get() = json.encodeToString(TaskView.serializer(), task)
+    /** What the scripted server answers for the task; a test can change it to show a later state. */
+    private var served: TaskView? = null
+    private val taskJson get() = json.encodeToString(TaskView.serializer(), served ?: task)
     private val stepId get() = task.plan!!.steps.first().id
 
     private class FakeSpeech : SpeechOutput {
@@ -101,7 +103,22 @@ class TaskViewModelTest {
     private fun api(base: okhttp3.HttpUrl = server.url("/")): FieldOpsApi =
         NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { base }).build(), json).create(FieldOpsApi::class.java)
 
-    private fun viewModel(api: FieldOpsApi = api()) = TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue)
+    private fun viewModel(api: FieldOpsApi = api(), spoken: com.lensqi.fieldops.ui.task.SpokenChecks = com.lensqi.fieldops.ui.task.SpokenChecks()) =
+        TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue, spoken)
+
+    @Test
+    fun `a check that synced while two screens hold the task is spoken once`() {
+        val shared = com.lensqi.fieldops.ui.task.SpokenChecks()
+        val plan = viewModel(spoken = shared); val step = viewModel(spoken = shared)
+        await(plan) { it.task != null }; await(step) { it.task != null }
+        queue.commands.value = listOf(PendingCommand("k-1", task.taskId, CommandKind.StepCheckPhoto, 0, stepId = stepId))
+        until { plan.state.value.queuedChecks == 1 && step.state.value.queuedChecks == 1 }
+        served = task.copy(plan = task.plan!!.copy(steps = task.plan!!.steps.mapIndexed { i, s ->
+            if (i == 0) s.copy(lastCheck = com.lensqi.fieldops.data.api.TaskStepCheck(stepId, "step-1", com.lensqi.fieldops.data.api.StepVerdict.LooksDone, "The plug is back in.")) else s }))
+        queue.commands.value = emptyList()
+        until { plan.state.value.task?.currentStep?.lastCheck != null && step.state.value.task?.currentStep?.lastCheck != null }
+        assertEquals(1, speech.spoken.count { it.startsWith("Looks done") }, "one verdict, one announcement, whichever screen saw it first")
+    }
 
     private fun await(vm: TaskViewModel, what: (TaskUi) -> Boolean): TaskUi = runBlocking { withTimeout(5000) { vm.state.first(what) } }
     private fun until(what: () -> Boolean) = runBlocking { withTimeout(5000) { while (!what()) kotlinx.coroutines.delay(10) } }
