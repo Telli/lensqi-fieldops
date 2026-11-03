@@ -84,6 +84,7 @@ class HomeViewModelTest {
         assertEquals(true, after.reachable)
         assertEquals(assets, after.fixtures.flatMap { it.assets }.map { it.assetId }, "the server answered health but not fixtures: the list stays")
         assertTrue(after.fixturesCachedAt!!.isNotBlank(), "and it is marked as the saved copy, with when it was fetched")
+        assertTrue(after.fixturesFailed && !loaded.fixturesFailed)
         assertEquals(null, loaded.fixturesCachedAt, "a fresh answer carries no cached mark")
     }
 
