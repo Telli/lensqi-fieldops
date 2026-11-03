@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { EventRecord, Inspection } from "./api";
-import { currentAttempt, verifyCard } from "./verify";
+import { attemptFailedOn, attemptHistory, currentAttempt, verifyCard, verifyPreflight } from "./verify";
 
 let seq = 0;
 const e = (kind: string, fields: Record<string, unknown> = {}): EventRecord => ({ kind, sequence: ++seq, occurredAt: new Date(Date.UTC(2026, 9, 30, 10, 0, seq)).toISOString(), ...fields });
@@ -48,4 +48,44 @@ it("the card follows the server's readiness, with a stage fallback for an older 
   expect(verifyCard(base)).toBe("review");
   expect(verifyCard({ ...base, stage: "VerificationFailed" })).toBe("claim");
   expect(verifyCard({ ...base, awaitingAnalysis: ["p2"] })).toBe("comparing");
+});
+
+it("lists every attempt in the record with the proof that decided it", () => {
+  const events = [...attempt(), e("RepairClaimed", { claimId: "c2" }), e("PhotoRecorded", { evidenceId: "p2" }), decision("Denied", "Repair has not been acknowledged by the technician"),
+    e("ChecklistReviewed", { requirementId: "switch_chassis_visible", status: "Satisfied", reviewedByEvidenceId: "p2" }), e("TechnicianAcknowledged", { claimId: "c2" }), probe("verify-diag-def", true), decision("Verified")];
+  const history = attemptHistory(events);
+  expect(history.map((a) => a.decision.result)).toEqual(["Denied", "Denied", "Verified"]);
+  expect(history.map(attemptFailedOn)).toEqual(["measurement", "photo", null]);
+  expect(history[1]!.review).toEqual([]);
+  expect(history[2]!.measured.map((m) => m.passed)).toEqual([true]);
+  // The newest attempt is the one the screen shows
+  expect(currentAttempt(events)!.sequence).toBe(history[2]!.sequence);
+});
+
+const view = (extra: Partial<Inspection> = {}): Inspection => ({
+  stage: "ReadyToVerify", currentClaimId: "c1", repairClaimedAt: "2026-11-02T10:00:00Z", acceptedPostRepairPhotoId: "p1", technicianAcknowledged: false,
+  photos: [], diagnostics: [], checklist: [], segmentations: [], changeAnalyses: [{ claimId: "c1", photoEvidenceId: "p1", verdict: "Changed", reason: "", thresholdsVersion: "v" }],
+  readiness: { ready: false, next: "ReviewChecklist", blocking: [], checks: [{ diagnosticId: "d", afterClaim: false, lastRunAt: "2026-11-02T09:00:00Z", passed: false, source: "Simulated" }], measuresOnVerify: true },
+  ...extra,
+} as Inspection);
+
+it("preflight reads the four proofs from the server's view without deciding anything", () => {
+  const rows = verifyPreflight(view(), ["a", "b"]);
+  expect(rows.map((r) => [r.title, r.ok])).toEqual([["Repair photo", true], ["Your review", false], ["Your confirmation", false], ["Equipment check", null]]);
+  expect(rows[0]!.detail).toContain("a change from the earlier view was seen");
+  expect(rows[3]!.detail).toContain("last failed (simulated)");
+});
+
+it("preflight counts an answer only when given after the claim on a photo the change check did not reject", () => {
+  const checklist = [
+    { requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p1" },
+    { requirementId: "b", status: "Satisfied", reviewedAt: "2026-11-02T09:59:00Z", reviewedByEvidenceId: "p0" },   // before the claim
+  ] as Inspection["checklist"];
+  expect(verifyPreflight(view({ checklist }), ["a", "b"])[1]).toMatchObject({ ok: null, detail: "1 of 2 reviewed" });
+  const rejected = view({ checklist: [{ requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p1" }] as Inspection["checklist"],
+    changeAnalyses: [{ claimId: "c1", photoEvidenceId: "p1", verdict: "NoVisualChange", reason: "", thresholdsVersion: "v" }] });
+  expect(verifyPreflight(rejected, ["a"])[1]).toMatchObject({ ok: false, detail: "Nothing reviewed on the new photo yet" });
+  const done = view({ technicianAcknowledged: true, checklist: [{ requirementId: "a", status: "Satisfied", reviewedAt: "2026-11-02T10:05:00Z", reviewedByEvidenceId: "p1" }] as Inspection["checklist"] });
+  expect(verifyPreflight(done, ["a"]).map((r) => r.ok)).toEqual([true, true, true, null]);
+  expect(verifyPreflight(view({ acceptedPostRepairPhotoId: null, awaitingAnalysis: ["p2"] }), [])[0]).toMatchObject({ ok: null });
 });
