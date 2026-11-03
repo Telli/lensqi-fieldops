@@ -79,11 +79,12 @@ export const tasks = {
     const digest = await digestOf(photo);
     return once(`${id}:check:${stepId}:${digest}`, (k) => request<{ check: StepCheck & { source: string }; task: Task }>("POST", `${T(id)}/steps/${stepId}/check`, undefined, f, k, { signal }));
   },
-  ask: async (id: string, question: string, frame?: Blob | null, signal?: AbortSignal) => {
+  /** Keyed by the step on screen and the frame too: the server answers for its current step, so the same question asked again on a later step is a new question, not a replay. */
+  ask: async (id: string, question: string, frame?: Blob | null, opts?: { signal?: AbortSignal; stepId?: string | null }) => {
     const f = new FormData(); f.append("question", question);
     if (frame) f.append("image", frame, "frame.jpg");
     const digest = frame ? await digestOf(frame) : "none";
-    return once(`${id}:ask:${question}:${digest}`, (k) => request<{ answer: string; focus: string[]; stepId: string | null; photoId: string | null; modelId: string }>("POST", `${T(id)}/ask`, undefined, f, k, { signal }));
+    return once(`${id}:ask:${opts?.stepId ?? ""}:${question}:${digest}`, (k) => request<{ answer: string; focus: string[]; stepId: string | null; photoId: string | null; modelId: string }>("POST", `${T(id)}/ask`, undefined, f, k, { signal: opts?.signal }));
   },
   linkInspection: (id: string) => once(`${id}:link`, (k) => request<{ inspectionId: string; task: Task }>("POST", `${T(id)}/link-inspection`, undefined, undefined, k)),
   photoUrl: (id: string, evidenceId: string) => `${T(id)}/artifacts/${encodeURIComponent(evidenceId)}`,

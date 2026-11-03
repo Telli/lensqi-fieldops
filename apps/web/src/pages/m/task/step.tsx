@@ -99,7 +99,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     inflight.current = controller;
     try {
       const frame = live === "on" ? await grab(video.current, 1280) : null;
-      const r = await tasks.ask(id, question.trim(), frame, controller.signal);
+      const r = await tasks.ask(id, question.trim(), frame, { signal: controller.signal, stepId: step?.id });
       setAnswer({ question: question.trim(), answer: r.answer });
       speech.speak(r.answer, true);
       setTyped("");

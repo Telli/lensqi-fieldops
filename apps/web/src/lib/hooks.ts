@@ -59,6 +59,8 @@ export function friendlyError(e: unknown): string {
 export function useAct<A extends unknown[], R>(id: string, fn: (...args: A) => Promise<R>, opts?: { success?: string | ((r: R) => string) }) {
   const qc = useQueryClient();
   const controller = useRef<AbortController | null>(null);
+  // Leaving the screen ends the command here: no further call in a chain starts and no toast lands on the next screen.
+  useEffect(() => () => controller.current?.abort(), []);
   const m = useMutation({
     mutationFn: (args: A) => { controller.current = new AbortController(); return fn(...args); },
     onSuccess: (r) => {

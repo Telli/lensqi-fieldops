@@ -68,10 +68,11 @@ describe("honest AR guidance", () => {
 });
 
 describe("outline orientation", () => {
-  const mask = (h: number, w: number) => ({ ...outline, segmentationId: "seg-m", masks: [{ objectId: "o", width: w, height: h, left: 0, top: 0, right: w, bottom: h, rle: { size: [h, w] as [number, number], counts: "" } }] });
-  it("reads the frame SAM worked in from the mask size", () => {
-    expect(outlineFrame([mask(3000, 4000)])).toEqual({ w: 4000, h: 3000 });
-    expect(outlineFrame([outline])).toBeUndefined();
+  const cropped = { objectId: "o", width: 326, height: 382, left: 414, top: 586, right: 740, bottom: 968, rle: { size: [382, 326] as [number, number], counts: "" } };
+  it("reads the frame from the photo size the server recorded, never from a mask cropped to its object", () => {
+    expect(outlineFrame([{ ...outline, photoWidth: 4000, photoHeight: 3000, masks: [cropped] }])).toEqual({ w: 4000, h: 3000 });
+    expect(outlineFrame([{ ...outline, masks: [cropped], crop: { file: "c.jpg", transform: { sourceWidth: 1600, sourceHeight: 1000 } } }])).toEqual({ w: 1600, h: 1000 });
+    expect(outlineFrame([{ ...outline, masks: [cropped] }])).toBeUndefined();
   });
   it("shows a photo raw only when the browser would turn it a quarter turn against its outlines", () => {
     const frame = { w: 4000, h: 3000 };

@@ -60,6 +60,24 @@ public class RestartTests
     }
 
     [Fact]
+    public async Task A_create_retried_after_a_restart_still_returns_the_inspection_its_key_made()
+    {
+        string id, dir;
+        var body = new { fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" };
+        using (var first = new FieldOpsApiFactory())
+        {
+            dir = first.DataDir;
+            var req = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(body), Headers = { { "Idempotency-Key", "create-survives-restart" } } };
+            id = (await Json(await first.CreateClient().SendAsync(req))).GetProperty("inspectionId").GetString()!;
+        }
+        using var second = FieldOpsApiFactory.Over(dir);
+        var retry = new HttpRequestMessage(HttpMethod.Post, "/v1/inspections") { Content = JsonContent.Create(body), Headers = { { "Idempotency-Key", "create-survives-restart" } } };
+        var r = await second.CreateClient().SendAsync(retry);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(id, (await Json(r)).GetProperty("inspectionId").GetString());
+    }
+
+    [Fact]
     public async Task Corrupt_foreign_or_gapped_logs_are_left_on_disk_and_never_half_loaded()
     {
         string dir; string good;

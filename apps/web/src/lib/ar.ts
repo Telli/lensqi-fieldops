@@ -41,11 +41,15 @@ export function assessmentForPhoto(assessment?: Assessment | null, photoEvidence
   return cited.length ? { ...assessment, hypotheses: cited } : undefined;
 }
 
-/** The pixel frame the outlines were computed in, read from the masks SAM returned (`rle.size` is [height, width]). */
+/**
+ * The pixel frame the outlines were computed in: the stored photo's size as the server recorded it with the geometry, or
+ * the crop transform's source size on older geometry. Mask sizes are no use here: SAM returns each mask cropped to its object.
+ */
 export function outlineFrame(outlines: SegmentationGeometry[]): { w: number; h: number } | undefined {
-  for (const g of outlines) for (const m of g.masks) {
-    const [h, w] = m.rle.size;
-    if (h > 0 && w > 0) return { w, h };
+  for (const g of outlines) {
+    if (g.photoWidth && g.photoHeight) return { w: g.photoWidth, h: g.photoHeight };
+    const t = g.crop?.transform;
+    if (t?.sourceWidth && t.sourceHeight) return { w: t.sourceWidth, h: t.sourceHeight };
   }
   return undefined;
 }
