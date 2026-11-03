@@ -172,7 +172,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     <div className="dark flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
       <div className="relative min-h-0 flex-1 bg-black">
         <video ref={video} autoPlay playsInline muted className={cn("absolute inset-0 size-full object-contain", live !== "on" && "hidden")} />
-        {assist.enabled && <LiveOverlay {...assist} targetConcept={step.lookFor[0]} />}
+        {assist.enabled && <LiveOverlay {...assist} targetConcept={step.lookFor[0]} onSelect={busy || reviewing ? undefined : (o) => void ask(`Tell me about the ${o.label} in view. Is anything wrong with it for this step?`)} />}
         {live !== "on" && <p className="absolute inset-0 grid place-items-center px-8 text-center text-sm opacity-70">{live === "starting" ? "Starting camera…" : cameraNote}</p>}
         <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3">
           <Link href={`/m/t/${id}`} aria-label="Close" className="glass grid size-11 place-items-center rounded-full"><X className="size-5" /></Link>
