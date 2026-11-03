@@ -159,9 +159,12 @@ public static class TaskEndpoints
             if (task.State.Plan?.Steps.FirstOrDefault(s => s.Id == stepId) is not { } step) return ApiResults.NotFound($"Step '{stepId}' not found");
             if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Start the plan before checking a step");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
-            var image = await ReadImage((await http.ReadFormAsync(ct)).Files.GetFile("image"), limits, ct);
+            var form = await http.ReadFormAsync(ct);
+            var image = await ReadImage(form.Files.GetFile("image"), limits, ct);
             if (image.Error is { } bad) return bad;
             var (bytes, mediaType, width, height) = image.Value!.Value;
+            // The capture device travels with the photo, so a mock-glasses check is never shown as a phone or real-glasses photo.
+            if (!Inspections.InspectionEndpoints.TryCaptureOrigin(form["source"].ToString(), out var origin)) return Inspections.InspectionEndpoints.InvalidSource();
             var requestId = RequestId(http, "check");
             return await GuardAsync(async () =>
             {
@@ -178,7 +181,7 @@ public static class TaskEndpoints
                 {
                     var evidenceId = "step-" + Guid.NewGuid().ToString("N")[..10];
                     var stored = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
-                    photo = store.Execute(id, s => s.RecordPhoto(requestId + ":photo", evidenceId, stored.Sha256, width, height, TaskPhotoPurpose.StepCheck, stepId, clock.GetUtcNow()))
+                    photo = store.Execute(id, s => s.RecordPhoto(requestId + ":photo", evidenceId, stored.Sha256, width, height, TaskPhotoPurpose.StepCheck, stepId, clock.GetUtcNow(), origin))
                         .OfType<TaskPhotoRecorded>().Single();
                 }
                 var result = await coach.CheckAsync(store.Find(id)!.State, step, bytes, mediaType, ct);

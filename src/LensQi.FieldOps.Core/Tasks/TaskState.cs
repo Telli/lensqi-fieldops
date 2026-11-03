@@ -1,6 +1,9 @@
+using LensQi.FieldOps.Core.Inspection;
+
 namespace LensQi.FieldOps.Core.Tasks;
 
-public sealed record TaskPhoto(string EvidenceId, string Sha256, int Width, int Height, TaskPhotoPurpose Purpose, string? StepId, DateTimeOffset RecordedAt);
+public sealed record TaskPhoto(string EvidenceId, string Sha256, int Width, int Height, TaskPhotoPurpose Purpose, string? StepId, DateTimeOffset RecordedAt,
+    EvidenceOrigin Origin = EvidenceOrigin.Phone);
 
 public sealed record StepCheckRecord(string StepId, string PhotoId, StepCheckVerdict Verdict, string Reason, string ModelId, DateTimeOffset At);
 
@@ -57,7 +60,7 @@ public sealed record TaskState
         {
             PlanProposed p => next with { Plan = p.Plan, PlanModelId = p.ModelId, ManualPhotoIds = p.ManualPhotoIds },
             PlanAccepted a => next with { SafetyAcknowledged = a.SafetyAcknowledged, Phase = TaskPhase.InProgress },
-            TaskPhotoRecorded ph => next with { Photos = [.. Photos, new TaskPhoto(ph.EvidenceId, ph.Sha256, ph.Width, ph.Height, ph.Purpose, ph.StepId, ph.OccurredAt)] },
+            TaskPhotoRecorded ph => next with { Photos = [.. Photos, new TaskPhoto(ph.EvidenceId, ph.Sha256, ph.Width, ph.Height, ph.Purpose, ph.StepId, ph.OccurredAt, ph.Origin)] },
             StepStarted s => next with { CurrentStepId = s.StepId },
             StepChecked c => next with { Checks = [.. Checks, new StepCheckRecord(c.StepId, c.PhotoId, c.Verdict, c.Reason, c.ModelId, c.OccurredAt)] },
             QuestionAnswered q => next with { Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },

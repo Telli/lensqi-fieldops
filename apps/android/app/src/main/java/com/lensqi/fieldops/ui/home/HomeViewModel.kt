@@ -83,11 +83,15 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(loading = true, error = null) }
         val health = apiCall { api.health() }
         if (health is ApiOutcome.Ok) {
-            val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value.orEmpty()
+            // A failed list call keeps what the screen already shows (or the device copy); it never empties the assets.
+            val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value
             val list = (apiCall { api.inspections() } as? ApiOutcome.Ok)?.value
             list?.let { snapshots.save(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
-            fixtures.takeIf { it.isNotEmpty() }?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
-            _state.update { it.copy(health = health.value, reachable = true, fixtures = fixtures, inspections = list ?: it.inspections, cachedAt = null, loading = false) }
+            fixtures?.takeIf { it.isNotEmpty() }?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
+            _state.update {
+                val kept = it.fixtures.ifEmpty { snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer()))?.value.orEmpty() }
+                it.copy(health = health.value, reachable = true, fixtures = fixtures ?: kept, inspections = list ?: it.inspections, cachedAt = null, loading = false)
+            }
             loadFocus()
         } else {
             val list = snapshots.load(LIST_KEY, ListSerializer(InspectionSummary.serializer()))

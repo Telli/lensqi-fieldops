@@ -21,6 +21,15 @@ public static class InspectionEndpoints
         ["MockWearables"] = EvidenceOrigin.MockWearables, ["RecordedFixture"] = EvidenceOrigin.RecordedFixture,
     };
 
+    /// <summary>Provenance is never guessed: no source means a phone capture, anything else must name a capture origin.</summary>
+    internal static bool TryCaptureOrigin(string? source, out EvidenceOrigin origin)
+    {
+        if (string.IsNullOrWhiteSpace(source)) { origin = EvidenceOrigin.Phone; return true; }
+        return CaptureOrigins.TryGetValue(source.Trim(), out origin);
+    }
+
+    internal static IResult InvalidSource() => ApiResults.BadRequest("invalid_source", $"source must be one of {string.Join(", ", CaptureOrigins.Keys)}");
+
     public sealed record CreateInspectionRequest(string FixtureId, string AssetId);
     public sealed record ChecklistRequest(string RequirementId, ChecklistStatus Status, string PhotoEvidenceId);
     public sealed record RepairClaimRequest(string Description);
@@ -85,12 +94,7 @@ public static class InspectionEndpoints
                 return ApiResults.BadRequest("image_too_small", $"image is {width}x{height}; at least {limits.MinImageLongSide}x{limits.MinImageShortSide} is required");
             if ((long)width * height > limits.MaxImagePixels)
                 return ApiResults.BadRequest("image_too_large", $"image is {width}x{height}; at most {limits.MaxImagePixels} pixels are accepted");
-            // Provenance is never guessed: no source means a phone capture, anything else must name a capture origin.
-            var source = form["source"].ToString();
-            EvidenceOrigin origin;
-            if (string.IsNullOrWhiteSpace(source)) origin = EvidenceOrigin.Phone;
-            else if (!CaptureOrigins.TryGetValue(source.Trim(), out origin))
-                return ApiResults.BadRequest("invalid_source", $"source must be one of {string.Join(", ", CaptureOrigins.Keys)}");
+            if (!TryCaptureOrigin(form["source"].ToString(), out var origin)) return InvalidSource();
             var observedAt = DateTimeOffset.TryParse(form["observedAt"], out var obs) ? obs : clock.GetUtcNow();
             var evidenceId = "photo-" + Guid.NewGuid().ToString("N")[..10];
             var artifact = files.SaveImage(id, evidenceId, bytes, mediaType, width, height);
