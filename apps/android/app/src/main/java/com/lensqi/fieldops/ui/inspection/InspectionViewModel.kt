@@ -264,14 +264,17 @@ class InspectionViewModel @Inject constructor(
     }
 
     /**
-     * The name a command's retry key is kept under: the command, what it is about (a photo, a review answer, a summary)
-     * and the claim it belongs to. A new claim or a new photo makes a new name, so a key kept after a lost answer is only
-     * ever replayed for the very same request and can never hand a new photo an old assessment or a new claim an old
-     * decision. The server's event sequence is deliberately not part of the name: a command the server applied before its
-     * answer was lost advances the sequence, and its retry must still replay the recorded outcome, not run again.
+     * The name a command's retry key is kept under: the command, the inputs it depends on (the photo, the review answers,
+     * the claim, the confirmation) but never its own effect. A key kept after a lost answer is then replayed only while the
+     * request would be the same request: a new photo, a changed review answer or a new claim makes a new name, so an old
+     * assessment, measurement, confirmation or decision is never handed to new evidence. The server's event sequence is
+     * deliberately not part of the name: a command the server applied before its answer was lost advances the sequence,
+     * and its retry must still replay the recorded outcome, not run again.
      */
     private fun action(name: String) = "$name@claim=${state.value.view?.currentClaimId}"
     private fun latestPhotoId() = state.value.view?.photos?.lastOrNull()?.evidenceId
+    /** The review answers as they stand (requirement, answer, photo): a command that confirms or measures them is a new request once one changes. */
+    private fun reviewState() = state.value.view?.checklist?.sortedBy { it.requirementId }?.joinToString(";") { "${it.requirementId}=${it.status}:${it.reviewedByEvidenceId}" }.orEmpty()
 
     /**
      * After the shutter: queue the original photo, wait for the server to have it, then let Muse look and SAM outline
@@ -398,7 +401,8 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun runDiagnostic(diagnosticId: String) = act("Running $diagnosticId…") {
-        keys.command(action("diagnostic:$diagnosticId")) { k -> api.runDiagnostic(inspectionId, diagnosticId, k) }.onOk { cacheView(it.state) }
+        // A check is a new request once new evidence exists (a photo or a review answer), never a replay of an older measurement.
+        keys.command(action("diagnostic:$diagnosticId:${latestPhotoId()}:${reviewState()}")) { k -> api.runDiagnostic(inspectionId, diagnosticId, k) }.onOk { cacheView(it.state) }
     }
 
     fun setSimulated(diagnosticId: String, passed: Boolean) = act("Setting simulated endpoint…") {
@@ -430,7 +434,8 @@ class InspectionViewModel @Inject constructor(
     }
 
     fun acknowledge() = act("Recording acknowledgement…") {
-        val action = action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}")
+        // The confirmation is of the accepted photo and the review as they stand; a revised answer needs a new confirmation.
+        val action = action("acknowledge:${state.value.view?.acceptedPostRepairPhotoId}:${reviewState()}")
         keys.command(action) { k -> api.acknowledge(inspectionId, k) }
             .queuedWhenOffline(action, com.lensqi.fieldops.data.queue.CommandKind.Acknowledge, null)
             ?.onOk(::cacheView)
@@ -454,10 +459,12 @@ class InspectionViewModel @Inject constructor(
 
     /**
      * A verify that times out on the phone and is tapped again replays the server's decision instead of recording a second
-     * attempt. The key is for this claim and this accepted photo: after a new claim or a new photo it is a new request.
+     * attempt. The key is for this claim, this accepted photo, these review answers and this confirmation: after any of
+     * them changes it is a new request.
      */
     fun verify() = act("Server is verifying…") {
-        keys.command(action("verify:${state.value.view?.acceptedPostRepairPhotoId}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
+        val v = state.value.view
+        keys.command(action("verify:${v?.acceptedPostRepairPhotoId}:${reviewState()}:ack=${v?.technicianAcknowledged}")) { k -> api.verify(inspectionId, k) }.onOk { cacheView(it.state) }
     }
 
     fun checkReceipt() = act("Re-hashing the receipt bundle…") {
