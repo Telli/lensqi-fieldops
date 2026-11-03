@@ -97,7 +97,8 @@ public static class InspectionEndpoints
             // on the same pixels. The digest of the bytes as uploaded is returned too, so a client can still check its copy.
             var uploadedSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
             var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
-            if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, ct) is { Length: > 0 } turned && EvidenceFileStore.DetectImageType(turned) == "image/jpeg")
+            // Re-encoding can grow the file; a turned copy over the upload limit is not stored, the bytes as uploaded are.
+            if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, ct) is { Length: > 0 } turned && turned.LongLength <= EvidenceFileStore.MaxImageBytes && EvidenceFileStore.DetectImageType(turned) == "image/jpeg")
                 bytes = turned;
             // T6.1: size comes from the file header, never from the form; too small or too large is refused before storage.
             if (!EvidenceFileStore.TryReadDimensions(bytes, out var width, out var height))

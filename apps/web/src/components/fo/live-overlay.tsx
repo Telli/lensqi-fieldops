@@ -35,7 +35,8 @@ export function LiveOverlay({ objects, width, height, targetConcept, fit = "cont
         const corners = `M ${x} ${y + c} L ${x} ${y} L ${x + c} ${y} M ${x + w - c} ${y} L ${x + w} ${y} L ${x + w} ${y + c} M ${x} ${y + h - c} L ${x} ${y + h} L ${x + c} ${y + h} M ${x + w - c} ${y + h} L ${x + w} ${y + h} L ${x + w} ${y + h - c}`;
         const age = boxAge(detectedAt, o.id, now);
         return (
-          <g key={o.id} opacity={boxOpacity(age)} onClick={onSelect ? () => onSelect(o) : undefined} role={onSelect ? "button" : undefined}
+          <g key={o.id} opacity={boxOpacity(age)} onClick={onSelect ? () => onSelect(o) : undefined} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined}
+            onKeyDown={onSelect ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(o); } } : undefined}
             aria-label={onSelect ? `Ask about the ${o.label}` : undefined} style={onSelect ? { pointerEvents: "all", cursor: "pointer" } : undefined}>
             <rect x={x} y={y} width={w} height={h}
               fill={isTarget ? "rgba(245, 184, 61, 0.08)" : "rgba(53, 214, 232, 0.06)"}

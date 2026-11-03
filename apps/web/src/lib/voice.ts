@@ -32,29 +32,42 @@ export function useSpeak(initiallyOn = true) {
   const [on, setOn] = useState(initiallyOn && supported);
   // Held while the person said "pause": nothing is spoken, without turning the voice off.
   const [held, setHeld] = useState(false);
+  // While the microphone is open nothing is spoken, so the voice is never heard as a command or a question.
+  const [listening, setListeningState] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const last = useRef("");
+  // The utterance in flight and its time limit; callbacks and timers from an earlier one are ignored.
+  const current = useRef<{ utterance: SpeechSynthesisUtterance; limit: ReturnType<typeof setTimeout> } | null>(null);
+  const finish = useCallback((u?: SpeechSynthesisUtterance) => {
+    if (!current.current || (u && current.current.utterance !== u)) return;
+    clearTimeout(current.current.limit);
+    current.current = null;
+    setSpeaking(false);
+  }, []);
   const speak = useCallback((text: string, force = false) => {
-    if (!supported || !on || held || !text || (!force && text === last.current)) return;
+    if (!supported || !on || held || listening || !text || (!force && text === last.current)) return;
     last.current = text;
+    finish();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     // Some browsers never fire onend for a long utterance; a generous time limit keeps hands-free from waiting forever.
-    const limit = setTimeout(() => setSpeaking(false), 3000 + text.length * 90);
-    const done = () => { clearTimeout(limit); setSpeaking(false); };
-    u.onstart = () => setSpeaking(true);
-    u.onend = done;
-    u.onerror = done;
+    const limit = setTimeout(() => finish(u), 3000 + text.length * 90);
+    current.current = { utterance: u, limit };
+    u.onstart = () => { if (current.current?.utterance === u) setSpeaking(true); };
+    u.onend = () => finish(u);
+    u.onerror = () => finish(u);
     setSpeaking(true);
     speechSynthesis.speak(u);
-  }, [on, held, supported]);
-  const interrupt = useCallback(() => { if (supported) speechSynthesis.cancel(); setSpeaking(false); }, [supported]);
+  }, [on, held, listening, supported, finish]);
+  const interrupt = useCallback(() => { finish(); if (supported) speechSynthesis.cancel(); }, [supported, finish]);
   const hold = useCallback((value: boolean) => { setHeld(value); if (value) interrupt(); }, [interrupt]);
+  /** Tells the voice the microphone is open: what is playing stops and nothing new is spoken until it closes. */
+  const setListening = useCallback((value: boolean) => { setListeningState(value); if (value) interrupt(); }, [interrupt]);
   useEffect(() => () => { if (supported) speechSynthesis.cancel(); }, [supported]);
   const toggle = useCallback((value?: boolean) => {
     setOn((now) => { const next = value ?? !now; if (!next) interrupt(); return next; });
   }, [interrupt]);
-  return { supported, on, toggle, speak, hold, speaking, interrupt };
+  return { supported, on, toggle, speak, hold, speaking, interrupt, setListening };
 }
 
 /** "Pause" holds speech and live coaching; "resume" brings back what was on before. */
@@ -85,6 +98,11 @@ interface Recognition {
   start(): void; stop(): void; abort(): void;
 }
 type RecognitionCtor = new () => Recognition;
+
+const BLOCKED_MIC = "Microphone access is blocked for this site.";
+const BLOCKED_SERVICE = "Speech recognition isn't allowed for this site.";
+/** Errors that will not change by trying again, so hands-free stops asking. */
+export const voiceBlocked = (error: string | null) => error === BLOCKED_MIC || error === BLOCKED_SERVICE;
 
 /** Shown before the first use of the microphone, then not again on this device. */
 export const speechNotice = "Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.";
@@ -120,7 +138,7 @@ export function usePushToTalk(onFinal: (text: string) => void) {
       setHeard(text);
       if (e.results[e.results.length - 1]?.isFinal) final.current = text;
     };
-    r.onerror = (e) => setError(e.error === "not-allowed" ? "Microphone access is blocked for this site." : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
+    r.onerror = (e) => setError(e.error === "not-allowed" ? BLOCKED_MIC : e.error === "service-not-allowed" ? BLOCKED_SERVICE : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
     r.onend = () => {
       const aborted = rec.current !== r;
       rec.current = null; setListening(false);
@@ -135,8 +153,10 @@ export function usePushToTalk(onFinal: (text: string) => void) {
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
+  /** Ends an open listen and delivers nothing from it, unlike `stop`, which still hands over the final text. */
+  const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); }, []);
   useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
-  return { supported: !!Ctor, listening, heard, error, start, stop, notice: !!Ctor && !seen };
+  return { supported: !!Ctor, listening, heard, error, start, stop, abort, notice: !!Ctor && !seen };
 }
 
 /**
@@ -144,10 +164,12 @@ export function usePushToTalk(onFinal: (text: string) => void) {
  * pending, so the technician never touches the phone between questions. Speech is interrupted whenever listening starts,
  * so the voice never talks into the microphone. Off again when the microphone is blocked.
  */
-export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void }, speech: { speaking: boolean; interrupt: () => void }, busy: boolean) {
+export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void; abort: () => void },
+  speech: { speaking: boolean; setListening: (on: boolean) => void }, busy: boolean) {
   const [on, setOn] = useState(false);
-  const blocked = voice.error === "Microphone access is blocked for this site.";
-  useEffect(() => { if (voice.listening) speech.interrupt(); }, [voice.listening]); // eslint-disable-line react-hooks/exhaustive-deps
+  const blocked = voiceBlocked(voice.error);
+  // The voice learns when the microphone is open, whether it was opened by hand or by hands-free.
+  useEffect(() => { speech.setListening(voice.listening); }, [voice.listening]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!on || !voice.supported) return;
     if (blocked) { setOn(false); return; }
@@ -155,5 +177,10 @@ export function useHandsFree(voice: { supported: boolean; listening: boolean; er
     const t = setTimeout(voice.start, 400);
     return () => clearTimeout(t);
   }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { on, toggle: () => setOn((v) => !v) };
+  const toggle = () => setOn((v) => {
+    // Off ends a listen that is open right now, so nothing said after the tap is taken as a command.
+    if (v && voice.listening) voice.abort();
+    return !v;
+  });
+  return { on, toggle };
 }
