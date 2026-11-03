@@ -95,6 +95,8 @@ data class TaskUi(
     val task: TaskView? = null,
     val busy: String? = null,
     val error: String? = null,
+    /** A delay, not a failure: a step update saved on this phone until the server confirms it. */
+    val notice: String? = null,
     val answer: Pair<String, String>? = null,
     /** The FieldProof inspection a technician task is linked to, for its stage and live or simulated outcome. */
     val linked: InspectionView? = null,
@@ -205,7 +207,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     private fun move(step: String, kind: CommandKind, reason: com.lensqi.fieldops.data.api.SkipRequest?, onMoved: (TaskView) -> Unit) =
         viewModelScope.launch {
             if (_state.value.busy != null) return@launch
-            _state.update { it.copy(busy = "move", error = null) }
+            _state.update { it.copy(busy = "move", error = null, notice = null) }
             try {
                 val pending = queue.observe(taskId).first()
                 if (pending.any { it.stepId == step && it.kind in setOf(CommandKind.TaskComplete, CommandKind.TaskSkip) })
@@ -220,7 +222,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
                     val payload = reason?.let { kotlinx.serialization.json.Json.encodeToString(com.lensqi.fieldops.data.api.SkipRequest.serializer(), it) }
                     queue.enqueueStepAction(PendingCommand(key, taskId, kind, System.currentTimeMillis(), stepId = step, payload = payload))
                     keys.drop(action)
-                    _state.update { it.copy(error = "Step update saved on this phone. Waiting for server confirmation.") }
+                    _state.update { it.copy(notice = "Step update saved on this phone. Waiting for server confirmation.") }
                 } else {
                     settle(action, outcome)
                     if (outcome is ApiOutcome.Ok) {
@@ -236,7 +238,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     @Volatile var measured: List<com.lensqi.fieldops.domain.live.LiveObject> = emptyList()
     /** The part confirmed on the camera, kept while the step stays the same. */
     val spatialTarget = com.lensqi.fieldops.ui.camera.TargetMemory()
-    fun clearError() = _state.update { it.copy(error = null) }
+    fun clearError() = _state.update { it.copy(error = null, notice = null) }
 
     /**
      * A full-resolution step photo: kept as the task's record, then the AI's suggested verdict is shown and spoken.

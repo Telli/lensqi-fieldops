@@ -393,10 +393,10 @@ public static class TaskEndpoints
         return new((bytes, mediaType, width, height), null);
     }
 
-    public sealed record TaskSummary(string TaskId, TaskMode Mode, string Goal, string? Title, TaskPhase Phase, int Steps, int Finished, string? CurrentStepTitle, SiteLink? Site, string? InspectionId, DateTimeOffset UpdatedAt);
+    public sealed record TaskSummary(string TaskId, TaskMode Mode, string Goal, string? Title, TaskPhase Phase, int Steps, int Finished, string? CurrentStepTitle, SiteLink? Site, string? InspectionId, DateTimeOffset UpdatedAt, bool TitleByAi = false);
 
     private static TaskSummary Summary(TaskState s) => new(s.TaskId, s.Mode, s.Goal, s.DisplayTitle, s.Phase, s.Plan?.Steps.Count ?? 0,
-        s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt);
+        s.CompletedStepIds.Count + s.SkippedStepIds.Count, s.CurrentStep?.Title, s.Site, s.InspectionId, s.UpdatedAt, s.TitleByAi);
 
     private static object CheckResult(StepChecked c, TaskSession session) => new
     {
@@ -411,7 +411,7 @@ public static class TaskEndpoints
         var plan = s.Plan;
         return new
         {
-            s.TaskId, s.Mode, s.Goal, title = s.DisplayTitle, s.Details, s.Site, s.Phase, s.Handoff,
+            s.TaskId, s.Mode, s.Goal, title = s.DisplayTitle, titleByAi = s.TitleByAi, s.Details, s.Site, s.Phase, s.Handoff,
             person = s.Person is { } p ? new { p.HeightCm, p.StandingReachCm, p.Tools } : null, s.CurrentStepId, s.InspectionId, s.CreatedAt, s.UpdatedAt, s.SafetyAcknowledged, s.AbandonReason,
             plan = plan is null ? null : new
             {

@@ -176,6 +176,18 @@ class TaskViewModelTest {
     }
 
     @Test
+    fun `the library files history under the server selected at the time of each call`() = runBlocking {
+        var base = "server-a"
+        val library = com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp) { base }
+        library.remember(task)
+        assertEquals(task.taskId, library.history().single().taskId)
+        base = "server-b"
+        assertEquals("server-b", library.server)
+        assertTrue(library.history().isEmpty())
+        assertNull(library.job(task.taskId))
+    }
+
+    @Test
     fun `cached reference bytes belong to the job and the server that supplied them`() = runBlocking {
         val snapshots = com.lensqi.fieldops.data.SnapshotStore(temp, json)
         val first = com.lensqi.fieldops.data.TaskLibrary(snapshots, temp, "server-a")

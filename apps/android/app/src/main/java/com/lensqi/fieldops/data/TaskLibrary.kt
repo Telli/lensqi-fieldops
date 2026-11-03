@@ -6,8 +6,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 
-/** A server-bound copy of confirmed jobs. Pending actions stay separate in the Room outbox. */
-class TaskLibrary(private val snapshots: SnapshotStore, private val directory: File, val server: String) {
+/**
+ * A server-bound copy of confirmed jobs. Pending actions stay separate in the Room outbox. The server base is read per
+ * call, so a screen that stays open across a server switch files its history under the server it now talks to.
+ */
+class TaskLibrary(private val snapshots: SnapshotStore, private val directory: File, private val base: () -> String) {
+    constructor(snapshots: SnapshotStore, directory: File, server: String) : this(snapshots, directory, { server })
+    val server: String get() = base()
     private fun key(kind: String, id: String = "") = SnapshotStore.key(server, kind, id)
     private val summaries = ListSerializer(TaskSummary.serializer())
 
@@ -21,7 +26,7 @@ class TaskLibrary(private val snapshots: SnapshotStore, private val directory: F
             snapshots.save(key("task", t.taskId), TaskView.serializer(), t)
             val steps = t.plan?.steps.orEmpty()
             val summary = TaskSummary(t.taskId, t.mode, t.goal, t.title ?: t.plan?.title, t.phase, steps.size,
-                steps.count { it.status == StepStatus.Done || it.status == StepStatus.Skipped }, t.currentStep?.title, t.inspectionId, t.updatedAt)
+                steps.count { it.status == StepStatus.Done || it.status == StepStatus.Skipped }, t.currentStep?.title, t.inspectionId, t.updatedAt, titleByAi = t.titleByAi)
             val list = snapshots.load(key("tasks"), summaries)?.value.orEmpty()
             snapshots.save(key("tasks"), summaries, listOf(summary) + list.filter { it.taskId != t.taskId })
         }

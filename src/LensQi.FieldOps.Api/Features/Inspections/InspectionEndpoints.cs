@@ -140,8 +140,10 @@ public static class InspectionEndpoints
                     var recorded = events.OfType<PhotoRecorded>().FirstOrDefault();
                     if (recorded?.EvidenceId != evidenceId)
                     {
-                        if (recorded is null || (recorded.OriginalSha256 is { } expected ? expected != uploadedSha256 : recorded.ArtifactSha256 != uploadedSha256 && recorded.ArtifactSha256 != artifact.Sha256))
-                            return DifferentCommand();
+                        if (recorded is null) return DifferentCommand();
+                        // Its own code, so a client can tell "this key already carried another photo" from a stage conflict.
+                        if (recorded.OriginalSha256 is { } expected ? expected != uploadedSha256 : recorded.ArtifactSha256 != uploadedSha256 && recorded.ArtifactSha256 != artifact.Sha256)
+                            return ApiResults.Conflict(InspectionErrorCodes.KeyReused, "This Idempotency-Key was already used for a different photo; retry with the same photo or a new key");
                         evidenceId = recorded.EvidenceId;
                         artifactPath = Directory.EnumerateFiles(Path.Combine(files.DataDirectoryPath, "evidence", id))
                             .First(f => Path.GetFileName(f).StartsWith(evidenceId + "-", StringComparison.Ordinal));

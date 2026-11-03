@@ -1,3 +1,4 @@
+using LensQi.FieldOps.Core.Inspection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -107,9 +108,9 @@ public class RestartTests
     public async Task A_retried_photo_upload_after_a_restart_is_not_recorded_twice()
     {
         string dir, id;
-        HttpRequestMessage Upload(string inspectionId)
+        HttpRequestMessage Upload(string inspectionId, byte[]? bytes = null)
         {
-            var form = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(640, 480)), "image", "a.png" } };
+            var form = new MultipartFormDataContent { { new ByteArrayContent(bytes ?? TestImages.Png(640, 480)), "image", "a.png" } };
             var m = new HttpRequestMessage(HttpMethod.Post, $"/v1/inspections/{inspectionId}/observations") { Content = form };
             m.Headers.Add("Idempotency-Key", "capture-1");
             return m;
@@ -126,6 +127,12 @@ public class RestartTests
         await c2.SendAsync(Upload(id));
         var view = await Json(await c2.GetAsync($"/v1/inspections/{id}"));
         Assert.Single(view.GetProperty("photos").EnumerateArray());
+
+        // The same key with another photo is refused under its own code, never answered with the first photo.
+        var reused = await c2.SendAsync(Upload(id, TestImages.Png(320, 240)));
+        Assert.Equal(HttpStatusCode.Conflict, reused.StatusCode);
+        Assert.Equal(InspectionErrorCodes.KeyReused, (await Json(reused)).GetProperty("code").GetString());
+        Assert.Single((await Json(await c2.GetAsync($"/v1/inspections/{id}"))).GetProperty("photos").EnumerateArray());
     }
 
     [Fact]
