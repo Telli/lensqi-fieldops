@@ -21,6 +21,7 @@ public sealed class InspectionStore
     private readonly ConcurrentDictionary<string, Entry> _sessions = new(StringComparer.Ordinal);
     /// <summary>The inspection each client create key made, so a retried create returns it instead of a second inspection.</summary>
     private readonly ConcurrentDictionary<string, string> _createdByKey = new(StringComparer.Ordinal);
+    private readonly object _createLock = new();
     private readonly string _root;
 
     private sealed class Entry(InspectionSession session)
@@ -79,17 +80,29 @@ public sealed class InspectionStore
     /// <summary>The inspection an earlier create under <paramref name="requestId"/> made, if any.</summary>
     public InspectionSession? FindCreated(string requestId) => _createdByKey.TryGetValue(requestId, out var id) ? Find(id) : null;
 
-    /// <summary>Creates an inspection; with a <paramref name="requestId"/>, a concurrent or later create under the same key returns this one.</summary>
+    /// <summary>
+    /// Creates an inspection; with a <paramref name="requestId"/>, a concurrent or later create under the same key returns this
+    /// one. Creation is serialised and the first event is on disk before the inspection or its key can be seen, so a retry
+    /// never finds a half-published or unpersisted inspection; a failed write leaves no log behind.
+    /// </summary>
     public InspectionSession Create(LoadedExpectedTwin twin, string assetId, DateTimeOffset now, string? requestId = null)
     {
-        if (requestId is not null && FindCreated(requestId) is { } earlier) return earlier;
-        var id = "I-" + Guid.NewGuid().ToString("N")[..12];
-        var session = InspectionSession.Create(id, twin, assetId, now, requestId);
-        if (requestId is not null && !_createdByKey.TryAdd(requestId, id)) return FindCreated(requestId)!;
-        var entry = new Entry(session);
-        _sessions[id] = entry;
-        Persist(entry);
-        return session;
+        lock (_createLock)
+        {
+            if (requestId is not null && FindCreated(requestId) is { } earlier) return earlier;
+            var id = "I-" + Guid.NewGuid().ToString("N")[..12];
+            var entry = new Entry(InspectionSession.Create(id, twin, assetId, now, requestId));
+            try { Persist(entry); }
+            catch
+            {
+                var path = Path.Combine(_root, id + ".jsonl");
+                if (File.Exists(path)) File.Delete(path);
+                throw;
+            }
+            _sessions[id] = entry;
+            if (requestId is not null) _createdByKey[requestId] = id;
+            return entry.Session;
+        }
     }
 
     /// <summary>Runs one command under the inspection's lock and appends any new events to the JSONL log, even when the command throws.</summary>

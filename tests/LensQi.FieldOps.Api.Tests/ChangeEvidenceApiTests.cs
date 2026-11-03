@@ -133,6 +133,11 @@ public class ChangeEvidenceApiTests
         var post = up.GetProperty("evidenceId").GetString();
         Assert.Equal("ReadyToVerify", up.GetProperty("state").GetProperty("stage").GetString());
         Assert.Equal(post, up.GetProperty("state").GetProperty("acceptedPostRepairPhotoId").GetString());
+        // The change-evidence geometry names the stored photo's frame, like an ordinary segmentation, so clients can orient a rotated photo to it.
+        var changeSeg = up.GetProperty("state").GetProperty("segmentations").EnumerateArray().Last(x => x.GetProperty("sourcePhotoEvidenceId").GetString() == post).GetProperty("evidenceId").GetString();
+        var geometry = await flow.Http.GetFromJsonAsync<JsonElement>($"/v1/inspections/{flow.Id}/artifacts/{changeSeg}.json");
+        Assert.Equal(640, geometry.GetProperty("photoWidth").GetInt32());
+        Assert.Equal(480, geometry.GetProperty("photoHeight").GetInt32());
         // the post-repair SAM call is recorded like any other segmentation
         Assert.Equal(2, up.GetProperty("state").GetProperty("segmentations").GetArrayLength());
 
