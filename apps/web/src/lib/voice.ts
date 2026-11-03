@@ -23,25 +23,35 @@ export function parseCommand(text: string): Command | null {
   return lookup.get(t) ?? null;
 }
 
-/** Speaks text aloud and cancels whatever was being said. Off when the browser has no speech synthesis. */
+/**
+ * Speaks text aloud and cancels whatever was being said. Off when the browser has no speech synthesis. `speaking` is true
+ * while an utterance plays, and `interrupt()` stops one so the voice never talks over the microphone.
+ */
 export function useSpeak(initiallyOn = true) {
   const supported = typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
   const [on, setOn] = useState(initiallyOn && supported);
   // Held while the person said "pause": nothing is spoken, without turning the voice off.
   const [held, setHeld] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const last = useRef("");
   const speak = useCallback((text: string, force = false) => {
     if (!supported || !on || held || !text || (!force && text === last.current)) return;
     last.current = text;
     speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    const u = new SpeechSynthesisUtterance(text);
+    u.onstart = () => setSpeaking(true);
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    speechSynthesis.speak(u);
   }, [on, held, supported]);
-  const hold = useCallback((value: boolean) => { setHeld(value); if (value && supported) speechSynthesis.cancel(); }, [supported]);
+  const interrupt = useCallback(() => { if (supported) speechSynthesis.cancel(); setSpeaking(false); }, [supported]);
+  const hold = useCallback((value: boolean) => { setHeld(value); if (value) interrupt(); }, [interrupt]);
   useEffect(() => () => { if (supported) speechSynthesis.cancel(); }, [supported]);
   const toggle = useCallback((value?: boolean) => {
-    setOn((now) => { const next = value ?? !now; if (!next && supported) speechSynthesis.cancel(); return next; });
-  }, [supported]);
-  return { supported, on, toggle, speak, hold };
+    setOn((now) => { const next = value ?? !now; if (!next) interrupt(); return next; });
+  }, [interrupt]);
+  return { supported, on, toggle, speak, hold, speaking, interrupt };
 }
 
 /** "Pause" holds speech and live coaching; "resume" brings back what was on before. */
@@ -117,10 +127,30 @@ export function usePushToTalk(onFinal: (text: string) => void) {
     };
     rec.current = r;
     setListening(true);
-    r.start();
+    // A recogniser that refuses to start never fires onend, so the button would stay on "listening" without this.
+    try { r.start(); } catch { rec.current = null; setListening(false); setError("Voice input couldn't start. Try again."); }
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
   useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
   return { supported: !!Ctor, listening, heard, error, start, stop, notice: !!Ctor && !seen };
+}
+
+/**
+ * Hands-free: the microphone opens again by itself after each utterance, once the answer has been spoken and nothing is
+ * pending, so the technician never touches the phone between questions. Speech is interrupted whenever listening starts,
+ * so the voice never talks into the microphone. Off again when the microphone is blocked.
+ */
+export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void }, speech: { speaking: boolean; interrupt: () => void }, busy: boolean) {
+  const [on, setOn] = useState(false);
+  const blocked = voice.error === "Microphone access is blocked for this site.";
+  useEffect(() => { if (voice.listening) speech.interrupt(); }, [voice.listening]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!on || !voice.supported) return;
+    if (blocked) { setOn(false); return; }
+    if (voice.listening || speech.speaking || busy) return;
+    const t = setTimeout(voice.start, 400);
+    return () => clearTimeout(t);
+  }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { on, toggle: () => setOn((v) => !v) };
 }

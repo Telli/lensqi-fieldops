@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Check, ChevronRight, Loader2, Mic, Radio, Square, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronRight, Ear, Loader2, Mic, Radio, Square, Volume2, VolumeX, X } from "lucide-react";
 import { LensQiMark } from "@/components/fo/ai";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
@@ -10,7 +10,7 @@ import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
 import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
-import { parseCommand, speechNotice, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
+import { parseCommand, speechNotice, useHandsFree, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
 /** The current camera frame as a JPEG, no larger than `maxSide` on its long edge. */
@@ -162,6 +162,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       default: return void ask(text);
     }
   });
+  const handsFree = useHandsFree(voice, speech, !!busy);
 
   if (!t || !step)
     return <div className="grid h-dvh place-items-center bg-overlay text-overlay-foreground"><Loader2 className="animate-spin opacity-60" /></div>;
@@ -232,6 +233,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
           </button>
         )}
         {voice.listening && <p className="text-center text-sm text-primary" aria-live="polite">{voice.heard || "Listening…"}</p>}
+        {handsFree.on && !voice.listening && <p className="text-center text-[11px] opacity-60">Hands-free: the microphone opens again after each answer.</p>}
         {voice.error && <p className="text-center text-xs text-warning">{voice.error}</p>}
 
         <form onSubmit={(e) => { e.preventDefault(); ask(typed); }} className="flex items-center gap-2">
@@ -239,6 +241,12 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
             <button type="button" onClick={voice.listening ? voice.stop : voice.start} disabled={busy === "ask"} aria-label={voice.listening ? "Stop listening" : "Ask or say a command"}
               className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20", voice.listening && "border-primary bg-primary text-primary-foreground")}>
               {voice.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
+            </button>
+          )}
+          {voice.supported && (
+            <button type="button" onClick={handsFree.toggle} disabled={reviewing} aria-pressed={handsFree.on} aria-label={handsFree.on ? "Turn hands-free off" : "Hands-free: keep listening"}
+              className={cn("grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-40", handsFree.on && "border-primary text-primary")}>
+              <Ear className="size-5" />
             </button>
           )}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy === "ask" || reviewing} placeholder={busy === "ask" ? "Thinking…" : reviewing ? "Go to the current step to ask" : "Ask about this step…"} aria-label="Ask a question"
