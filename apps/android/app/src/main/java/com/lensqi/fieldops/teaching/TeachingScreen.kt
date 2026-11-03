@@ -106,6 +106,8 @@ private fun CapturePanel(vm: TeachingViewModel, ui: TeachingUi, creating: Boolea
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var cameraAsked by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; cameraAsked = true }
+    // Back from Settings: what was allowed there takes effect without reopening the recorder.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED; onPauseOrDispose { } }
     var cameraReady by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     val controller = remember {

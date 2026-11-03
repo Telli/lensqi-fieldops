@@ -187,6 +187,11 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     var heard by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var settingsNeeded by remember { mutableStateOf(false) }
+    // Back from Settings with the microphone allowed: the Settings hint and its error go, the mic button works again.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        if (settingsNeeded && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { settingsNeeded = false; error = null }
+        onPauseOrDispose { }
+    }
     val supported = remember { SpeechRecognizer.isRecognitionAvailable(context) }
     val canOnDevice = remember { supported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
     var onDevice by remember { mutableStateOf(canOnDevice) }

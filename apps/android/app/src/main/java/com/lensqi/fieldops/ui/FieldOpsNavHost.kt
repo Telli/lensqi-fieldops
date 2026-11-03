@@ -26,8 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -194,8 +192,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     // compares and its before photo as a framing aid. Before a repair, the part the AI asked to see.
                     val guide = com.lensqi.fieldops.domain.captureGuide(ui.view)
                     val reference by produceState<android.graphics.Bitmap?>(null, guide?.referencePhotoId) { value = guide?.referencePhotoId?.let { vm.photoForDisplay(it) } }
-                    // What ARCore measured on the last analysed frame goes with the photo as a measured note; the still has no depth.
-                    var measured by remember { mutableStateOf<String?>(null) }
+                    // What ARCore measured on the last analysed frame goes with the photo as a measured note; the still has no
+                    // depth. The shutter turns live assist off, which clears the live objects before the photo is saved, so the
+                    // note is the last measurement seen, kept only while it is fresh.
+                    val measured = remember { com.lensqi.fieldops.ui.camera.MeasuredNote() }
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
                         analyzeLive = vm::analyzeLiveFrame,
@@ -206,10 +206,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         registration = remember(ui.fixture, ui.view?.assetId) { com.lensqi.fieldops.ui.inspection.registrationSubject(ui.fixture, ui.view?.assetId) },
                         scopeKey = vm.inspectionId,
                         targetMemory = vm.spatialTarget,
-                        onObjects = { measured = com.lensqi.fieldops.ui.task.measuredJson(it) },
+                        onObjects = { measured.seen(com.lensqi.fieldops.ui.task.measuredJson(it)) },
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
-                            vm.captureForReview(file, origin = "Phone", measured = measured)
+                            vm.captureForReview(file, origin = "Phone", measured = measured.recent())
                             nav.navigate("review") { popUpTo("camera") { inclusive = true } }
                         },
                     )

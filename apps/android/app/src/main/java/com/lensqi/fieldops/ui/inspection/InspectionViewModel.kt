@@ -24,6 +24,7 @@ import com.lensqi.fieldops.data.api.Segmentation
 import com.lensqi.fieldops.data.api.SimulationRequest
 import com.lensqi.fieldops.data.api.WorkOrderRequest
 import com.lensqi.fieldops.data.api.apiCall
+import com.lensqi.fieldops.data.api.retryable
 import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationResult
 import com.lensqi.fieldops.data.api.VisualAssessment
@@ -436,12 +437,13 @@ class InspectionViewModel @Inject constructor(
     }
 
     /**
-     * A command the server could not be reached for is saved on the phone under the key it was just sent with and sent
-     * later in capture order (verify is never saved: it measures the equipment). Null means it was saved, so the caller
-     * has nothing more to show; the server's refusal or answer still comes back through the queue.
+     * A command the server did not answer (unreachable, timed out, 5xx, asked to slow down) is saved on the phone under the
+     * key it was just sent with and sent later in capture order, with the same body (verify is never saved: it measures the
+     * equipment). A refusal is final and is shown instead. Null means it was saved, so the caller has nothing more to show;
+     * the server's answer or refusal still comes back through the queue.
      */
     private suspend fun <T> ApiOutcome<T>.queuedWhenOffline(action: String, kind: com.lensqi.fieldops.data.queue.CommandKind, payload: String?): ApiOutcome<T>? {
-        if (this !is ApiOutcome.Unreachable) return this
+        if (!retryable) return this
         return try {
             queue.enqueueCommand(inspectionId, kind, keys.keyFor(action), payload, serverBase)
             keys.drop(action)

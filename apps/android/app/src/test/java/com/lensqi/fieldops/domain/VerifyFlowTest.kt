@@ -215,6 +215,16 @@ class VerifyHistoryAndPreflightTest {
         assertEquals(true, rows[3].detail.contains("Measured again") && rows[3].detail.contains("failed (simulated)"), rows[3].detail)
     }
 
+    @Test fun `an answer given after the claim on an earlier accepted photo still counts, one on a rejected photo does not`() {
+        val onEarlier = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p1") },
+            changes = listOf(VisualChangeAnalysis("c1", "p1", "p0", null, 12, null, null, null, VisualChangeVerdict.Changed, "moved", "v1"),
+                VisualChangeAnalysis("c1", "p2", "p0", null, 12, null, null, null, VisualChangeVerdict.Changed, "moved", "v1")))
+        assertEquals(true, verifyPreflight(onEarlier, required)[1].ok, "the policy accepts a review of an earlier accepted photo")
+        val onRejected = view(accepted = "p2", checklist = required.map { entry(it, ChecklistStatus.Satisfied, photo = "p1") },
+            changes = listOf(VisualChangeAnalysis("c1", "p1", "p0", null, 0, "p0", null, null, VisualChangeVerdict.DuplicateImage, "same", "v1")))
+        assertEquals(false, verifyPreflight(onRejected, required)[1].ok, "a review of a photo the change check rejected does not count")
+    }
+
     @Test fun `a half review or a not-right answer is named, and a comparison still running is pending`() {
         val half = verifyPreflight(view(accepted = "p2", awaiting = emptyList(), checklist = listOf(entry("switch_chassis_visible", ChecklistStatus.Unknown))), required)
         assertNull(half[1].ok); assertEquals(true, half[1].detail.startsWith("1 of 2"))
