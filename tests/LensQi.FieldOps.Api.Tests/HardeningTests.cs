@@ -50,7 +50,7 @@ public sealed class FakeOrienter : IImageOrienter
     public int Calls { get; private set; }
     /// <summary>When set, the turned copy is padded past the upload limit, as a re-encode at high quality can be.</summary>
     public bool Oversize { get; set; }
-    public Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, CancellationToken ct)
+    public Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, long maxPixels, CancellationToken ct)
     {
         Calls++;
         if (!EvidenceFileStore.TryReadDimensions(jpeg, out var w, out var h)) return Task.FromResult<byte[]?>(null);

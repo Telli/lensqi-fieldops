@@ -319,6 +319,19 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
     }
 
     [Fact]
+    public async Task An_image_declaring_too_many_pixels_is_refused_before_the_orienter_decodes_it()
+    {
+        var id = await CreateInspection();
+        var before = _factory.FakeOrienter.Calls;
+        var huge = TestImages.JpegWithOrientation(12000, 9000, 6);   // 108 MP declared in a few dozen bytes
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(huge), "image", "huge.jpg" }, { new StringContent("Phone"), "source" } };
+        var r = await _client.PostAsync($"/v1/inspections/{id}/observations", form);
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Equal("image_too_large", (await Json(r)).GetProperty("code").GetString());
+        Assert.Equal(before, _factory.FakeOrienter.Calls);
+    }
+
+    [Fact]
     public async Task A_turned_copy_over_the_upload_limit_is_not_stored()
     {
         var id = await CreateInspection();

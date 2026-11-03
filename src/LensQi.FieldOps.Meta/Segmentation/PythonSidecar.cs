@@ -93,14 +93,14 @@ public sealed class PythonSidecar(SamOptions options, string repoRoot) : ISamOut
         }
     }
 
-    public async Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, CancellationToken ct)
+    public async Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, long maxPixels, CancellationToken ct)
     {
         var dir = Directory.CreateTempSubdirectory("fieldops-orient-").FullName;
         var input = Path.Combine(dir, "in.jpg"); var output = Path.Combine(dir, "out.jpg");
         try
         {
             await File.WriteAllBytesAsync(input, jpeg, ct).ConfigureAwait(false);
-            var (stdout, _) = await RunAsync(["-I", Path.Combine(ScriptDirectory, "auto_orient.py"), "--image", input, "--out", output], null, ct).ConfigureAwait(false);
+            var (stdout, _) = await RunAsync(["-I", Path.Combine(ScriptDirectory, "auto_orient.py"), "--image", input, "--out", output, "--max-pixels", maxPixels.ToString()], null, ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(stdout);
             if (doc.RootElement.TryGetProperty("error", out _) || !File.Exists(output)) return null;
             return await File.ReadAllBytesAsync(output, ct).ConfigureAwait(false);

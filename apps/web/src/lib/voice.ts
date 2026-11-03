@@ -132,19 +132,24 @@ export function usePushToTalk(onFinal: (text: string) => void) {
     const r = new Ctor();
     r.lang = navigator.language || "en-US"; r.interimResults = true; r.continuous = false;
     final.current = ""; setHeard(""); setError(null);
+    // Every callback is ignored once this recogniser is no longer the current one (aborted, or replaced by a newer one).
     r.onresult = (e) => {
+      if (rec.current !== r) return;
       let text = "";
       for (let i = 0; i < e.results.length; i++) text += e.results[i]![0].transcript;
       setHeard(text);
       if (e.results[e.results.length - 1]?.isFinal) final.current = text;
     };
-    r.onerror = (e) => setError(e.error === "not-allowed" ? BLOCKED_MIC : e.error === "service-not-allowed" ? BLOCKED_SERVICE : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
+    r.onerror = (e) => {
+      if (rec.current !== r) return;
+      setError(e.error === "not-allowed" ? BLOCKED_MIC : e.error === "service-not-allowed" ? BLOCKED_SERVICE : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
+    };
     r.onend = () => {
-      const aborted = rec.current !== r;
+      // Nothing is delivered after the page let go of the recognizer (unmount or abort), and nothing of a newer one is touched.
+      if (rec.current !== r) return;
       rec.current = null; setListening(false);
       const text = final.current.trim();
-      // Nothing is delivered after the page let go of the recognizer (unmount aborts it).
-      if (text && !aborted) deliver.current(text);
+      if (text) deliver.current(text);
     };
     rec.current = r;
     setListening(true);
@@ -168,11 +173,16 @@ export function useHandsFree(voice: { supported: boolean; listening: boolean; er
   speech: { speaking: boolean; setListening: (on: boolean) => void }, busy: boolean) {
   const [on, setOn] = useState(false);
   const blocked = voiceBlocked(voice.error);
+  // Turning hands-free on allows one attempt even after a denial, in case access was granted since; a second denial ends it.
+  const retried = useRef(false);
   // The voice learns when the microphone is open, whether it was opened by hand or by hands-free.
   useEffect(() => { speech.setListening(voice.listening); }, [voice.listening]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!on || !voice.supported) return;
-    if (blocked) { setOn(false); return; }
+    if (blocked) {
+      if (retried.current) { setOn(false); return; }
+      retried.current = true;
+    }
     if (voice.listening || speech.speaking || busy) return;
     const t = setTimeout(voice.start, 400);
     return () => clearTimeout(t);
@@ -180,6 +190,7 @@ export function useHandsFree(voice: { supported: boolean; listening: boolean; er
   const toggle = () => setOn((v) => {
     // Off ends a listen that is open right now, so nothing said after the tap is taken as a command.
     if (v && voice.listening) voice.abort();
+    if (!v) retried.current = false;
     return !v;
   });
   return { on, toggle };

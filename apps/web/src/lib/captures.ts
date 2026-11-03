@@ -7,14 +7,21 @@ import type { Origin } from "./api";
  */
 export interface SavedCapture { inspectionId: string; blob: Blob; name: string; source: Origin; key: string; observedAt: string; savedAt: number }
 
-const DB = "lensqi-fieldops", STORE = "captures";
+const DB = "lensqi-fieldops", STORE = "captures", BY_INSPECTION = "inspectionId";
+/** One record per capture, so a later failure never replaces an earlier photo still waiting to be sent. */
+const recordId = (c: Pick<SavedCapture, "inspectionId" | "key">) => `${c.inspectionId}:${c.key}`;
 
 function open(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       if (typeof indexedDB === "undefined") { resolve(null); return; }
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: "inspectionId" }); };
+      const req = indexedDB.open(DB, 2);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        // Version 1 kept one capture per inspection under the inspection id; its records are not carried over.
+        if (db.objectStoreNames.contains(STORE)) db.deleteObjectStore(STORE);
+        db.createObjectStore(STORE, { keyPath: "id" }).createIndex(BY_INSPECTION, "inspectionId", { unique: false });
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
       req.onblocked = () => resolve(null);
@@ -40,6 +47,9 @@ function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBReq
 }
 
 /** True when the capture is on the device; false when the browser gives no storage (then there is nothing to retry later). */
-export const saveCapture = (c: SavedCapture) => run("readwrite", (s) => s.put(c)).then((r) => r !== null);
-export const loadCapture = (inspectionId: string) => run<SavedCapture | undefined>("readonly", (s) => s.get(inspectionId)).then((r) => r ?? null);
-export const clearCapture = (inspectionId: string) => run("readwrite", (s) => s.delete(inspectionId)).then(() => undefined);
+export const saveCapture = (c: SavedCapture) => run("readwrite", (s) => s.put({ ...c, id: recordId(c) })).then((r) => r !== null);
+/** Every capture of the inspection still waiting to be sent, oldest first. */
+export const loadCaptures = (inspectionId: string) =>
+  run<(SavedCapture & { id: string })[]>("readonly", (s) => s.index(BY_INSPECTION).getAll(inspectionId))
+    .then((r) => (r ?? []).map(({ id: _id, ...c }) => c as SavedCapture).sort((a, b) => a.savedAt - b.savedAt));
+export const clearCapture = (inspectionId: string, key: string) => run("readwrite", (s) => s.delete(recordId({ inspectionId, key }))).then(() => undefined);

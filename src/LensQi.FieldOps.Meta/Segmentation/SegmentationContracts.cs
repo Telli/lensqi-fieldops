@@ -70,5 +70,5 @@ public interface IImageAnalyzer
 /// agree. Returns null when it cannot; the upload then keeps the bytes as received.</summary>
 public interface IImageOrienter
 {
-    Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, CancellationToken ct);
+    Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, long maxPixels, CancellationToken ct);
 }

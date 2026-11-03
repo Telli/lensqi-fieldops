@@ -17,9 +17,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--max-pixels", type=int, default=50_000_000, help="refuse to decode an image declaring more pixels than this")
     a = ap.parse_args()
     try:
         img = Image.open(a.image)
+        # The header's size is checked before any pixel is decoded, so a small file declaring a huge image costs nothing.
+        if img.width * img.height > a.max_pixels:
+            raise ValueError(f"image is {img.width}x{img.height}; at most {a.max_pixels} pixels are decoded")
         img.load()
         before = img.size
         turned = ImageOps.exif_transpose(img)
