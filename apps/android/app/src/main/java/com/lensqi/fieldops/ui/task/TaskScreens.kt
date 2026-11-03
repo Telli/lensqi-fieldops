@@ -355,6 +355,12 @@ fun PlanScreen(vm: TaskViewModel, onBack: () -> Unit, onStep: () -> Unit, onDone
                 plan.steps.forEachIndexed { i, step -> if (i > 0) HorizontalDivider(color = Fo.Border); StepRow(step, i + 1) }
             }
         }
+        if (s.queuedChecks > 0) item {
+            Panel(border = Fo.Warning) {
+                Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on this phone, waiting for the network", style = MaterialTheme.typography.bodySmall)
+                Text("The verdict is read out and shown on the step when it arrives.", style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
+            }
+        }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
             if (t.phase == TaskPhase.Abandoned) Panel { Text("You stopped this task. Its record is kept.", style = MaterialTheme.typography.bodySmall) }
@@ -458,7 +464,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error)
+            StepDetails(t, step, s.answer, voice.listening, voice.heard, s.error ?: voice.error, if (voice.settingsNeeded) voice.openSettings else null)
         },
         controls = { handle ->
             camera.value = handle
@@ -644,7 +650,7 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
-private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?) {
+private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TaskSources(step)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
@@ -656,6 +662,7 @@ private fun ColumnScope.StepDetails(task: com.lensqi.fieldops.data.api.TaskView,
         answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
+        onOpenSettings?.let { TextButton(onClick = it, contentPadding = PaddingValues(0.dp)) { Text("Open settings for the microphone", color = FoDark.Primary, fontSize = 12.sp) } }
     }
 }
 

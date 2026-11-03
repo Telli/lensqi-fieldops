@@ -25,6 +25,7 @@ object NetworkModule {
     @Provides @Singleton
     fun okHttp(settings: SettingsStore): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(baseUrlInterceptor(settings::currentBase))
+        .addNetworkInterceptor(com.lensqi.fieldops.data.api.ClockSkew.interceptor())
         .connectTimeout(10, TimeUnit.SECONDS)
         // Muse and SAM calls take 5–20 s; the server cuts a model request at 90 s.
         .readTimeout(100, TimeUnit.SECONDS)

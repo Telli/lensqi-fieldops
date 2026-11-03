@@ -60,11 +60,12 @@ class CommandQueue internal constructor(
     private val cache: InspectionCache,
     /** Where the camera and imports write temporary files; a source there is deleted once its saved copy exists. */
     private val scratch: File? = null,
+    private val json: kotlinx.serialization.json.Json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; explicitNulls = false },
     private val schedule: () -> Unit,
 ) {
     @Inject constructor(@ApplicationContext context: Context, dao: PendingCommandDao,
-        factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache) :
-        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, context.cacheDir, { scheduleSync(context) })
+        factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache, json: kotlinx.serialization.json.Json) :
+        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, context.cacheDir, json, { scheduleSync(context) })
 
     private val mutex = Mutex()
     fun observe(sessionId: String, server: String) = dao.observe(sessionId, server)
@@ -78,11 +79,22 @@ class CommandQueue internal constructor(
     }
 
     suspend fun enqueuePhoto(inspectionId: String, source: File, origin: String, server: String,
-        observedAt: Instant = Instant.now(), afterRepair: Boolean = false): PendingCommand =
+        observedAt: Instant = Instant.now(), afterRepair: Boolean = false, measured: String? = null): PendingCommand =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             save(PendingCommand(UUID.randomUUID().toString(), inspectionId, CommandKind.UploadPhoto, System.currentTimeMillis(),
-                source = origin, observedAt = observedAt.toString(), serverBase = server, afterRepair = afterRepair), source.readBytes())
+                source = origin, observedAt = observedAt.toString(), serverBase = server, afterRepair = afterRepair, measured = measured), source.readBytes())
                 .also { if (scratch != null && source.parentFile == scratch) source.delete() }
+        }
+
+    /**
+     * An inspection command the server could not be reached for, kept under the Idempotency-Key the screen already used,
+     * so the replay is the same request. Sent in capture order after the photos before it; a refusal (the server moved on)
+     * is kept with its code until the technician removes it.
+     */
+    suspend fun enqueueCommand(inspectionId: String, kind: CommandKind, key: String, payload: String?, server: String): PendingCommand =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            require(kind.isJsonCommand) { "only JSON commands are queued this way" }
+            PendingCommand(key, inspectionId, kind, System.currentTimeMillis(), serverBase = server, payload = payload).also { dao.insert(it); schedule() }
         }
 
     private suspend fun save(command: PendingCommand, bytes: ByteArray): PendingCommand =
@@ -133,12 +145,13 @@ class CommandQueue internal constructor(
 
     private suspend fun send(c: PendingCommand): ApiOutcome<String?> {
         val server = c.serverBase ?: return ApiOutcome.Rejected(0, "server_unbound", "Choose the original server before retrying this saved photo")
+        val api = apiFor(server)
+        if (c.kind.isJsonCommand) return sendCommand(api, c, server)
         val file = c.filePath?.let(::File)?.takeIf { it.isFile }
             ?: return ApiOutcome.Rejected(0, "photo_missing", "The saved photo could not be found; capture it again")
-        val api = apiFor(server)
         val part = MultipartBody.Part.createFormData("image", file.name, file.asRequestBody(requireNotNull(c.mediaType).toMediaType()))
         return when (c.kind) {
-            CommandKind.UploadPhoto -> when (val r = apiCall { api.uploadObservation(c.sessionId, c.id, part, requireNotNull(c.source).toRequestBody(), requireNotNull(c.observedAt).toRequestBody()) }) {
+            CommandKind.UploadPhoto -> when (val r = apiCall { api.uploadObservation(c.sessionId, c.id, part, requireNotNull(c.source).toRequestBody(), requireNotNull(c.observedAt).toRequestBody(), c.measured?.toRequestBody()) }) {
                 is ApiOutcome.Ok -> {
                     if (r.value.sha256 != c.sha256) ApiOutcome.Rejected(0, "client_digest_mismatch", "Uploaded bytes did not match the saved photo")
                     else { cache.put(r.value.state, server); ApiOutcome.Ok(r.value.evidenceId) }
@@ -151,6 +164,31 @@ class CommandQueue internal constructor(
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }
+            else -> error("not a photo command: ${c.kind}")
+        }
+    }
+
+    /** A queued JSON command: the body it was saved with, under its original key; the server's view replaces the cached one. */
+    private suspend fun sendCommand(api: FieldOpsApi, c: PendingCommand, server: String): ApiOutcome<String?> {
+        val id = c.sessionId
+        val body = c.payload
+        val r: ApiOutcome<com.lensqi.fieldops.data.api.InspectionView> = try {
+            when (c.kind) {
+                CommandKind.RepairClaim -> apiCall { api.repairClaim(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.RepairClaimRequest.serializer(), requireNotNull(body))).state }
+                CommandKind.Checklist -> apiCall { api.checklist(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.ChecklistRequest.serializer(), requireNotNull(body))) }
+                CommandKind.WorkOrder -> apiCall { api.workOrder(id, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.WorkOrderRequest.serializer(), requireNotNull(body))) }
+                CommandKind.Acknowledge -> apiCall { api.acknowledge(id, c.id) }
+                else -> error("not a JSON command: ${c.kind}")
+            }
+        } catch (e: IllegalArgumentException) {
+            return ApiOutcome.Rejected(0, "payload_unreadable", "The saved command could not be read; enter it again")
+        } catch (e: kotlinx.serialization.SerializationException) {
+            return ApiOutcome.Rejected(0, "payload_unreadable", "The saved command could not be read; enter it again")
+        }
+        return when (r) {
+            is ApiOutcome.Ok -> { cache.put(r.value, server); ApiOutcome.Ok(null) }
+            is ApiOutcome.Rejected -> r
+            is ApiOutcome.Unreachable -> r
         }
     }
 

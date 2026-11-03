@@ -169,7 +169,9 @@ class ListeningHold(private val speech: SpeechOutput?) {
     fun result(text: String?, deliver: (String) -> Unit) { ended(); text?.takeIf { it.isNotBlank() }?.let(deliver) }
 }
 
-class VoiceInputState(val listening: Boolean, val heard: String, val error: String?, val supported: Boolean, val start: () -> Unit, val stop: () -> Unit)
+class VoiceInputState(val listening: Boolean, val heard: String, val error: String?, val supported: Boolean, val start: () -> Unit, val stop: () -> Unit,
+    /** The microphone was refused and Android will not ask again; [openSettings] is the way to allow it. Typing still works. */
+    val settingsNeeded: Boolean = false, val openSettings: () -> Unit = {})
 
 /**
  * Push-to-talk speech recognition. The on-device recognizer is used where Android offers one (Android 12+); otherwise the
@@ -184,6 +186,7 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var settingsNeeded by remember { mutableStateOf(false) }
     val supported = remember { SpeechRecognizer.isRecognitionAvailable(context) }
     val canOnDevice = remember { supported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
     var onDevice by remember { mutableStateOf(canOnDevice) }
@@ -222,12 +225,19 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
         })
         Unit
     }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) begin() else error = "Microphone permission is needed for voice." }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) { settingsNeeded = false; begin() }
+        else {
+            settingsNeeded = com.lensqi.fieldops.ui.common.permanentlyDenied(context, Manifest.permission.RECORD_AUDIO)
+            error = if (settingsNeeded) "The microphone is off for LensQi and Android will not ask again. Allow it in Settings, or keep typing." else "Microphone permission is needed for voice."
+        }
+    }
     return VoiceInputState(listening, heard, error, supported && recognizer != null,
         start = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
             else permission.launch(Manifest.permission.RECORD_AUDIO)
         },
         stop = { recognizer?.stopListening(); Unit },
+        settingsNeeded = settingsNeeded, openSettings = { com.lensqi.fieldops.ui.common.openAppSettings(context) },
     )
 }

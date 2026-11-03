@@ -12,8 +12,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
-/** UploadPhoto is inspection evidence; StepCheckPhoto is a guided-task step check (GT-R09.5). */
-enum class CommandKind { UploadPhoto, StepCheckPhoto }
+/**
+ * UploadPhoto is inspection evidence; StepCheckPhoto is a guided-task step check (GT-R09.5). RepairClaim, Checklist,
+ * Acknowledge and WorkOrder are the inspection's small JSON commands, saved on the phone while offline and sent in
+ * capture order; Verify is never queued, it measures the equipment and needs the server now.
+ */
+enum class CommandKind { UploadPhoto, StepCheckPhoto, RepairClaim, Checklist, Acknowledge, WorkOrder }
+
+/** The JSON commands the queue can hold. */
+val CommandKind.isJsonCommand: Boolean get() = this == CommandKind.RepairClaim || this == CommandKind.Checklist || this == CommandKind.Acknowledge || this == CommandKind.WorkOrder
 
 enum class CommandState { Pending, Rejected, Uploaded }
 
@@ -42,6 +49,10 @@ data class PendingCommand(
     val serverBase: String? = null,
     val resultEvidenceId: String? = null,
     @ColumnInfo(defaultValue = "0") val afterRepair: Boolean = false,
+    /** The JSON body of a queued command (claim, checklist, work order); null for photos and acknowledgements. */
+    val payload: String? = null,
+    /** Parts the phone measured at the shutter, as the server's `measured` JSON array; null when nothing was measured. */
+    val measured: String? = null,
 )
 
 @Dao
@@ -72,11 +83,19 @@ interface PendingCommandDao {
     suspend fun delete(id: String)
 }
 
-@Database(entities = [PendingCommand::class], version = 3, exportSchema = false)
+@Database(entities = [PendingCommand::class], version = 4, exportSchema = false)
 abstract class QueueDatabase : RoomDatabase() {
     abstract fun commands(): PendingCommandDao
 
     companion object {
+        /** Version 4 queues the inspection's JSON commands and keeps what the phone measured at the shutter; queued rows are kept. */
+        val MIGRATION_3_4_SQL = listOf(
+            "ALTER TABLE pending_command ADD COLUMN payload TEXT",
+            "ALTER TABLE pending_command ADD COLUMN measured TEXT",
+        )
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) = MIGRATION_3_4_SQL.forEach { db.execSQL(it) }
+        }
         val MIGRATION_2_3_SQL = listOf(
             "ALTER TABLE pending_command ADD COLUMN serverBase TEXT",
             "ALTER TABLE pending_command ADD COLUMN resultEvidenceId TEXT",

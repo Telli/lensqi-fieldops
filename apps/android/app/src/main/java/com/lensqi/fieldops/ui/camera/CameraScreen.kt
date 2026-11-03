@@ -204,13 +204,15 @@ private fun CameraContent(
     var liveBeforeShutter by rememberSaveable { mutableStateOf(false) }
     var ghost by rememberSaveable { mutableStateOf(true) }
     val arActive = liveEnabled && spatialEnabled && arAvailability == ArAvailability.Ready && arFailure == null
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
+    var asked by rememberSaveable { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; asked = true }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
 
     if (!granted) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
             Text("Camera access is needed to capture evidence. Nothing is recorded without your tap.")
             PrimaryButton("Allow camera", { ask.launch(Manifest.permission.CAMERA) }, Modifier.fillMaxWidth())
+            com.lensqi.fieldops.ui.common.PermissionSettingsHint(context, Manifest.permission.CAMERA, asked, "Camera access", "Without it no photo can be taken, so nothing can be inspected or verified.")
             Text("Back", color = FoDark.Muted, modifier = Modifier.clickable(onClick = onClose).padding(8.dp))
         }
         return

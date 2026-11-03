@@ -26,6 +26,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -143,7 +145,7 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     val step = t?.currentStep ?: return@composable
                     val n = t.plan?.steps?.indexOfFirst { it.id == step.id } ?: 0
                     GlassesScreen(
-                        session = LiveSession(vm.taskId, LiveSessionKind.Task, step.lookFor.firstOrNull()),
+                        session = LiveSession(vm.taskId, LiveSessionKind.Task, step.lookFor.firstOrNull(), label = "Step ${n + 1} · ${step.title}"),
                         prompt = step.instruction,
                         status = "Step ${n + 1} of ${t.plan?.steps?.size ?: 1} · ${step.title}",
                         onClose = { nav.popBackStack() },
@@ -158,9 +160,13 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                 composable("task/{taskId}/done", arguments = listOf(navArgument("taskId") { type = NavType.StringType })) {
                     TaskDoneScreen(hiltViewModel(), onHome = { goTab("taskHome") }, onInspection = openInspection)
                 }
-                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onAssets = { nav.navigate("assets") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }) }
+                composable("home") { HomeScreen(home, onStart = { goTab("start") }, onAssets = { nav.navigate("assets") }, onOpen = openInspection, onAll = { nav.navigate("inspections") }, onProfile = { nav.navigate("profile") }, onScan = { nav.navigate("scan") }) }
                 composable("inspections") { InspectionsScreen(home, openInspection) }
-                composable("start") { StartScreen(home) { id -> nav.navigate("inspection/$id") { popUpTo("start") { inclusive = true } } ; nav.navigate("camera") } }
+                composable("start") { StartScreen(home, onScan = { nav.navigate("scan") }) { id -> nav.navigate("inspection/$id") { popUpTo("start") { inclusive = true } } ; nav.navigate("camera") } }
+                composable("scan") {
+                    com.lensqi.fieldops.ui.home.ScanAssetScreen(home, onBack = { nav.popBackStack() },
+                        onCreated = { id -> nav.navigate("inspection/$id") { popUpTo("scan") { inclusive = true } }; nav.navigate("camera") })
+                }
                 composable("assets") { AssetsScreen(home) { assetId -> nav.navigate("asset/$assetId") } }
                 composable("asset/{assetId}", arguments = listOf(navArgument("assetId") { type = NavType.StringType })) { e ->
                     AssetDetailScreen(
@@ -188,6 +194,8 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     // compares and its before photo as a framing aid. Before a repair, the part the AI asked to see.
                     val guide = com.lensqi.fieldops.domain.captureGuide(ui.view)
                     val reference by produceState<android.graphics.Bitmap?>(null, guide?.referencePhotoId) { value = guide?.referencePhotoId?.let { vm.photoForDisplay(it) } }
+                    // What ARCore measured on the last analysed frame goes with the photo as a measured note; the still has no depth.
+                    var measured by remember { mutableStateOf<String?>(null) }
                     CameraScreen(
                         prompt = vm.cameraPrompt(),
                         analyzeLive = vm::analyzeLiveFrame,
@@ -198,9 +206,10 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                         registration = remember(ui.fixture, ui.view?.assetId) { com.lensqi.fieldops.ui.inspection.registrationSubject(ui.fixture, ui.view?.assetId) },
                         scopeKey = vm.inspectionId,
                         targetMemory = vm.spatialTarget,
+                        onObjects = { measured = com.lensqi.fieldops.ui.task.measuredJson(it) },
                         onClose = { nav.popBackStack() },
                         onCaptured = { file ->
-                            vm.captureForReview(file, origin = "Phone")
+                            vm.captureForReview(file, origin = "Phone", measured = measured)
                             nav.navigate("review") { popUpTo("camera") { inclusive = true } }
                         },
                     )
@@ -214,9 +223,11 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
                     // Same pinning as "camera": the photo belongs to the inspection underneath.
                     val parent = remember(e) { nav.previousBackStackEntry } ?: return@composable
                     val vm: InspectionViewModel = hiltViewModel(parent)
-                    val stage = vm.state.collectAsStateWithLifecycle().value.view?.stage
+                    val ui = vm.state.collectAsStateWithLifecycle().value
+                    val stage = ui.view?.stage
+                    val assetName = ui.view?.let { v -> ui.fixture?.assets?.firstOrNull { it.assetId == v.assetId }?.displayName ?: v.assetId }
                     GlassesScreen(
-                        session = LiveSession(vm.inspectionId, LiveSessionKind.Inspection),
+                        session = LiveSession(vm.inspectionId, LiveSessionKind.Inspection, label = assetName ?: "Inspection ${vm.inspectionId}"),
                         prompt = vm.cameraPrompt(),
                         status = stage?.let { stageLabel(it) },
                         onClose = { nav.popBackStack() },
