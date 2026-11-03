@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cameraError, connectCamera } from "./camera";
+import { cameraError, connectCamera, hasStillCapture } from "./camera";
 
 describe("camera ownership", () => {
   it("stops a stream that arrives after leaving the camera", async () => {
@@ -32,5 +32,13 @@ describe("camera ownership", () => {
     connectCamera(() => Promise.reject(error), vi.fn(), ignored)();
     await Promise.resolve(); await Promise.resolve();
     expect(ignored).not.toHaveBeenCalled();
+  });
+});
+
+describe("still capture", () => {
+  it("takes a sensor still only where the browser offers ImageCapture", () => {
+    expect(hasStillCapture({})).toBe(false);
+    expect(hasStillCapture({ ImageCapture: class {} })).toBe(true);
+    expect(hasStillCapture(undefined)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, ShieldCheck, SlidersHorizontal, Sparkles, Eye, ClipboardCheck, Gauge, Lock } from "lucide-react";
+import { Camera, Terminal, RotateCcw, FileCheck2, Wrench, Loader2, UserCheck, Glasses, ShieldCheck, SlidersHorizontal, Sparkles, Eye, ClipboardCheck, Gauge, Lock, CheckCircle2, XCircle, CircleDashed } from "lucide-react";
 import { TopBar, Page } from "@/components/fo/mobile-shell";
 import { AiCard, Progress } from "@/components/fo/ai";
 import { ArFrame } from "@/components/fo/ar-frame";
@@ -12,9 +12,9 @@ import { api, commandScope, type ChecklistStatus, type Decision, type EventRecor
 import { aiSummary, verifySteps } from "@/lib/ai";
 import { arTags, usePhotoOutlines } from "@/lib/ar";
 import { qk, useAct, useElapsed } from "@/lib/hooks";
-import { beforePhoto, useInspectionBundle, verifications } from "@/lib/inspection";
+import { beforePhoto, useInspectionBundle } from "@/lib/inspection";
 import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason, measuredValue, predictionOutcome, probeValue } from "@/lib/labels";
-import { COMPARE_GIVE_UP_MS, COMPARE_POLL_MS, currentAttempt, verifyCard, verifyCardStep, type Attempt } from "@/lib/verify";
+import { COMPARE_GIVE_UP_MS, COMPARE_POLL_MS, attemptFailedOn, attemptHistory, currentAttempt, verifyCard, verifyCardStep, verifyPreflight, type Attempt, type PreflightRow } from "@/lib/verify";
 import { cn } from "@/lib/utils";
 
 /**
@@ -81,7 +81,8 @@ export default function Verify({ id }: { id: string }) {
   // The server's own answer for each item under this claim; the policy counts it whichever post-repair photo it cited.
   const reviewed = (req: string) => i.checklist.find((c) => c.requirementId === req);
   const attempt = verify.isPending ? null : currentAttempt(ev);
-  const attempts = verifications(ev);
+  const attempts = attemptHistory(ev);
+  const preflight = verifyPreflight(i, required.map((r) => r.requirementId));
   const asked = i.evidenceRequests?.find((r) => !r.answeredByPhotoId);
   const busy = review.isPending || ack.isPending || claim.isPending;
   const btn = "h-12 w-full rounded-2xl";
@@ -191,7 +192,7 @@ export default function Verify({ id }: { id: string }) {
       <TopBar title="Repair verification" back={`/m/i/${id}`} right={check?.source && <SourceBadge source={check.source} />} />
       <Page className="space-y-4">
         {showCamera ? (
-          <VerifyCamera key={i.currentClaimId} id={id} guideSrc={before && photoUrl(before.evidenceId)}
+          <VerifyCamera key={i.currentClaimId} id={id} guideSrc={before && photoUrl(before.evidenceId)} photoUrl={photoUrl}
             prompt={asked ? `Requested: ${asked.note}` : "Frame the repaired connection the same way as before"}
             onAccepted={() => setCameraOpen(false)} onClose={card === "photo" && !attempt ? undefined : () => setCameraOpen(false)} />
         ) : (
@@ -207,6 +208,8 @@ export default function Verify({ id }: { id: string }) {
           !showCamera && <div ref={nextStep} className="scroll-mt-20">{gateCard}</div>
         )}
 
+        {/* The three proofs and the measurement as the server sees them now, so a failed attempt is rarer and never a surprise. */}
+        {!attempt && !verify.isPending && !showCamera && card !== "closed" && card !== "claim" && card !== "comparing" && <Preflight rows={preflight} />}
         {!attempt && !verify.isPending && waitingOn.length > 1 && card !== "closed" && (
           <Expandable title={`Why verify can't run yet · ${waitingOn.length}`}>
             <ul className="space-y-1.5 text-xs text-muted-foreground">{waitingOn.map((b) => <li key={b}>· {b}</li>)}</ul>
@@ -217,16 +220,7 @@ export default function Verify({ id }: { id: string }) {
 
         <div className="space-y-2">
           {!attempt && accepted && (card === "confirm" || card === "run") && <Expandable title={`Your review · ${required.length} items`}>{reviewRows}</Expandable>}
-          {attempts.length > 0 && (
-            <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-              <span>Attempts</span>
-              {attempts.map((a) => {
-                const ok = (a["decision"] as Decision).result === "Verified";
-                return <span key={a.sequence} title={fmtWhen(a.occurredAt)} className={cn("size-2 rounded-full", ok ? "bg-success" : "bg-failure")} />;
-              })}
-              <span className="ml-auto">all kept in the record</span>
-            </div>
-          )}
+          {attempts.length > 0 && <AttemptHistory attempts={attempts} fixture={fixture} />}
           {attempt && (
             <TechDetails rows={[["Decision", attempt.decision.result], ["Reason", attempt.decision.reasons.join(" ")], ["Policy", attempt.decision.policyVersion], ["Outcome", attempt.decision.outcomeKind ?? "—"], ["Decided", fmtWhen(attempt.at)]]} />
           )}
@@ -320,6 +314,53 @@ function AttemptResult({ id, i, a, fixture, card, onRetake, claimAgain }: {
         <ul className="space-y-0.5 text-muted-foreground">{d.reasons.map((r) => <li key={r}>· {r}</li>)}</ul>
       </div>
     </div>
+  );
+}
+
+/** The proofs verify needs, where each stands and why, read from the server's view. Nothing here decides. */
+function Preflight({ rows }: { rows: PreflightRow[] }) {
+  return (
+    <div className="panel divide-y divide-border" data-preflight>
+      {rows.map((r) => (
+        <div key={r.title} className="flex items-start gap-2.5 px-3.5 py-2.5 text-sm">
+          {r.ok === true ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" /> : r.ok === false ? <XCircle className="mt-0.5 size-4 shrink-0 text-failure" /> : <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+          <div className="min-w-0"><div className="font-medium">{r.title}</div><div className="text-xs text-muted-foreground">{r.detail}</div></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Every verify attempt kept in the record, newest first: its decision, when, and which proof decided it. */
+function AttemptHistory({ attempts, fixture }: { attempts: Attempt[]; fixture?: Fixture | null }) {
+  const failedOn: Record<NonNullable<ReturnType<typeof attemptFailedOn>>, string> = {
+    measurement: "the equipment check failed", review: "your review did not pass", confirmation: "the evidence was not confirmed", photo: "no accepted photo",
+  };
+  const target = (diagnosticId: string) => fixture?.diagnostics.find((x) => x.diagnosticId === diagnosticId)?.targetAlias ?? diagnosticId;
+  return (
+    <Expandable title={`Attempts · ${attempts.length} kept in the record`}>
+      <ol className="space-y-2 text-xs" data-attempt-history>
+        {[...attempts].reverse().map((a, k) => {
+          const ok = a.decision.result === "Verified";
+          const why = attemptFailedOn(a);
+          return (
+            <li key={a.sequence} className="flex gap-2.5">
+              <span className={cn("mt-1 size-2 shrink-0 rounded-full", ok ? "bg-success" : a.decision.result === "NeedsHumanReview" ? "bg-warning" : "bg-failure")} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                  <span className="font-medium text-foreground">Attempt {attempts.length - k} · {a.decision.result === "NeedsHumanReview" ? "Held" : a.decision.result}</span>
+                  <span className="text-muted-foreground">{fmtWhen(a.at)}</span>
+                </div>
+                <p className="text-muted-foreground">{ok ? "Every required check passed." : `${why ? `Decided by ${failedOn[why]}: ` : ""}${plainReason(a.decision.reasons[0] ?? "")}`}</p>
+                {a.measured.length > 0 && (
+                  <p className="text-muted-foreground">{a.measured.map((m) => `${target(m.diagnosticId)} ${m.passed === null ? "unavailable" : m.passed ? "passed" : "failed"} (${m.source === "LiveLocal" ? "live" : m.source === "Simulated" ? "simulated" : "replay"})`).join(" · ")}</p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </Expandable>
   );
 }
 

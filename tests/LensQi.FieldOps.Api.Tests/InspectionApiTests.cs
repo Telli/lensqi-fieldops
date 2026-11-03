@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
+using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Core.Inspection;
 using LensQi.FieldOps.Diagnostics;
 using LensQi.FieldOps.Meta.Segmentation;
@@ -28,6 +29,7 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
     public FakeVisionChat FakeChat { get; } = new();
     public FakeSegmenter FakeSam { get; } = new();
     public FakeQualityAnalyzer FakeQuality { get; } = new();
+    public FakeOrienter FakeOrienter { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -44,6 +46,7 @@ public sealed class FieldOpsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IRoiCropper>(new FakeCropper());
             services.RemoveAll<IImageAnalyzer>();
             services.AddSingleton<IImageAnalyzer>(FakeQuality);
+            services.AddSingleton<IImageOrienter>(FakeOrienter);
         });
     }
 }
@@ -298,6 +301,77 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal("Verified", first.GetProperty("decision").GetProperty("result").GetString());
         Assert.True(second.GetProperty("replayed").GetBoolean());
         Assert.Equal(first.GetProperty("decision").ToString(), second.GetProperty("decision").ToString());
+    }
+
+    [Fact]
+    public void Exif_orientation_is_read_from_the_first_app1_segment_only()
+    {
+        Assert.Equal(6, EvidenceFileStore.ReadExifOrientation(TestImages.JpegWithOrientation(640, 480, 6)));
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.JpegWithOrientation(640, 480, 1)));
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.JpegWithOrientation(640, 480, 9)));   // out of range: treated as upright
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Jpeg(640, 480)));                      // APP0 only
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Png(640, 480)));
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation([0xFF, 0xD8, 0xFF, 0xE1, 0x00]));                 // truncated
+        // A first Exif segment without the tag (a thumbnail block) is skipped and the orientation read from the next one.
+        var two = TestImages.JpegWithOrientation(640, 480, 6);
+        byte[] thumbnailBlock = [0xFF, 0xE1, 0x00, 0x22, (byte)'E', (byte)'x', (byte)'i', (byte)'f', 0, 0, (byte)'M', (byte)'M', 0, 0x2A, 0, 0, 0, 8, 0, 1, 0x01, 0x1A, 0, 5, 0, 0, 0, 1, 0, 0, 0, 0x1A, 0, 0, 0, 0];
+        Assert.Equal(6, EvidenceFileStore.ReadExifOrientation([.. two[..2], .. thumbnailBlock, .. two[2..]]));
+        // An IFD offset near int.MaxValue is out of range, never an overflow into the bounds check.
+        var huge = TestImages.JpegWithOrientation(640, 480, 6);
+        huge[16] = 0x7F; huge[17] = 0xFF; huge[18] = 0xFF; huge[19] = 0xFE;
+        Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(huge));
+    }
+
+    [Fact]
+    public async Task An_image_declaring_too_many_pixels_is_refused_before_the_orienter_decodes_it()
+    {
+        var id = await CreateInspection();
+        var before = _factory.FakeOrienter.Calls;
+        var huge = TestImages.JpegWithOrientation(12000, 9000, 6);   // 108 MP declared in a few dozen bytes
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(huge), "image", "huge.jpg" }, { new StringContent("Phone"), "source" } };
+        var r = await _client.PostAsync($"/v1/inspections/{id}/observations", form);
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Equal("image_too_large", (await Json(r)).GetProperty("code").GetString());
+        Assert.Equal(before, _factory.FakeOrienter.Calls);
+    }
+
+    [Fact]
+    public async Task A_turned_copy_over_the_upload_limit_is_not_stored()
+    {
+        var id = await CreateInspection();
+        _factory.FakeOrienter.Oversize = true;
+        try
+        {
+            var turned = TestImages.JpegWithOrientation(640, 480, 6);
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(turned), "image", "portrait.jpg" }, { new StringContent("Phone"), "source" } };
+            var r = await Json(await _client.PostAsync($"/v1/inspections/{id}/observations", form));
+            Assert.Equal(640, r.GetProperty("width").GetInt32());
+            Assert.Equal(r.GetProperty("uploadedSha256").GetString(), r.GetProperty("sha256").GetString());
+        }
+        finally { _factory.FakeOrienter.Oversize = false; }
+    }
+
+    [Fact]
+    public async Task A_turned_jpeg_is_stored_as_shown_and_the_uploaded_digest_is_still_returned()
+    {
+        var id = await CreateInspection();
+        var turned = TestImages.JpegWithOrientation(640, 480, 6);
+        var before = _factory.FakeOrienter.Calls;
+        using var form = new MultipartFormDataContent { { new ByteArrayContent(turned), "image", "portrait.jpg" }, { new StringContent("Phone"), "source" } };
+        var r = await Json(await _client.PostAsync($"/v1/inspections/{id}/observations", form));
+        // Stored upright: the sides swap, the stored digest is of the turned bytes, and the uploaded digest matches what the client sent.
+        Assert.Equal(480, r.GetProperty("width").GetInt32());
+        Assert.Equal(640, r.GetProperty("height").GetInt32());
+        Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(turned)), r.GetProperty("uploadedSha256").GetString());
+        Assert.NotEqual(r.GetProperty("uploadedSha256").GetString(), r.GetProperty("sha256").GetString());
+        Assert.Equal(before + 1, _factory.FakeOrienter.Calls);
+
+        // An upright JPEG never goes through the sidecar and both digests agree.
+        var upright = TestImages.Jpeg(640, 480);
+        using var form2 = new MultipartFormDataContent { { new ByteArrayContent(upright), "image", "landscape.jpg" }, { new StringContent("Phone"), "source" } };
+        var r2 = await Json(await _client.PostAsync($"/v1/inspections/{id}/observations", form2));
+        Assert.Equal(r2.GetProperty("uploadedSha256").GetString(), r2.GetProperty("sha256").GetString());
+        Assert.Equal(before + 1, _factory.FakeOrienter.Calls);
     }
 
     [Fact]

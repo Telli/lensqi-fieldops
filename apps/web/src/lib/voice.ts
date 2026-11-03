@@ -23,25 +23,53 @@ export function parseCommand(text: string): Command | null {
   return lookup.get(t) ?? null;
 }
 
-/** Speaks text aloud and cancels whatever was being said. Off when the browser has no speech synthesis. */
+/**
+ * Speaks text aloud and cancels whatever was being said. Off when the browser has no speech synthesis. `speaking` is true
+ * while an utterance plays, and `interrupt()` stops one so the voice never talks over the microphone.
+ */
 export function useSpeak(initiallyOn = true) {
   const supported = typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
   const [on, setOn] = useState(initiallyOn && supported);
   // Held while the person said "pause": nothing is spoken, without turning the voice off.
   const [held, setHeld] = useState(false);
+  // While the microphone is open nothing is spoken, so the voice is never heard as a command or a question. Kept in a ref
+  // as well, because the recogniser reports the close synchronously, right before it delivers a command that may speak.
+  const listeningRef = useRef(false);
+  const [, setListeningState] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const last = useRef("");
+  // The utterance in flight and its time limit; callbacks and timers from an earlier one are ignored.
+  const current = useRef<{ utterance: SpeechSynthesisUtterance; limit: ReturnType<typeof setTimeout> } | null>(null);
+  const finish = useCallback((u?: SpeechSynthesisUtterance) => {
+    if (!current.current || (u && current.current.utterance !== u)) return;
+    clearTimeout(current.current.limit);
+    current.current = null;
+    setSpeaking(false);
+  }, []);
   const speak = useCallback((text: string, force = false) => {
-    if (!supported || !on || held || !text || (!force && text === last.current)) return;
+    if (!supported || !on || held || listeningRef.current || !text || (!force && text === last.current)) return;
     last.current = text;
+    finish();
     speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  }, [on, held, supported]);
-  const hold = useCallback((value: boolean) => { setHeld(value); if (value && supported) speechSynthesis.cancel(); }, [supported]);
+    const u = new SpeechSynthesisUtterance(text);
+    // Some browsers never fire onend for a long utterance; a generous time limit keeps hands-free from waiting forever.
+    const limit = setTimeout(() => finish(u), 3000 + text.length * 90);
+    current.current = { utterance: u, limit };
+    u.onstart = () => { if (current.current?.utterance === u) setSpeaking(true); };
+    u.onend = () => finish(u);
+    u.onerror = () => finish(u);
+    setSpeaking(true);
+    speechSynthesis.speak(u);
+  }, [on, held, supported, finish]);
+  const interrupt = useCallback(() => { finish(); if (supported) speechSynthesis.cancel(); }, [supported, finish]);
+  const hold = useCallback((value: boolean) => { setHeld(value); if (value) interrupt(); }, [interrupt]);
+  /** Tells the voice the microphone is open: what is playing stops and nothing new is spoken until it closes. */
+  const setListening = useCallback((value: boolean) => { listeningRef.current = value; setListeningState(value); if (value) interrupt(); }, [interrupt]);
   useEffect(() => () => { if (supported) speechSynthesis.cancel(); }, [supported]);
   const toggle = useCallback((value?: boolean) => {
-    setOn((now) => { const next = value ?? !now; if (!next && supported) speechSynthesis.cancel(); return next; });
-  }, [supported]);
-  return { supported, on, toggle, speak, hold };
+    setOn((now) => { const next = value ?? !now; if (!next) interrupt(); return next; });
+  }, [interrupt]);
+  return { supported, on, toggle, speak, hold, speaking, interrupt, setListening };
 }
 
 /** "Pause" holds speech and live coaching; "resume" brings back what was on before. */
@@ -73,6 +101,11 @@ interface Recognition {
 }
 type RecognitionCtor = new () => Recognition;
 
+const BLOCKED_MIC = "Microphone access is blocked for this site.";
+const BLOCKED_SERVICE = "Speech recognition isn't allowed for this site.";
+/** Errors that will not change by trying again, so hands-free stops asking. */
+export const voiceBlocked = (error: string | null) => error === BLOCKED_MIC || error === BLOCKED_SERVICE;
+
 /** Shown before the first use of the microphone, then not again on this device. */
 export const speechNotice = "Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.";
 const NOTICE_KEY = "lensqi.speechNoticeSeen";
@@ -82,7 +115,7 @@ const noticeSeen = () => { try { return localStorage.getItem(NOTICE_KEY) === "1"
  * Push-to-talk speech recognition in the browser (Web Speech API). The browser may use a remote speech provider; only the final text is
  * used. Unsupported browsers report it so the page can offer typing instead.
  */
-export function usePushToTalk(onFinal: (text: string) => void) {
+export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told synchronously when the microphone opens and closes, before any final text is delivered. */ onListening?: (on: boolean) => void }) {
   const Ctor = typeof window !== "undefined" ? ((window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor }).SpeechRecognition
     ?? (window as unknown as { webkitSpeechRecognition?: RecognitionCtor }).webkitSpeechRecognition) : undefined;
   const [listening, setListening] = useState(false);
@@ -92,6 +125,8 @@ export function usePushToTalk(onFinal: (text: string) => void) {
   const final = useRef("");
   const deliver = useRef(onFinal);
   deliver.current = onFinal;
+  const tell = useRef(opts?.onListening);
+  tell.current = opts?.onListening;
   const [seen, setSeen] = useState(noticeSeen);
 
   const start = useCallback(() => {
@@ -101,26 +136,62 @@ export function usePushToTalk(onFinal: (text: string) => void) {
     const r = new Ctor();
     r.lang = navigator.language || "en-US"; r.interimResults = true; r.continuous = false;
     final.current = ""; setHeard(""); setError(null);
+    // Every callback is ignored once this recogniser is no longer the current one (aborted, or replaced by a newer one).
     r.onresult = (e) => {
+      if (rec.current !== r) return;
       let text = "";
       for (let i = 0; i < e.results.length; i++) text += e.results[i]![0].transcript;
       setHeard(text);
       if (e.results[e.results.length - 1]?.isFinal) final.current = text;
     };
-    r.onerror = (e) => setError(e.error === "not-allowed" ? "Microphone access is blocked for this site." : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
+    r.onerror = (e) => {
+      if (rec.current !== r) return;
+      setError(e.error === "not-allowed" ? BLOCKED_MIC : e.error === "service-not-allowed" ? BLOCKED_SERVICE : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
+    };
     r.onend = () => {
-      const aborted = rec.current !== r;
-      rec.current = null; setListening(false);
+      // Nothing is delivered after the page let go of the recognizer (unmount or abort), and nothing of a newer one is touched.
+      if (rec.current !== r) return;
+      rec.current = null; setListening(false); tell.current?.(false);
       const text = final.current.trim();
-      // Nothing is delivered after the page let go of the recognizer (unmount aborts it).
-      if (text && !aborted) deliver.current(text);
+      if (text) deliver.current(text);
     };
     rec.current = r;
-    setListening(true);
-    r.start();
+    setListening(true); tell.current?.(true);
+    // A recogniser that refuses to start never fires onend, so the button would stay on "listening" without this.
+    try { r.start(); } catch { rec.current = null; setListening(false); tell.current?.(false); setError("Voice input couldn't start. Try again."); }
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
+  /** Ends an open listen and delivers nothing from it, unlike `stop`, which still hands over the final text. */
+  const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); tell.current?.(false); }, []);
   useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
-  return { supported: !!Ctor, listening, heard, error, start, stop, notice: !!Ctor && !seen };
+  return { supported: !!Ctor, listening, heard, error, start, stop, abort, notice: !!Ctor && !seen };
+}
+
+/**
+ * Hands-free: the microphone opens again by itself after each utterance, once the answer has been spoken and nothing is
+ * pending, so the technician never touches the phone between questions. The recogniser tells the voice when the
+ * microphone is open (`usePushToTalk`'s `onListening`), so nothing is spoken into it. Off again when the microphone is blocked.
+ */
+export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void; abort: () => void },
+  speech: { speaking: boolean }, busy: boolean) {
+  const [on, setOn] = useState(false);
+  const blocked = voiceBlocked(voice.error);
+  // Turning hands-free on allows one attempt even after a denial, in case access was granted since; a second denial ends it.
+  const retried = useRef(false);
+  useEffect(() => {
+    if (!on || !voice.supported) return;
+    if (blocked && retried.current) { setOn(false); return; }
+    if (voice.listening || speech.speaking || busy) return;
+    // The retry is spent only when a start is really attempted, not while something else holds hands-free back.
+    const t = setTimeout(() => { if (blocked) retried.current = true; voice.start(); }, 400);
+    return () => clearTimeout(t);
+  }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = () => setOn((v) => {
+    // Off ends a listen that is open right now, so nothing said after the tap is taken as a command.
+    if (v && voice.listening) voice.abort();
+    if (!v) retried.current = false;
+    return !v;
+  });
+  return { on, toggle };
 }

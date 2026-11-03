@@ -29,7 +29,35 @@ public static class TestImages
         0xFF, 0xC0, 0x00, 0x11, 0x08, (byte)(height >> 8), (byte)height, (byte)(width >> 8), (byte)width, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1,
     ];
 
+    /// <summary>A JPEG whose APP1 Exif segment carries the given IFD0 orientation, then the frame header (big-endian TIFF).</summary>
+    public static byte[] JpegWithOrientation(int width, int height, int orientation) =>
+    [
+        0xFF, 0xD8,
+        0xFF, 0xE1, 0x00, 0x22, (byte)'E', (byte)'x', (byte)'i', (byte)'f', 0, 0,
+        (byte)'M', (byte)'M', 0, 0x2A, 0, 0, 0, 8,                 // TIFF header: big-endian, IFD0 at offset 8
+        0, 1,                                                      // one entry
+        0x01, 0x12, 0, 3, 0, 0, 0, 1, (byte)(orientation >> 8), (byte)orientation, 0, 0,   // Orientation, SHORT, count 1
+        0, 0, 0, 0,                                                // no next IFD
+        0xFF, 0xC0, 0x00, 0x11, 0x08, (byte)(height >> 8), (byte)height, (byte)(width >> 8), (byte)width, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1,
+    ];
+
     private static byte[] BigEndian(int v) => [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
+}
+
+/// <summary>Stands in for the Pillow sidecar: a turned JPEG is a plain JPEG header with the sides swapped for a quarter turn.</summary>
+public sealed class FakeOrienter : IImageOrienter
+{
+    public int Calls { get; private set; }
+    /// <summary>When set, the turned copy is padded past the upload limit, as a re-encode at high quality can be.</summary>
+    public bool Oversize { get; set; }
+    public Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, long maxPixels, CancellationToken ct)
+    {
+        Calls++;
+        if (!EvidenceFileStore.TryReadDimensions(jpeg, out var w, out var h)) return Task.FromResult<byte[]?>(null);
+        var quarter = orientation is 5 or 6 or 7 or 8;
+        var turned = TestImages.Jpeg(quarter ? h : w, quarter ? w : h);
+        return Task.FromResult<byte[]?>(Oversize ? [.. turned, .. new byte[EvidenceFileStore.MaxImageBytes]] : turned);
+    }
 }
 
 public sealed class FakeQualityAnalyzer : IImageAnalyzer

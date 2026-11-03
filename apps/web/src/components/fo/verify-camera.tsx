@@ -2,16 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Camera as CameraIcon, Images, Layers, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { api, ApiError, isCancelled, newKey, type ObservationResponse } from "@/lib/api";
-import { cameraError, connectCamera } from "@/lib/camera";
+import { cameraError, connectCamera, takeStill } from "@/lib/camera";
 import { friendlyError, qk, useElapsed } from "@/lib/hooks";
 import { changeLabel } from "@/lib/labels";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { EvidenceBadge } from "@/components/fo/primitives";
+import { WhyNotAccepted } from "@/components/fo/why-not-accepted";
 import { cn } from "@/lib/utils";
 
 /** One capture: the original bytes and the key that identifies it, kept until the server has answered. */
-interface Capture { blob: Blob; url: string; name: string; source: "Phone" | "RecordedFixture"; key: string; observedAt: string }
+interface Capture { blob: Blob; url: string; name: string; source: "Phone" | "RecordedFixture"; key: string; observedAt: string; still?: boolean }
 
 /**
  * The camera inside the verify screen. Live preview with the earlier photo as a faint guide and, if switched on, live
@@ -19,9 +20,11 @@ interface Capture { blob: Blob; url: string; name: string; source: "Phone" | "Re
  * under one key per capture, so "Try again" after a dropped connection cannot record it twice. The server compares it
  * with the earlier view inside the upload request; this shows its verdict and never decides one.
  */
-export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
+export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose, photoUrl }: {
   id: string; prompt: string; guideSrc?: string;
   onAccepted: (r: ObservationResponse) => void; onClose?: () => void;
+  /** Where a stored photo can be shown from, for the earlier view a rejected photo was compared with. */
+  photoUrl?: (evidenceId: string) => string | undefined;
 }) {
   const qc = useQueryClient();
   const video = useRef<HTMLVideoElement>(null);
@@ -37,11 +40,14 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
   const [answer, setAnswer] = useState<ObservationResponse | null>(null);
   const saving = useRef(false);
   const inflight = useRef<AbortController | null>(null);
+  // One shutter at a time, and a still that finishes after the camera closed is dropped rather than uploaded.
+  const shuttering = useRef(false);
+  const gone = useRef(false);
   const assist = useLiveAssist(video, live === "on" && !capture, `/v1/inspections/${encodeURIComponent(id)}`);
   const elapsed = useElapsed(phase === "saving");
 
   // Leaving the camera ends the upload here; the server may still record the photo, and the capture's key finds it.
-  useEffect(() => () => inflight.current?.abort(), []);
+  useEffect(() => () => { gone.current = true; inflight.current?.abort(); }, []);
 
   useEffect(() => {
     if (capture) return;
@@ -86,8 +92,8 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
     }
   }
 
-  function take(blob: Blob, name: string, source: Capture["source"]) {
-    const c = { blob, url: URL.createObjectURL(blob), name, source, key: newKey(), observedAt: new Date().toISOString() };
+  function take(blob: Blob, name: string, source: Capture["source"], still?: boolean) {
+    const c = { blob, url: URL.createObjectURL(blob), name, source, key: newKey(), observedAt: new Date().toISOString(), still };
     setCapture(c);
     setAnswer(null);
     void save(c);
@@ -96,10 +102,10 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
   function shutter() {
     const v = video.current;
     if (live !== "on" || !v || !v.videoWidth) { fileCamera.current?.click(); return; }
-    const canvas = document.createElement("canvas");
-    canvas.width = v.videoWidth; canvas.height = v.videoHeight;
-    canvas.getContext("2d")!.drawImage(v, 0, 0);
-    canvas.toBlob((b) => b && take(b, `verify-${Date.now()}.jpg`, "Phone"), "image/jpeg", 0.92);
+    // A full-resolution still from the camera where the browser offers one, else the preview frame.
+    if (shuttering.current) return;
+    shuttering.current = true;
+    void takeStill(v).then((r) => { if (r && !gone.current) take(r.blob, `verify-${Date.now()}.jpg`, "Phone", r.still); }).finally(() => { shuttering.current = false; });
   }
 
   // A file from the native camera on a touch device is a capture; on a desktop it is an imported file and says so.
@@ -190,6 +196,8 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
               {change ? <EvidenceBadge state={changeLabel[change.verdict].state} label={changeLabel[change.verdict].label} /> : <span className="text-sm font-medium text-failure">Photo not accepted</span>}
             </div>
             <p className="text-sm text-overlay-foreground/85">{change ? `${change.reason.trim().replace(/\.?$/, ".")} Nothing was checked on the equipment.` : problem}</p>
+            {answer && <SavedAs r={answer} still={capture?.still} />}
+            {change && <WhyNotAccepted change={change} yours={capture?.url} reference={change.referencePhotoEvidenceId ? photoUrl?.(change.referencePhotoEvidenceId) : undefined} />}
             <button type="button" onClick={retake} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground"><CameraIcon className="size-4" /> Take a new photo</button>
           </div>
         )}
@@ -198,4 +206,9 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
       <input ref={fileGallery} type="file" accept="image/jpeg,image/png" className="hidden" onChange={onFile("RecordedFixture")} />
     </div>
   );
+}
+
+/** What the server kept: the stored size, and whether it came from a sensor still or the preview frame. */
+export function SavedAs({ r, still }: { r: ObservationResponse; still?: boolean }) {
+  return <p className="text-[11px] text-overlay-foreground/60">Saved at {r.width}×{r.height}{still === true ? " · full-resolution still" : still === false ? " · preview frame" : ""}</p>;
 }
