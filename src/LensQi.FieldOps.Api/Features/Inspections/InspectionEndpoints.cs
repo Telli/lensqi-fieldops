@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using LensQi.FieldOps.Api.Infrastructure.Evidence;
 using LensQi.FieldOps.Api.Infrastructure.Fixtures;
 using LensQi.FieldOps.Api.Infrastructure.Hardening;
@@ -79,7 +80,7 @@ public static class InspectionEndpoints
             store.Find(id) is { } s ? Results.Ok(s.Events) : ApiResults.NotFound($"Inspection '{id}' not found"));
 
         // FR-02: multipart upload of the original JPEG/PNG. Magic bytes decide the type; declared content type is ignored.
-        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, IImageAnalyzer imaging, ChangeEvidenceService change, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/inspections/{id}/observations", async (string id, HttpRequest http, InspectionStore store, EvidenceFileStore files, IImageAnalyzer imaging, IImageOrienter orienter, ChangeEvidenceService change, HardeningOptions limits, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             if (!http.HasFormContentType) return ApiResults.BadRequest("multipart/form-data with an 'image' file is required");
@@ -92,6 +93,12 @@ public static class InspectionEndpoints
             var bytes = ms.ToArray();
             var mediaType = EvidenceFileStore.DetectImageType(bytes);
             if (mediaType is null) return ApiResults.BadRequest("image must be JPEG or PNG (checked by magic bytes)");
+            // A JPEG turned by its EXIF orientation is stored the way it is shown, so SAM, the crops and every client draw
+            // on the same pixels. The digest of the bytes as uploaded is returned too, so a client can still check its copy.
+            var uploadedSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            var orientation = EvidenceFileStore.ReadExifOrientation(bytes);
+            if (orientation != 1 && await orienter.OrientAsync(bytes, orientation, ct) is { Length: > 0 } turned && EvidenceFileStore.DetectImageType(turned) == "image/jpeg")
+                bytes = turned;
             // T6.1: size comes from the file header, never from the form; too small or too large is refused before storage.
             if (!EvidenceFileStore.TryReadDimensions(bytes, out var width, out var height))
                 return ApiResults.BadRequest("image_unreadable", "image header has no readable pixel size");
@@ -144,7 +151,7 @@ public static class InspectionEndpoints
                     }
                 }
                 var st = store.Find(id)!;
-                return Results.Ok(new { evidenceId, artifact.Sha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals?.Quality, perceptualHash = signals?.PerceptualHash,
+                return Results.Ok(new { evidenceId, artifact.Sha256, uploadedSha256, artifact.MediaType, artifact.Bytes, width, height, quality = signals?.Quality, perceptualHash = signals?.PerceptualHash,
                     changeAnalysis = analysis, origin = origin.ToString(), events = events.Count, state = View(st) });
             });
         }).DisableAntiforgery();

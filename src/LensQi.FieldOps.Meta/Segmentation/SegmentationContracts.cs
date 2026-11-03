@@ -65,3 +65,10 @@ public interface IImageAnalyzer
 {
     Task<ImageMeasurement?> MeasureAsync(string imagePath, CancellationToken ct);
 }
+
+/// <summary>Turns a JPEG the way its EXIF orientation says and clears the tag, so stored, segmented and displayed pixels
+/// agree. Returns null when it cannot; the upload then keeps the bytes as received.</summary>
+public interface IImageOrienter
+{
+    Task<byte[]?> OrientAsync(byte[] jpeg, int orientation, CancellationToken ct);
+}
