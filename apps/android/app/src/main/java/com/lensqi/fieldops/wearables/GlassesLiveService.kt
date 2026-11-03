@@ -32,6 +32,8 @@ class GlassesLiveService : Service() {
     private var session: LiveCameraSession? = null
     private var feedbackJob: Job? = null
     @Volatile private var running = false
+    /** The inspection or task step being served; the frame consumer reads it so a switch changes what the frames are about. */
+    @Volatile private var current: LiveSession? = null
     @Volatile private var lastFrameAt = 0L
     private var speaker: TextToSpeech? = null
     private var speechReady = false
@@ -59,12 +61,16 @@ class GlassesLiveService : Service() {
         if (intent?.action == STOP) { source.stopStreaming(); stopSelf(); return START_NOT_STICKY }
         if (intent?.action == MUTE) { if (running) toggleMute() else stopSelf(); return START_NOT_STICKY }
         val live = sessionOf(intent) ?: run { stopSelf(); return START_NOT_STICKY }
-        if (running) return START_NOT_STICKY
+        if (running) {
+            // Another inspection or step asked for assistance: its guidance replaces the earlier session's, it never mixes with it.
+            if (switchNeeded(current, live)) switchTo(live)
+            return START_NOT_STICKY
+        }
         // Promotion precedes any model work. The user can stop from the notification without unlocking the app.
         try { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
         catch (_: Exception) { source.reportError("Live assistance could not stay active. Check Bluetooth permission and try again."); stopSelf(); return START_NOT_STICKY }
         if (!source.state.value.streaming) { source.reportError("Start the glasses camera before live assistance."); stopSelf(); return START_NOT_STICKY }
-        running = true; lastFrameAt = SystemClock.elapsedRealtime()
+        running = true; current = live; lastFrameAt = SystemClock.elapsedRealtime()
         store.mutable.value = GlassesLiveState(session = live, enabled = true, audioNote = store.state.value.audioNote)
         wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LensQi:GlassesLive").apply { acquire(60_000) }
         source.setFrameConsumer { bitmap ->
@@ -72,7 +78,8 @@ class GlassesLiveService : Service() {
                 lastFrameAt = SystemClock.elapsedRealtime()
                 val tracker = synchronized(sessionLock) {
                     if (!running) return@setFrameConsumer
-                    session ?: LiveCameraSession(targetConcept = live.targetConcept) { kind, bytes, frame -> live.analyze(api, kind, bytes, frame) }.also { created ->
+                    val serving = current ?: return@setFrameConsumer
+                    session ?: LiveCameraSession(targetConcept = serving.targetConcept) { kind, bytes, frame -> serving.analyze(api, kind, bytes, frame) }.also { created ->
                         session = created
                         feedbackJob = scope.launch { created.state.collect { value ->
                             if (running && session === created) store.mutable.update { it.copy(feedback = value) }
@@ -107,6 +114,14 @@ class GlassesLiveService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    /** Drops the old session's tracker, advice and speech; the next frame starts a tracker for [live]. */
+    private fun switchTo(live: LiveSession) {
+        current = live
+        clearSession("Switching live assistance")
+        speaker?.stop(); speechGate = SpokenFeedbackGate(); lastHud = null; lastSpokenLost = false
+        store.mutable.update { it.copy(session = live) }
     }
 
     private fun clearSession(message: String) {
@@ -175,10 +190,25 @@ class GlassesLiveService : Service() {
         fun start(context: Context, session: LiveSession) = ContextCompat.startForegroundService(context,
             Intent(context, GlassesLiveService::class.java).putExtra(SESSION, session.id).putExtra(SESSION_KIND, session.kind.name).putExtra(TARGET, session.targetConcept))
 
+        /** A different inspection, task, or step target means the frames must be analysed for the new one. */
+        internal fun switchNeeded(current: LiveSession?, requested: LiveSession): Boolean = current != requested
+
         private fun sessionOf(intent: Intent?): LiveSession? {
             val id = intent?.getStringExtra(SESSION) ?: return null
             val kind = intent.getStringExtra(SESSION_KIND)?.let { k -> LiveSessionKind.entries.firstOrNull { it.name == k } } ?: return null
             return LiveSession(id, kind, intent.getStringExtra(TARGET))
+        }
+        /**
+         * Whether the live-assist notification can show at all: the permission (Android 13+), app notifications on, and
+         * the channel not blocked. A channel not yet made counts as open. Without it the service still runs, but its Stop and
+         * Mute actions are not on the lock screen, and the screen must not promise them.
+         */
+        fun notificationsAvailable(context: Context): Boolean {
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+            val manager = androidx.core.app.NotificationManagerCompat.from(context)
+            if (!manager.areNotificationsEnabled()) return false
+            return manager.getNotificationChannel(CHANNEL)?.let { it.importance != NotificationManager.IMPORTANCE_NONE } ?: true
         }
         fun pause(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(PAUSE)) }
         fun mute(context: Context) { context.startService(Intent(context, GlassesLiveService::class.java).setAction(MUTE)) }

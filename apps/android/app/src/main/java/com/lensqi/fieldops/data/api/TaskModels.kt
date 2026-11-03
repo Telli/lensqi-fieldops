@@ -37,7 +37,8 @@ data class TaskPlan(
 
 @Serializable data class TaskSite(val fixtureId: String, val assetId: String)
 @Serializable data class TaskAnswer(val stepId: String? = null, val question: String, val answer: String, val photoId: String? = null, val modelId: String = "")
-@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null)
+/** [origin] is the capture device the client declared; an older server leaves it out, which means a phone photo. */
+@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null, val origin: EvidenceOrigin? = null)
 
 @Serializable
 data class TaskView(
@@ -47,6 +48,15 @@ data class TaskView(
     val person: TaskPerson? = null,
 ) {
     val currentStep: TaskStep? get() = plan?.steps?.firstOrNull { it.id == currentStepId }
+    /** The capture device of one of the task's photos, as the server recorded it. */
+    fun photoOrigin(photoId: String): EvidenceOrigin? = photos.firstOrNull { it.evidenceId == photoId }?.origin
+}
+
+/** Where a check photo came from when it was not the phone. Mock glasses are never shown as real glasses or as a phone. */
+fun checkPhotoNote(task: TaskView, check: TaskStepCheck): String = when (task.photoOrigin(check.photoId)) {
+    EvidenceOrigin.MockWearables -> " · photo from mock glasses, simulated"
+    EvidenceOrigin.Glasses -> " · photo from the glasses"
+    else -> ""
 }
 
 @Serializable
