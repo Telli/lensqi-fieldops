@@ -123,6 +123,12 @@ data class TaskUi(
         val next = steps.firstOrNull { it.status == com.lensqi.fieldops.data.api.StepStatus.Todo || it.status == com.lensqi.fieldops.data.api.StepStatus.Active }
         return confirmed.copy(plan = plan.copy(steps = steps), currentStepId = next?.id ?: confirmed.currentStepId)
     }
+    /** Every step finished on this phone while the server has yet to confirm it: the summary is shown, never a completed phase. */
+    val pendingCompletion: Boolean get() {
+        val shown = displayed ?: return false
+        return shown.phase == com.lensqi.fieldops.data.api.TaskPhase.InProgress && pendingSteps.any { it.state == CommandState.Pending } &&
+            shown.plan?.steps?.all { it.status == com.lensqi.fieldops.data.api.StepStatus.Done || it.status == com.lensqi.fieldops.data.api.StepStatus.Skipped } == true
+    }
 }
 
 /** One task: plan, steps, questions and photo checks. The AI coaches and suggests; the person decides when a step is done. */
@@ -146,7 +152,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
                 val pending = moves.count { it.state == CommandState.Pending } + checks.count { it.state == CommandState.Pending }
                 if (pending < waiting) refresh()
                 waiting = pending
-                _state.update { it.copy(queuedChecks = checks.count { c -> c.state == CommandState.Pending }, pendingSteps = moves, refusedChecks = (checks + moves).filter { c -> c.state == CommandState.Rejected }) }
+                // The saved-update notice lasts as long as a step update is still waiting; once the outbox is clear it is gone.
+                _state.update { it.copy(queuedChecks = checks.count { c -> c.state == CommandState.Pending }, pendingSteps = moves, refusedChecks = (checks + moves).filter { c -> c.state == CommandState.Rejected },
+                    notice = if (moves.any { m -> m.state == CommandState.Pending }) it.notice else null) }
                 all.filter { it.state == CommandState.Rejected }.forEach { c ->
                     _state.update { it.copy(error = friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())) }
                     // Keep refused originals until the user explicitly removes or retries them.
@@ -162,7 +170,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         }
         val r = apiCall { api.task(taskId) }
         if (r is ApiOutcome.Ok) { library.remember(r.value); speakNewChecks(r.value) }
-        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else it.cachedAt, error = r.errorText()) }
+        // When the server cannot be read, a newer copy the outbox replay saved still replaces what this screen holds.
+        val saved = if (r is ApiOutcome.Ok) null else library.job(taskId)?.takeIf { c -> _state.value.task?.let { held -> c.value.updatedAt != held.updatedAt && library.isNewer(c.value, held) } == true }
+        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: saved?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else saved?.fetchedAt ?: it.cachedAt, error = r.errorText()) }
         (r as? ApiOutcome.Ok)?.value?.let { library.cacheReferences(it, api) }
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }

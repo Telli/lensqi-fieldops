@@ -439,7 +439,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     val n = steps.indexOfFirst { it.id == step?.id }
     // Not state: the camera hands this over on every composition, and voice commands only read it.
     val camera = remember { HandleRef() }
-    LaunchedEffect(t?.phase) { if (t?.phase == TaskPhase.Completed) onDone() }
+    LaunchedEffect(t?.phase, s.pendingCompletion) { if (t?.phase == TaskPhase.Completed || s.pendingCompletion) onDone() }
     LaunchedEffect(step?.id) {
         vm.clearAnswer()
         step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true, replace = true) }
@@ -740,7 +740,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
         }
         val skipped = plan.steps.count { it.status == StepStatus.Skipped }
         item {
-            AiCard(plan.title, if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase != TaskPhase.Completed) "In progress" else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
+            AiCard(plan.title, if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase != TaskPhase.Completed) (if (s.pendingCompletion) "All steps marked done on this phone · waiting for server confirmation" else "In progress") else if (skipped > 0) "Done, with $skipped step${if (skipped == 1) "" else "s"} skipped" else "All steps done",
                 if (t.mode == TaskMode.Diy) "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." else null,
                 tone = if (skipped > 0) Fo.Warning else Fo.Success) {
                 if (t.site != null) {

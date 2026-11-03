@@ -151,6 +151,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
         const saved = await tasks.get(id);
         save(saved);
         if (saved.currentStepId) nav(`/m/t/${id}/step/${saved.currentStepId}`);
+        else if (saved.pendingCompletion) nav(`/m/t/${id}/done`);
       } else {
         toast.error(friendlyError(e));
         qc.invalidateQueries({ queryKey: taskKeys.one(id) });

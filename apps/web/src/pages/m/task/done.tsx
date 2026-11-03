@@ -45,7 +45,7 @@ export default function TaskDone({ id }: { id: string }) {
       <Page className="space-y-4">
         {packageButton}
         <AiCard tone={skipped.length ? "warning" : "success"} says={t.plan.title}
-          title={t.phase === "Completed" ? (skipped.length ? `Done, with ${skipped.length} step${skipped.length === 1 ? "" : "s"} skipped` : "All steps done") : t.phase === "Abandoned" ? "Stopped · record retained" : "In progress"}
+          title={t.phase === "Completed" ? (skipped.length ? `Done, with ${skipped.length} step${skipped.length === 1 ? "" : "s"} skipped` : "All steps done") : t.phase === "Abandoned" ? "Stopped · record retained" : t.pendingCompletion ? "All steps marked done on this device · waiting for server confirmation" : "In progress"}
           hint={t.mode === "Diy" ? "LensQi guided this from an AI-written plan. Recheck anything safety-critical, such as leaks, levels and fastenings." : undefined}>
           {t.site && t.inspectionId && linked.data && (
             <p className={cn("mb-2 flex items-center gap-1.5 text-sm font-medium", linked.data.stage === "VerifiedComplete" ? "text-success" : linked.data.stage === "VerificationFailed" ? "text-failure" : "text-muted-foreground")}>
