@@ -99,6 +99,8 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (!question.trim() || busy) return;
     if (reviewing) { toast.info("Questions are about the current step. Go to it to ask."); return; }
     setBusy("ask");
+    // A question asked by typing or by tapping a box while the microphone is open ends the listen first, so the answer is spoken.
+    if (voice.listening) voice.abort();
     const controller = new AbortController();
     inflight.current = controller;
     try {

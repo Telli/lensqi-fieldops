@@ -128,6 +128,8 @@ export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told
   const tell = useRef(opts?.onListening);
   tell.current = opts?.onListening;
   const [seen, setSeen] = useState(noticeSeen);
+  // Counts starts the recogniser refused; hands-free watches it, since the refusal leaves `listening` unchanged.
+  const [startFailures, setStartFailures] = useState(0);
 
   const start = useCallback(() => {
     if (!Ctor || rec.current) return;
@@ -158,14 +160,14 @@ export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told
     rec.current = r;
     setListening(true); tell.current?.(true);
     // A recogniser that refuses to start never fires onend, so the button would stay on "listening" without this.
-    try { r.start(); } catch { rec.current = null; setListening(false); tell.current?.(false); setError("Voice input couldn't start. Try again."); }
+    try { r.start(); } catch { rec.current = null; setListening(false); tell.current?.(false); setError("Voice input couldn't start. Try again."); setStartFailures((n) => n + 1); }
   }, [Ctor]);
 
   const stop = useCallback(() => rec.current?.stop(), []);
   /** Ends an open listen and delivers nothing from it, unlike `stop`, which still hands over the final text. */
   const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); tell.current?.(false); }, []);
   useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
-  return { supported: !!Ctor, listening, heard, error, start, stop, abort, notice: !!Ctor && !seen };
+  return { supported: !!Ctor, listening, heard, error, start, stop, abort, startFailures, notice: !!Ctor && !seen };
 }
 
 /**
@@ -173,24 +175,27 @@ export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told
  * pending, so the technician never touches the phone between questions. The recogniser tells the voice when the
  * microphone is open (`usePushToTalk`'s `onListening`), so nothing is spoken into it. Off again when the microphone is blocked.
  */
-export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void; abort: () => void },
+export function useHandsFree(voice: { supported: boolean; listening: boolean; error: string | null; start: () => void; abort: () => void; startFailures: number },
   speech: { speaking: boolean }, busy: boolean) {
   const [on, setOn] = useState(false);
   const blocked = voiceBlocked(voice.error);
   // Turning hands-free on allows one attempt even after a denial, in case access was granted since; a second denial ends it.
   const retried = useRef(false);
+  // A recogniser that refuses to start leaves `listening` as it was, so that refusal is watched by count and ends hands-free.
+  const failuresAtOn = useRef(voice.startFailures);
   useEffect(() => {
     if (!on || !voice.supported) return;
     if (blocked && retried.current) { setOn(false); return; }
+    if (voice.startFailures !== failuresAtOn.current) { setOn(false); return; }
     if (voice.listening || speech.speaking || busy) return;
     // The retry is spent only when a start is really attempted, not while something else holds hands-free back.
     const t = setTimeout(() => { if (blocked) retried.current = true; voice.start(); }, 400);
     return () => clearTimeout(t);
-  }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, voice.supported, voice.listening, speech.speaking, busy, blocked, voice.startFailures]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggle = () => setOn((v) => {
     // Off ends a listen that is open right now, so nothing said after the tap is taken as a command.
     if (v && voice.listening) voice.abort();
-    if (!v) retried.current = false;
+    if (!v) { retried.current = false; failuresAtOn.current = voice.startFailures; }
     return !v;
   });
   return { on, toggle };
