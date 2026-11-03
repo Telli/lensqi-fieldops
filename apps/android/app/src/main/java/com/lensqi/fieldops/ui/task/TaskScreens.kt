@@ -34,6 +34,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Visibility
@@ -104,6 +109,17 @@ import java.io.File
 fun verdictText(v: StepVerdict) = when (v) { StepVerdict.LooksDone -> "Looks done"; StepVerdict.NotYet -> "Not yet"; StepVerdict.CantTell -> "Can't tell" }
 private fun verdictColor(v: StepVerdict) = when (v) { StepVerdict.LooksDone -> Fo.Success; StepVerdict.NotYet -> Fo.Warning; StepVerdict.CantTell -> Fo.Muted }
 private fun riskColor(r: RiskLevel) = when (r) { RiskLevel.Low -> Fo.Success; RiskLevel.Moderate -> Fo.Warning; RiskLevel.High -> Fo.Failure }
+
+/**
+ * Tap-to-mute, the same switch the "mute" and "unmute" voice commands flip. [muted] is the screen's view of
+ * [SpeechOutput.enabled]; the screen sets it from both the tap and the command, so the icon follows either.
+ */
+@Composable
+private fun MuteButton(muted: Boolean, onToggle: () -> Unit) {
+    Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .4f)).border(1.dp, FoDark.Border, RoundedCornerShape(12.dp)).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
+        Icon(if (muted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp, if (muted) "Turn voice on" else "Mute voice", tint = if (muted) FoDark.Muted else FoDark.Foreground, modifier = Modifier.size(20.dp))
+    }
+}
 
 @Composable
 private fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 48) {
@@ -227,25 +243,30 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
 fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: TaskMode, initialGoal: String, sourceId: String, onBack: () -> Unit, onCreated: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var mode by remember { mutableStateOf(initialMode) }
-    var goal by remember { mutableStateOf(initialGoal) }
-    var equipment by remember { mutableStateOf("") }
-    var details by remember { mutableStateOf("") }
+    // What was typed and chosen survives a rotation or a process death: a goal and its details are not retyped.
+    var mode by rememberSaveable { mutableStateOf(initialMode) }
+    var goal by rememberSaveable { mutableStateOf(initialGoal) }
+    var equipment by rememberSaveable { mutableStateOf("") }
+    var details by rememberSaveable { mutableStateOf("") }
     var source by remember(sourceId) { mutableStateOf<com.lensqi.fieldops.data.api.TaskView?>(null) }
-    val selectedPhotos = remember(sourceId) { mutableStateListOf<String>() }
-    val selectedAnswers = remember(sourceId) { mutableStateListOf<String>() }
+    val strings = listSaver<androidx.compose.runtime.snapshots.SnapshotStateList<String>, String>(save = { it.toList() }, restore = { it.toMutableStateList() })
+    val selectedPhotos = rememberSaveable(sourceId, saver = strings) { mutableStateListOf<String>() }
+    val selectedAnswers = rememberSaveable(sourceId, saver = strings) { mutableStateListOf<String>() }
     LaunchedEffect(sourceId) {
         if (sourceId.isNotBlank()) {
             source = vm.loadSource(sourceId)
             if (details.isBlank()) details = source?.details.orEmpty()
         }
     }
-    var asset by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val manuals = remember { mutableStateListOf<File>() }
+    var asset by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
+    // The copies live in the cache; a restored path whose file is gone is dropped rather than sent empty.
+    val manuals = rememberSaveable(saver = listSaver<androidx.compose.runtime.snapshots.SnapshotStateList<File>, String>(save = { it.map { f -> f.path } }, restore = { it.map(::File).filter { f -> f.isFile }.toMutableStateList() })) { mutableStateListOf<File>() }
     val voice = rememberVoiceInput { goal = it }
     val scope = rememberCoroutineScope()
     var pickError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { vm.clearError() }
+    // The manual copies were made for this one create; once the server has the task they are leftovers in the cache.
+    val created: (String) -> Unit = { id -> manuals.forEach { it.delete() }; manuals.clear(); onCreated(id) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         // Copy and convert off the main thread: any image the phone can open becomes an upright JPEG the server accepts.
@@ -318,7 +339,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
         }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         item {
-            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { val selected = siteForMode(mode, asset); vm.create(mode, goal, listOf(equipment.trim(), details.trim()).filter { it.isNotEmpty() }.joinToString("\n"), selected?.first, selected?.second, manuals.toList(), sourceId.takeIf { it.isNotBlank() }, selectedPhotos.toList(), selectedAnswers.toList(), onCreated) },
+            PrimaryButton(if (s.creating) "Writing your plan…" else "Plan it", { val selected = siteForMode(mode, asset); vm.create(mode, goal, listOf(equipment.trim(), details.trim()).filter { it.isNotEmpty() }.joinToString("\n"), selected?.first, selected?.second, manuals.toList(), sourceId.takeIf { it.isNotBlank() }, selectedPhotos.toList(), selectedAnswers.toList(), created) },
                 Modifier.fillMaxWidth(), enabled = !s.creating && goal.trim().length >= 3, icon = Icons.Outlined.AutoAwesome, busy = s.creating)
         }
         if (s.creating) item { Text("This takes up to half a minute. The plan is checked for safety before you see it.", style = MaterialTheme.typography.bodySmall) }
@@ -334,7 +355,8 @@ private fun StepRow(step: TaskStep, n: Int, vm: TaskViewModel) {
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(step.title + if (step.handsOn) " · hands-on" else "", fontWeight = FontWeight.Medium)
-            Text(TechnicianText.guidance(step.instruction), style = MaterialTheme.typography.bodySmall)
+            // The plan's own words: an instruction about "the Delta cartridge" is not vocabulary to translate.
+            Text(step.instruction, style = MaterialTheme.typography.bodySmall)
             TaskSources(step, vm)
             step.cautions.forEach { Text("${it.kind} · ${it.text}", color = Fo.Warning, fontSize = 12.sp) }
             if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = Fo.Failure, fontSize = 12.sp)
@@ -445,6 +467,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         step?.let { vm.speaker.speak(stepSpeech(it, n + 1), force = true, replace = true) }
     }
     var typed by remember { mutableStateOf("") }
+    var muted by remember { mutableStateOf(!vm.speaker.enabled) }
     val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
     val voice = rememberVoiceInput(vm.speaker) { said ->
         val now = vm.state.value
@@ -456,10 +479,11 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             VoiceCommand.Skip -> if (viewingId != null) vm.speaker.speak("Go to the current step to skip it. Say next to go there.", force = true)
                 else if (idle) vm.skip(current.id) {} else vm.speaker.speak(STILL_WORKING, force = true)
             VoiceCommand.Back -> steps.getOrNull(n - 1)?.let { viewingId = it.id } ?: vm.speaker.speak("This is the first step.", force = true)
-            VoiceCommand.Check -> camera.value?.capture?.invoke()
+            // A check is recorded against the server's current step, never against a finished one being looked back at.
+            VoiceCommand.Check -> if (reviewingNow) vm.speaker.speak("Go to the current step to check it. Say next to go there.", force = true) else camera.value?.capture?.invoke()
             VoiceCommand.Repeat -> (shown ?: current).let { vm.speaker.speak(stepSpeech(it), force = true, replace = true) }
-            VoiceCommand.Mute -> vm.speaker.mute()
-            VoiceCommand.Unmute -> vm.speaker.unmute()
+            VoiceCommand.Mute -> { vm.speaker.mute(); muted = true }
+            VoiceCommand.Unmute -> { vm.speaker.unmute(); muted = false }
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
             null -> if (reviewingNow) vm.speaker.speak("Questions are about the current step. Say next to go to it.", force = true)
@@ -492,8 +516,11 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.cachedAt != null) Text("Saved plan · ${s.cachedAt}")
             s.pendingSteps.filter { it.state == CommandState.Pending }.forEach { Text("Step ${it.stepId}: update waiting for sync") }
-            if (s.queuedChecks > 0) Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp))
+            if (s.queuedChecks > 0) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text("${s.queuedChecks} check photo${if (s.queuedChecks == 1) "" else "s"} saved on the phone, waiting for the network", color = FoDark.Foreground, fontSize = 12.sp)
+                // A waiting photo can be withdrawn: a wrong shot, or one the service keeps failing on, need not hold the step.
+                s.pendingChecks.forEach { command -> TextButton(onClick = { vm.withdrawCheck(command) }, contentPadding = PaddingValues(0.dp)) { Text("Remove the saved photo for step ${steps.indexOfFirst { it.id == command.stepId } + 1}", color = FoDark.Primary, fontSize = 12.sp) } }
+            }
             s.refusedChecks.forEach { command ->
                 Text("A saved check was refused: ${command.errorMessage.orEmpty()}", color = FoDark.Warning)
                 Row {
@@ -513,7 +540,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StepButton(Icons.AutoMirrored.Outlined.ArrowBack, "Previous step", enabled = n > 0 && s.busy == null) { steps.getOrNull(n - 1)?.let { viewingId = it.id } }
                 StepButton(Icons.Outlined.Visibility, "Use the glasses for this step", enabled = !reviewing && s.busy == null) { onGlasses() }
-                StepButton(Icons.Outlined.CameraAlt, "Check this step with a photo", enabled = !handle.capturing && s.busy == null, highlight = needsCheck, busy = handle.capturing || s.busy == "check") { handle.capture() }
+                StepButton(Icons.Outlined.CameraAlt, "Check this step with a photo", enabled = !reviewing && !handle.capturing && s.busy == null, highlight = needsCheck, busy = handle.capturing || s.busy == "check") { handle.capture() }
                 Box(Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(16.dp)).background(if (s.busy != null) FoDark.Primary.copy(alpha = .4f) else FoDark.Primary)
                     .clickable(enabled = s.busy == null) { if (reviewing) viewingId = null else vm.complete(step.id) {} }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -522,7 +549,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
                 Text(if (needsCheck) "Tip: a quick check photo can confirm this step." else if (voice.supported) "Say “next”, “repeat”, “check this”, or ask a question." else "", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (!reviewing) TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
             }
@@ -692,11 +720,12 @@ private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops
         TaskSources(step, vm)
         if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
         if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
+        // The model's reason and answers are shown as written: they name the equipment, which is not vocabulary to translate.
         step.lastCheck?.let { c ->
-            Text(TechnicianText.guidance("Camera check: ${verdictText(c.verdict)} · ${c.reason}") + checkPhotoNote(task, c), color = verdictColor(c.verdict), fontSize = 12.sp)
+            Text("Camera check: ${verdictText(c.verdict)} · ${c.reason}" + checkPhotoNote(task, c), color = verdictColor(c.verdict), fontSize = 12.sp)
             Text("A suggestion. You decide when the step is done.", color = FoDark.Muted, fontSize = 10.sp)
         }
-        answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(TechnicianText.guidance(a), color = FoDark.Foreground, fontSize = 13.sp) }
+        answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(a, color = FoDark.Foreground, fontSize = 13.sp) }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
         // Saved for later is a delay, not a failure: shown in the plain colour, not the warning one.
@@ -721,6 +750,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
             Panel {
                 Text("Check photos saved on this phone", fontWeight = FontWeight.Medium)
                 if (s.queuedChecks > 0) Text("${s.queuedChecks} waiting for the network", style = MaterialTheme.typography.bodySmall)
+                s.pendingChecks.forEach { command -> TextButton(onClick = { vm.withdrawCheck(command) }) { Text("Remove the waiting photo for step ${plan?.steps?.indexOfFirst { it.id == command.stepId }?.plus(1) ?: "?"}") } }
                 s.refusedChecks.forEach { command ->
                     Text("Refused: ${com.lensqi.fieldops.ui.common.friendly(command.errorCode ?: "unknown", command.errorMessage.orEmpty())}", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
@@ -728,6 +758,8 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
             }
         }
         item { WorkPackageButton(vm) }
+        // A failed export or FieldProof link is said here, under the button that asked for it; the next action clears it.
+        s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         if (plan == null) {
             item { Panel {
                 Text(t.title ?: t.goal)
@@ -761,13 +793,13 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
                     if (i > 0) HorizontalDivider(color = Fo.Border)
                     Column(Modifier.padding(14.dp)) {
                         Text("${i + 1}. ${step.title}", fontWeight = FontWeight.Medium, color = if (step.status == StepStatus.Done) Fo.Foreground else Fo.Muted)
-                        step.lastCheck?.let { Text(TechnicianText.guidance("Camera check: ${verdictText(it.verdict)} · ${it.reason}") + checkPhotoNote(t, it), color = verdictColor(it.verdict), fontSize = 12.sp) }
+                        step.lastCheck?.let { Text("Camera check: ${verdictText(it.verdict)} · ${it.reason}" + checkPhotoNote(t, it), color = verdictColor(it.verdict), fontSize = 12.sp) }
                     }
                 }
             }
         }
         if (t.answers.isNotEmpty()) item {
-            Panel { Text("Your questions", fontWeight = FontWeight.Medium); t.answers.forEach { a -> Text(a.question, style = MaterialTheme.typography.bodySmall); Text(TechnicianText.guidance(a.answer), fontSize = 13.sp) } }
+            Panel { Text("Your questions", fontWeight = FontWeight.Medium); t.answers.forEach { a -> Text(a.question, style = MaterialTheme.typography.bodySmall); Text(a.answer, fontSize = 13.sp) } }
         }
         item { Box(Modifier.height(24.dp)) }
     }
@@ -787,14 +819,15 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     val open = t?.phase == TaskPhase.InProgress
     val answers = t?.answers.orEmpty().asReversed()
     var typed by remember { mutableStateOf("") }
+    var muted by remember { mutableStateOf(!vm.speaker.enabled) }
     val pace = rememberVoicePace(vm.speaker, camera) { true }
     val voice = rememberVoiceInput(vm.speaker) { said ->
         when (parseCommand(said)) {
             VoiceCommand.Pause -> pace.pause(camera.value)
             VoiceCommand.Resume -> pace.resume(camera.value)
             VoiceCommand.Repeat -> answers.firstOrNull()?.let { vm.speaker.speak(it.answer, force = true, replace = true) } ?: vm.speaker.speak("There's no answer yet. Ask a question.", force = true)
-            VoiceCommand.Mute -> vm.speaker.mute()
-            VoiceCommand.Unmute -> vm.speaker.unmute()
+            VoiceCommand.Mute -> { vm.speaker.mute(); muted = true }
+            VoiceCommand.Unmute -> { vm.speaker.unmute(); muted = false }
             VoiceCommand.Check -> camera.value?.capture?.invoke()
             else -> vm.ask(said, camera.value?.latestFrame?.invoke())
         }
@@ -805,7 +838,8 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         analyzeLive = vm::analyzeLiveFrame,
         onClose = onClose,
         onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
-        header = t?.title ?: "Just ask",
+        // A title the AI named from the conversation is labelled as such, as the plan and summary label it.
+        header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
@@ -827,7 +861,8 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
                 }
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
                 TextButton(onClick = { onPlan(t?.title?.takeUnless { it == "Just ask" } ?: answers.firstOrNull { it.question != LOOK }?.question.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
                 Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }

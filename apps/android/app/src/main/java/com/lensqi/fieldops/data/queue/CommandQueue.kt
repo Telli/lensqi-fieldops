@@ -28,17 +28,26 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Result of draining the queue once. */
+/** Result of draining the queue once: [Offline] means something is left that a later run may deliver. */
 enum class DrainResult { Empty, Offline }
 
-/** What the queue does with one send: keep a command (and its photo) after a transient failure, drop it only once refused. */
-enum class Disposition { Sent, RetryLater, Refused }
+/**
+ * What the queue does with one send. [RetryLater] is a server that could not be reached: nothing for it goes until the
+ * network is back. [HoldSession] is a server that answered but could not take this row now (a model failure, overload,
+ * a timeout): only this row's session waits, so one task's bad luck never stops another's photos. [Refused] is final
+ * and the row is kept with its code until the person removes or retries it.
+ */
+enum class Disposition { Sent, RetryLater, HoldSession, Refused }
 
 fun dispositionOf(outcome: ApiOutcome<*>): Disposition = when {
     outcome is ApiOutcome.Ok -> Disposition.Sent
-    outcome.retryable -> Disposition.RetryLater
+    outcome is ApiOutcome.Unreachable -> Disposition.RetryLater
+    outcome.retryable -> Disposition.HoldSession
     else -> Disposition.Refused
 }
+
+/** How many times the server may answer "not now" to one row before it is refused with that answer's code. */
+const val MAX_SERVER_ATTEMPTS = 5
 
 /** The bytes are neither JPEG nor PNG (a HEIC or WebP import, say); nothing is saved. */
 class UnsupportedImageException : IllegalArgumentException("Only JPEG or PNG images can be evidence")
@@ -51,6 +60,8 @@ interface StepCheckQueue {
     suspend fun enqueueStepAction(command: PendingCommand)
     suspend fun dismiss(command: PendingCommand)
     suspend fun retry(command: PendingCommand) {}
+    /** A saved check the person no longer wants sent, whether or not the server has been asked yet. */
+    suspend fun withdraw(command: PendingCommand) = dismiss(command)
 }
 
 @Singleton
@@ -83,6 +94,7 @@ class CommandQueue internal constructor(
         }
         override suspend fun dismiss(command: PendingCommand) = this@CommandQueue.dismiss(command)
         override suspend fun retry(command: PendingCommand) { this@CommandQueue.retry(command, server) }
+        override suspend fun withdraw(command: PendingCommand) = this@CommandQueue.withdraw(command)
     }
 
     suspend fun enqueuePhoto(inspectionId: String, source: File, origin: String, server: String,
@@ -116,10 +128,22 @@ class CommandQueue internal constructor(
             saved
         }
 
-    suspend fun dismiss(command: PendingCommand) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    /** Removes a row and its photo; the rows its session held behind it go next, so a sync is asked for. */
+    suspend fun dismiss(command: PendingCommand) { remove(command); schedule() }
+
+    private suspend fun remove(command: PendingCommand) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         dao.delete(command.id)
         command.filePath?.let { File(it).delete() }
         Unit
+    }
+
+    /**
+     * A pending step check the person withdraws before it was sent (a wrong photo, or one the server keeps failing on).
+     * A send already in flight finishes on its own; its answer finds no row to update and is dropped.
+     */
+    suspend fun withdraw(command: PendingCommand) {
+        require(command.kind == CommandKind.StepCheckPhoto) { "only step checks are withdrawn; inspection evidence is dismissed once refused" }
+        dismiss(command)
     }
 
     /** Refused photos stay on disk until an explicit retry or removal; unknown legacy destinations require user choice. */
@@ -129,25 +153,42 @@ class CommandQueue internal constructor(
         schedule()
     }
 
-    /** Sends in capture order per server; a server that cannot take a command now is skipped, so it never holds up another. */
+    /**
+     * Sends in capture order per session. A server that cannot be reached is skipped, so it never holds up another; a
+     * server that answered "not now" holds only that row's session, and after [MAX_SERVER_ATTEMPTS] such answers the row
+     * is refused with the last one's code, so the remove and retry choices apply. A refusal holds the rest of its session
+     * too: step 2 is never sent after step 1 was refused (the server moved on), until the person removes or retries
+     * the refused row. Removing it asks for a sync, so the held rows go then.
+     */
     suspend fun drain(): DrainResult = mutex.withLock {
         val unavailable = mutableSetOf<String>()
-        var next = dao.nextPending(emptyList())
+        val waiting = mutableSetOf<String>()
+        val held = dao.rejectedSessions().toMutableSet()
+        var next = dao.nextPending(emptyList(), held.toList())
         while (next != null) {
             val command = next
-            dao.countAttempt(command.id)
-            val outcome = send(command)
+            val outcome = try { send(command) } catch (e: IllegalArgumentException) {
+                // A row this build cannot read (a column it expects is empty) is refused on the phone, not left to crash the worker.
+                ApiOutcome.Rejected(0, "row_unreadable", "The saved command could not be read; remove it and do the step again")
+            }
             when (dispositionOf(outcome)) {
                 Disposition.Sent -> {
                     if (command.kind == CommandKind.UploadPhoto) dao.uploaded(command.id, (outcome as ApiOutcome.Ok).value!!)
-                    else dismiss(command)
+                    else remove(command)
                 }
                 Disposition.RetryLater -> unavailable += requireNotNull(command.serverBase)
-                Disposition.Refused -> (outcome as ApiOutcome.Rejected).let { dao.reject(command.id, it.code, it.message) }
+                Disposition.HoldSession -> {
+                    val answer = outcome as ApiOutcome.Rejected
+                    // Only "not now" answers count: runs while the server was unreachable say nothing about this photo.
+                    dao.countAttempt(command.id)
+                    if (command.attempts + 1 >= MAX_SERVER_ATTEMPTS) { dao.reject(command.id, answer.code, answer.message); held += command.sessionId }
+                    else waiting += command.sessionId
+                }
+                Disposition.Refused -> { (outcome as ApiOutcome.Rejected).let { dao.reject(command.id, it.code, it.message) }; held += command.sessionId }
             }
-            next = dao.nextPending(unavailable.toList())
+            next = dao.nextPending(unavailable.toList(), (held + waiting).toList())
         }
-        if (unavailable.isEmpty()) DrainResult.Empty else DrainResult.Offline
+        if (unavailable.isEmpty() && waiting.isEmpty()) DrainResult.Empty else DrainResult.Offline
     }
 
     private suspend fun send(c: PendingCommand): ApiOutcome<String?> {

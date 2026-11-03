@@ -7,6 +7,7 @@ import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.ObservationStatus
 import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VisualAssessment
+import com.lensqi.fieldops.data.api.VisualChangeAnalysis
 
 /** What the single primary button does next; each maps to a server command or a screen, nothing is decided here. */
 enum class MoveKind { Scan, Assess, Check, Plan, Repair, Verify, Receipt, Retry }
@@ -23,6 +24,8 @@ fun aiSummary(v: InspectionView?, a: VisualAssessment?): String {
         if (v.stage == InspectionStage.VerifiedComplete)
             return if (uncompared) "Your review of the new photo and a fresh equipment check both passed." else "The new photo and a fresh equipment check both passed."
         if (v.stage == InspectionStage.VerificationFailed) v.lastDecision?.reasons?.firstOrNull()?.let { return plainReason(it) }
+        // A later photo the server rejected is the news, even while an earlier one stays accepted for the claim.
+        rejectedAfterAccepted(v)?.let { return changeText(it.verdict).detail }
         if (v.acceptedPostRepairPhotoId != null)
             return if (uncompared) "I couldn't compare your repair photo with the earlier one, so the visual part rests on your review."
             else "I've compared your repair photo with the earlier one and accepted it."
@@ -40,6 +43,21 @@ fun aiSummary(v: InspectionView?, a: VisualAssessment?): String {
         unclear.takeIf { it.isNotEmpty() }?.let { "I can't make out the ${join(it)} yet." },
         odd.takeIf { it.isNotEmpty() }?.let { "The ${join(it)} doesn't match what I expect." },
     ).joinToString(" ").ifEmpty { "I couldn't make out the parts I need in this photo." }
+}
+
+/**
+ * The latest change analysis for the current claim when it rejects a photo newer than the accepted one. The server keeps
+ * the earlier photo accepted and moves the stage to NeedsEvidence; the screen must then show the rejection, not the
+ * acceptance. Null when nothing newer was rejected.
+ */
+fun rejectedAfterAccepted(v: InspectionView): VisualChangeAnalysis? {
+    val latest = v.changeAnalyses.lastOrNull { it.claimId == v.currentClaimId } ?: return null
+    if (latest.verdict != VisualChangeVerdict.NoVisualChange && latest.verdict != VisualChangeVerdict.DuplicateImage) return null
+    val accepted = v.acceptedPostRepairPhotoId ?: return latest
+    if (latest.photoEvidenceId == accepted) return null
+    val order = v.photos.map { it.evidenceId }
+    val newer = order.indexOf(latest.photoEvidenceId).let { i -> i < 0 || i > order.indexOf(accepted) }
+    return if (newer || v.stage == InspectionStage.NeedsEvidence) latest else null
 }
 
 /** The one thing to do next, from the server's stage and the latest assessment. */

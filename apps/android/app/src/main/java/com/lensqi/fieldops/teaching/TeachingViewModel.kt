@@ -50,6 +50,9 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     // Main thread only. The first stop request wins; a stop the app makes (not the user) marks the recording Interrupted.
     private var stopReason: String? = null
     private var stopInterrupted = false
+    /** A stop asked for while the recording was still starting (recording not yet assigned); applied once it is. */
+    private var pendingStop: PendingStop? = null
+    private class PendingStop(val reason: String?)
     private var lastSampleNs = 0L
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
@@ -77,6 +80,7 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
 
     fun start(controller: LifecycleCameraController, goal: String, equipment: String, demonstrator: String, permission: Boolean, training: Boolean) {
         if (mutable.value.busy || activeId != null) return
+        pendingStop = null
         mutable.update { it.copy(busy = true, error = null, message = null) }
         val now = Instant.now().toString()
         val elapsed = SystemClock.elapsedRealtimeNanos()
@@ -100,10 +104,12 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
                     recording = controller.startRecording(FileOutputOptions.Builder(store.video(record.id))
                         .setFileSizeLimit(256L * 1024 * 1024).setDurationLimitMillis(10 * 60 * 1000L).build(),
                         AudioConfig.AUDIO_DISABLED, ContextCompat.getMainExecutor(getApplication()), ::onVideoEvent)
+                    // A stop asked for during start-up (the app left the foreground, the camera closed, the user) applies now.
+                    pendingStop?.let { pendingStop = null; stop(it.reason) }
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
-                activeId = null
+                activeId = null; pendingStop = null
                 store.save(record.copy(state = RecordingState.Failed, stopReason = "Recording could not start."))
                 refresh(record.id)
                 mutable.update { it.copy(busy = false, error = "Recording could not start. Check free space and camera access, then try again.") }
@@ -153,7 +159,9 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     /** With no reason the user chose to stop; the app passes a reason when it stops on leaving the foreground or closing the camera. */
     fun stop(reason: String? = null) {
         val id = activeId ?: return
-        if (recording == null || stopReason != null) return
+        if (stopReason != null) return
+        // Still starting: the recording object does not exist yet, so the request is kept and applied once it does.
+        if (recording == null) { if (pendingStop == null) pendingStop = PendingStop(reason); return }
         stopReason = reason ?: USER_STOP
         stopInterrupted = reason != null
         val now = SystemClock.elapsedRealtimeNanos()

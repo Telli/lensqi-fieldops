@@ -51,19 +51,25 @@ object ArCore {
      */
     fun openSession(context: Context): Triple<Session, Boolean, Boolean> {
         val session = Session(context)
-        val depth = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
-        val markers = runCatching {
-            val bitmap = context.assets.open(RegistrationMarker.ASSET).use { BitmapFactory.decodeStream(it) }
-            AugmentedImageDatabase(session).apply { addImage(RegistrationMarker.ID, bitmap, RegistrationMarker.WIDTH_M.toFloat()) }
-        }.getOrNull()
-        session.configure(session.config.apply {
-            focusMode = Config.FocusMode.AUTO
-            updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
-            planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
-            depthMode = if (depth) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
-            markers?.let { augmentedImageDatabase = it }
-        })
-        return Triple(session, depth, markers != null)
+        // A Session holds the camera and native memory: if configuring it fails, it is closed before the failure propagates.
+        try {
+            val depth = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+            val markers = runCatching {
+                val bitmap = context.assets.open(RegistrationMarker.ASSET).use { BitmapFactory.decodeStream(it) }
+                AugmentedImageDatabase(session).apply { addImage(RegistrationMarker.ID, bitmap, RegistrationMarker.WIDTH_M.toFloat()) }
+            }.getOrNull()
+            session.configure(session.config.apply {
+                focusMode = Config.FocusMode.AUTO
+                updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+                planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+                depthMode = if (depth) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
+                markers?.let { augmentedImageDatabase = it }
+            })
+            return Triple(session, depth, markers != null)
+        } catch (e: Throwable) {
+            runCatching { session.close() }
+            throw e
+        }
     }
 }
 

@@ -16,3 +16,11 @@ data class GlassesLiveState(val session: LiveSession? = null, val enabled: Boole
     /** The session live assist was running for when a shutter photo paused it; the glasses screen starts it again for that session. */
     internal val resumeFor = MutableStateFlow<LiveSession?>(null)
 }
+
+/**
+ * Whether the glasses screen should start live assist again now for [session]: the camera streams, no service runs, no
+ * shutter photo is in flight, and the pause was for this very session. Never while capturing: the restart would race the
+ * photo and consume the pending resume before the next screen could.
+ */
+fun shouldResumeLive(streaming: Boolean, liveEnabled: Boolean, capturing: Boolean, pending: LiveSession?, session: LiveSession): Boolean =
+    streaming && !liveEnabled && !capturing && pending != null && session.sameAs(pending)

@@ -13,7 +13,10 @@ data class ScannedAsset(val fixtureId: String, val assetId: String, val displayN
 fun assetFromScan(payload: String, fixtures: List<Fixture>): ScannedAsset? {
     val text = payload.trim()
     if (text.isEmpty()) return null
-    val tokens = text.split(Regex("[^A-Za-z0-9._-]+")).filter { it.isNotEmpty() }.map { it.lowercase() }.toSet()
+    // Punctuation that ends a sentence or a label ("Asset: LAB-SW-01.") is not part of the id; the raw token is kept too,
+    // since an id may itself end in one of these characters.
+    val raw = text.split(Regex("[^A-Za-z0-9._-]+")).filter { it.isNotEmpty() }
+    val tokens = (raw + raw.map { it.trim('.', '-', '_') }).filter { it.isNotEmpty() }.map { it.lowercase() }.toSet()
     return fixtures.flatMap { f -> f.assets.map { a -> ScannedAsset(f.fixtureId, a.assetId, a.displayName) } }
         .filter { it.assetId.lowercase() == text.lowercase() || it.assetId.lowercase() in tokens }
         .maxByOrNull { it.assetId.length }

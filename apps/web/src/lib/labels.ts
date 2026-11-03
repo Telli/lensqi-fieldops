@@ -95,6 +95,9 @@ export function plainReason(reason: string): string {
 }
 
 /** A before-repair photo can never show the post-repair view; that item is expected to be unknown and is not "unclear". */
+/** Photos in a receipt: a preserved original is the same photo's bytes under another name, and a mask is not a photo. */
+export const countPhotos = (artifacts: { kind?: string }[]) => artifacts.filter((a) => (a.kind ?? "photo") === "photo").length;
+
 export const isPostRepairItem = (featureId: string) => /post_?repair/i.test(featureId);
 
 /** First letter up; model sentences sometimes start lower-case. */

@@ -22,6 +22,14 @@ class AssetScanTest {
         assertEquals(fixtures.first().fixtureId, assetFromScan(asset.assetId, fixtures)!!.fixtureId)
     }
 
+    @Test fun `punctuation that ends a label or sentence is not part of the id`() {
+        assertEquals(asset.assetId, assetFromScan("Asset: ${asset.assetId}.", fixtures)!!.assetId)
+        assertEquals(asset.assetId, assetFromScan("${asset.assetId}_", fixtures)!!.assetId)
+        assertEquals(asset.assetId, assetFromScan("-${asset.assetId}-", fixtures)!!.assetId)
+        // Letters and digits stuck to the id are still part of the token.
+        assertNull(assetFromScan("${asset.assetId}1.", fixtures))
+    }
+
     @Test fun `anything the site record does not list is no asset, and a prefix is not a match`() {
         assertNull(assetFromScan("", fixtures))
         assertNull(assetFromScan("https://example.com/", fixtures))

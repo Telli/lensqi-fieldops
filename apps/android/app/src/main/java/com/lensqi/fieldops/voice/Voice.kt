@@ -110,11 +110,36 @@ class SpeechTurns(private val clock: () -> Long, private val maxMsPerChar: Long 
     fun release(): List<String> = waiting.toList().also { waiting.clear() }
 }
 
+/**
+ * What a speaker does with lines before its engine has started. The first step of a task opened cold arrives while
+ * TextToSpeech is still initialising, so the latest forced line (a step, an answer, a check result) waits and is read
+ * once the engine is ready; a newer forced line replaces it, since the older one is out of date by then. Hints are
+ * dropped: the screen offers them again. An engine that fails to start reads nothing, as before.
+ */
+class StartupBuffer {
+    private var started = false
+    private var failed = false
+    private var waiting: String? = null
+    /** True when the line may play now; false when it was kept for [ready] or dropped. */
+    @Synchronized fun offer(text: String, force: Boolean): Boolean {
+        if (started) return true
+        if (force && !failed) waiting = text
+        return false
+    }
+    /** The engine reported its start: the line kept for it, if any, to play now. */
+    @Synchronized fun ready(success: Boolean): String? {
+        started = success; failed = !success
+        return waiting.also { waiting = null }?.takeIf { success }
+    }
+    /** Speech was stopped (the screen closed): a line waiting for the engine belongs to it and is never read. */
+    @Synchronized fun clear() { waiting = null }
+}
+
 /** Text-to-speech for guidance, shared by every screen. A new line interrupts the previous one, unless that one is forced. */
 @Singleton
 class Speaker @Inject constructor(@ApplicationContext context: Context) : SpeechOutput {
-    @Volatile private var ready = false
-    private val tts = TextToSpeech(context) { status -> ready = status == TextToSpeech.SUCCESS }
+    private val startup = StartupBuffer()
+    private val tts = TextToSpeech(context) { status -> startup.ready(status == TextToSpeech.SUCCESS)?.let { play(it, force = true, replace = true) } }
     private val turns = SpeechTurns(SystemClock::elapsedRealtime)
     @Volatile override var enabled = true
     @Volatile override var held = false
@@ -139,11 +164,13 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
         })
     }
 
-    override fun speak(text: String, force: Boolean, replace: Boolean) =
-        play(com.lensqi.fieldops.ui.common.TechnicianText.guidance(text), force, replace)
+    // What is spoken is what the screen shows: a step, an answer or a check reason names the equipment in its own words
+    // ("the Delta cartridge"); internal status strings are made readable by their callers before they reach here.
+    override fun speak(text: String, force: Boolean, replace: Boolean) = play(text, force, replace)
 
     private fun play(spoken: String, force: Boolean, replace: Boolean) {
-        if (!enabled || held || !ready || spoken.isBlank()) return
+        if (!enabled || held || spoken.isBlank()) return
+        if (!startup.offer(spoken, force)) return
         if (listening) { if (force) synchronized(turns) { turns.hold(spoken, replace) }; return }
         if (!force && spoken == last) return
         val id: String; val play: Play
@@ -153,7 +180,7 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
         tts.speak(spoken, if (play == Play.After) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
-    override fun stop() { synchronized(turns) { turns.clear() }; tts.stop() }
+    override fun stop() { startup.clear(); synchronized(turns) { turns.clear() }; tts.stop() }
 }
 
 /**
@@ -187,6 +214,8 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     var heard by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var settingsNeeded by remember { mutableStateOf(false) }
+    // Whether Android was still willing to explain the request when it was made; compared with after (see deniedForGood).
+    var rationaleBefore by remember { mutableStateOf(false) }
     // Back from Settings with the microphone allowed: the Settings hint and its error go, the mic button works again.
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
         if (settingsNeeded && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { settingsNeeded = false; error = null }
@@ -233,14 +262,15 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { settingsNeeded = false; begin() }
         else {
-            settingsNeeded = com.lensqi.fieldops.ui.common.permanentlyDenied(context, Manifest.permission.RECORD_AUDIO)
+            // Sticky: once Android stops asking, later taps are refused with no rationale either side, which must not hide the Settings way in.
+            settingsNeeded = settingsNeeded || com.lensqi.fieldops.ui.common.deniedForGood(rationaleBefore, com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO))
             error = if (settingsNeeded) "The microphone is off for LensQi and Android will not ask again. Allow it in Settings, or keep typing." else "Microphone permission is needed for voice."
         }
     }
     return VoiceInputState(listening, heard, error, supported && recognizer != null,
         start = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
-            else permission.launch(Manifest.permission.RECORD_AUDIO)
+            else { rationaleBefore = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO); permission.launch(Manifest.permission.RECORD_AUDIO) }
         },
         stop = { recognizer?.stopListening(); Unit },
         settingsNeeded = settingsNeeded, openSettings = { com.lensqi.fieldops.ui.common.openAppSettings(context) },

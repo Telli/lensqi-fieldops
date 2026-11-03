@@ -9,7 +9,7 @@ import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
 import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
-import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task } from "@/lib/tasks";
+import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task, taskRoute } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
 import { parseCommand, speechNotice, useHandsFree, usePause, usePushToTalk, useSpeak } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -76,7 +76,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (!t) return;
     if (t.phase === "Completed") { nav(`/m/t/${id}/done`, { replace: true }); return; }
     if (t.phase === "Planned" || t.phase === "Abandoned") { nav(`/m/t/${id}`, { replace: true }); return; }
-    const current = t.currentStepId ? `/m/t/${id}/step/${t.currentStepId}` : `/m/t/${id}`;
+    const current = taskRoute(t);
     if (!stepId) { nav(current, { replace: true }); return; }
     const routed = steps.find((s) => s.id === stepId);
     // A step id from an old link or another plan is not on this task: show the current step instead of waiting forever.
@@ -160,7 +160,11 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   }
 
   const voice = usePushToTalk((text) => {
-    switch (parseCommand(text)) {
+    const command = parseCommand(text);
+    // While paused nothing said is a command or a question; only "resume" is heard, so ambient speech never reaches the
+    // server. Hands-free keeps listening for it, or a pause by voice could only be ended by a tap.
+    if (pauser.paused && command !== "resume") return;
+    switch (command) {
       case "next": return void (reviewing && t?.currentStepId ? nav(`/m/t/${id}/step/${t.currentStepId}`) : move("complete"));
       case "back": return void move("back");
       case "skip": return void move("skip");

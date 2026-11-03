@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -32,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +80,8 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
     var payload by remember { mutableStateOf<String?>(null) }
     // Matched from the code and the site records as they are now: a label read before the records arrived matches once they do.
     val found = remember(payload, s.fixtures) { payload?.let { assetFromScan(it, s.fixtures) } }
+    // Read by the analyzer thread: once a label matched, later frames are dropped so another code cannot swap the asset under the Inspect button.
+    val matched = rememberUpdatedState(found)
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -84,7 +89,8 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
             Text("Scan an asset label", style = MaterialTheme.typography.titleMedium)
         }
         HorizontalDivider(color = Fo.Border)
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The buttons sit below the 3:4 preview; on a short screen they are reached by scrolling.
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!granted) {
                 Text("Camera access is needed to read the label. Nothing is recorded; the code is matched on this phone.")
                 PrimaryButton("Allow camera", { ask.launch(Manifest.permission.CAMERA) }, Modifier.fillMaxWidth())
@@ -107,7 +113,7 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
                 val busy = AtomicBoolean(false)
                 controller.setImageAnalysisAnalyzer(executor) { proxy ->
                     val media = proxy.image
-                    if (media == null || !busy.compareAndSet(false, true)) { proxy.close(); return@setImageAnalysisAnalyzer }
+                    if (media == null || matched.value != null || !busy.compareAndSet(false, true)) { proxy.close(); return@setImageAnalysisAnalyzer }
                     scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes ->
                             codes.firstNotNullOfOrNull { it.rawValue }?.let { raw ->

@@ -8,6 +8,8 @@ import com.lensqi.fieldops.ui.common.AiCard
 import com.lensqi.fieldops.ui.common.MoveKind
 import com.lensqi.fieldops.ui.common.ProgressSegments
 import com.lensqi.fieldops.ui.common.aiSummary
+import com.lensqi.fieldops.ui.common.rejectedAfterAccepted
+import com.lensqi.fieldops.ui.common.CHANGE_CHECK_KIND
 import com.lensqi.fieldops.ui.common.nextMove
 import com.lensqi.fieldops.ui.common.progressStep
 import com.lensqi.fieldops.ui.theme.FoDark
@@ -85,8 +87,6 @@ import com.lensqi.fieldops.domain.verifyPreflight
 import com.lensqi.fieldops.domain.PreflightRow
 import androidx.compose.material.icons.outlined.Speed
 import com.lensqi.fieldops.ui.common.verifySteps
-import java.time.Instant
-import java.time.OffsetDateTime
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -151,7 +151,11 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch { vm.captureForReview(copyToCache(context, uri), origin = "RecordedFixture"); onReview() }
+        // The review opens only once the photo is saved for upload; a photo that cannot be copied or used stays an error here.
+        if (uri != null) scope.launch {
+            val file = runCatching { copyToCache(context, uri) }.getOrNull()
+            if (file == null) vm.importFailed() else if (vm.prepareReview(file, origin = "RecordedFixture")) onReview()
+        }
     }
     val importPhoto = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val view = s.view
@@ -166,7 +170,7 @@ fun InspectionScreen(onBack: () -> Unit, onCapture: () -> Unit, onOpenReceipt: (
                 Text(name ?: "Inspection", style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 if (verifying) Text("Repair verification", style = MaterialTheme.typography.bodySmall)
             }
-            view?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage)) }
+            view?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage, it.outcomeKind)) }
             Spacer(Modifier.width(12.dp))
         }
         HorizontalDivider(color = Fo.Border)
@@ -225,9 +229,9 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
     // Hero: the latest photo with LensQi's outlines, and the camera one tap away.
     item {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(FoDark.Overlay)) {
-            val img = s.outlineImage
+            val set = latest?.let { s.outlineSets[it.evidenceId] }
             when {
-                img != null && s.outlinePhotoId == latest?.evidenceId -> ArOverlay(img, s.outlines, arTags(s.fixture, a, s.outlines), guide = target)
+                set != null -> ArOverlay(set.image, set.outlines, arTags(s.fixture, a, set.outlines), guide = target, sourceWidth = set.sourceWidth)
                 latest != null -> vm.artifactFor(latest.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), "Latest photo", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Crop) }
                 else -> Column(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(onClick = onCapture), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Icon(Icons.Outlined.CameraAlt, null, tint = FoDark.Muted, modifier = Modifier.size(36.dp))
@@ -293,9 +297,11 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
 private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit, importPhoto: () -> Unit, onOpenReceipt: (String) -> Unit, onGlasses: () -> Unit) {
     val accepted = view.photos.firstOrNull { it.evidenceId == view.acceptedPostRepairPhotoId }
     val change = view.changeAnalyses.lastOrNull { it.claimId == view.currentClaimId }
-    val after = accepted ?: change?.let { c -> view.photos.firstOrNull { it.evidenceId == c.photoEvidenceId } }
-    val claimedAt = view.repairClaimedAt?.let(::instant)
-    val before = claimedAt?.let { at -> view.photos.lastOrNull { p -> instant(p.observedAt)?.let { it <= at } == true } } ?: view.photos.firstOrNull()
+    // A later photo the server rejected is shown as "After · not accepted": the earlier accepted one is no longer the news.
+    val rejectedLater = rejectedAfterAccepted(view)
+    val after = rejectedLater?.let { c -> view.photos.firstOrNull { it.evidenceId == c.photoEvidenceId } }
+        ?: accepted ?: change?.let { c -> view.photos.firstOrNull { it.evidenceId == c.photoEvidenceId } }
+    val before = beforePhoto(view)
     val required = s.fixture?.visualRequirements?.filter { it.mandatory }.orEmpty()
     // The server's own answer for each item under this claim; the policy counts it whichever post-repair photo it cited.
     fun reviewed(req: String) = view.checklist.firstOrNull { it.requirementId == req }
@@ -323,7 +329,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
         PrimaryButton("Record the repair", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
     }
 
-    item(key = HERO_KEY) { VerifyHero(s, vm, before, after, camera = card != VerifyCard.Closed, onCapture) }
+    item(key = HERO_KEY) { VerifyHero(s, vm, before, after, afterAccepted = rejectedLater == null, camera = card != VerifyCard.Closed, onCapture) }
     if (attempt != null) attemptItems(s, vm, view, attempt, card, onCapture, onOpenReceipt, claimAgain)
     else item(key = NEXT_STEP_KEY) {
         when {
@@ -352,10 +358,17 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
                 PrimaryButton("Verify the repair", vm::verify, Modifier.fillMaxWidth(), enabled = s.busy == null && !answersWaiting, busy = running, icon = Icons.Outlined.Build)
             }
             card == VerifyCard.Claim -> AiCard("This repair attempt didn't pass.", "Fix it, then claim again", "Every attempt stays in the record.", tone = Fo.Failure) { claimAgain() }
-            card == VerifyCard.Closed -> AiCard(plainReason(blocking.firstOrNull().orEmpty()), "Inspection closed", null)
+            card == VerifyCard.Closed -> AiCard(plainReason(blocking.firstOrNull().orEmpty()), "Inspection closed", null) {
+                // Offline the attempt trail is not loaded, so this card is all that says how it closed: a simulated check is never left unbadged.
+                if (view.outcomeKind == VerificationOutcomeKind.VerifiedCompleteSimulated) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SimBadge(); Muted("This result does not verify live equipment.")
+                }
+            }
             else -> AiCard(
                 aiSummary(view, null), asked?.note ?: "Photograph the repair",
-                asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." } ?: "Same view as before. The same photo again won't count.",
+                asked?.let { "Requested by the ${it.requestedBy.lowercase()}. Your next photo answers it." }
+                    ?: if (rejectedLater != null) "The last photo was not accepted. Take a new one after the repair; the same view as before won't count."
+                    else "Same view as before. The same photo again won't count.",
             ) {
                 // Saved photos are listed once, above the cards, in both modes.
                 // The server refuses a repair photo whose device time is far behind the claim: say so before the shutter.
@@ -447,7 +460,7 @@ private fun LazyListScope.attemptItems(
     }
     item {
         Expandable("Details · checks and inspection record") {
-            Part(Icons.Outlined.Visibility, "What the photo showed", "Camera assessment · inferred",
+            Part(Icons.Outlined.Visibility, "What the photo showed", CHANGE_CHECK_KIND,
                 pass = when (change?.verdict) { null, VisualChangeVerdict.Unscorable -> null; VisualChangeVerdict.Changed -> true; else -> false }) {
                 if (change != null) {
                     val c = changeText(change.verdict)
@@ -544,30 +557,30 @@ private fun Part(icon: ImageVector, title: String, kind: String, pass: Boolean?,
     }
 }
 
-private fun instant(s: String): Instant? = runCatching { OffsetDateTime.parse(s).toInstant() }.getOrNull()
-
 /** Before and after on one frame. "After" is the repair photo with the server's change outline pinned to it. */
 @Composable
-private fun VerifyHero(s: InspectionUi, vm: InspectionViewModel, before: PhotoEvidence?, after: PhotoEvidence?, camera: Boolean, onCapture: () -> Unit) {
+private fun VerifyHero(s: InspectionUi, vm: InspectionViewModel, before: PhotoEvidence?, after: PhotoEvidence?, afterAccepted: Boolean, camera: Boolean, onCapture: () -> Unit) {
     val view = s.view ?: return
     var side by remember { mutableStateOf<Boolean?>(null) }
     val showAfter = side ?: (after != null)
     val photo = if (showAfter) after else before
+    val afterLabel = if (afterAccepted) "After" else "After · not accepted"
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(FoDark.Overlay)) {
-        val img = s.outlineImage
+        // Each photo's outlines are cached by id, so toggling Before keeps them.
+        val set = photo?.let { s.outlineSets[it.evidenceId] }
         when {
             photo == null -> Column(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(onClick = onCapture), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Icon(Icons.Outlined.CameraAlt, null, tint = FoDark.Muted, modifier = Modifier.size(36.dp))
                 Text("Tap to open the camera", color = FoDark.Muted, fontSize = 13.sp)
             }
-            img != null && s.outlinePhotoId == photo.evidenceId -> {
+            set != null -> {
                 val change = view.changeAnalyses.lastOrNull { it.photoEvidenceId == photo.evidenceId }
-                ArOverlay(img, s.outlines, arTags(s.fixture, if (showAfter) null else s.latestAssessment, s.outlines, change))
+                ArOverlay(set.image, set.outlines, arTags(s.fixture, if (showAfter) null else s.latestAssessment, set.outlines, change), sourceWidth = set.sourceWidth)
             }
-            else -> vm.artifactFor(photo.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), if (showAfter) "After" else "Before", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Fit) }
+            else -> vm.artifactFor(photo.evidenceId)?.let { AsyncImage(vm.artifactUrl(it), if (showAfter) afterLabel else "Before", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Fit) }
         }
         if (before != null) Row(Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.72f)).padding(3.dp)) {
-            listOf(false to "Before", true to "After").forEach { (isAfter, label) ->
+            listOf(false to "Before", true to afterLabel).forEach { (isAfter, label) ->
                 val on = showAfter == isAfter
                 val enabled = !isAfter || after != null
                 Text(

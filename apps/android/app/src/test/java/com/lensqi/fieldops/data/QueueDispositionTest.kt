@@ -8,15 +8,19 @@ import org.junit.jupiter.api.Test
 
 class QueueDispositionTest {
     @Test
-    fun `a transient failure keeps the queued photo for a later retry`() {
+    fun `a server that cannot be reached keeps the queued photo and holds the server`() {
+        assertEquals(Disposition.RetryLater, dispositionOf(ApiOutcome.Unreachable("no route")))
+    }
+
+    @Test
+    fun `a server that answered not now keeps the queued photo and holds only its task`() {
         for (outcome in listOf(
-            ApiOutcome.Unreachable("no route"),
             ApiOutcome.Rejected(503, "http_503", "overloaded"),
             ApiOutcome.Rejected(504, "model_timeout", "timed out"),
             ApiOutcome.Rejected(429, "rate_limited", "slow down"),
             ApiOutcome.Rejected(409, "provider_unavailable", "Muse is down"),
             ApiOutcome.Rejected(409, "invalid_model_output", "bad JSON"),
-        )) assertEquals(Disposition.RetryLater, dispositionOf(outcome), outcome.toString())
+        )) assertEquals(Disposition.HoldSession, dispositionOf(outcome), outcome.toString())
     }
 
     @Test

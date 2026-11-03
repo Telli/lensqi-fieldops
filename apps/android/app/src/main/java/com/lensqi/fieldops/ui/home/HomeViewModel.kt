@@ -92,12 +92,12 @@ class HomeViewModel @Inject constructor(
             // A failed list call keeps the device copy of the assets, marked with when it was fetched; it never empties them.
             val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value
             val list = (apiCall { api.inspections() } as? ApiOutcome.Ok)?.value
-            list?.let { snapshots.save(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
+            list?.let { snapshots.saveOn(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
             // Every answer is saved, an empty list too, so a later failure never resurrects assets the server has removed.
-            fixtures?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
+            fixtures?.let { snapshots.saveOn(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
             // After a failed call the list this run already fetched is the newest known (a snapshot save can fail and leave an
             // older copy on disk); the saved copy is read only when nothing was fetched yet, on a cold start.
-            val kept = if (fixtures == null && _state.value.fixturesFetchedAt == null) snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
+            val kept = if (fixtures == null && _state.value.fixturesFetchedAt == null) snapshots.loadOn(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
             val now = java.time.Instant.now().toString()
             _state.update {
                 val fetchedAt = if (fixtures != null) now else it.fixturesFetchedAt ?: kept?.fetchedAt
@@ -108,9 +108,9 @@ class HomeViewModel @Inject constructor(
             }
             loadFocus()
         } else {
-            val list = snapshots.load(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
+            val list = snapshots.loadOn(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
             // Same rule: the list this run fetched outranks the saved copy.
-            val fixtures = if (_state.value.fixturesFetchedAt == null) snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
+            val fixtures = if (_state.value.fixturesFetchedAt == null) snapshots.loadOn(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
             _state.update {
                 val fetchedAt = it.fixturesFetchedAt ?: fixtures?.fetchedAt
                 it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt,
