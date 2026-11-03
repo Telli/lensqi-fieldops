@@ -131,7 +131,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     // One idempotency key per pending action (RetryKeys): a retry after a lost response, a server error or a failed model
     // call replays the server's outcome (or reuses the photo it saved) instead of acting twice. A refusal drops the key.
-    private val keys = com.lensqi.fieldops.data.api.RetryKeys()
+    private val keys = com.lensqi.fieldops.data.api.RetryKeys(saved)
     private fun keyFor(action: String) = keys.keyFor(action)
     private fun <T> settle(action: String, r: ApiOutcome<T>) {
         keys.settle(action, r)

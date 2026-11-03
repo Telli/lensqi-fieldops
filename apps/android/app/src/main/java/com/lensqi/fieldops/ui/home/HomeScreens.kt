@@ -258,6 +258,7 @@ fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Start an inspection", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
         item { Text("Pick the equipment from its asset label. LensQi checks it against the site's expected setup.", style = MaterialTheme.typography.bodySmall) }
+        s.fixturesCachedAt?.let { at -> item { AssetsCachedNote(at) } }
         s.error?.let { item { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) } }
         s.fixtures.forEach { f ->
             item { SectionTitle(f.fixtureId) }
@@ -278,11 +279,19 @@ fun StartScreen(vm: HomeViewModel, onCreated: (String) -> Unit) {
     }
 }
 
+/** The assets on screen are the copy saved on this phone: the server did not answer for them this time. */
+@Composable
+private fun AssetsCachedNote(fetchedAt: String) = Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Icon(Icons.Outlined.CloudOff, null, tint = Fo.Warning, modifier = Modifier.size(16.dp))
+    Text("Assets from the copy saved ${whenText(fetchedAt)}. The server did not answer for the site records; an asset added or removed since may not show.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
+}
+
 @Composable
 fun AssetsScreen(vm: HomeViewModel, onOpenAsset: (String) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Assets", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
+        s.fixturesCachedAt?.let { at -> item { AssetsCachedNote(at) } }
         s.fixtures.forEach { f ->
             item { SectionTitle(f.fixtureId) }
             item {

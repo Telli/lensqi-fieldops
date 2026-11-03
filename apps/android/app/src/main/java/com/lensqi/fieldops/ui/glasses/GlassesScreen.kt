@@ -95,6 +95,8 @@ import com.lensqi.fieldops.ui.theme.Fo
 import com.lensqi.fieldops.ui.theme.FoDark
 import com.lensqi.fieldops.wearables.GlassesMode
 import com.lensqi.fieldops.wearables.LiveSession
+import com.lensqi.fieldops.wearables.GlassesLiveService
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.lensqi.fieldops.wearables.GlassesPhase
 import com.lensqi.fieldops.wearables.GlassesState
 import com.lensqi.fieldops.ui.camera.LiveCameraState
@@ -133,10 +135,12 @@ fun GlassesScreen(
     val liveHere = live.enabled && live.session == session
     val captured by rememberUpdatedState(onCaptured)
     val capture = { vm.capture { photo -> captured(photo.file, photo.origin) } }
-    // Without the notification (Android 13+ permission refused) the service still runs, but its Stop and Mute actions are
-    // not on the lock screen; the screen says so instead of promising them.
-    var notificationsOn by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || granted(context, Manifest.permission.POST_NOTIFICATIONS)) }
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> notificationsOn = ok; vm.startLive(session) }
+    // Without the notification (permission refused, app notifications off, or the channel blocked) the service still runs,
+    // but its Stop and Mute actions are not on the lock screen; the screen says so instead of promising them. Checked again
+    // each time the screen resumes, since Settings can change it meanwhile.
+    var notificationsOn by remember { mutableStateOf(GlassesLiveService.notificationsAvailable(context)) }
+    LifecycleResumeEffect(Unit) { notificationsOn = GlassesLiveService.notificationsAvailable(context); onPauseOrDispose { } }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notificationsOn = GlassesLiveService.notificationsAvailable(context); vm.startLive(session) }
     val startLive = {
         if (Build.VERSION.SDK_INT >= 33 && !granted(context, Manifest.permission.POST_NOTIFICATIONS)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         else vm.startLive(session)

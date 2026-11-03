@@ -33,3 +33,17 @@ class RetryKeysTest {
         assertEquals(1, seen.size)
     }
 }
+
+/** Pending keys survive process death through the view model's saved state, so a lost answer is still replayed, not repeated. */
+class RetryKeysSavedStateTest {
+    @Test fun `a key pending when the process dies is the same key after recreation, and settles away`() {
+        val saved = androidx.lifecycle.SavedStateHandle()
+        val before = RetryKeys(saved)
+        val key = before.keyFor("verify:c1@9")
+        before.settle("verify:c1@9", ApiOutcome.Unreachable("timeout"))
+        val after = RetryKeys(saved)
+        assertEquals(key, after.keyFor("verify:c1@9"), "recreated from saved state, the same request keeps its key")
+        after.settle("verify:c1@9", ApiOutcome.Ok("decided"))
+        assertNotEquals(key, RetryKeys(saved).keyFor("verify:c1@9"), "a settled key is gone from the saved state too")
+    }
+}

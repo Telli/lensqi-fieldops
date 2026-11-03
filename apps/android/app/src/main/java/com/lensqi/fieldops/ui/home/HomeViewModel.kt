@@ -33,6 +33,8 @@ data class HomeState(
     val inspections: List<InspectionSummary> = emptyList(),
     /** Set when the list shown is the device copy because the server is unreachable. */
     val cachedAt: String? = null,
+    /** Set when the assets shown are the device copy: the fixtures call failed (even with the server reachable) or the server is unreachable. */
+    val fixturesCachedAt: String? = null,
     val loading: Boolean = false,
     val creating: String? = null,
     val error: String? = null,
@@ -83,20 +85,22 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(loading = true, error = null) }
         val health = apiCall { api.health() }
         if (health is ApiOutcome.Ok) {
-            // A failed list call keeps what the screen already shows (or the device copy); it never empties the assets.
+            // A failed list call keeps the device copy of the assets, marked with when it was fetched; it never empties them.
             val fixtures = (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value
             val list = (apiCall { api.inspections() } as? ApiOutcome.Ok)?.value
             list?.let { snapshots.save(LIST_KEY, ListSerializer(InspectionSummary.serializer()), it) }
-            fixtures?.takeIf { it.isNotEmpty() }?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
+            // Every answer is saved, an empty list too, so a later failure never resurrects assets the server has removed.
+            fixtures?.let { snapshots.save(FIXTURES_KEY, ListSerializer(Fixture.serializer()), it) }
+            val kept = if (fixtures == null) snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer())) else null
             _state.update {
-                val kept = it.fixtures.ifEmpty { snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer()))?.value.orEmpty() }
-                it.copy(health = health.value, reachable = true, fixtures = fixtures ?: kept, inspections = list ?: it.inspections, cachedAt = null, loading = false)
+                it.copy(health = health.value, reachable = true, fixtures = fixtures ?: kept?.value ?: it.fixtures, fixturesCachedAt = if (fixtures != null) null else kept?.fetchedAt,
+                    inspections = list ?: it.inspections, cachedAt = null, loading = false)
             }
             loadFocus()
         } else {
             val list = snapshots.load(LIST_KEY, ListSerializer(InspectionSummary.serializer()))
             val fixtures = snapshots.load(FIXTURES_KEY, ListSerializer(Fixture.serializer()))
-            _state.update { it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt, loading = false) }
+            _state.update { it.copy(reachable = false, health = null, inspections = list?.value ?: it.inspections, fixtures = fixtures?.value ?: it.fixtures, cachedAt = list?.fetchedAt, fixturesCachedAt = fixtures?.fetchedAt, loading = false) }
         }
     }
 

@@ -43,14 +43,21 @@ suspend fun <T> apiCall(block: suspend () -> T): ApiOutcome<T> = try {
  * One Idempotency-Key per pending action. A retry after a lost response, a server error or a failed model call reuses the
  * key, so the server replays its outcome (or reuses the photo it saved) instead of acting twice; an answer, accepted or
  * refused, drops the key so the next tap is a new request.
+ *
+ * The action name must carry the state the command refers to (the claim, the photo, the server's event sequence): a key
+ * is only ever reused for the same request to the same state, never for a new claim or a new photo.
+ *
+ * With a [SavedStateHandle] the pending keys survive process death and view model recreation, so a command whose answer
+ * was lost just before Android killed the app is still replayed rather than repeated when the screen comes back.
  */
-class RetryKeys {
-    private val keys = mutableMapOf<String, String>()
-    @Synchronized fun keyFor(action: String): String = keys.getOrPut(action) { java.util.UUID.randomUUID().toString() }
+class RetryKeys(private val saved: androidx.lifecycle.SavedStateHandle? = null, private val slot: String = "retry-keys") {
+    private val keys: HashMap<String, String> = saved?.get<HashMap<String, String>>(slot)?.let { HashMap(it) } ?: HashMap()
+    private fun persist() { saved?.set(slot, HashMap(keys)) }
+    @Synchronized fun keyFor(action: String): String = keys.getOrPut(action) { java.util.UUID.randomUUID().toString() }.also { persist() }
     /** The action moved somewhere else (queued offline under its key, say): the next tap is a new request. */
-    @Synchronized fun drop(action: String) { keys.remove(action) }
+    @Synchronized fun drop(action: String) { keys.remove(action); persist() }
     @Synchronized fun <T> settle(action: String, outcome: ApiOutcome<T>): ApiOutcome<T> {
-        if (!outcome.retryable) keys.remove(action)
+        if (!outcome.retryable) { keys.remove(action); persist() }
         return outcome
     }
     /** Runs one command under its action's key and settles it. */
