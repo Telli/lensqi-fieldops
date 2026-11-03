@@ -48,6 +48,7 @@ interface StepCheckQueue {
     fun observe(sessionId: String): Flow<List<PendingCommand>>
     /** [source] is the capture device ("Phone", "Glasses", "MockWearables"); it is sent with the photo when the queue drains. */
     suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String = "Phone"): PendingCommand
+    suspend fun enqueueStepAction(command: PendingCommand)
     suspend fun dismiss(command: PendingCommand)
     suspend fun retry(command: PendingCommand) {}
 }
@@ -61,11 +62,12 @@ class CommandQueue internal constructor(
     /** Where the camera and imports write temporary files; a source there is deleted once its saved copy exists. */
     private val scratch: File? = null,
     private val json: kotlinx.serialization.json.Json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; explicitNulls = false },
+    private val snapshots: com.lensqi.fieldops.data.SnapshotStore? = null,
     private val schedule: () -> Unit,
 ) {
     @Inject constructor(@ApplicationContext context: Context, dao: PendingCommandDao,
-        factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache, json: kotlinx.serialization.json.Json) :
-        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, context.cacheDir, json, { scheduleSync(context) })
+        factory: com.lensqi.fieldops.di.ApiFactory, cache: InspectionCache, json: kotlinx.serialization.json.Json, snapshots: com.lensqi.fieldops.data.SnapshotStore) :
+        this(File(context.filesDir, "captures"), dao, factory::forServer, cache, context.cacheDir, json, snapshots, { scheduleSync(context) })
 
     private val mutex = Mutex()
     fun observe(sessionId: String, server: String) = dao.observe(sessionId, server)
@@ -74,6 +76,11 @@ class CommandQueue internal constructor(
         override fun observe(sessionId: String) = this@CommandQueue.observe(sessionId, server)
         override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String) =
             save(PendingCommand(key, taskId, CommandKind.StepCheckPhoto, System.currentTimeMillis(), source = source, stepId = stepId, serverBase = server), jpeg)
+        override suspend fun enqueueStepAction(command: PendingCommand) {
+            require(command.kind in setOf(CommandKind.TaskComplete, CommandKind.TaskSkip))
+            dao.insert(command.copy(serverBase = server))
+            schedule()
+        }
         override suspend fun dismiss(command: PendingCommand) = this@CommandQueue.dismiss(command)
         override suspend fun retry(command: PendingCommand) { this@CommandQueue.retry(command, server) }
     }
@@ -146,6 +153,21 @@ class CommandQueue internal constructor(
     private suspend fun send(c: PendingCommand): ApiOutcome<String?> {
         val server = c.serverBase ?: return ApiOutcome.Rejected(0, "server_unbound", "Choose the original server before retrying this saved photo")
         val api = apiFor(server)
+        if (c.kind == CommandKind.TaskComplete || c.kind == CommandKind.TaskSkip) {
+            val step = requireNotNull(c.stepId)
+            val result = apiCall {
+                when {
+                    c.kind == CommandKind.TaskComplete -> api.stepAction(c.sessionId, step, "complete", c.id)
+                    c.payload == null -> api.stepAction(c.sessionId, step, "skip", c.id)
+                    else -> api.skipStep(c.sessionId, step, c.id, json.decodeFromString(com.lensqi.fieldops.data.api.SkipRequest.serializer(), c.payload))
+                }
+            }
+            return when (result) {
+                is ApiOutcome.Ok -> { rememberJob(server, result.value); ApiOutcome.Ok(null) }
+                is ApiOutcome.Rejected -> result
+                is ApiOutcome.Unreachable -> result
+            }
+        }
         if (c.kind.isJsonCommand) return sendCommand(api, c, server)
         val file = c.filePath?.let(::File)?.takeIf { it.isFile }
             ?: return ApiOutcome.Rejected(0, "photo_missing", "The saved photo could not be found; capture it again")
@@ -161,12 +183,16 @@ class CommandQueue internal constructor(
                 is ApiOutcome.Unreachable -> r
             }
             CommandKind.StepCheckPhoto -> when (val r = apiCall { api.checkStep(c.sessionId, requireNotNull(c.stepId), c.id, part, c.source?.toRequestBody()) }) {
-                is ApiOutcome.Ok -> ApiOutcome.Ok(null)
+                is ApiOutcome.Ok -> { rememberJob(server, r.value.task); ApiOutcome.Ok(null) }
                 is ApiOutcome.Rejected -> r
                 is ApiOutcome.Unreachable -> r
             }
             else -> error("not a photo command: ${c.kind}")
         }
+    }
+
+    private suspend fun rememberJob(server: String, task: com.lensqi.fieldops.data.api.TaskView) {
+        snapshots?.let { com.lensqi.fieldops.data.TaskLibrary(it, File(directory.parentFile, "job-references"), server).remember(task) }
     }
 
     /** A queued JSON command: the body it was saved with, under its original key; the server's view replaces the cached one. */

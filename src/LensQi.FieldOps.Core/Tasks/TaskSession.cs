@@ -29,7 +29,7 @@ public sealed class TaskSession
 
     /// <summary>Starts a task. <paramref name="requestId"/> is the creation request's key, kept on <see cref="TaskCreated"/>.</summary>
     public static TaskSession Create(string taskId, TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestId = null,
-        PersonContext? person = null)
+        PersonContext? person = null, TaskHandoff? handoff = null)
     {
         goal = goal?.Trim() ?? "";
         if (mode == TaskMode.Freeform && goal.Length == 0) goal = FreeformGoal;
@@ -45,7 +45,7 @@ public sealed class TaskSession
                 throw new TaskConflictException(TaskErrorCodes.InvalidInput, $"Name up to {PersonContext.MaxTools} tools, each in 1 to 4 plain words");
             if (person.HeightCm is null && person.Tools.Count == 0) person = null;
         }
-        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site, person) { RequestId = requestId }]);
+        return new TaskSession([new TaskCreated(1, taskId, now, mode, goal, details, site, person, handoff) { RequestId = requestId }]);
     }
 
     public static TaskSession Rehydrate(IEnumerable<TaskEvent> events) => new(events.ToList());
@@ -73,7 +73,9 @@ public sealed class TaskSession
             Require(State.Phase == TaskPhase.Planned && State.Plan is null, "This task already has a plan");
             foreach (var id in manualPhotoIds)
                 Require(State.Photos.Any(p => p.EvidenceId == id && p.Purpose == TaskPhotoPurpose.Manual), $"Manual photo '{id}' is not part of this task");
-            TaskPlanValidator.Validate(plan, State.Goal, State.Details);
+            if (plan.Steps.Any(step => step.ReferencePhotoIds?.Any(id => !manualPhotoIds.Contains(id)) == true))
+                throw new TaskConflictException(TaskErrorCodes.InvalidPlan, "A step cites a page outside this task");
+            TaskPlanValidator.Validate(plan, State.Goal, State.Details + " " + State.Handoff?.UserWords());
             return Commit([new PlanProposed(0, State.TaskId, now, plan, modelId, promptDigest, responseDigest, manualPhotoIds)]);
         });
 
@@ -109,7 +111,7 @@ public sealed class TaskSession
             return Commit([new StepChecked(0, State.TaskId, now, stepId, photoId, verdict, reason, modelId)]);
         });
 
-    public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now) =>
+    public IReadOnlyList<TaskEvent> RecordAnswer(string requestId, string? stepId, string question, string answer, string? photoId, string modelId, DateTimeOffset now, string? sessionTitle = null) =>
         Idempotent(requestId, () =>
         {
             // Coaching starts only once the plan's safety notes are accepted (free-form help is in progress from the start).
@@ -118,7 +120,12 @@ public sealed class TaskSession
             if (photoId is not null) Require(State.Photos.Any(p => p.EvidenceId == photoId), $"Photo '{photoId}' is not part of this task");
             if (string.IsNullOrWhiteSpace(question) || question.Length > 500) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Questions are 1 to 500 characters");
             if (string.IsNullOrWhiteSpace(answer) || answer.Length > 1200) throw new TaskConflictException(TaskErrorCodes.InvalidInput, "Answers are 1 to 1200 characters");
-            return Commit([new QuestionAnswered(0, State.TaskId, now, stepId, question.Trim(), answer.Trim(), photoId, modelId)]);
+            var title = sessionTitle?.Trim();
+            if (State.Mode != TaskMode.Freeform || title is not { Length: > 0 and <= 80 } ||
+                title.Any(char.IsControl) || TaskPlanValidator.HasLink(title) ||
+                title.Equals("Just ask", StringComparison.OrdinalIgnoreCase) || title.Equals(FreeformGoal, StringComparison.OrdinalIgnoreCase))
+                title = null;
+            return Commit([new QuestionAnswered(0, State.TaskId, now, stepId, question.Trim(), answer.Trim(), photoId, modelId, title)]);
         });
 
     /// <summary>

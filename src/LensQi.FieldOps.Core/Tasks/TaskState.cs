@@ -7,6 +7,13 @@ public sealed record TaskPhoto(string EvidenceId, string Sha256, int Width, int 
 
 public sealed record StepCheckRecord(string StepId, string PhotoId, StepCheckVerdict Verdict, string Reason, string ModelId, DateTimeOffset At);
 
+public sealed record TaskHandoff(string SourceTaskId, string? EquipmentDetails, IReadOnlyList<AnswerRecord> Answers, IReadOnlyList<string> PhotoIds, SiteLink? Equipment = null)
+{
+    /// <summary>What the person said in the earlier conversation: the equipment details and their questions. The AI's answers
+    /// are left out so that an answer mentioning a hazard can never classify a plan as restricted work; only the user's words do.</summary>
+    public string UserWords() => string.Join(" ", Answers.Select(a => a.Question).Prepend(EquipmentDetails));
+}
+
 public sealed record AnswerRecord(string? StepId, string Question, string Answer, string? PhotoId, string ModelId, DateTimeOffset At);
 
 /// <summary>A task as its events say it is. Built only by <see cref="Replay"/>.</summary>
@@ -16,6 +23,7 @@ public sealed record TaskState
     public required TaskMode Mode { get; init; }
     public required string Goal { get; init; }
     public string? Details { get; init; }
+    public TaskHandoff? Handoff { get; init; }
     public SiteLink? Site { get; init; }
     public PersonContext? Person { get; init; }
     public IReadOnlyDictionary<string, SkipReason> SkipReasons { get; init; } = new Dictionary<string, SkipReason>();
@@ -36,6 +44,33 @@ public sealed record TaskState
     public string? AbandonReason { get; init; }
     public long LastSequence { get; init; }
 
+    public string? SessionTitle { get; init; }
+    /// <summary>The shown title was named by the AI from a free-form conversation, not written by the person or taken from
+    /// their words; clients and the work package label it so it is never read as a finding.</summary>
+    public bool TitleByAi => Named().ByAi;
+    public string? DisplayTitle => Named().Title;
+
+    /// <summary>The title and whether the AI supplied it: the session title, or for an older log an AI answer when no question
+    /// of the person's can name the job.</summary>
+    private (string? Title, bool ByAi) Named()
+    {
+        if (Mode != TaskMode.Freeform) return (Plan?.Title, false);
+        if (!Goal.Equals(TaskSession.FreeformGoal, StringComparison.OrdinalIgnoreCase) &&
+            !Goal.Equals("Just ask", StringComparison.OrdinalIgnoreCase)) return (Goal, false);
+        if (SessionTitle is not null) return (SessionTitle, true);
+        // Logs written before session titles existed still have the original questions and guarded answers. The earliest
+        // substantive question names the job: a later "can you explain that again?" never replaces the equipment it was about.
+        const string look = "What am I looking at, and is anything wrong?";
+        var questions = Answers.Select(a => a.Question).Where(q => !q.Equals(look, StringComparison.OrdinalIgnoreCase)).ToList();
+        var topic = questions.FirstOrDefault(q => q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 3) ?? questions.FirstOrDefault();
+        var byAi = false;
+        if (topic is null && Answers.LastOrDefault()?.Answer is { } answer) { topic = answer; byAi = true; }
+        if (string.IsNullOrWhiteSpace(topic)) return ("Just ask", false);
+        var words = topic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var title = string.Join(" ", words.Take(12));
+        return (title.Length > 80 ? title[..77] + "…" : title, byAi);
+    }
+
     public TaskStep? CurrentStep => Plan?.Steps.FirstOrDefault(s => s.Id == CurrentStepId);
     public bool IsClosed => Phase is TaskPhase.Completed or TaskPhase.Abandoned;
     public bool IsFinished(string stepId) => CompletedStepIds.Contains(stepId) || SkippedStepIds.Contains(stepId);
@@ -45,7 +80,7 @@ public sealed record TaskState
         TaskState? state = null;
         foreach (var e in events)
             state = state is null
-                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, Person = c.Person, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
+                ? e is TaskCreated c ? new TaskState { TaskId = c.TaskId, Mode = c.Mode, Goal = c.Goal, Details = c.Details, Site = c.Site, Person = c.Person, Handoff = c.Handoff, CreatedAt = c.OccurredAt, UpdatedAt = c.OccurredAt, LastSequence = c.Sequence,
                     // Free-form help has no plan to accept: it is in progress from the start.
                     Phase = c.Mode == TaskMode.Freeform ? TaskPhase.InProgress : TaskPhase.Planned }
                     : throw new InvalidOperationException("A task log must start with TaskCreated")
@@ -63,7 +98,7 @@ public sealed record TaskState
             TaskPhotoRecorded ph => next with { Photos = [.. Photos, new TaskPhoto(ph.EvidenceId, ph.Sha256, ph.Width, ph.Height, ph.Purpose, ph.StepId, ph.OccurredAt, ph.Origin)] },
             StepStarted s => next with { CurrentStepId = s.StepId },
             StepChecked c => next with { Checks = [.. Checks, new StepCheckRecord(c.StepId, c.PhotoId, c.Verdict, c.Reason, c.ModelId, c.OccurredAt)] },
-            QuestionAnswered q => next with { Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },
+            QuestionAnswered q => next with { SessionTitle = q.SessionTitle ?? SessionTitle, Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },
             StepCompleted s => next with { CompletedStepIds = [.. CompletedStepIds, s.StepId], CurrentStepId = CurrentStepId == s.StepId ? null : CurrentStepId },
             StepSkipped s => next with
             {

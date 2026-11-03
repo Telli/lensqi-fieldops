@@ -174,3 +174,32 @@ class QueuedBehindTest {
         assertTrue(listOf(row(CommandKind.WorkOrder, CommandState.Pending), row(CommandKind.UploadPhoto, CommandState.Uploaded)).hasQueuedCommands())
     }
 }
+
+class OfflineStepSyncTest {
+    @Test fun `a restarted worker replays the retained step key and saves the server answer for offline use`(@TempDir dir: File) = runBlocking {
+        val json = NetworkModule.json()
+        val task = json.decodeFromString(CreateTaskResponse.serializer(),
+            File("../../../docs/evidence/tasks/plan-oil.json").readText()).task
+        val dao = MemoryCommands()
+        val snapshots = SnapshotStore(File(dir,"snapshots"),json)
+        MockWebServer().use { server ->
+            server.start()
+            val base = server.url("/").toString()
+            fun worker() = CommandQueue(File(dir,"captures"), dao,
+                { NetworkModule.retrofit(OkHttpClient(),json,it).create(FieldOpsApi::class.java) }, InspectionCache(), snapshots = snapshots) {}
+            val step = task.plan!!.steps.first().id
+            val key = "offline-step-key"
+            worker().forServer(base).enqueueStepAction(PendingCommand(key, task.taskId, CommandKind.TaskComplete, 1, stepId = step))
+            server.enqueue(MockResponse().setResponseCode(503))
+            assertEquals(DrainResult.Offline, worker().drain())
+            assertEquals(key, server.takeRequest().getHeader("Idempotency-Key"))
+            server.enqueue(MockResponse().setBody(json.encodeToString(TaskView.serializer(),task)))
+            assertEquals(DrainResult.Empty,worker().drain())
+            val sent = server.takeRequest()
+            assertEquals(key,sent.getHeader("Idempotency-Key"))
+            assertEquals("/v1/tasks/${task.taskId}/steps/$step:complete",sent.path)
+            assertTrue(dao.rows.value.isEmpty())
+            assertEquals(task,TaskLibrary(snapshots,dir,base).job(task.taskId)?.value)
+        }
+    }
+}

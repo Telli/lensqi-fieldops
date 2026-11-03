@@ -24,7 +24,7 @@ public abstract record TaskEvent(long Sequence, string TaskId, DateTimeOffset Oc
 }
 
 public sealed record TaskCreated(long Sequence, string TaskId, DateTimeOffset OccurredAt, TaskMode Mode, string Goal, string? Details, SiteLink? Site,
-    PersonContext? Person = null)
+    PersonContext? Person = null, TaskHandoff? Handoff = null)
     : TaskEvent(Sequence, TaskId, OccurredAt);
 
 /// <summary>The AI-written plan as validated, with what produced it.</summary>
@@ -46,7 +46,7 @@ public sealed record StepStarted(long Sequence, string TaskId, DateTimeOffset Oc
 public sealed record StepChecked(long Sequence, string TaskId, DateTimeOffset OccurredAt, string StepId, string PhotoId, StepCheckVerdict Verdict, string Reason, string ModelId)
     : TaskEvent(Sequence, TaskId, OccurredAt);
 
-public sealed record QuestionAnswered(long Sequence, string TaskId, DateTimeOffset OccurredAt, string? StepId, string Question, string Answer, string? PhotoId, string ModelId)
+public sealed record QuestionAnswered(long Sequence, string TaskId, DateTimeOffset OccurredAt, string? StepId, string Question, string Answer, string? PhotoId, string ModelId, string? SessionTitle = null)
     : TaskEvent(Sequence, TaskId, OccurredAt);
 
 public sealed record StepCompleted(long Sequence, string TaskId, DateTimeOffset OccurredAt, string StepId) : TaskEvent(Sequence, TaskId, OccurredAt);

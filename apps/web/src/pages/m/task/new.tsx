@@ -8,7 +8,7 @@ import { Page, TopBar } from "@/components/fo/mobile-shell";
 import { LensQiMark } from "@/components/fo/ai";
 import { friendlyError, useFixtures } from "@/lib/hooks";
 import { loadPerson, parseHeightCm, savePerson, toolChoices } from "@/lib/person";
-import { taskKeys, tasks, type TaskMode } from "@/lib/tasks";
+import { taskKeys, tasks, useTask, type TaskMode } from "@/lib/tasks";
 import { speechNotice, usePushToTalk } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,11 @@ export default function NewTask() {
   const fixtures = useFixtures();
   const [mode, setMode] = useState<TaskMode>(params.get("mode") === "Technician" ? "Technician" : "Diy");
   const [goal, setGoal] = useState(params.get("goal") ?? "");
+  const sourceId = params.get("source") || undefined;
+  const source = useTask(sourceId ?? "").data;
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [equipment, setEquipment] = useState("");
   const [details, setDetails] = useState("");
   const [person, setPerson] = useState(loadPerson);
   const [heightText, setHeightText] = useState(() => (person.heightCm ? `${person.heightCm} cm` : ""));
@@ -36,7 +41,7 @@ export default function NewTask() {
     try {
       const me = { heightCm, tools: person.tools };
       savePerson(me);
-      const r = await tasks.create({ mode, goal: goal.trim(), details: details.trim() || undefined, fixtureId: chosen?.fixtureId, assetId: chosen?.assetId, manuals, ...me });
+      const r = await tasks.create({ mode, goal: goal.trim(), details: [equipment.trim(), details.trim()].filter(Boolean).join("\n") || undefined, fixtureId: mode === "Technician" ? chosen?.fixtureId : undefined, assetId: mode === "Technician" ? chosen?.assetId : undefined, manuals, sourceId, sourcePhotos: photos, sourceAnswers: answers, ...me });
       qc.setQueryData(taskKeys.one(r.task.taskId), r.task);
       qc.invalidateQueries({ queryKey: taskKeys.list });
       if (r.planError) toast.warning(r.planError.code === "unsafe_plan" ? "The first plan failed the safety checks. Try again." : "The plan isn't ready. Try again.");
@@ -76,12 +81,18 @@ export default function NewTask() {
           </div>
         </label>
 
-        <label className="block space-y-1.5">
+        <section className="block space-y-1.5">
           <span className="text-sm font-medium">Details <span className="font-normal text-muted-foreground">(optional)</span></span>
-          <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={2} maxLength={1000}
+          {source && <fieldset className="space-y-2"><legend>Carry forward from Just ask</legend>
+            {source.details && <p>Equipment details: {source.details}</p>}
+            {source.answers.map(a=><label key={a.at} className="block"><input type="checkbox" checked={answers.includes(a.at)} disabled={answers.length >= 10 && !answers.includes(a.at)} onChange={e=>setAnswers(e.target.checked?[...answers,a.at]:answers.filter(at=>at!==a.at))}/> {a.question} · {a.answer}</label>)}
+            {source.photos.map(p=><label key={p.evidenceId} className="inline-block"><input type="checkbox" checked={photos.includes(p.evidenceId)} disabled={photos.length+manuals.length>=3 && !photos.includes(p.evidenceId)} onChange={e=>setPhotos(e.target.checked?[...photos,p.evidenceId]:photos.filter(id=>id!==p.evidenceId))}/><img width="100" src={tasks.photoUrl(source.taskId,p.evidenceId)} alt={"Reference " + p.evidenceId}/></label>)}
+          </fieldset>}
+          <input value={equipment} maxLength={180} onChange={e=>setEquipment(e.target.value)} placeholder="Make, model and variant from the equipment label" aria-label="Equipment identity" className="w-full rounded-xl border p-2"/>
+          <textarea aria-label="Job details" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} maxLength={Math.max(0,999-equipment.length)}
             placeholder={mode === "Diy" ? "Engine size, tools you have, anything unusual" : "Site notes, access, what's already in place"}
             className="w-full resize-none rounded-2xl border border-input bg-background px-3.5 py-3 text-sm outline-none focus:border-primary" />
-        </label>
+        </section>
 
         <div className="space-y-1.5">
           <span className="text-sm font-medium">About you <span className="font-normal text-muted-foreground">(optional, kept in this browser)</span></span>
@@ -121,11 +132,11 @@ export default function NewTask() {
                 <button onClick={() => setManuals(manuals.filter((_, k) => k !== n))} aria-label="Remove photo"><X className="size-3.5" /></button>
               </span>
             ))}
-            {manuals.length < 3 && (
+            {manuals.length + photos.length < 3 && (
               <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
                 <BookOpen className="size-3.5" />Add a page or label
                 <input type="file" accept="image/*" capture="environment" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setManuals([...manuals, f].slice(0, 3)); e.target.value = ""; }} />
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setManuals([...manuals, f].slice(0, 3 - photos.length)); e.target.value = ""; }} />
               </label>
             )}
           </div>

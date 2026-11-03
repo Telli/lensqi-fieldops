@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { tasks } from "./tasks";
+import { filterHistory, tasks, type TaskSummary } from "./tasks";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -82,4 +82,20 @@ it("keys a question by the step it is asked on, so a lost answer on one step is 
   const keys = fetch.mock.calls.map(keyOf);
   expect(keys[1]).toBe(keys[0]);
   expect(keys[2]).not.toBe(keys[0]);
+});
+
+it("recovers older stopped jobs and searches their equipment across the whole history", () => {
+  const rows: TaskSummary[] = Array.from({length:9}, (_,i) => ({taskId: `T-${i}`,mode:"Technician",goal:"Inspect unit",phase:"InProgress",steps:2,finished:0,currentStepTitle:null,title:null,site:null,inspectionId:null,updatedAt:"2026-11-03"}));
+  rows[8] = {...rows[8]!, phase:"Abandoned",site:{fixtureId:"site",assetId:"Rack-B"}};
+  expect(filterHistory(rows,"All","")).toHaveLength(9);
+  expect(filterHistory(rows,"Stopped"," rack-b ").map(t=>t.taskId)).toEqual(["T-8"]);
+  expect(filterHistory(rows,"Active","Rack-B")).toEqual([]);
+});
+
+it("reports a refused work package as an error instead of a saved error body", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ code: "invalid_evidence", message: "A job photo failed digest verification" }), { status: 409 })));
+  await expect(tasks.package("T-1")).rejects.toMatchObject({ status: 409, code: "invalid_evidence", message: "A job photo failed digest verification" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { status: 200, headers: { "content-type": "application/zip" } })));
+  const zip = await tasks.package("T-1");
+  expect(zip.size).toBe(4);
 });

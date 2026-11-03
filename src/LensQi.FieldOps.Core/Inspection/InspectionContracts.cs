@@ -72,6 +72,8 @@ public sealed record VerificationDecision(
 public static class InspectionErrorCodes
 {
     public const string InvalidState = "invalid_state";
+    /// <summary>An Idempotency-Key retried with different input (other photo bytes); the first command is not replayed.</summary>
+    public const string KeyReused = "key_reused";
     public const string UnknownAsset = "unknown_asset";
     public const string InvalidModelOutput = "invalid_model_output";
     public const string ProbeNotAllowlisted = "probe_not_allowlisted";

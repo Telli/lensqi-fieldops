@@ -33,7 +33,7 @@ public sealed record StepPhotoCheck(bool Required, string WhatDoneLooksLike);
 public sealed record TaskStep(
     string Id, string Title, string Instruction, bool HandsOn,
     IReadOnlyList<string> LookFor, IReadOnlyList<Caution> Cautions, IReadOnlyList<string> StopIf, StepPhotoCheck? Check,
-    string? AccessFor = null, IReadOnlyList<LensQi.FieldOps.Core.Knowledge.ApplicableFact>? SourceFacts = null);
+    string? AccessFor = null, IReadOnlyList<LensQi.FieldOps.Core.Knowledge.ApplicableFact>? SourceFacts = null, IReadOnlyList<string>? ReferencePhotoIds = null);
 
 /// <summary>What the person told LensQi about themselves, so plans and coaching fit them: their height and the tools they have.</summary>
 public sealed record PersonContext(int? HeightCm, IReadOnlyList<string> Tools)

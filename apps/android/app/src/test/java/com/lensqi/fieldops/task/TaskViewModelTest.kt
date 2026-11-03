@@ -29,6 +29,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -45,6 +46,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TaskViewModelTest {
+    @org.junit.jupiter.api.io.TempDir lateinit var temp: File
     private val json = NetworkModule.json()
     /** The recorded genuine Muse plan, started at its first step. */
     private val task: TaskView = json.decodeFromString(CreateTaskResponse.serializer(), File("../../../docs/evidence/tasks/plan-oil.json").readText()).task
@@ -68,6 +70,7 @@ class TaskViewModelTest {
         val commands = MutableStateFlow<List<PendingCommand>>(emptyList())
         val queued: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
         val dismissed: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        override suspend fun enqueueStepAction(command: PendingCommand) { commands.value += command }
         override fun observe(sessionId: String): Flow<List<PendingCommand>> = commands
         override suspend fun enqueueStepCheck(taskId: String, stepId: String, key: String, jpeg: ByteArray, source: String): PendingCommand =
             PendingCommand(key, taskId, CommandKind.StepCheckPhoto, 0, source = source, stepId = stepId).also { queued += Triple(taskId, stepId, key) }
@@ -104,7 +107,7 @@ class TaskViewModelTest {
         NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { base }).build(), json).create(FieldOpsApi::class.java)
 
     private fun viewModel(api: FieldOpsApi = api(), spoken: com.lensqi.fieldops.ui.task.SpokenChecks = com.lensqi.fieldops.ui.task.SpokenChecks()) =
-        TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue, spoken)
+        TaskViewModel(SavedStateHandle(mapOf("taskId" to task.taskId)), api, speech, queue, spoken, com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp, "test"))
 
     @Test
     fun `a check that synced while two screens hold the task is spoken once`() {
@@ -128,21 +131,87 @@ class TaskViewModelTest {
         MockResponse().setResponseCode(status).setBody("""{"code":"$code","message":"$message"}""")
 
     @Test
-    fun `loads the task and keeps one key per action until the server answers`() {
+    fun `a transient step failure is queued exactly once under its original key`() {
         val vm = viewModel()
         assertEquals(stepId, await(vm) { it.task != null }.task!!.currentStepId)
 
         scripted += ":complete" to error(503, "http_503", "busy")
         vm.complete(stepId) {}
         until { keysFor(":complete").size == 1 && vm.state.value.busy == null }
+        val saved = queue.commands.value.single()
+        assertEquals(keysFor(":complete").single(), saved.id)
         vm.complete(stepId) {}
-        until { keysFor(":complete").size == 2 && vm.state.value.busy == null }
-        vm.complete(stepId) {}
-        until { keysFor(":complete").size == 3 }
+        until { vm.state.value.busy == null }
+        assertEquals(1, queue.commands.value.size)
+        assertEquals(1, keysFor(":complete").size)
 
-        val keys = keysFor(":complete")
-        assertEquals(keys[0], keys[1], "a server error keeps the key, so the server can replay")
-        assertNotEquals(keys[1], keys[2], "an answered action starts a new one")
+    }
+
+    @Test
+    fun `a cold offline job reopens its accepted plan and pending step without claiming completion`() {
+        await(viewModel()) { it.task != null }
+        val down = MockWebServer().apply { start() }.also { it.shutdown() }
+        val offline = viewModel(api(down.url("/")))
+        assertEquals(stepId, await(offline) { it.cachedAt != null }.task!!.currentStepId)
+        offline.complete(stepId) {}
+        until { queue.commands.value.any { it.kind == CommandKind.TaskComplete } }
+        val reopened = viewModel(api(down.url("/")))
+        val ui = await(reopened) { it.cachedAt != null && it.pendingSteps.isNotEmpty() }
+        assertEquals(stepId, ui.task!!.currentStepId)
+        assertNotEquals(stepId, ui.displayed!!.currentStepId)
+        assertEquals(TaskPhase.InProgress, ui.displayed!!.phase)
+        assertFalse(ui.pendingCompletion)
+        // Every remaining step finished on the phone: the summary opens with a pending label, and the phase is still the server's.
+        val steps = task.plan!!.steps
+        val allPending = ui.copy(pendingSteps = steps.filter { it.status != com.lensqi.fieldops.data.api.StepStatus.Done }
+            .map { PendingCommand("m-${it.id}", task.taskId, CommandKind.TaskComplete, 0, stepId = it.id) })
+        assertTrue(allPending.pendingCompletion)
+        assertEquals(TaskPhase.InProgress, allPending.displayed!!.phase)
+        assertFalse(allPending.copy(task = task.copy(phase = TaskPhase.Completed)).pendingCompletion)
+    }
+
+    @Test
+    fun `an older snapshot never replaces a newer one and server offsets are read`() = runBlocking {
+        val library = com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp, "server-a")
+        val newer = task.copy(updatedAt = "2026-10-29T01:00:00.000000+00:00", goal = "newer")
+        val older = task.copy(updatedAt = "2026-10-29T00:59:00Z", goal = "older")
+        library.remember(newer); library.remember(older)
+        assertEquals("newer", library.job(task.taskId)?.value?.goal)
+        library.remember(older.copy(updatedAt = "2026-10-29T01:01:00+00:00", goal = "newest"))
+        assertEquals("newest", library.job(task.taskId)?.value?.goal)
+        library.remember(older.copy(updatedAt = "not a time", goal = "unreadable"))
+        assertEquals("unreadable", library.job(task.taskId)?.value?.goal)
+    }
+
+    @Test
+    fun `the library files history under the server selected at the time of each call`() = runBlocking {
+        var base = "server-a"
+        val library = com.lensqi.fieldops.data.TaskLibrary(com.lensqi.fieldops.data.SnapshotStore(temp, json), temp) { base }
+        library.remember(task)
+        assertEquals(task.taskId, library.history().single().taskId)
+        base = "server-b"
+        assertEquals("server-b", library.server)
+        assertTrue(library.history().isEmpty())
+        assertNull(library.job(task.taskId))
+    }
+
+    @Test
+    fun `cached reference bytes belong to the job and the server that supplied them`() = runBlocking {
+        val snapshots = com.lensqi.fieldops.data.SnapshotStore(temp, json)
+        val first = com.lensqi.fieldops.data.TaskLibrary(snapshots, temp, "server-a")
+        val other = com.lensqi.fieldops.data.TaskLibrary(snapshots, temp, "server-b")
+        val bytes = "stored page".toByteArray()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) = MockResponse().setBody("stored page")
+        }
+        val page = com.lensqi.fieldops.data.api.TaskPhoto("p1", "Manual", sha256 = com.lensqi.fieldops.data.queue.CommandQueue.sha256(bytes))
+        val job = task.copy(photos = listOf(page, page.copy(evidenceId = "corrupt", sha256 = "wrong")))
+        first.remember(job); first.cacheReferences(job, api())
+        assertTrue(first.reference(task.taskId, "p1").readBytes().contentEquals(bytes))
+        assertFalse(first.reference(task.taskId, "corrupt").exists())
+        assertFalse(other.reference(task.taskId, "p1").exists())
+        assertNull(other.job(task.taskId))
+        assertEquals(task.taskId, first.history().single().taskId)
     }
 
     @Test

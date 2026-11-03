@@ -1,3 +1,4 @@
+import { TaskSources } from "@/components/fo/task-sources";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -143,7 +144,19 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
       save(next);
       qc.invalidateQueries({ queryKey: taskKeys.list });
       nav(next.phase === "Completed" ? `/m/t/${id}/done` : `/m/t/${id}/step/${next.currentStepId}`);
-    } catch (e) { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: taskKeys.one(id) }); } finally { setBusy(null); }
+    } catch (e) {
+      if (e instanceof Error && "code" in e && e.code === "job_update_saved") {
+        // Saved on this device for later: a delay, not a failure, so it is not shown as one.
+        toast.message(e.message);
+        const saved = await tasks.get(id);
+        save(saved);
+        if (saved.currentStepId) nav(`/m/t/${id}/step/${saved.currentStepId}`);
+        else if (saved.pendingCompletion) nav(`/m/t/${id}/done`);
+      } else {
+        toast.error(friendlyError(e));
+        qc.invalidateQueries({ queryKey: taskKeys.one(id) });
+      }
+    } finally { setBusy(null); }
   }
 
   const voice = usePushToTalk((text) => {
@@ -205,6 +218,8 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
             This step is {step.status === "Done" ? "done" : "skipped"}. Go to the current step <ChevronRight className="size-4" />
           </Link>
         )}
+        {t.cached && <p role="status">Saved job · {t.pendingUpdates ?? 0} updates awaiting sync</p>}
+        <TaskSources id={id} step={step} />
         {step.lookFor.length > 0 && <p className="text-xs opacity-70">Look for: {step.lookFor.join(", ")}</p>}
 
         {assist.enabled ? (

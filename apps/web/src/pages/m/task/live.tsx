@@ -71,6 +71,7 @@ export default function FreeformLive({ id }: { id: string }) {
       speech.speak(r.answer, true);
       setTyped("");
       qc.invalidateQueries({ queryKey: taskKeys.one(id) });
+      qc.invalidateQueries({ queryKey: taskKeys.list });
     } catch (e) { if (!isCancelled(e)) toast.error(friendlyError(e)); } finally { setAsking(false); }
   }
 
@@ -91,7 +92,7 @@ export default function FreeformLive({ id }: { id: string }) {
     try { qc.setQueryData(taskKeys.one(id), await tasks.finish(id)); qc.invalidateQueries({ queryKey: taskKeys.list }); nav("/m"); }
     catch (e) { toast.error(friendlyError(e)); }
   }
-  const planHref = `/m/new?mode=Diy&goal=${encodeURIComponent(answers[0]?.question && answers[0].question !== LOOK ? answers[0].question : "")}`;
+  const planHref = `/m/new?mode=Diy&source=${encodeURIComponent(id)}&goal=${encodeURIComponent(t?.title && t.title !== "Just ask" ? t.title : answers.find(a => a.question !== LOOK)?.question ?? "")}`;
 
   return (
     <div className="dark flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
@@ -101,7 +102,7 @@ export default function FreeformLive({ id }: { id: string }) {
         {live !== "on" && <p className="absolute inset-0 grid place-items-center px-8 text-center text-sm opacity-70">{live === "starting" ? "Starting camera…" : cameraNote}</p>}
         <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3">
           <Link href="/m" aria-label="Close" className="glass grid size-11 place-items-center rounded-full"><X className="size-5" /></Link>
-          <span className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">Just ask · no plan</span>
+          <span className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">{t?.title ?? "Just ask"}</span>
           <button onClick={() => speech.toggle()} disabled={!speech.supported} aria-pressed={speech.on} aria-label={speech.on ? "Mute voice" : "Turn voice on"} className="glass grid size-11 place-items-center rounded-full disabled:opacity-40">
             {speech.on ? <Volume2 className="size-5 text-primary" /> : <VolumeX className="size-5" />}
           </button>
