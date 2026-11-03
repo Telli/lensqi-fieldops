@@ -98,6 +98,7 @@ fun plainReason(reason: String) = when {
     reason.contains("remains unknown") || reason.contains("conflicting") -> "A checklist item needs a person to decide."
     reason.contains("unavailable") -> "The equipment check is unavailable. Try it again when connected."
     reason.contains("change analysis rejected") -> "The reviewed photo was not accepted. Review against the new photo."
+    reason.contains("taken before the repair claim") -> "The reviewed photo was taken before the repair. Review against the new photo."
     else -> "A required check is unresolved. Review the evidence and try again."
 }
 

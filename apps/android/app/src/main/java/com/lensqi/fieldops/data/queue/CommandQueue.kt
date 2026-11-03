@@ -167,10 +167,10 @@ class CommandQueue internal constructor(
         var next = dao.nextPending(emptyList(), held.toList())
         while (next != null) {
             val command = next
-            val outcome = try { send(command) } catch (e: IllegalArgumentException) {
-                // A row this build cannot read (a column it expects is empty) is refused on the phone, not left to crash the worker.
-                ApiOutcome.Rejected(0, "row_unreadable", "The saved command could not be read; remove it and do the step again")
-            }
+            // A row this build cannot read (a column its kind needs is empty) is refused on the phone before anything is sent,
+            // so it never crashes the worker and a failure after the server accepted is never mistaken for one.
+            val outcome = if (command.readable) send(command)
+                else ApiOutcome.Rejected(0, "row_unreadable", "The saved command could not be read; remove it and do the step again")
             when (dispositionOf(outcome)) {
                 Disposition.Sent -> {
                     if (command.kind == CommandKind.UploadPhoto) dao.uploaded(command.id, (outcome as ApiOutcome.Ok).value!!)
@@ -189,6 +189,14 @@ class CommandQueue internal constructor(
             next = dao.nextPending(unavailable.toList(), (held + waiting).toList())
         }
         if (unavailable.isEmpty() && waiting.isEmpty()) DrainResult.Empty else DrainResult.Offline
+    }
+
+    /** Whether every column the row's kind reads is present; JSON payloads are checked where they are decoded. */
+    private val PendingCommand.readable: Boolean get() = when (kind) {
+        CommandKind.TaskComplete, CommandKind.TaskSkip -> stepId != null
+        CommandKind.StepCheckPhoto -> stepId != null && mediaType != null && filePath != null
+        CommandKind.UploadPhoto -> mediaType != null && source != null && observedAt != null && filePath != null
+        else -> true
     }
 
     private suspend fun send(c: PendingCommand): ApiOutcome<String?> {

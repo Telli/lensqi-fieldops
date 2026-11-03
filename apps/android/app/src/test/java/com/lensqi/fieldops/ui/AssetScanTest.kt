@@ -28,6 +28,10 @@ class AssetScanTest {
         assertEquals(asset.assetId, assetFromScan("-${asset.assetId}-", fixtures)!!.assetId)
         // Letters and digits stuck to the id are still part of the token.
         assertNull(assetFromScan("${asset.assetId}1.", fixtures))
+        // An id that itself ends in punctuation is still found behind a sentence's full stop.
+        val dashed = fixtures.map { f -> f.copy(assets = f.assets.map { it.copy(assetId = it.assetId + "-") }) }
+        assertEquals(asset.assetId + "-", assetFromScan("Asset: ${asset.assetId}-.", dashed)!!.assetId)
+        assertEquals(asset.assetId + "-", assetFromScan("(${asset.assetId}-)", dashed)!!.assetId)
     }
 
     @Test fun `anything the site record does not list is no asset, and a prefix is not a match`() {

@@ -92,6 +92,8 @@ data class OutlineSet(val outlines: List<Segmentation>, val image: Bitmap, val s
 
 data class InspectionUi(
     val view: InspectionView? = null,
+    /** A shutter or gallery photo is being saved for review; the review screen shows that rather than "nothing to review". */
+    val preparingReview: Boolean = false,
     val fixture: Fixture? = null,
     val diagnosticsMode: DiagnosticSource? = null,
     val pending: List<PendingCommand> = emptyList(),
@@ -231,9 +233,13 @@ class InspectionViewModel @Inject constructor(
         local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
-        // The latest photo, and the before photo while a repair is being verified so toggling "Before" keeps its outlines.
-        // Anything else is dropped: each set holds a decoded photo.
-        val wanted = listOf(photo) + listOfNotNull(beforePhoto(view)?.takeIf { view.currentClaimId != null && it.evidenceId != photo.evidenceId })
+        // The latest photo; while a repair is being verified also the before photo (toggling "Before" keeps its outlines) and
+        // the accepted after photo, which the screen shows while a newer photo is still being compared. Anything else is
+        // dropped: each set holds a decoded photo.
+        val wanted = (listOf(photo) + listOfNotNull(
+            beforePhoto(view)?.takeIf { view.currentClaimId != null },
+            view.photos.firstOrNull { it.evidenceId == view.acceptedPostRepairPhotoId },
+        )).distinctBy { it.evidenceId }
         val sets = wanted.mapNotNull { p -> outlineSet(view, p.evidenceId, local.value.outlineSets[p.evidenceId])?.let { p.evidenceId to it } }.toMap()
         val latest = sets[photo.evidenceId]
         local.update { it.copy(outlineSets = sets, outlines = latest?.outlines.orEmpty(), outlinePhotoId = photo.evidenceId, outlineImage = latest?.image) }
@@ -251,7 +257,7 @@ class InspectionViewModel @Inject constructor(
      */
     private suspend fun outlineSet(view: InspectionView, photoId: String, cached: OutlineSet?): OutlineSet? {
         val refs = view.segmentations.filter { it.sourcePhotoEvidenceId == photoId && it.matched }.associateBy { it.concept }.values.toList()
-        if (cached != null && cached.outlines.map { it.segmentationId }.toSet() == refs.map { it.evidenceId }.toSet()) return cached
+        if (cached != null && cached.outlines.map { it.segmentationId }.sorted() == refs.map { it.evidenceId }.sorted()) return cached
         val geometries = refs.mapNotNull { seg ->
             (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
                 ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
@@ -313,6 +319,7 @@ class InspectionViewModel @Inject constructor(
     suspend fun prepareReview(file: File, origin: String, measured: String? = null): Boolean = viewModelScope.async {
         val afterRepair = state.value.view?.currentClaimId != null
         val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
+        local.update { it.copy(preparingReview = true) }
         try {
             val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair, measured)
             resumeReview(command)
@@ -323,7 +330,7 @@ class InspectionViewModel @Inject constructor(
         } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) {
             local.update { it.copy(error = "Only JPEG or PNG photos can be used as evidence. Choose another photo.") }
             false
-        }
+        } finally { local.update { it.copy(preparingReview = false) } }
     }.await()
 
     /** A picked photo that could not be copied from its provider (no stream, revoked access, file gone). */

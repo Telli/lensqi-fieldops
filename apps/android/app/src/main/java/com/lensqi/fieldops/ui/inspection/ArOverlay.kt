@@ -101,12 +101,12 @@ fun registrationSubject(fixture: Fixture?, assetId: String?): com.lensqi.fieldop
 }
 
 /**
- * The pre-repair photo the server compares against: the last one taken before the claim, else the first. A photo the
- * technician took after the claim is never shown as "before".
+ * The pre-repair photo the server compares against: the last one taken before the claim. Without a claim time the first
+ * photo stands in; with one, a photo the technician took after the claim is never shown as "before", so there may be none.
  */
 fun beforePhoto(view: InspectionView): PhotoEvidence? {
     val claimedAt = view.repairClaimedAt?.let(::instantOf) ?: return view.photos.firstOrNull()
-    return view.photos.lastOrNull { p -> instantOf(p.observedAt)?.let { it <= claimedAt } == true } ?: view.photos.firstOrNull()
+    return view.photos.lastOrNull { p -> instantOf(p.observedAt)?.let { it <= claimedAt } == true }
 }
 
 internal fun instantOf(s: String): Instant? = runCatching { OffsetDateTime.parse(s).toInstant() }.getOrNull()

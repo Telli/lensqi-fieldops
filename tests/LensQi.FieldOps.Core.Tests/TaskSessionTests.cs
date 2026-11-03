@@ -62,6 +62,23 @@ public class TaskSessionTests
     }
 
     [Fact]
+    public void A_key_that_recorded_another_command_is_refused_instead_of_replayed_as_this_one()
+    {
+        var s = Started();
+        s.CompleteStep("k", "s1", T0);
+        var e = Assert.Throws<TaskConflictException>(() => s.SkipStep("k", "s2", T0));
+        Assert.Equal(TaskErrorCodes.InvalidState, e.Code);
+        Assert.Throws<TaskConflictException>(() => s.Abandon("k", "changed my mind", T0));
+        Assert.Throws<TaskConflictException>(() => s.RecordCheck("k", "s2", "p", StepCheckVerdict.LooksDone, "ok", "m", T0));
+        Assert.Equal(TaskPhase.InProgress, s.State.Phase);
+        Assert.Single(s.State.CompletedStepIds);
+        // Its own command still replays; a start that changed nothing replays its empty batch under any command.
+        Assert.Same(s.CompleteStep("k", "s1", T0), s.CompleteStep("k", "s1", T0));
+        Assert.Empty(s.StartStep("noop", s.State.CurrentStepId!, T0));
+        Assert.Empty(s.StartStep("noop", s.State.CurrentStepId!, T0));
+    }
+
+    [Fact]
     public void A_risky_plan_needs_the_safety_notes_accepted()
     {
         var s = TaskSession.Create("T-1", TaskMode.Diy, "Change the oil", null, null, T0);

@@ -88,11 +88,17 @@ private fun ReviewContent(vm: InspectionViewModel, onContinue: () -> Unit, onRet
     val s by vm.state.collectAsStateWithLifecycle()
     val r = s.review
     if (r == null) {
-        // No review to show (the photo could not be saved or read): say why, with a way back, instead of a blank screen.
+        // The camera opens this screen while its photo is still being saved; a photo that could not be saved or read says
+        // why, with a way back, instead of a blank screen.
         Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Nothing to review", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FoDark.Foreground)
-            Text(s.error ?: "The photo could not be prepared for review.", fontSize = 13.sp, color = FoDark.Muted)
-            SecondaryButton("Close", onContinue, Modifier.fillMaxWidth())
+            if (s.preparingReview) {
+                Text("Saving photo…", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FoDark.Foreground)
+                Text("The review opens as soon as the photo is saved on this phone.", fontSize = 13.sp, color = FoDark.Muted)
+            } else {
+                Text("Nothing to review", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = FoDark.Foreground)
+                Text(s.error ?: "The photo could not be prepared for review.", fontSize = 13.sp, color = FoDark.Muted)
+                SecondaryButton("Close", onContinue, Modifier.fillMaxWidth())
+            }
         }
         return
     }

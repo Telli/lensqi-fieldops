@@ -244,8 +244,10 @@ private fun CameraContent(
 
     // An embedding screen (a task step) stays on this camera after the photo, so the coaching it had before the shutter comes
     // back; a standalone camera leaves for the review, so nothing is restored there.
+    // Live coaching was turned off for the shutter; it comes back whether the photo was taken, refused or never attempted.
+    fun restoreLive() { liveEnabled = liveBeforeShutter && liveAllowed }
     fun deliver(file: File) {
-        if (controls != null) liveEnabled = liveBeforeShutter && liveAllowed
+        if (controls != null) restoreLive()
         onCaptured(file)
     }
     fun takePhoto() {
@@ -255,7 +257,7 @@ private fun CameraContent(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) { capturing = false; if (stillPart != null) still = file.path else deliver(file) }
-                override fun onError(exception: ImageCaptureException) { capturing = false; DiagnosticHistory.record("capture", "capture_failed", exception.imageCaptureError); status = "The photo couldn’t be taken. Hold steady and try again." }
+                override fun onError(exception: ImageCaptureException) { capturing = false; restoreLive(); DiagnosticHistory.record("capture", "capture_failed", exception.imageCaptureError); status = "The photo couldn’t be taken. Hold steady and try again." }
             },
         )
     }
@@ -263,7 +265,7 @@ private fun CameraContent(
     LaunchedEffect(pendingCapture, streaming, arActive) { if (pendingCapture && streaming && !arActive) { pendingCapture = false; takePhoto() } }
     // If CameraX doesn't come back after AR hands the camera over, say so and let the technician press again.
     LaunchedEffect(pendingCapture) {
-        if (pendingCapture) { delay(8_000); pendingCapture = false; capturing = false; status = "The camera isn't ready. Press the shutter again." }
+        if (pendingCapture) { delay(8_000); pendingCapture = false; capturing = false; restoreLive(); status = "The camera isn't ready. Press the shutter again." }
     }
     fun retake() {
         still?.let { File(it).delete() }

@@ -206,7 +206,7 @@ public static class TaskEndpoints
                 // A retried key returns the recorded check; after a failed model call it re-checks the photo already saved. A key
                 // that recorded another command is refused before any photo is saved or model call made.
                 if (store.Execute(id, s => s.Replayed(requestId)) is { } done)
-                    return done.OfType<StepChecked>().FirstOrDefault() is { } earlier ? Results.Ok(CheckResult(earlier, store.Find(id)!)) : DifferentCommand();
+                    return done.OfType<StepChecked>().FirstOrDefault() is { } earlier && earlier.StepId == stepId ? Results.Ok(CheckResult(earlier, store.Find(id)!)) : DifferentCommand();
                 var photo = store.Execute(id, s => s.Replayed(requestId + ":photo"))?.OfType<TaskPhotoRecorded>().FirstOrDefault();
                 if (photo is not null && ArtifactPath(files, id, photo.EvidenceId) is { } savedPath)
                 {
@@ -227,7 +227,7 @@ public static class TaskEndpoints
                 if (reason.Length > 400) reason = TaskSafety.Referral;
                 // The session replays whatever the key recorded first; only a check is answered as one.
                 return store.Execute(id, s => s.RecordCheck(requestId, stepId, photo.EvidenceId, check.Verdict, reason, result.ModelId, clock.GetUtcNow()))
-                    .OfType<StepChecked>().FirstOrDefault() is { } recorded ? Results.Ok(CheckResult(recorded, store.Find(id)!)) : DifferentCommand();
+                    .OfType<StepChecked>().FirstOrDefault() is { } recorded && recorded.StepId == stepId ? Results.Ok(CheckResult(recorded, store.Find(id)!)) : DifferentCommand();
             });
         }).DisableAntiforgery().AsModelCall();
 
@@ -256,6 +256,8 @@ public static class TaskEndpoints
             if (task.State.Phase != TaskPhase.InProgress) return ApiResults.Conflict(TaskErrorCodes.InvalidState, "Questions need a started task, or free-form help");
             return await GuardAsync(async () =>
             {
+                // A key that recorded another command is refused before any frame is saved or model call made.
+                if (store.Execute(id, s => s.Replayed(requestId)) is { } other && !other.OfType<QuestionAnswered>().Any()) return DifferentCommand();
                 string? photoId = null;
                 // A retry after a failed model call keeps the photo the first attempt recorded under this request, and
                 // asks about that photo rather than a newer frame.

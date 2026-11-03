@@ -112,34 +112,35 @@ class SpeechTurns(private val clock: () -> Long, private val maxMsPerChar: Long 
 
 /**
  * What a speaker does with lines before its engine has started. The first step of a task opened cold arrives while
- * TextToSpeech is still initialising, so the latest forced line (a step, an answer, a check result) waits and is read
- * once the engine is ready; a newer forced line replaces it, since the older one is out of date by then. Hints are
- * dropped: the screen offers them again. An engine that fails to start reads nothing, as before.
+ * TextToSpeech is still initialising, so forced lines (a step, an answer, a check result) wait in order and are read once
+ * the engine is ready. A replacing line (a new step) drops the ones before it, since they are out of date by then; a
+ * check result or an error keeps the step it follows. Hints are dropped: the screen offers them again. An engine that
+ * fails to start reads nothing, as before.
  */
 class StartupBuffer {
     private var started = false
     private var failed = false
-    private var waiting: String? = null
+    private val waiting = mutableListOf<String>()
     /** True when the line may play now; false when it was kept for [ready] or dropped. */
-    @Synchronized fun offer(text: String, force: Boolean): Boolean {
+    @Synchronized fun offer(text: String, force: Boolean, replace: Boolean = false): Boolean {
         if (started) return true
-        if (force && !failed) waiting = text
+        if (force && !failed) { if (replace) waiting.clear(); waiting += text }
         return false
     }
-    /** The engine reported its start: the line kept for it, if any, to play now. */
-    @Synchronized fun ready(success: Boolean): String? {
+    /** The engine reported its start: the lines kept for it, in order, to play now. */
+    @Synchronized fun ready(success: Boolean): List<String> {
         started = success; failed = !success
-        return waiting.also { waiting = null }?.takeIf { success }
+        return waiting.toList().also { waiting.clear() }.takeIf { success } ?: emptyList()
     }
-    /** Speech was stopped (the screen closed): a line waiting for the engine belongs to it and is never read. */
-    @Synchronized fun clear() { waiting = null }
+    /** Speech was stopped (the screen closed): lines waiting for the engine belong to it and are never read. */
+    @Synchronized fun clear() { waiting.clear() }
 }
 
 /** Text-to-speech for guidance, shared by every screen. A new line interrupts the previous one, unless that one is forced. */
 @Singleton
 class Speaker @Inject constructor(@ApplicationContext context: Context) : SpeechOutput {
     private val startup = StartupBuffer()
-    private val tts = TextToSpeech(context) { status -> startup.ready(status == TextToSpeech.SUCCESS)?.let { play(it, force = true, replace = true) } }
+    private val tts = TextToSpeech(context) { status -> startup.ready(status == TextToSpeech.SUCCESS).forEach { play(it, force = true, replace = false) } }
     private val turns = SpeechTurns(SystemClock::elapsedRealtime)
     @Volatile override var enabled = true
     @Volatile override var held = false
@@ -170,7 +171,7 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
 
     private fun play(spoken: String, force: Boolean, replace: Boolean) {
         if (!enabled || held || spoken.isBlank()) return
-        if (!startup.offer(spoken, force)) return
+        if (!startup.offer(spoken, force, replace)) return
         if (listening) { if (force) synchronized(turns) { turns.hold(spoken, replace) }; return }
         if (!force && spoken == last) return
         val id: String; val play: Play
@@ -213,7 +214,7 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     var listening by remember { mutableStateOf(false) }
     var heard by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var settingsNeeded by remember { mutableStateOf(false) }
+    var settingsNeeded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     // Whether Android was still willing to explain the request when it was made; compared with after (see deniedForGood).
     var rationaleBefore by remember { mutableStateOf(false) }
     // Back from Settings with the microphone allowed: the Settings hint and its error go, the mic button works again.
@@ -262,15 +263,22 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { settingsNeeded = false; begin() }
         else {
-            // Sticky: once Android stops asking, later taps are refused with no rationale either side, which must not hide the Settings way in.
-            settingsNeeded = settingsNeeded || com.lensqi.fieldops.ui.common.deniedForGood(rationaleBefore, com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO))
+            // Sticky, and remembered across visits: once Android stops asking, every later tap is refused with no rationale
+            // either side, which must not hide the Settings way in; the rationale it showed once is kept on the device.
+            val after = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO)
+            com.lensqi.fieldops.ui.common.noteRationale(context, Manifest.permission.RECORD_AUDIO)
+            settingsNeeded = settingsNeeded || com.lensqi.fieldops.ui.common.deniedForGood(rationaleBefore, after, com.lensqi.fieldops.ui.common.rationaleEverShown(context, Manifest.permission.RECORD_AUDIO))
             error = if (settingsNeeded) "The microphone is off for LensQi and Android will not ask again. Allow it in Settings, or keep typing." else "Microphone permission is needed for voice."
         }
     }
     return VoiceInputState(listening, heard, error, supported && recognizer != null,
         start = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
-            else { rationaleBefore = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO); permission.launch(Manifest.permission.RECORD_AUDIO) }
+            else {
+                rationaleBefore = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO)
+                com.lensqi.fieldops.ui.common.noteRationale(context, Manifest.permission.RECORD_AUDIO)
+                permission.launch(Manifest.permission.RECORD_AUDIO)
+            }
         },
         stop = { recognizer?.stopListening(); Unit },
         settingsNeeded = settingsNeeded, openSettings = { com.lensqi.fieldops.ui.common.openAppSettings(context) },
