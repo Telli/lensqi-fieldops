@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arTags, assessmentForPhoto, nextStep } from "./ar";
+import { arTags, assessmentForPhoto, containedRect, nextStep, outlineFrame, outlinesInRawOrientation } from "./ar";
 import { nextMove } from "./ai";
 import type { Assessment, ChangeAnalysis, Fixture, Inspection, SegmentationGeometry } from "./api";
 
@@ -64,5 +64,24 @@ describe("honest AR guidance", () => {
     const i = inspection("Inconclusive", { evidenceRequests: [{ requestId: "r", note: "Take a photo", requestedBy: "Operator", requestedAt: "now" }] });
     expect(nextStep(i).text).toBe("Inspection closed — inconclusive");
     expect(nextMove(i)).toBeNull();
+  });
+});
+
+describe("outline orientation", () => {
+  const mask = (h: number, w: number) => ({ ...outline, segmentationId: "seg-m", masks: [{ objectId: "o", width: w, height: h, left: 0, top: 0, right: w, bottom: h, rle: { size: [h, w] as [number, number], counts: "" } }] });
+  it("reads the frame SAM worked in from the mask size", () => {
+    expect(outlineFrame([mask(3000, 4000)])).toEqual({ w: 4000, h: 3000 });
+    expect(outlineFrame([outline])).toBeUndefined();
+  });
+  it("shows a photo raw only when the browser would turn it a quarter turn against its outlines", () => {
+    const frame = { w: 4000, h: 3000 };
+    expect(outlinesInRawOrientation(frame, 3000, 4000)).toBe(true);
+    expect(outlinesInRawOrientation(frame, 4000, 3000)).toBe(false);
+    expect(outlinesInRawOrientation({ w: 2000, h: 2000 }, 2000, 2000)).toBe(false);
+    expect(outlinesInRawOrientation(undefined, 3000, 4000)).toBe(false);
+  });
+  it("letterboxes a picture inside its box", () => {
+    expect(containedRect(4000, 3000, 400, 400)).toEqual({ left: 0, top: 50, width: 400, height: 300 });
+    expect(containedRect(3000, 4000, 400, 400)).toEqual({ left: 50, top: 0, width: 300, height: 400 });
   });
 });

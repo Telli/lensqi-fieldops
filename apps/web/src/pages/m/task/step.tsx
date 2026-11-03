@@ -6,6 +6,7 @@ import { ArrowLeft, Camera, Check, ChevronRight, Loader2, Mic, Radio, Square, Vo
 import { LensQiMark } from "@/components/fo/ai";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
+import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
 import { cautionLabel, stepIndex, taskKeys, tasks, useTask, verdictLabel, type Task } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
@@ -38,6 +39,10 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
   const [answer, setAnswer] = useState<{ question: string; answer: string } | null>(null);
   const [typed, setTyped] = useState("");
   const speech = useSpeak(true);
+  const inflight = useRef<AbortController | null>(null);
+  // Leaving the step ends a question or check still waiting for the model, so its answer never toasts on another screen.
+  useEffect(() => () => inflight.current?.abort(), []);
+  const cancel = () => inflight.current?.abort();
 
   const steps = t?.plan?.steps ?? [];
   const step = steps.find((s) => s.id === (stepId ?? t?.currentStepId));
@@ -70,10 +75,15 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (!t) return;
     if (t.phase === "Completed") { nav(`/m/t/${id}/done`, { replace: true }); return; }
     if (t.phase === "Planned" || t.phase === "Abandoned") { nav(`/m/t/${id}`, { replace: true }); return; }
-    if (!stepId && t.currentStepId) { nav(`/m/t/${id}/step/${t.currentStepId}`, { replace: true }); return; }
-    // Only an unfinished step becomes current; a finished one is shown read-only with a way back to the current step.
+    const current = t.currentStepId ? `/m/t/${id}/step/${t.currentStepId}` : `/m/t/${id}`;
+    if (!stepId) { nav(current, { replace: true }); return; }
     const routed = steps.find((s) => s.id === stepId);
-    if (open && routed && t.currentStepId !== stepId && routed.status !== "Done" && routed.status !== "Skipped") tasks.start(id, routed.id).then(save).catch(() => undefined);
+    // A step id from an old link or another plan is not on this task: show the current step instead of waiting forever.
+    if (!routed) { nav(current, { replace: true }); return; }
+    // Only an unfinished step becomes current; a finished one is shown read-only with a way back to the current step.
+    // When the server will not open it, coaching and questions would be about its own current step, so go there.
+    if (open && t.currentStepId !== stepId && routed.status !== "Done" && routed.status !== "Skipped")
+      tasks.start(id, routed.id).then(save).catch((e) => { toast.error(`This step couldn't be opened. ${friendlyError(e)}`); nav(current, { replace: true }); });
   }, [t?.phase, t?.currentStepId, stepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const readStep = (force = false) => step && speech.speak(`Step ${n + 1}. ${step.title}. ${step.instruction} ${step.cautions.map((c) => c.text).join(". ")}`, force);
@@ -85,13 +95,15 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     if (!question.trim()) return;
     if (reviewing) { toast.info("Questions are about the current step. Go to it to ask."); return; }
     setBusy("ask");
+    const controller = new AbortController();
+    inflight.current = controller;
     try {
       const frame = live === "on" ? await grab(video.current, 1280) : null;
-      const r = await tasks.ask(id, question.trim(), frame);
+      const r = await tasks.ask(id, question.trim(), frame, controller.signal);
       setAnswer({ question: question.trim(), answer: r.answer });
       speech.speak(r.answer, true);
       setTyped("");
-    } catch (e) { toast.error(friendlyError(e)); } finally { setBusy(null); }
+    } catch (e) { if (!isCancelled(e)) toast.error(friendlyError(e)); } finally { setBusy(null); }
   }
 
   async function check(photo?: Blob | null) {
@@ -99,11 +111,17 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
     const blob = photo ?? (live === "on" ? await grab(video.current, 4096) : null);
     if (!blob) { file.current?.click(); return; }
     setBusy("check");
+    const controller = new AbortController();
+    inflight.current = controller;
     try {
-      const r = await tasks.check(id, step.id, blob);
+      const r = await tasks.check(id, step.id, blob, controller.signal);
       save(r.task);
       speech.speak(`${verdictLabel[r.check.verdict].text}. ${r.check.reason}`, true);
-    } catch (e) { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: taskKeys.one(id) }); } finally { setBusy(null); }
+    } catch (e) {
+      // A cancelled check may still be recorded by the server; the refresh shows it if so.
+      if (!isCancelled(e)) toast.error(friendlyError(e));
+      qc.invalidateQueries({ queryKey: taskKeys.one(id) });
+    } finally { setBusy(null); }
   }
 
   async function move(kind: "complete" | "skip" | "back") {
@@ -216,16 +234,20 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
           )}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy === "ask" || reviewing} placeholder={busy === "ask" ? "Thinking…" : reviewing ? "Go to the current step to ask" : "Ask about this step…"} aria-label="Ask a question"
             className="h-12 min-w-0 flex-1 rounded-2xl border border-overlay-foreground/20 bg-transparent px-3 text-sm outline-none focus:border-primary" />
-          {(typed.trim() || busy === "ask") && (
-            <button type="submit" disabled={busy === "ask"} aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20">
-              {busy === "ask" ? <Loader2 className="size-5 animate-spin" /> : <ChevronRight className="size-5" />}
+          {busy === "ask" ? (
+            <button type="button" onClick={cancel} aria-label="Cancel the question" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20">
+              <Loader2 className="size-5 animate-spin" />
+            </button>
+          ) : typed.trim() && (
+            <button type="submit" aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-overlay-foreground/20">
+              <ChevronRight className="size-5" />
             </button>
           )}
         </form>
         {voice.notice && <p className="text-[11px] opacity-60">{speechNotice}</p>}
         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2">
           <button onClick={() => move("back")} disabled={n === 0 || !!busy} aria-label="Previous step" className="grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20 disabled:opacity-30"><ArrowLeft className="size-5" /></button>
-          <button onClick={() => check()} disabled={!!busy || !open} aria-label="Check this step with a photo" className={cn("grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20", needsCheck && "border-primary text-primary")}>
+          <button onClick={() => (busy === "check" ? cancel() : check())} disabled={(!!busy && busy !== "check") || !open} aria-label={busy === "check" ? "Cancel the photo check" : "Check this step with a photo"} className={cn("grid size-12 place-items-center rounded-2xl border border-overlay-foreground/20", needsCheck && "border-primary text-primary")}>
             {busy === "check" ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
           </button>
           <button onClick={() => move("complete")} disabled={!!busy || !open || finished} aria-label="Step done"
@@ -237,7 +259,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
           <span>{needsCheck ? "Tip: a quick check photo can confirm this step." : voice.supported ? "Say “next”, “repeat”, “check this”, or ask a question." : ""}</span>
           {!finished && open && <button onClick={() => move("skip")} disabled={!!busy} className="flex min-h-11 items-center gap-0.5 px-1">Skip <ChevronRight className="size-3.5" /></button>}
         </div>
-        <input ref={file} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) check(f); e.target.value = ""; }} />
+        <input ref={file} type="file" accept="image/jpeg,image/png" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) check(f); e.target.value = ""; }} />
       </div>
     </div>
   );
