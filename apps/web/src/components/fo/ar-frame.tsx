@@ -18,27 +18,52 @@ type Measured = { src: string; nw: number; nh: number; cw: number; ch: number };
 /** Browsers refuse canvases past about 16.7 million pixels; a 12 MP photo's outlines look the same drawn at this size. */
 const MAX_CANVAS_SIDE = 4096;
 
-/** Decoded, tinted mask tiles, so a re-render or a polling refresh never decodes the RLE or repaints a tile again. */
+/**
+ * Decoded, tinted mask tiles, so a re-render or a polling refresh never decodes the RLE or repaints a tile again. SAM
+ * returns each mask cropped to its object, so most tiles are small; one covering a whole 12 MP photo is drawn at the
+ * display cap, and the cache keeps a byte budget rather than an entry count.
+ */
 const tiles = new Map<string, HTMLCanvasElement>();
-const TILE_CACHE = 48;
+const TILE_BUDGET_BYTES = 64 * 1024 * 1024;
+let tileBytes = 0;
+const bytesOf = (c: HTMLCanvasElement) => c.width * c.height * 4;
+function remember(key: string, tile: HTMLCanvasElement) {
+  const size = bytesOf(tile);
+  if (size > TILE_BUDGET_BYTES) return;
+  const old = tiles.get(key);
+  if (old) { tiles.delete(key); tileBytes -= bytesOf(old); }
+  for (const [k, c] of tiles) {
+    if (tileBytes + size <= TILE_BUDGET_BYTES) break;
+    tiles.delete(k); tileBytes -= bytesOf(c);
+  }
+  tiles.set(key, tile); tileBytes += size;
+}
 function tintedTile(segmentationId: string, m: Mask, color: string): HTMLCanvasElement | null {
   const key = `${segmentationId}:${m.objectId}:${color}`;
   const hit = tiles.get(key);
   if (hit) return hit;
   const [mh, mw] = m.rle.size;
   const bits = decodeRle(m.rle.counts, mh, mw);
-  const tile = document.createElement("canvas");
-  tile.width = mw; tile.height = mh;
+  const full = document.createElement("canvas");
+  full.width = mw; full.height = mh;
+  const f = full.getContext("2d");
+  if (!f) return null;
+  const pixels = f.createImageData(mw, mh);
+  for (let p = 0; p < bits.length; p++) pixels.data[p * 4 + 3] = bits[p] ? 255 : 0;
+  f.putImageData(pixels, 0, 0);
+  // Tint, scaling down to the display cap; the full-size decode above is let go once drawn.
+  const scale = Math.min(1, MAX_CANVAS_SIDE / Math.max(mw, mh));
+  const tile = scale === 1 ? full : document.createElement("canvas");
+  if (tile !== full) {
+    tile.width = Math.max(1, Math.round(mw * scale)); tile.height = Math.max(1, Math.round(mh * scale));
+    tile.getContext("2d")?.drawImage(full, 0, 0, tile.width, tile.height);
+  }
   const t = tile.getContext("2d");
   if (!t) return null;
-  const pixels = t.createImageData(mw, mh);
-  for (let p = 0; p < bits.length; p++) pixels.data[p * 4 + 3] = bits[p] ? 255 : 0;
-  t.putImageData(pixels, 0, 0);
   t.globalCompositeOperation = "source-in";
   t.fillStyle = color;
-  t.fillRect(0, 0, mw, mh);
-  if (tiles.size >= TILE_CACHE) tiles.delete(tiles.keys().next().value!);
-  tiles.set(key, tile);
+  t.fillRect(0, 0, tile.width, tile.height);
+  remember(key, tile);
   return tile;
 }
 

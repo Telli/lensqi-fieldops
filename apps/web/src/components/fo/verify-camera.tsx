@@ -77,7 +77,7 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
     } catch (e) {
       // A refusal is final for this photo; a cancel or anything else may not have reached the server, so the same
       // capture is offered again under the same key.
-      setProblem(isCancelled(e) ? "Cancelled. The photo may still have reached the server." : friendlyError(e));
+      setProblem(isCancelled(e) ? "Cancelled. The photo may still have reached the server." : `The photo didn't reach the server. ${friendlyError(e)}`);
       setPhase(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429 ? "rejected" : "failed");
     } finally {
       saving.current = false;
@@ -179,7 +179,7 @@ export function VerifyCamera({ id, prompt, guideSrc, onAccepted, onClose }: {
         )}
         {phase === "failed" && capture && (
           <div className="space-y-2" role="alert">
-            <p className="text-sm">The photo didn't reach the server. {problem}</p>
+            <p className="text-sm">{problem}</p>
             <button type="button" onClick={() => save(capture)} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-medium text-primary-foreground"><RotateCcw className="size-4" /> Try again with this photo</button>
             <button type="button" onClick={retake} className="min-h-11 w-full rounded-xl text-xs text-overlay-foreground/80">Take a different photo</button>
           </div>
