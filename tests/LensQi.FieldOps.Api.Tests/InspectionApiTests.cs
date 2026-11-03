@@ -312,6 +312,10 @@ public class InspectionApiTests : IClassFixture<FieldOpsApiFactory>
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Jpeg(640, 480)));                      // APP0 only
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation(TestImages.Png(640, 480)));
         Assert.Equal(1, EvidenceFileStore.ReadExifOrientation([0xFF, 0xD8, 0xFF, 0xE1, 0x00]));                 // truncated
+        // A first Exif segment without the tag (a thumbnail block) is skipped and the orientation read from the next one.
+        var two = TestImages.JpegWithOrientation(640, 480, 6);
+        byte[] thumbnailBlock = [0xFF, 0xE1, 0x00, 0x22, (byte)'E', (byte)'x', (byte)'i', (byte)'f', 0, 0, (byte)'M', (byte)'M', 0, 0x2A, 0, 0, 0, 8, 0, 1, 0x01, 0x1A, 0, 5, 0, 0, 0, 1, 0, 0, 0, 0x1A, 0, 0, 0, 0];
+        Assert.Equal(6, EvidenceFileStore.ReadExifOrientation([.. two[..2], .. thumbnailBlock, .. two[2..]]));
         // An IFD offset near int.MaxValue is out of range, never an overflow into the bounds check.
         var huge = TestImages.JpegWithOrientation(640, 480, 6);
         huge[16] = 0x7F; huge[17] = 0xFF; huge[18] = 0xFF; huge[19] = 0xFE;
