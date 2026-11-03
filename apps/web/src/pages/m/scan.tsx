@@ -3,8 +3,8 @@ import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { X, Images, ChevronUp, Check, Loader2, AlertTriangle, Camera as CameraIcon, ArrowRight, Glasses } from "lucide-react";
-import { api, type Assessment, type ChangeAnalysis, type Inspection, type SegmentationGeometry } from "@/lib/api";
-import { friendlyError, qk } from "@/lib/hooks";
+import { api, isCancelled, newKey, type Assessment, type ChangeAnalysis, type Inspection, type ObservationResponse, type SegmentationGeometry } from "@/lib/api";
+import { friendlyError, qk, useElapsed } from "@/lib/hooks";
 import { useInspectionBundle } from "@/lib/inspection";
 import { changeLabel, featureName, isPostRepairItem, observationState, sentence } from "@/lib/labels";
 import { ArFrame } from "@/components/fo/ar-frame";
@@ -42,7 +42,14 @@ export default function Scan({ id }: { id: string }) {
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
   const [cameraAttempt, setCameraAttempt] = useState(0);
   const processing = useRef(false);
+  const inflight = useRef<AbortController | null>(null);
   const assist = useLiveAssist(video, live === "on" && !preview && !busy, `/v1/inspections/${encodeURIComponent(id)}`);
+  const elapsed = useElapsed(busy);
+
+  // Closing the camera ends the model calls here, so nothing toasts or lands on the next screen. The server may still
+  // finish a call that reached it; the inspection view shows that on its next refresh.
+  useEffect(() => () => inflight.current?.abort(), []);
+  const cancel = () => inflight.current?.abort();
 
   const afterRepair = !!i?.currentClaimId && (i.stage === "ReadyToVerify" || i.stage === "NeedsEvidence");
   const asked = i?.evidenceRequests?.find((r) => !r.answeredByPhotoId);
@@ -83,22 +90,30 @@ export default function Scan({ id }: { id: string }) {
       ? [{ label: "Saving photo", state: "doing" }, { label: "Comparing with before", state: "todo" }]
       : [{ label: "Saving photo", state: "doing" }, { label: "Observing", state: "todo" }, { label: "Matching asset", state: "todo" }, { label: "Outlining parts", state: "todo" }];
     setSteps(plan);
+    const controller = new AbortController();
+    inflight.current = controller;
+    const signal = controller.signal;
+    // One key per capture: "try again" after a dropped connection finds the photo the server already recorded.
+    const key = newKey();
+    let up: ObservationResponse | undefined;
+    let state: Inspection | undefined;
+    let assessment: Assessment | undefined;
+    const outlines: SegmentationGeometry[] = [];
     try {
-      const up = await api.upload(id, blob, name, source);
+      up = await api.upload(id, blob, name, source, key, undefined, { signal });
       setStep(0, "done");
-      let state = up.state;
-      let assessment: Assessment | undefined;
-      const outlines: SegmentationGeometry[] = [];
+      state = up.state;
       if (afterRepair) {
         setStep(1, "done");
       } else {
         setStep(1, "doing");
         try {
-          const inv = await api.investigate(id);
+          const inv = await api.investigate(id, up.evidenceId, signal);
           assessment = assessmentForPhoto(inv.assessment, up.evidenceId);
           state = inv.state;
           setStep(1, "done");
         } catch (e) {
+          if (isCancelled(e)) throw e;
           setStep(1, "skipped");
           toast.message("The AI couldn't look at this photo", { description: friendlyError(e) });
         }
@@ -108,10 +123,11 @@ export default function Scan({ id }: { id: string }) {
         let failed = 0;
         for (const concept of outlineOrder(fixture, assessment ?? prior)) {
           try {
-            const seg = await api.segment(id, concept, up.evidenceId);
+            const seg = await api.segment(id, concept, up.evidenceId, signal);
             if (seg.segmentation.matched && seg.segmentation.photoEvidenceId === up.evidenceId) outlines.push(seg.segmentation);
             state = seg.state;
           } catch (e) {
+            if (isCancelled(e)) throw e;
             failed++;
             toast.message(`Couldn't outline the ${concept}`, { description: friendlyError(e) });
           }
@@ -121,9 +137,16 @@ export default function Scan({ id }: { id: string }) {
       setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
       qc.setQueryData(qk.inspection(id), state);
     } catch (e) {
-      setSteps([]);
-      setPreview(null);
-      toast.error(friendlyError(e));
+      if (isCancelled(e) && up && state) {
+        // The photo is saved; what the AI managed before the cancel is shown, the rest is marked as not done.
+        setSteps((st) => st.map((x) => (x.state === "doing" || x.state === "todo" ? { ...x, state: "skipped" } : x)));
+        setResult({ evidenceId: up.evidenceId, assessment, outlines, change: up.changeAnalysis, state });
+        qc.setQueryData(qk.inspection(id), state);
+      } else {
+        setSteps([]);
+        setPreview(null);
+        if (!isCancelled(e)) toast.error(friendlyError(e));
+      }
     } finally {
       processing.current = false;
       setBusy(false);
@@ -194,14 +217,16 @@ export default function Scan({ id }: { id: string }) {
         <Link href={i?.currentClaimId ? `/m/i/${id}/verify` : `/m/i/${id}`} className="glass grid size-10 place-items-center rounded-full" aria-label="Close camera"><X className="size-5" /></Link>
         <div className="glass flex-1 truncate rounded-full px-3 py-2 text-xs">
           {!fixture ? "Loading…"
-            : busy && !result ? <span className="opacity-80">{steps.find((s) => s.state === "doing")?.label ?? "Processing photo"}…</span>
+            : busy && !result ? <span className="opacity-80">{steps.find((s) => s.state === "doing")?.label ?? "Processing photo"}…{elapsed > 1 && <span className="ml-1 font-mono">{elapsed}s</span>}</span>
             : match === "mismatch" ? <span className="text-warning">▲ Looks like {result?.assessment?.assetId}, not {name}</span>
             : match === "match" ? <span><span className="text-success">●</span> {name} · AI match</span>
             : match === "unseen" ? <span className="text-warning">▲ Can't confirm {name} in this photo</span>
             : assetMatch(shown, i?.assetId) === "match" ? <span><span className="text-success">●</span> {name} · matched earlier</span>
             : <span className="opacity-80">{expected?.displayName ?? i?.assetId} · from asset label</span>}
         </div>
-        <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>
+        {busy && !result
+          ? <button type="button" onClick={cancel} className="glass flex h-10 items-center rounded-full px-3 text-[11px]">Cancel</button>
+          : <Link href={`/m/i/${id}/glasses`} className="glass flex h-10 items-center gap-1.5 rounded-full px-3 text-[11px]" aria-label="Glasses view"><Glasses className="size-4" /> Glasses</Link>}
       </div>
 
       <div className={cn("relative min-h-0 flex-1", preview && "overflow-y-auto")}>

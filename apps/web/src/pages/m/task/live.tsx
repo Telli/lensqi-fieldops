@@ -6,6 +6,7 @@ import { ListChecks, Loader2, Mic, Radio, Send, Square, Volume2, VolumeX, X } fr
 import { LensQiMark } from "@/components/fo/ai";
 import { LiveOverlay } from "@/components/fo/live-overlay";
 import { cameraError, connectCamera } from "@/lib/camera";
+import { isCancelled } from "@/lib/api";
 import { friendlyError } from "@/lib/hooks";
 import { taskKeys, tasks, useTask } from "@/lib/tasks";
 import { useLiveAssist } from "@/lib/use-live-assist";
@@ -41,6 +42,8 @@ export default function FreeformLive({ id }: { id: string }) {
   const assist = useLiveAssist(video, live === "on" && open, `/v1/tasks/${encodeURIComponent(id)}`);
   const answers = [...(t?.answers ?? [])].reverse();
   const pauser = usePause(assist, speech);
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) { setLive("off"); setCameraNote("Live camera isn't available here. You can still ask by typing."); return; }
@@ -57,13 +60,15 @@ export default function FreeformLive({ id }: { id: string }) {
   async function ask(question: string) {
     if (!question.trim() || !open) return;
     setAsking(true);
+    const controller = new AbortController();
+    inflight.current = controller;
     try {
       const frame = live === "on" ? await grab(video.current) : null;
-      const r = await tasks.ask(id, question.trim(), frame);
+      const r = await tasks.ask(id, question.trim(), frame, controller.signal);
       speech.speak(r.answer, true);
       setTyped("");
       qc.invalidateQueries({ queryKey: taskKeys.one(id) });
-    } catch (e) { toast.error(friendlyError(e)); } finally { setAsking(false); }
+    } catch (e) { if (!isCancelled(e)) toast.error(friendlyError(e)); } finally { setAsking(false); }
   }
 
   const voice = usePushToTalk((text) => {
@@ -140,9 +145,15 @@ export default function FreeformLive({ id }: { id: string }) {
           )}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} disabled={!open} placeholder={open ? "Ask anything about what you see…" : "This session has ended"} aria-label="Ask a question"
             className="h-12 min-w-0 flex-1 rounded-2xl border border-overlay-foreground/20 bg-transparent px-3 text-sm outline-none focus:border-primary" />
-          <button type="submit" disabled={asking || !typed.trim() || !open} aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-40">
-            {asking ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
-          </button>
+          {asking ? (
+            <button type="button" onClick={() => inflight.current?.abort()} aria-label="Cancel the question" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground">
+              <Loader2 className="size-5 animate-spin" />
+            </button>
+          ) : (
+            <button type="submit" disabled={!typed.trim() || !open} aria-label="Ask" className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-40">
+              <Send className="size-5" />
+            </button>
+          )}
         </form>
         <div className="flex items-center justify-between gap-2 text-xs">
           <button onClick={() => ask(LOOK)} disabled={asking || !open} className="min-h-11 rounded-xl border border-overlay-foreground/20 px-3 disabled:opacity-40">What am I looking at?</button>

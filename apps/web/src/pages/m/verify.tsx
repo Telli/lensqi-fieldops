@@ -8,10 +8,10 @@ import { ArFrame } from "@/components/fo/ar-frame";
 import { VerifyCamera } from "@/components/fo/verify-camera";
 import { EvidenceBadge, Expandable, SourceBadge, TechDetails } from "@/components/fo/primitives";
 import { Button } from "@/components/ui/button";
-import { api, type ChecklistStatus, type Decision, type EventRecord, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
+import { api, commandScope, type ChecklistStatus, type Decision, type EventRecord, type Inspection, type Fixture, type Assessment, type Photo } from "@/lib/api";
 import { aiSummary, verifySteps } from "@/lib/ai";
 import { arTags, usePhotoOutlines } from "@/lib/ar";
-import { qk, useAct } from "@/lib/hooks";
+import { qk, useAct, useElapsed } from "@/lib/hooks";
 import { beforePhoto, useInspectionBundle, verifications } from "@/lib/inspection";
 import { changeLabel, checklistLabel, featureName, fmtTime, fmtWhen, plainReason, measuredValue, predictionOutcome, probeValue } from "@/lib/labels";
 import { COMPARE_GIVE_UP_MS, COMPARE_POLL_MS, currentAttempt, verifyCard, verifyCardStep, type Attempt } from "@/lib/verify";
@@ -51,13 +51,15 @@ export default function Verify({ id }: { id: string }) {
   const { i, ev, fixture, assessment, photoUrl } = useInspectionBundle(id);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [retry, setRetry] = useState("");
-  const review = useAct(id, (req: string, status: ChecklistStatus, photo: string) => api.review(id, req, status, photo));
-  const ack = useAct(id, () => api.acknowledge(id));
-  const verify = useAct(id, () => api.verify(id));
-  const claim = useAct(id, (d: string) => api.claim(id, d), { success: "New repair attempt recorded" });
+  // Each command is keyed by what it was decided on, so a retry after a lost answer replays instead of acting twice.
+  const review = useAct(id, (req: string, status: ChecklistStatus, photo: string) => api.review(id, req, status, photo, commandScope(i)));
+  const ack = useAct(id, () => api.acknowledge(id, commandScope(i)));
+  const verify = useAct(id, (): ReturnType<typeof api.verify> => api.verify(id, commandScope(i), verify.signal()));
+  const claim = useAct(id, (d: string) => api.claim(id, d, commandScope(i)), { success: "New repair attempt recorded" });
   const card = i ? verifyCard(i) : "photo";
   const tooLong = useComparePolling(id, !!i?.currentClaimId && card === "comparing");
   const nextStep = useScrollToNextStep(card);
+  const verifying = useElapsed(verify.isPending);
 
   if (!i) return <><TopBar title="Repair verification" back="/m" /><Page><Loader2 className="mx-auto animate-spin" /></Page></>;
 
@@ -131,7 +133,12 @@ export default function Verify({ id }: { id: string }) {
 
   const gateCard = (() => {
     if (verify.isPending)
-      return <AiCard says="Your photo, review and confirmation are in." title="Verifying…" hint={`Measuring ${target ?? "the equipment"} now. The photo and the measurement both have to pass.`} />;
+      return (
+        <AiCard says="Your photo, review and confirmation are in." title={`Verifying…${verifying > 1 ? ` ${verifying}s` : ""}`}
+          hint={`Measuring ${target ?? "the equipment"} now. The photo and the measurement both have to pass. Cancelling doesn't undo a measurement already taken; its decision stays in the record and shows here.`}>
+          <Button size="lg" variant="outline" className={btn} onClick={verify.cancel}>Cancel</Button>
+        </AiCard>
+      );
     switch (card) {
       case "comparing":
         return (
@@ -405,7 +412,7 @@ function PredictionCard({ id, i, ev, canAsk }: { id: string; i: Inspection; ev: 
   const registered = [...ev].reverse().find((e) => e.kind === "PredictionRegistered" && since(e));
   const scored = registered && ev.find((e) => e.kind === "PredictionScored" && e["predictionId"] === registered["predictionId"]);
   const refused = [...ev].reverse().find((e) => (e.kind === "KnowledgeProposalRejected" || e.kind === "KnowledgeProposalAccepted") && since(e));
-  const ask = useAct(id, () => api.reason(id, `Technician's repair claim: ${String(claim?.["description"] ?? "")}. Predict what the approved equipment check will report.`), {
+  const ask = useAct(id, () => api.reason(id, `Technician's repair claim: ${String(claim?.["description"] ?? "")}. Predict what the approved equipment check will report.`, commandScope(i)), {
     success: (r) => r.accepted ? (r.prediction ? "Prediction recorded before the check" : "LensQi didn't propose a check to predict") : "The server refused LensQi's suggestion and recorded why",
   });
   if (!registered && !canAsk) return null;

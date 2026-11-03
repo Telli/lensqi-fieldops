@@ -41,6 +41,33 @@ export function assessmentForPhoto(assessment?: Assessment | null, photoEvidence
   return cited.length ? { ...assessment, hypotheses: cited } : undefined;
 }
 
+/** The pixel frame the outlines were computed in, read from the masks SAM returned (`rle.size` is [height, width]). */
+export function outlineFrame(outlines: SegmentationGeometry[]): { w: number; h: number } | undefined {
+  for (const g of outlines) for (const m of g.masks) {
+    const [h, w] = m.rle.size;
+    if (h > 0 && w > 0) return { w, h };
+  }
+  return undefined;
+}
+
+/**
+ * Whether the browser shows the photo turned relative to the pixels the outlines were computed on. The server reads a
+ * JPEG's size before its EXIF rotation and SAM sees those raw pixels, while the browser displays the photo rotated, so a
+ * portrait photo imported from a gallery would get sideways outlines. True when the outline frame is the displayed size
+ * transposed; the photo is then shown in its raw orientation, where the outlines fit. A half turn (orientation 3) keeps
+ * the size and cannot be told apart here; phone shutter photos carry no rotation and are never affected.
+ */
+export function outlinesInRawOrientation(frame: { w: number; h: number } | undefined, naturalWidth: number, naturalHeight: number): boolean {
+  return !!frame && frame.w !== frame.h && frame.w === naturalHeight && frame.h === naturalWidth;
+}
+
+/** Where a `w`×`h` picture sits when contained in a `cw`×`ch` box: the letterboxed rectangle, in CSS pixels. */
+export function containedRect(w: number, h: number, cw: number, ch: number) {
+  const scale = Math.min(cw / w, ch / h);
+  const width = w * scale, height = h * scale;
+  return { left: (cw - width) / 2, top: (ch - height) / 2, width, height };
+}
+
 const mainBox = (g: SegmentationGeometry): Box | undefined =>
   [...g.boxes].sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0] ?? g.masks[0];
 

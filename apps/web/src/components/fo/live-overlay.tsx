@@ -1,9 +1,15 @@
 import type { LiveFeedback } from '@/lib/use-live-assist';
 
-export function LiveOverlay({ objects, width, height, targetConcept }: LiveFeedback & { targetConcept?: string }) {
+/**
+ * Tracked boxes drawn over the live video, in the video frame's pixels. `fit` must match the video's `object-fit`:
+ * a contained video letterboxes and a covering one centre-crops, and the boxes only land on the parts when the SVG
+ * does the same.
+ */
+export function LiveOverlay({ objects, width, height, targetConcept, fit = "contain" }: LiveFeedback & { targetConcept?: string; fit?: "contain" | "cover" }) {
   if (!width || !height) return null;
   return (
-    <svg aria-label="Live object tracking" className="pointer-events-none absolute inset-0 size-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+    <svg aria-label="Live object tracking" className="pointer-events-none absolute inset-0 size-full" viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={fit === "cover" ? "xMidYMid slice" : "xMidYMid meet"}>
       {objects.map((o, n) => {
         const x = o.box.left * width, y = o.box.top * height;
         const w = (o.box.right - o.box.left) * width, h = (o.box.bottom - o.box.top) * height;

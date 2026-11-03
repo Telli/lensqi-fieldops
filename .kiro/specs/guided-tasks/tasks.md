@@ -38,7 +38,7 @@
   - Tests: shared command cases (next, back, repeat, take photo, check step, pause, synonyms, non-commands).
 - [x] **GT-T11 — Parameterize `use-live-assist.ts`.** Endpoint base for tasks and inspections. *(done Oct 28: ba64285)*
   - Tests: existing live-assist tests pass; task base hits `/v1/tasks/{id}/live/*`.
-- [x] **GT-T12 — Mode home and goal entry.** `/m` and `/m/new?mode=diy|tech` with mic, details, manual photos, technician site picker (GT-R01.1). *(done Oct 28: ba64285)*
+- [x] **GT-T12 — Mode home and goal entry.** `/m` and `/m/new?mode=Technician` (default Do it yourself) with mic, details, manual photos, technician site picker (GT-R01.1). *(done Oct 28: ba64285)*
 - [x] **GT-T13 — Plan screen.** `/m/t/:id`: AI-written label, risk, time, tools, parts, steps with cautions and stop-if, referral, not-a-certification note, safety acceptance (GT-R03.7, GT-R04.1). *(done Oct 28: ba64285; checked in the browser)*
 - [x] **GT-T14 — Step runner and done screen.** `/m/t/:id/step/:stepId` from `scan.tsx` camera, `LiveOverlay`, `AiCard`, `Progress`; spoken instruction; push-to-talk and typed questions; commands; "Check this step" with suggestion card; Next/Back; `/m/t/:id/done` (GT-R05, GT-R07, GT-R09.3). *(done Oct 28: ba64285; browser: plan, step, Done, check card; camera and microphone not available in the browser pane)*
 - [x] **Gate:** `npm --prefix apps/web test` and `npm --prefix apps/web run build` pass; DIY flow works at phone size in the browser with fakes, and with one genuine plan. *(met Oct 28: 25 web tests, build, genuine plans in the browser)*
