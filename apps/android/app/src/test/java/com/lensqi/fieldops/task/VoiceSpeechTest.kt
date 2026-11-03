@@ -9,10 +9,13 @@ import com.lensqi.fieldops.voice.ListeningHold
 import com.lensqi.fieldops.voice.Play
 import com.lensqi.fieldops.voice.SpeechOutput
 import com.lensqi.fieldops.voice.SpeechTurns
+import com.lensqi.fieldops.voice.StartupBuffer
 import com.lensqi.fieldops.voice.mute
 import com.lensqi.fieldops.voice.unmute
+import com.lensqi.fieldops.ui.common.deniedForGood
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -158,6 +161,27 @@ class VoiceSpeechTest {
             stepSpeech(step, 2))
         assertEquals("Drain the oil. Remove the drain plug with a 15 mm socket. Hot oil can burn. Stop if the plug thread is stripped. Stop if oil is still hot.", stepSpeech(step))
         assertEquals("Look. Check the level.", stepSpeech(TaskStep("s2", "Look", "Check the level.", handsOn = false)))
+    }
+
+    @Test fun `the first step of a task opened cold waits for the speech engine and is read once it starts`() {
+        val startup = StartupBuffer()
+        assertFalse(startup.offer("Step 1. Drain the oil.", force = true))
+        assertFalse(startup.offer("Move closer to the plug.", force = false), "a hint is dropped; the screen offers it again")
+        // The person moved on before the engine started: only the latest step is worth reading.
+        assertFalse(startup.offer("Step 2. Fit the filter.", force = true))
+        assertEquals("Step 2. Fit the filter.", startup.ready(true))
+        assertTrue(startup.offer("Looks done.", force = true))
+        // Stopped (the screen closed) before the engine started: nothing waits for it.
+        val closed = StartupBuffer(); closed.offer("Step 1.", force = true); closed.clear(); assertNull(closed.ready(true))
+        // An engine that fails to start reads nothing, now or later.
+        val failed = StartupBuffer(); failed.offer("Step 1.", force = true); assertNull(failed.ready(false)); assertFalse(failed.offer("Step 2.", force = true))
+    }
+
+    @Test fun `a microphone prompt dismissed with back is not a permanent refusal`() {
+        assertFalse(deniedForGood(rationaleBefore = false, rationaleAfter = false), "the first prompt, or one dismissed with Back")
+        assertFalse(deniedForGood(rationaleBefore = false, rationaleAfter = true), "refused once: Android will explain next time")
+        assertTrue(deniedForGood(rationaleBefore = true, rationaleAfter = false), "refused again: Android stops asking")
+        assertFalse(deniedForGood(rationaleBefore = true, rationaleAfter = true))
     }
 
     @Test fun `mute and unmute say that they took`() {

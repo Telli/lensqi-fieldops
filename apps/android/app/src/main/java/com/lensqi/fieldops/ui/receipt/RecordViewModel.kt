@@ -10,7 +10,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class RecordUi(val summary: RecordSummary? = null, val error: String? = null, val loading: Boolean = false, val exporting: Boolean = false)
+/** [error] is a load failure (Try again reloads); [exportError] is an export failure and leaves the loaded summary in place. */
+data class RecordUi(val summary: RecordSummary? = null, val error: String? = null, val loading: Boolean = false, val exporting: Boolean = false, val exportError: String? = null)
+
+/**
+ * The server answers the bundle request with 409 receipt_invalid when the record fails its own integrity check; that is a
+ * fact about the record, not the connection, and no retry changes it. Anything else is a transfer failure.
+ */
+fun exportFailure(e: Exception): String =
+    if (e is retrofit2.HttpException && e.code() == 409) EXPORT_INTEGRITY_FAILED else EXPORT_FAILED
+
+const val EXPORT_INTEGRITY_FAILED = "The record failed its integrity check and cannot be exported."
+const val EXPORT_FAILED = "The record could not be exported. Check the connection, then try again."
 
 @HiltViewModel
 class RecordViewModel @Inject constructor(private val api: FieldOpsApi) : ViewModel() {
@@ -27,7 +38,7 @@ class RecordViewModel @Inject constructor(private val api: FieldOpsApi) : ViewMo
     }
 
     suspend fun export(id: String, directory: java.io.File): java.io.File? {
-        mutable.value = mutable.value.copy(exporting = true, error = null)
+        mutable.value = mutable.value.copy(exporting = true, exportError = null)
         return try {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 directory.mkdirs()
@@ -40,7 +51,7 @@ class RecordViewModel @Inject constructor(private val api: FieldOpsApi) : ViewMo
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            mutable.value = mutable.value.copy(error = "The record could not be exported. Check the connection and the record’s integrity, then try again.")
+            mutable.value = mutable.value.copy(exportError = exportFailure(e))
             null
         } finally { mutable.value = mutable.value.copy(exporting = false) }
     }

@@ -17,14 +17,19 @@ class MemoryCommands : PendingCommandDao {
     val rows = MutableStateFlow<List<PendingCommand>>(emptyList())
     override suspend fun insert(command: PendingCommand) { rows.update { it + command } }
     override fun observe(sessionId: String, serverBase: String) = rows.map { it.filter { c -> c.sessionId == sessionId && (c.serverBase == serverBase || c.serverBase == null) } }
-    override suspend fun nextPending(skip: List<String>) = rows.value.firstOrNull { it.state == CommandState.Pending && it.serverBase !in skip }
+    override suspend fun nextPending(skip: List<String>, skipSessions: List<String>) = rows.value.firstOrNull { it.state == CommandState.Pending && it.serverBase !in skip && it.sessionId !in skipSessions }
+    override suspend fun rejectedSessions() = rows.value.filter { it.state == CommandState.Rejected }.map { it.sessionId }.distinct()
     private fun change(id: String, fn: (PendingCommand) -> PendingCommand) { rows.update { it.map { c -> if(c.id == id) fn(c) else c } } }
     override suspend fun countAttempt(id: String) = change(id) { it.copy(attempts = it.attempts + 1) }
     override suspend fun reject(id: String, code: String, message: String) = change(id) { it.copy(state = CommandState.Rejected, errorCode = code, errorMessage = message) }
     override suspend fun uploaded(id: String, evidenceId: String) = change(id) { it.copy(state = CommandState.Uploaded, resultEvidenceId = evidenceId) }
-    override suspend fun retry(id: String, serverBase: String) = change(id) { it.copy(state = CommandState.Pending, serverBase = serverBase, errorCode = null, errorMessage = null) }
+    override suspend fun retry(id: String, serverBase: String) = change(id) { it.copy(state = CommandState.Pending, serverBase = serverBase, errorCode = null, errorMessage = null, attempts = 0) }
     override suspend fun delete(id: String) { rows.update { it.filterNot { c -> c.id == id } } }
 }
+
+/** A step check sent with the recorded check answer, so the queue sees a 200 with the server's shape. */
+private fun checkAnswer() = MockResponse().setBody(File("../../../docs/evidence/tasks/check-oil.json").readText())
+private fun notNow() = MockResponse().setResponseCode(409).setBody("""{"code":"provider_unavailable","message":"Muse is down"}""")
 
 class CommandQueueTest {
     private val json = NetworkModule.json()
@@ -154,11 +159,127 @@ class QueuedCommandTest {
             server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"invalid_state","message":"nothing to confirm"}"""))
             assertEquals(DrainResult.Empty, queue.drain())
             assertEquals("/v1/inspections/I-1/acknowledge", server.takeRequest().path)
-            val rows = dao.rows.value.associateBy { it.id }
+            var rows = dao.rows.value.associateBy { it.id }
             assertEquals(CommandState.Rejected, rows["ack-key"]!!.state); assertEquals("invalid_state", rows["ack-key"]!!.errorCode)
+            // The refusal holds the rest of its inspection: the next command waits until the technician removes the refused one.
+            assertEquals(CommandState.Pending, rows["bad-key"]!!.state)
+            queue.dismiss(rows["ack-key"]!!)
+            assertEquals(DrainResult.Empty, queue.drain())
+            rows = dao.rows.value.associateBy { it.id }
             assertEquals(CommandState.Rejected, rows["bad-key"]!!.state); assertEquals("payload_unreadable", rows["bad-key"]!!.errorCode)
             assertEquals(1, server.requestCount, "an unreadable body never reaches the server")
             assertThrows(IllegalArgumentException::class.java) { runBlocking { queue.enqueueCommand("I-1", CommandKind.UploadPhoto, "k", null, base) } }
+        }
+    }
+}
+
+/** What holds a row back: a server that answered "not now" holds its task, a server out of reach holds everything for it, a refusal holds what follows it. */
+class QueueHoldTest {
+    private val json = NetworkModule.json()
+    private fun api(base: String) = NetworkModule.retrofit(OkHttpClient(), json, base).create(FieldOpsApi::class.java)
+    private val original = byteArrayOf(-1, -40, -1) + "original camera bytes".toByteArray()
+    private fun byPath(vararg answers: Pair<String, () -> MockResponse>) = object : okhttp3.mockwebserver.Dispatcher() {
+        override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest) = answers.first { request.path.orEmpty().contains(it.first) }.second()
+    }
+
+    @Test fun `a model failure holds only its task, and another task's check on the same server still goes`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = byPath("/T-1/" to ::notNow, "/T-2/" to ::checkAnswer); server.start()
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val bound = queue.forServer(server.url("/").toString())
+            val first = bound.enqueueStepCheck("T-1", "s1", "t1-s1", original)
+            val second = bound.enqueueStepCheck("T-1", "s2", "t1-s2", original)
+            val other = bound.enqueueStepCheck("T-2", "s1", "t2-s1", original)
+            assertEquals(DrainResult.Offline, queue.drain(), "the held row is tried again later")
+            assertEquals(2, server.requestCount, "T-1's first check and T-2's check; T-1's second waits its turn")
+            assertEquals(listOf(CommandState.Pending, CommandState.Pending), listOf(first, second).map { c -> dao.rows.value.single { it.id == c.id }.state })
+            assertNull(dao.rows.value.firstOrNull { it.id == other.id }, "a sent check leaves the queue")
+            assertEquals(1, dao.rows.value.single { it.id == first.id }.attempts)
+        }
+    }
+
+    @Test fun `after five not-now answers the row is refused with that code, and a retry starts the count again`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = byPath("/" to ::notNow); server.start()
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val bound = queue.forServer(server.url("/").toString())
+            val saved = bound.enqueueStepCheck("T-1", "s1", "t1-s1", original)
+            repeat(MAX_SERVER_ATTEMPTS - 1) { assertEquals(DrainResult.Offline, queue.drain()) }
+            assertEquals(CommandState.Pending, dao.rows.value.single().state)
+            assertEquals(DrainResult.Empty, queue.drain(), "nothing left for the worker: the row now waits for the person")
+            val refused = dao.rows.value.single()
+            assertEquals(CommandState.Rejected, refused.state); assertEquals("provider_unavailable", refused.errorCode); assertEquals(MAX_SERVER_ATTEMPTS, refused.attempts)
+            assertEquals(MAX_SERVER_ATTEMPTS, server.requestCount)
+            assertTrue(File(saved.filePath!!).exists(), "the photo stays for the person's retry or removal")
+            bound.retry(refused)
+            assertEquals(0, dao.rows.value.single().attempts); assertEquals(CommandState.Pending, dao.rows.value.single().state)
+        }
+    }
+
+    @Test fun `runs while the server was unreachable do not count towards refusing a photo`(@TempDir dir: File) = runBlocking {
+        val dead = MockWebServer().apply { start() }.also { it.shutdown() }
+        MockWebServer().use { server ->
+            server.dispatcher = byPath("/" to ::notNow); server.start()
+            // While the server is down every request is refused at the socket; afterwards it answers "not now".
+            var down = true
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, { base -> api(if (down) dead.url("/").toString() else base) }, InspectionCache()) {}
+            queue.forServer(server.url("/").toString()).enqueueStepCheck("T-1", "s1", "t1-s1", original)
+            repeat(MAX_SERVER_ATTEMPTS) { assertEquals(DrainResult.Offline, queue.drain()) }
+            assertEquals(CommandState.Pending, dao.rows.value.single().state); assertEquals(0, dao.rows.value.single().attempts, "dropped connections are not answers")
+            down = false
+            assertEquals(DrainResult.Offline, queue.drain())
+            val row = dao.rows.value.single()
+            assertEquals(CommandState.Pending, row.state, "one not-now answer after a server outage is not five")
+            assertEquals(1, row.attempts); assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test fun `a server that cannot be reached holds every task for it, while another server's photo goes`(@TempDir dir: File) = runBlocking {
+        val down = MockWebServer().apply { start() }.also { it.shutdown() }
+        MockWebServer().use { up ->
+            up.dispatcher = byPath("/" to ::checkAnswer); up.start()
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val one = queue.forServer(down.url("/").toString()).enqueueStepCheck("T-1", "s1", "t1", original)
+            val two = queue.forServer(down.url("/").toString()).enqueueStepCheck("T-2", "s1", "t2", original)
+            val reachable = queue.forServer(up.url("/").toString()).enqueueStepCheck("T-3", "s1", "t3", original)
+            assertEquals(DrainResult.Offline, queue.drain())
+            assertEquals(listOf(CommandState.Pending, CommandState.Pending), listOf(one, two).map { c -> dao.rows.value.single { it.id == c.id }.state })
+            assertNull(dao.rows.value.firstOrNull { it.id == reachable.id })
+            assertEquals(1, up.requestCount)
+        }
+    }
+
+    @Test fun `a refused step holds the task's later steps until the refused row is removed`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            val bound = queue.forServer(server.url("/").toString())
+            bound.enqueueStepAction(PendingCommand("step-1", "T-1", CommandKind.TaskComplete, 1, stepId = "s1"))
+            bound.enqueueStepAction(PendingCommand("step-2", "T-1", CommandKind.TaskComplete, 2, stepId = "s2"))
+            server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"invalid_state","message":"The step is already done"}"""))
+            server.enqueue(MockResponse().setBody(File("../../../docs/evidence/tasks/plan-oil.json").let { json.encodeToString(TaskView.serializer(), json.decodeFromString(CreateTaskResponse.serializer(), it.readText()).task) }))
+            assertEquals(DrainResult.Empty, queue.drain())
+            assertEquals(1, server.requestCount, "step 2 is never sent after step 1 was refused: the server moved on")
+            assertEquals("/v1/tasks/T-1/steps/s1:complete", server.takeRequest().path)
+            val rows = dao.rows.value.associateBy { it.id }
+            assertEquals(CommandState.Rejected, rows["step-1"]!!.state); assertEquals(CommandState.Pending, rows["step-2"]!!.state)
+            // A later run still holds it: the refusal is on the phone until the person removes it.
+            assertEquals(DrainResult.Empty, queue.drain()); assertEquals(1, server.requestCount)
+            bound.dismiss(rows["step-1"]!!)
+            assertEquals(DrainResult.Empty, queue.drain())
+            assertEquals("/v1/tasks/T-1/steps/s2:complete", server.takeRequest().path)
+            assertTrue(dao.rows.value.isEmpty())
+        }
+    }
+
+    @Test fun `a row this build cannot read is refused on the phone instead of crashing the worker`(@TempDir dir: File) = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val dao = MemoryCommands(); val queue = CommandQueue(File(dir, "saved"), dao, ::api, InspectionCache()) {}
+            dao.insert(PendingCommand("no-step", "T-1", CommandKind.TaskComplete, 1, serverBase = server.url("/").toString()))
+            assertEquals(DrainResult.Empty, queue.drain())
+            assertEquals("row_unreadable", dao.rows.value.single().errorCode); assertEquals(CommandState.Rejected, dao.rows.value.single().state)
+            assertEquals(0, server.requestCount)
         }
     }
 }

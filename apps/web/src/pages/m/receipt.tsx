@@ -8,7 +8,7 @@ import { Logo, Citation, SourceBadge, TechDetails } from "@/components/fo/primit
 import { EvidencePhoto } from "@/components/fo/evidence-photo";
 import { api, receiptHtmlUrl, receiptJsonUrl, type Decision, type DiagnosticResult, type EventRecord } from "@/lib/api";
 import { beforePhoto, useGeometry, useInspectionBundle } from "@/lib/inspection";
-import { changeLabel, featureName, fmtWhen, isPostRepairItem, plainReason, predictionOutcome, probeValue, type EvidenceState } from "@/lib/labels";
+import { changeLabel, featureName, fmtWhen, isPostRepairItem, plainReason, predictionOutcome, probeValue, type EvidenceState, countPhotos } from "@/lib/labels";
 import type { ChangeVerdict } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -175,7 +175,7 @@ export function FieldProofReceipt({ id, wide }: { id: string; wide?: boolean }) 
               <button onClick={() => check.refetch()} className="text-[11px] text-primary">{check.isFetching ? "Checking…" : "Check now"}</button>
             </div>
             <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{r.manifestSha256}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">{r.artifacts.filter((a) => a.kind !== "segmentation").length} photos · {r.artifacts.filter((a) => a.kind === "segmentation").length} SAM masks · {r.diagnostics.length} checks · {r.events.length} events</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{countPhotos(r.artifacts)} photos · {r.artifacts.filter((a) => a.kind === "segmentation").length} SAM masks · {r.diagnostics.length} checks · {r.events.length} events</div>
             {check.data && (
               <div className={cn("mt-2 flex items-center gap-1.5 text-xs", check.data.isValid ? "text-success" : "text-failure")}>
                 <ShieldCheck className="size-3.5" />{check.data.isValid ? `Intact · ${check.data.checks.length} checks passed` : `Tampered: ${check.data.failures.join("; ")}`}

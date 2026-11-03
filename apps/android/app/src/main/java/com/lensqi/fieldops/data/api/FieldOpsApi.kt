@@ -146,8 +146,9 @@ interface FieldOpsApi {
 
     @Multipart
     @POST("v1/tasks/{id}/ask")
+    /** [source] names the device the frame came from (Phone, Glasses, MockWearables), like a check's; absent means Phone. */
     suspend fun ask(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part("question") question: RequestBody, @Part image: MultipartBody.Part?,
-        @Part("measured") measured: RequestBody? = null): AskResponse
+        @Part("measured") measured: RequestBody? = null, @Part("source") source: RequestBody? = null): AskResponse
 
     @POST("v1/tasks/{id}/steps/{stepId}:skip")
     suspend fun skipStep(@Path("id") id: String, @Path("stepId") stepId: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: SkipRequest): TaskView

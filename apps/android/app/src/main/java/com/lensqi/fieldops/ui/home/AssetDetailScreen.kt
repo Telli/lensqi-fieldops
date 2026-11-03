@@ -73,11 +73,22 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
                     val url = s.assetPhotos[assetId]
                     if (url != null) AsyncImage(url, "Latest photo", Modifier.fillMaxWidth().aspectRatio(4f / 3f), contentScale = ContentScale.Fit)
                     else Column(
-                        Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(enabled = fixture != null) { fixture?.let { onStart(it.fixtureId, assetId) } },
+                        // The hero continues an open inspection when there is one; a second inspection of the same asset is never started from here.
+                        Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(enabled = open != null || fixture != null) {
+                            if (open != null) onOpen(open.inspectionId) else fixture?.let { onStart(it.fixtureId, assetId) }
+                        },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                     ) {
                         Icon(Icons.Outlined.CameraAlt, null, tint = FoDark.Muted, modifier = Modifier.size(36.dp))
-                        Text(if (history.any { it.photos > 0 }) "Loading the latest photo…" else "No photos yet · scan it", color = FoDark.Muted, fontSize = 13.sp)
+                        // Offline the photo cannot arrive; say so instead of loading forever.
+                        Text(
+                            when {
+                                !history.any { it.photos > 0 } -> "No photos yet · scan it"
+                                s.reachable == false -> "Photo unavailable offline"
+                                else -> "Loading the latest photo…"
+                            },
+                            color = FoDark.Muted, fontSize = 13.sp,
+                        )
                     }
                     if (url != null) Text("Latest photo", fontSize = 11.sp, color = FoDark.Foreground,
                         modifier = Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(FoDark.Overlay.copy(alpha = 0.65f)).padding(horizontal = 10.dp, vertical = 4.dp))
@@ -90,7 +101,7 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
                         asset?.let { Text(it.kind.replace('_', ' '), style = MaterialTheme.typography.bodySmall)
                             com.lensqi.fieldops.ui.common.TechDetails(listOf("Asset" to assetId, "Fixture" to fixture.fixtureId)) }
                     }
-                    history.firstOrNull()?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage)) }
+                    history.firstOrNull()?.let { EvidenceBadge(stageState(it.stage), stageLabel(it.stage, it.outcomeKind)) }
                 }
             }
             if (open != null) item { PrimaryButton("Continue the open inspection", { onOpen(open.inspectionId) }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward) }

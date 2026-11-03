@@ -18,7 +18,12 @@ object TechnicianText {
         null -> "Connection check unavailable"
     }
 
-    /** Keep all task/safety content; translate vocabulary, never truncate cautions or infer success. */
+    /**
+     * Makes an internal status string readable: camera and tracking status, verification labels, hypothesis reasons,
+     * friendly() errors. Keep all task/safety content; translate vocabulary, never truncate cautions or infer success.
+     * Not for what the model or the plan wrote (a step, an answer, a check reason): those name the equipment in its own
+     * words, and "the Delta cartridge" must stay the Delta cartridge. Those are shown and spoken as written.
+     */
     fun guidance(text: String): String {
         // Numeric model metrics are not instructions. Remove only the metric, before its label is translated below;
         // "low confidence: 0.42" keeps its warning as "uncertain".

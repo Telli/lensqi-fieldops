@@ -115,6 +115,8 @@ fun ReceiptScreen(url: String, onBack: () -> Unit, vm: RecordViewModel = hiltVie
                     }) { Text("Save bundle") }
                 }
                 exportMessage?.let { Text(it) }
+                // An export failure does not unload the record; the summary stays and Try again is not offered for it.
+                state.exportError?.let { Text(it, color = Fo.Failure) }
                 Expandable("Details") {
                     Text("Check history · earliest first", style = MaterialTheme.typography.titleSmall)
                     Text("Includes earlier attempts. The result above is the recorded final decision.", style = MaterialTheme.typography.bodySmall)

@@ -104,6 +104,8 @@ data class TaskUi(
     val pendingSteps: List<PendingCommand> = emptyList(),
     /** Step-check photos saved on the phone, waiting for the network. */
     val queuedChecks: Int = 0,
+    /** The waiting check photos themselves, so one the person no longer wants sent can be withdrawn. */
+    val pendingChecks: List<PendingCommand> = emptyList(),
     val refusedChecks: List<PendingCommand> = emptyList(),
 ) {
     // An outbox overlay lets the person continue the next step without changing the confirmed snapshot.
@@ -153,7 +155,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
                 if (pending < waiting) refresh()
                 waiting = pending
                 // The saved-update notice lasts as long as a step update is still waiting; once the outbox is clear it is gone.
-                _state.update { it.copy(queuedChecks = checks.count { c -> c.state == CommandState.Pending }, pendingSteps = moves, refusedChecks = (checks + moves).filter { c -> c.state == CommandState.Rejected },
+                val waitingChecks = checks.filter { c -> c.state == CommandState.Pending }
+                _state.update { it.copy(queuedChecks = waitingChecks.size, pendingChecks = waitingChecks, pendingSteps = moves, refusedChecks = (checks + moves).filter { c -> c.state == CommandState.Rejected },
                     notice = if (moves.any { m -> m.state == CommandState.Pending }) it.notice else null) }
                 all.filter { it.state == CommandState.Rejected }.forEach { c ->
                     _state.update { it.copy(error = friendly(c.errorCode ?: "unknown", c.errorMessage.orEmpty())) }
@@ -172,7 +175,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         if (r is ApiOutcome.Ok) { library.remember(r.value); speakNewChecks(r.value) }
         // When the server cannot be read, a newer copy the outbox replay saved still replaces what this screen holds.
         val saved = if (r is ApiOutcome.Ok) null else library.job(taskId)?.takeIf { c -> _state.value.task?.let { held -> c.value.updatedAt != held.updatedAt && library.isNewer(c.value, held) } == true }
-        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: saved?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else saved?.fetchedAt ?: it.cachedAt, error = r.errorText()) }
+        // A load that fails is shown until one succeeds. An error from an action or the outbox (a refused step) is not a
+        // load error: a reload a moment later must not wipe it before the person has read it.
+        val loadError = r.errorText()
+        _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: saved?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else saved?.fetchedAt ?: it.cachedAt,
+            error = loadError ?: it.error.takeUnless { e -> e == lastLoadError }) }
+        lastLoadError = loadError
         (r as? ApiOutcome.Ok)?.value?.let { library.cacheReferences(it, api) }
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
@@ -182,6 +190,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
      * sync, once; the checks already in the record when the task opened are not read out again.
      */
     private var seeded = false
+    /** The error the last [refresh] set, if any: the only one a later successful load clears. */
+    private var lastLoadError: String? = null
     private fun speakNewChecks(task: TaskView) {
         val checks = task.plan?.steps?.mapNotNull { it.lastCheck }.orEmpty()
         if (!seeded) { spoken.seed(checks.map { it.photoId }); seeded = true; return }
@@ -220,8 +230,12 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
             _state.update { it.copy(busy = "move", error = null, notice = null) }
             try {
                 val pending = queue.observe(taskId).first()
-                if (pending.any { it.stepId == step && it.kind in setOf(CommandKind.TaskComplete, CommandKind.TaskSkip) })
+                // Only an update still waiting holds the tap; a refused one is finished (it stays listed until removed) and a
+                // new attempt is a new request. Held back is said, so a tap that does nothing is never silent.
+                if (pending.any { it.stepId == step && it.kind in setOf(CommandKind.TaskComplete, CommandKind.TaskSkip) && it.state == CommandState.Pending }) {
+                    _state.update { it.copy(notice = "This step's update is already saved on this phone and waiting for the server.") }
                     return@launch
+                }
                 val action = "${kind.name}:$step"
                 val key = keyFor(action)
                 val outcome = if (pending.any { it.state == CommandState.Pending }) null else apiCall {
@@ -261,6 +275,9 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val bytes = try {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { if (photo.length() <= MAX_UPLOAD_BYTES) photo.readBytes() else reduce(photo, 2400) }
         } catch (e: java.io.IOException) { null }
+        // The shutter file is a one-off handed to this check (the camera's capture-*.jpg, the glasses' JPEG): once its bytes
+        // are in hand nothing else reads it, and the queue saves its own copy, so it goes now rather than fill the cache.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { photo.delete() }
         if (bytes == null) { _state.update { it.copy(busy = null, error = "That photo couldn't be read. Take it again.") }; return@launch }
         val part = jpeg("image", bytes)
         val action = "check:$stepId:${key()}"
@@ -276,17 +293,22 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
             _state.update { it.copy(busy = null, error = if (saved) "The photo is saved on the phone and will be checked when the service is available." else friendly("local_save_failed", "")) }
             return@launch
         }
+        // The server's view carries the check; the offline copy must too, or a cold reopen would show the step unchecked.
+        (r as? ApiOutcome.Ok)?.value?.task?.let { library.remember(it) }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         settle(action, r)
         (r as? ApiOutcome.Ok)?.value?.check?.let { c -> spoken.firstTime(c.photoId); speaker.speak("${verdictText(c.verdict)}. ${c.reason}", force = true) }
     }
 
-    /** A question by voice or text, with the latest camera frame when live coaching has one. The answer is spoken. */
-    fun ask(question: String, frame: ByteArray?) = viewModelScope.launch {
+    /**
+     * A question by voice or text, with the latest camera frame when live coaching has one. The answer is spoken.
+     * [source] is the device the frame came from ("Phone", "Glasses" or "MockWearables"), sent with it like a check's.
+     */
+    fun ask(question: String, frame: ByteArray?, source: String = "Phone") = viewModelScope.launch {
         if (question.isBlank()) return@launch
         _state.update { it.copy(busy = "ask", error = null) }
         val action = "ask:${question.trim()}:${frame?.let { com.lensqi.fieldops.data.queue.CommandQueue.sha256(it) }}"
-        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text)) }
+        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text), frame?.let { text(source) }) }
         settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
         _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer) }
@@ -297,6 +319,8 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     fun retryCheck(command: PendingCommand) = viewModelScope.launch { queue.retry(command) }
     fun removeCheck(command: PendingCommand) = viewModelScope.launch { queue.dismiss(command) }
+    /** A check photo still waiting to be sent that the person no longer wants checked. */
+    fun withdrawCheck(command: PendingCommand) = viewModelScope.launch { queue.withdraw(command) }
 
     fun clearAnswer() = _state.update { it.copy(answer = null) }
 
@@ -314,12 +338,19 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     fun linkInspection(onLinked: (String) -> Unit) = viewModelScope.launch {
         _state.update { it.copy(busy = "link", error = null) }
         val r = apiCall { api.linkInspection(taskId, key()) }
+        // The linked inspection id is part of the task's record; the offline copy keeps it so the summary offers the record there too.
+        (r as? ApiOutcome.Ok)?.value?.task?.let { library.remember(it) }
         _state.update { it.copy(busy = null, task = (r as? ApiOutcome.Ok)?.value?.task ?: it.task, error = r.errorText()) }
         if (r is ApiOutcome.Ok) onLinked(r.value.inspectionId)
     }
 
+    /** Fetches the work package into a fresh file in [dir]; a failure is shown in [TaskUi.error], and an older export is pruned. */
     suspend fun exportPackage(dir: File): File? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        _state.update { it.copy(error = null) }
         dir.mkdirs()
+        // A shared package is read by the receiving app within moments; one older than a day is a leftover, not an export in use.
+        val stale = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+        dir.listFiles()?.filter { it.name.startsWith("work-package-") && it.name.endsWith(".zip") && it.lastModified() < stale }?.forEach { it.delete() }
         val file = File.createTempFile("work-package-", ".zip", dir)
         when (val result = apiCall { api.workPackage(taskId).use { body -> file.outputStream().use { out -> body.byteStream().copyTo(out) } } }) {
             is ApiOutcome.Ok -> file

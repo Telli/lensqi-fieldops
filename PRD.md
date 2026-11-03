@@ -387,7 +387,7 @@ VerificationDecision Evaluate(InspectionSession s, IReadOnlyList<Evidence> evide
 }
 ```
 
-This is an **example policy**; the implemented gate is `VerificationPolicyEvaluator` (`fieldproof-policy/1.4`: 1.2 added change evidence on post-repair photos; 1.3 counts a photo only once its change analysis is recorded and only an explicit `Satisfied` review meets a requirement; 1.4 holds the decision while any post-repair photo is still being analysed, and the server runs no probe when the photo, review or acknowledgement already decides the outcome). Do **not** use uncalibrated model confidence thresholds as the decisive proof rule, and do not let a task step check feed this gate.
+This is an **example policy**; the implemented gate is `VerificationPolicyEvaluator` (`fieldproof-policy/1.5`: 1.2 added change evidence on post-repair photos; 1.3 counts a photo only once its change analysis is recorded and only an explicit `Satisfied` review meets a requirement; 1.4 holds the decision while any post-repair photo is still being analysed, and the server runs no probe when the photo, review or acknowledgement already decides the outcome; 1.5 refuses a checklist review that cites a photo taken before the repair claim). Do **not** use uncalibrated model confidence thresholds as the decisive proof rule, and do not let a task step check feed this gate.
 
 ## 8. Site records and the expected twin
 

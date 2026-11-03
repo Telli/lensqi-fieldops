@@ -350,6 +350,143 @@ public class TaskApiTests
     private static HttpRequestMessage Keyed(string path, string key) =>
         new(HttpMethod.Post, path) { Headers = { { "Idempotency-Key", key } } };
 
+    private static HttpRequestMessage Keyed(string path, string key, HttpContent content) =>
+        new(HttpMethod.Post, path) { Content = content, Headers = { { "Idempotency-Key", key } } };
+
+    private static MultipartFormDataContent Photo(byte[] bytes, string? source = null, string? question = null)
+    {
+        var form = new MultipartFormDataContent { { new ByteArrayContent(bytes), "image", "photo.jpg" } };
+        if (source is not null) form.Add(new StringContent(source), "source");
+        if (question is not null) form.Add(new StringContent(question), "question");
+        return form;
+    }
+
+    private static async Task<List<JsonElement>> Events(HttpClient c, string id) =>
+        JsonDocument.Parse(await c.GetStringAsync($"/v1/tasks/{id}/events")).RootElement.EnumerateArray().Select(e => e.Clone()).ToList();
+
+    [Fact]
+    public async Task Concurrent_creates_with_one_key_make_one_task_and_both_answers_carry_its_plan()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        // The planner is slow, so the retry arrives while the first request is still inside the model call.
+        f.FakeChat.Delay = TimeSpan.FromMilliseconds(400);
+        var body = new { mode = "Diy", goal = "Change the oil in my 2025 Civic" };
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ =>
+            c.SendAsync(Keyed("/v1/tasks", "create-1", JsonContent.Create(body)))));
+        f.FakeChat.Delay = null;
+        Assert.All(responses, r => Assert.True(r.IsSuccessStatusCode, r.StatusCode.ToString()));
+        var bodies = await Task.WhenAll(responses.Select(Body));
+        Assert.Single(bodies.Select(b => b.GetProperty("task").GetProperty("taskId").GetString()).Distinct());
+        Assert.All(bodies, b => Assert.Equal(JsonValueKind.Object, b.GetProperty("task").GetProperty("plan").ValueKind));
+        Assert.Single(bodies, b => b.TryGetProperty("replayed", out var replayed) && replayed.GetBoolean());
+        Assert.Equal(1, f.FakeChat.Calls);
+        Assert.Single((await Body(await c.GetAsync("/v1/tasks"))).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_create_key_replays_the_same_request_and_refuses_a_different_one()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var first = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Diy", goal = "Change the oil in my 2025 Civic" })));
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var id = (await Body(first)).GetProperty("task").GetProperty("taskId").GetString();
+
+        var same = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Diy", goal = " Change the oil in my 2025 Civic " })));
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+        var replayed = await Body(same);
+        Assert.Equal(id, replayed.GetProperty("task").GetProperty("taskId").GetString());
+        Assert.True(replayed.GetProperty("replayed").GetBoolean());
+
+        var otherGoal = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Diy", goal = "Replace the cabin air filter" })));
+        Assert.Equal(HttpStatusCode.Conflict, otherGoal.StatusCode);
+        Assert.Equal("invalid_state", (await Body(otherGoal)).GetProperty("code").GetString());
+        var otherMode = await c.SendAsync(Keyed("/v1/tasks", "create-2", JsonContent.Create(new { mode = "Technician", goal = "Change the oil in my 2025 Civic" })));
+        Assert.Equal(HttpStatusCode.Conflict, otherMode.StatusCode);
+        Assert.Single((await Body(await c.GetAsync("/v1/tasks"))).EnumerateArray());
+        Assert.Equal(1, f.FakeChat.Calls);
+    }
+
+    [Fact]
+    public async Task A_key_that_recorded_another_command_is_refused_by_check_and_link_without_side_effects()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Technician", goal = "Reseat the yellow cable on port 2", fixtureId = "LAB-RACK-01", assetId = "LAB-SW-01" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        Assert.Equal(HttpStatusCode.OK, (await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1:complete", "k1"))).StatusCode);
+        var calls = f.FakeChat.Calls;
+
+        var check = await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s2/check", "k1", Image()));
+        Assert.Equal(HttpStatusCode.Conflict, check.StatusCode);
+        Assert.Equal("invalid_state", (await Body(check)).GetProperty("code").GetString());
+        Assert.DoesNotContain(await Events(c, id), e => e.GetProperty("kind").GetString() is "TaskPhotoRecorded" or "StepChecked");
+        Assert.False(Directory.Exists(Path.Combine(f.DataDir, "evidence", id)) && Directory.EnumerateFiles(Path.Combine(f.DataDir, "evidence", id)).Any());
+        Assert.Equal(calls, f.FakeChat.Calls);
+
+        var link = await c.SendAsync(Keyed($"/v1/tasks/{id}/link-inspection", "k1"));
+        Assert.Equal(HttpStatusCode.Conflict, link.StatusCode);
+        Assert.Equal("invalid_state", (await Body(link)).GetProperty("code").GetString());
+        Assert.Empty((await Body(await c.GetAsync("/v1/inspections"))).EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, (await Body(await c.GetAsync($"/v1/tasks/{id}"))).GetProperty("inspectionId").ValueKind);
+
+        // The same key on its own command still replays it, and a fresh key still links.
+        Assert.Equal(HttpStatusCode.OK, (await c.SendAsync(Keyed($"/v1/tasks/{id}/steps/s1:complete", "k1"))).StatusCode);
+        var linked = await c.SendAsync(Keyed($"/v1/tasks/{id}/link-inspection", "k2"));
+        Assert.Equal(HttpStatusCode.OK, linked.StatusCode);
+        Assert.Equal((await Body(linked)).GetProperty("inspectionId").GetString(), (await Body(await c.SendAsync(Keyed($"/v1/tasks/{id}/link-inspection", "k2")))).GetProperty("inspectionId").GetString());
+        Assert.Single((await Body(await c.GetAsync("/v1/inspections"))).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_question_s_frame_keeps_the_capture_device_and_refuses_an_unknown_one()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Freeform" });
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "That is the drain plug.", focus = Array.Empty<string>() });
+
+        var bogus = await c.PostAsync($"/v1/tasks/{id}/ask", Photo(TestImages.Png(640, 480), source: "Toaster", question: "What is this?"));
+        Assert.Equal(HttpStatusCode.BadRequest, bogus.StatusCode);
+        Assert.Equal("invalid_source", (await Body(bogus)).GetProperty("code").GetString());
+        Assert.Empty((await Body(await c.GetAsync($"/v1/tasks/{id}"))).GetProperty("photos").EnumerateArray());
+        Assert.Equal(0, f.FakeChat.Calls);
+
+        var mock = await Body(await c.PostAsync($"/v1/tasks/{id}/ask", Photo(TestImages.Png(640, 480), source: "MockWearables", question: "What is this?")));
+        var phone = await Body(await c.PostAsync($"/v1/tasks/{id}/ask", Photo(TestImages.Png(640, 480), question: "And this?")));
+        var origins = (await Body(await c.GetAsync($"/v1/tasks/{id}"))).GetProperty("photos").EnumerateArray()
+            .ToDictionary(p => p.GetProperty("evidenceId").GetString()!, p => p.GetProperty("origin").GetString());
+        Assert.Equal("MockWearables", origins[mock.GetProperty("photoId").GetString()!]);
+        Assert.Equal("Phone", origins[phone.GetProperty("photoId").GetString()!]);   // no source is a phone capture, as before
+    }
+
+    [Fact]
+    public async Task A_step_photo_is_turned_by_its_exif_orientation_before_the_model_and_the_record_see_it()
+    {
+        using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Diy", goal = "Change the oil in my 2025 Civic" });
+        await c.PostAsJsonAsync($"/v1/tasks/{id}/accept", new { safetyAcknowledged = true });
+        await c.PostAsync($"/v1/tasks/{id}/steps/s1:complete", null);
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { verdict = "LooksDone", reason = "The plug is back in and the pan is dry." });
+
+        // A phone's raw shutter JPEG: landscape sensor bytes tagged orientation 6, shown as a portrait.
+        var turns = f.FakeOrienter.Calls;
+        var checked_ = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Photo(TestImages.JpegWithOrientation(640, 480, 6))));
+        Assert.Equal(turns + 1, f.FakeOrienter.Calls);
+        var turned = TestImages.Jpeg(480, 640);
+        Assert.Equal(turned, f.FakeChat.LastImage);
+        var photoId = checked_.GetProperty("check").GetProperty("photoId").GetString();
+        var photo = checked_.GetProperty("task").GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == photoId);
+        Assert.Equal(480, photo.GetProperty("width").GetInt32());
+        Assert.Equal(640, photo.GetProperty("height").GetInt32());
+        Assert.Equal(turned, await c.GetByteArrayAsync($"/v1/tasks/{id}/artifacts/{photoId}"));
+
+        // An upright image is never sent to the orienter and keeps its own size.
+        var upright = await Body(await c.PostAsync($"/v1/tasks/{id}/steps/s2/check", Photo(TestImages.Jpeg(640, 480))));
+        Assert.Equal(turns + 1, f.FakeOrienter.Calls);
+        var uprightId = upright.GetProperty("check").GetProperty("photoId").GetString();
+        var kept = upright.GetProperty("task").GetProperty("photos").EnumerateArray().Single(p => p.GetProperty("evidenceId").GetString() == uprightId);
+        Assert.Equal((640, 480), (kept.GetProperty("width").GetInt32(), kept.GetProperty("height").GetInt32()));
+        Assert.Equal(TestImages.Jpeg(640, 480), f.FakeChat.LastImage);
+    }
+
     [Fact]
     public async Task Manual_photos_ground_the_plan_and_are_kept()
     {

@@ -57,6 +57,15 @@ export function filterHistory(rows: TaskSummary[], filter: string, search: strin
   });
 }
 
+/**
+ * Where an in-progress task opens: its current step, or, when every step was finished on this device and the server has
+ * not confirmed yet, the summary. A task with neither goes back to its plan.
+ */
+export function taskRoute(t: Pick<Task, "taskId" | "currentStepId" | "pendingCompletion">): string {
+  if (t.currentStepId) return `/m/t/${t.taskId}/step/${t.currentStepId}`;
+  return t.pendingCompletion ? `/m/t/${t.taskId}/done` : `/m/t/${t.taskId}`;
+}
+
 const T = (id: string) => `/v1/tasks/${encodeURIComponent(id)}`;
 
 /** A short digest of the bytes a command sends, so a retry with the same photo replays and a new photo is a new command. */

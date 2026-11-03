@@ -20,14 +20,29 @@ fun partToConfirm(capturePart: String?, target: TargetView?): String? =
 /** Wording for the framing aid. Lining the view up helps the comparison; it never proves the repair. */
 const val FRAMING_AID_NOTE = "Framing aid only · lining up with the before photo helps the comparison, it doesn't prove the repair"
 
-/** A photo decoded upright (EXIF orientation applied) and at most about [maxSide] pixels on its long side, for display only. */
-fun uprightBitmap(bytes: ByteArray, maxSide: Int): Bitmap? {
+/** Pixels decoded for display, with the size of the stored image they came from: server geometry (outlines, masks) is in those source pixels. */
+data class DecodedPhoto(val bitmap: Bitmap, val sourceWidth: Int, val sourceHeight: Int)
+
+/** The power-of-two subsampling that keeps the long side under about [maxSide] pixels; a full-size decode of a phone photo is tens of MB. */
+fun sampleFor(width: Int, height: Int, maxSide: Int): Int {
+    var sample = 1
+    while (maxOf(width, height) / (sample * 2) >= maxSide) sample *= 2
+    return sample
+}
+
+/** A photo decoded as stored (no orientation change) and at most about [maxSide] pixels on its long side; null when the bytes are not an image. */
+fun decodeBounded(bytes: ByteArray, maxSide: Int): DecodedPhoto? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-    var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    val sample = sampleFor(bounds.outWidth, bounds.outHeight, maxSide)
     val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    return DecodedPhoto(decoded, bounds.outWidth, bounds.outHeight)
+}
+
+/** A photo decoded upright (EXIF orientation applied) and at most about [maxSide] pixels on its long side, for display only. */
+fun uprightBitmap(bytes: ByteArray, maxSide: Int): Bitmap? {
+    val decoded = decodeBounded(bytes, maxSide)?.bitmap ?: return null
     val fix = orientationFix(runCatching {
         ByteArrayInputStream(bytes).use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }
     }.getOrDefault(ExifInterface.ORIENTATION_NORMAL))

@@ -242,13 +242,19 @@ private fun CameraContent(
     // ARCore and CameraX cannot hold the camera at once: CameraX steps aside while AR runs.
     LaunchedEffect(arActive) { if (arActive) { streaming = false; controller.unbind() } else controller.bindToLifecycle(lifecycleOwner) }
 
+    // An embedding screen (a task step) stays on this camera after the photo, so the coaching it had before the shutter comes
+    // back; a standalone camera leaves for the review, so nothing is restored there.
+    fun deliver(file: File) {
+        if (controls != null) liveEnabled = liveBeforeShutter && liveAllowed
+        onCaptured(file)
+    }
     fun takePhoto() {
         val file = File(context.cacheDir, "capture-${System.currentTimeMillis()}.jpg")
         controller.takePicture(
             ImageCapture.OutputFileOptions.Builder(file).build(),
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) { capturing = false; if (stillPart != null) still = file.path else onCaptured(file) }
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) { capturing = false; if (stillPart != null) still = file.path else deliver(file) }
                 override fun onError(exception: ImageCaptureException) { capturing = false; DiagnosticHistory.record("capture", "capture_failed", exception.imageCaptureError); status = "The photo couldn’t be taken. Hold steady and try again." }
             },
         )
@@ -264,7 +270,7 @@ private fun CameraContent(
         still = null
         liveEnabled = liveBeforeShutter && liveAllowed
     }
-    fun useStill() { val path = still ?: return; still = null; onCaptured(File(path)) }
+    fun useStill() { val path = still ?: return; still = null; deliver(File(path)) }
     // A still restored after process death whose file is gone has nothing to confirm.
     LaunchedEffect(still) { if (still?.let { File(it).exists() } == false) still = null }
     BackHandler(enabled = still != null) { retake() }
@@ -633,18 +639,24 @@ private fun CameraContent(
                     stillPart = partToConfirm(capturePart, target)
                     onShutter()
                     liveBeforeShutter = liveEnabled
-                    if (arActive) pendingCapture = true else takePhoto()
+                    // takePicture before CameraX streams throws; a press during AR or before the preview is up waits for the stream instead.
+                    if (arActive || !streaming) pendingCapture = true else takePhoto()
                     // ARCore must hand the camera back for the photo; with CameraX, an embedding screen keeps its live coaching.
                     if (arActive || controls == null) liveEnabled = false
                 }
             }
             if (controls != null) controls(CameraHandle(shutter, { session?.latestJpeg() }, capturing, liveEnabled, { liveEnabled = it && liveAllowed }))
-            else Box(
-                Modifier.semantics { contentDescription = if (capturing) "Taking photo" else "Take photo" }.size(78.dp).border(3.dp, FoDark.Foreground, CircleShape).padding(6.dp).clip(CircleShape)
-                    .background(if (capturing) FoDark.Primary else FoDark.Foreground)
-                    .clickable(enabled = !capturing, onClick = shutter),
-                contentAlignment = Alignment.Center,
-            ) { if (capturing) CircularProgressIndicator(Modifier.size(28.dp), color = FoDark.Background, strokeWidth = 3.dp) }
+            else {
+                // The shutter waits for a camera: CameraX streaming, or ARCore holding it (the photo then waits for the hand-back).
+                val ready = !capturing && (arActive || streaming)
+                Box(
+                    Modifier.semantics { contentDescription = if (capturing) "Taking photo" else if (ready) "Take photo" else "Camera starting" }
+                        .size(78.dp).border(3.dp, if (ready || capturing) FoDark.Foreground else FoDark.Muted, CircleShape).padding(6.dp).clip(CircleShape)
+                        .background(if (capturing) FoDark.Primary else if (ready) FoDark.Foreground else FoDark.Muted.copy(alpha = 0.4f))
+                        .clickable(enabled = ready, onClick = shutter),
+                    contentAlignment = Alignment.Center,
+                ) { if (capturing) CircularProgressIndicator(Modifier.size(28.dp), color = FoDark.Background, strokeWidth = 3.dp) }
+            }
         }
         still?.let { path -> StillCheck(path, stillPart.orEmpty(), ::useStill, ::retake) }
     }
@@ -701,7 +713,11 @@ private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, onFai
         val (session, _, view) = started
         // CameraX releases the camera asynchronously; ARCore can open it once it is free.
         repeat(20) {
-            try { session.resume(); view.onResume(); return@LaunchedEffect } catch (_: CameraNotAvailableException) { delay(250) }
+            try { session.resume(); view.onResume(); return@LaunchedEffect }
+            catch (_: CameraNotAvailableException) { delay(250) }
+            // Anything else from ARCore (an unsupported configuration, a missing or stale Play Services for AR, a security
+            // refusal) is final: fall back to camera assistance instead of crashing the camera screen.
+            catch (e: Exception) { onFailure("Spatial guidance couldn’t start. Continue with camera assistance or reopen the camera."); return@LaunchedEffect }
         }
         onFailure("Spatial guidance couldn’t start. Continue with camera assistance or reopen the camera.")
     }

@@ -4,6 +4,7 @@ import com.lensqi.fieldops.data.api.ChecklistStatus
 import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.ObservationStatus
+import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VisualChangeVerdict
 
 /** Evidence states shown as badges; the design's vocabulary, mapped from server facts. */
@@ -21,6 +22,13 @@ fun stageLabel(s: InspectionStage) = when (s) {
     InspectionStage.VerifiedComplete -> "Verified complete"
     InspectionStage.Inconclusive -> "Inconclusive"
 }
+
+/**
+ * The stage with the server's outcome kind: a verification whose weakest check source was not live reads
+ * "Verified complete · simulated", never plain "Verified complete". The one-argument form stays for callers without a view.
+ */
+fun stageLabel(s: InspectionStage, outcome: VerificationOutcomeKind?): String =
+    if (s == InspectionStage.VerifiedComplete && outcome == VerificationOutcomeKind.VerifiedCompleteSimulated) "Verified complete · simulated" else stageLabel(s)
 
 fun stageState(s: InspectionStage) = when (s) {
     InspectionStage.Created, InspectionStage.Inconclusive -> EvidenceState.Unknown
@@ -40,8 +48,12 @@ fun observationLabel(s: ObservationStatus) = when (s) {
 
 data class ChangeText(val label: String, val state: EvidenceState, val detail: String)
 
+/**
+ * The server's change check is computed by code (perceptual hash distance, mask overlap), not by a model, so its result is
+ * never a hypothesis: Changed is the confirmed/measured state, as the web client shows it. It is still not a verification.
+ */
 fun changeText(v: VisualChangeVerdict) = when (v) {
-    VisualChangeVerdict.Changed -> ChangeText("Change detected", EvidenceState.Hypothesis, "Something in the target area changed since the earlier photo.")
+    VisualChangeVerdict.Changed -> ChangeText("Change detected", EvidenceState.HumanConfirmed, "Something in the target area changed since the earlier photo.")
     VisualChangeVerdict.NoVisualChange -> ChangeText("No change", EvidenceState.Failed, "The target area looks the same as before. Take a new photo after the repair.")
     VisualChangeVerdict.DuplicateImage -> ChangeText("Same photo", EvidenceState.Failed, "This is the same picture as an earlier one. Take a new photo after the repair.")
     VisualChangeVerdict.Unscorable -> ChangeText("Not compared", EvidenceState.Unknown, "The photos could not establish a change. Review the evidence; this is not a visual pass.")
@@ -59,6 +71,9 @@ fun featureName(id: String) = id.replace(Regex("_(visible|captured|present)$"), 
 
 /** A before-repair photo can never show the post-repair view; that item is expected to be unknown. */
 fun isPostRepairItem(id: String) = Regex("post_?repair", RegexOption.IGNORE_CASE).containsMatchIn(id)
+
+/** How the change check is labelled wherever it is shown: compared on the server by code, not inferred by a model. */
+const val CHANGE_CHECK_KIND = "Change check · compared by the server"
 
 fun sentence(t: String?) = t?.replaceFirstChar { it.uppercase() }.orEmpty()
 

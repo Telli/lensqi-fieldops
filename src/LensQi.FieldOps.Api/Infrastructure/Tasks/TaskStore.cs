@@ -65,6 +65,20 @@ public sealed class TaskStore
     public TaskSession? FindCreated(string? requestKey) =>
         requestKey is not null && _created.TryGetValue(requestKey, out var id) ? Find(id) : null;
 
+    /// <summary>
+    /// The task a create key made, only when the retry asks for the same mode, goal and site: a key reused for different
+    /// inputs is refused, never answered with another job's task (the inspection store's <c>SameCreate</c> rule).
+    /// </summary>
+    public static TaskSession SameCreate(TaskSession earlier, TaskMode mode, string goal, SiteLink? site)
+    {
+        // The same normalisation the session applies on create, so a retry of the very same request matches its record.
+        goal = goal.Trim();
+        if (mode == TaskMode.Freeform && goal.Length == 0) goal = TaskSession.FreeformGoal;
+        return earlier.State.Mode == mode && string.Equals(earlier.State.Goal, goal, StringComparison.Ordinal) && earlier.State.Site == site
+            ? earlier
+            : throw new TaskConflictException(TaskErrorCodes.InvalidState, "This Idempotency-Key was used for a different command");
+    }
+
     /// <summary>Creates a task, or returns the one an earlier request with the same key created (<c>Created</c> false).</summary>
     public (TaskSession Session, bool Created) Create(TaskMode mode, string goal, string? details, SiteLink? site, DateTimeOffset now, string? requestKey = null,
         PersonContext? person = null, TaskHandoff? handoff = null)

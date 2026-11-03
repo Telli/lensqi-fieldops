@@ -27,6 +27,21 @@ class LiveGlassesTest {
         assertEquals("Second", gate.next("Second", 9500))
         assertNull(gate.next("", 20000)); assertNull(gate.next("", 22000))
     }
+    private val step = LiveSession("task-1", LiveSessionKind.Task, "drain plug", "Step 2")
+    @Test fun `live assist resumes only once the shutter photo is taken and the camera streams again`() {
+        // A photo paused it for this very session: not while capturing, not while the service still runs, not without a stream.
+        assertFalse(shouldResumeLive(streaming = true, liveEnabled = false, capturing = true, pending = step, session = step))
+        assertFalse(shouldResumeLive(streaming = true, liveEnabled = true, capturing = false, pending = step, session = step))
+        assertFalse(shouldResumeLive(streaming = false, liveEnabled = false, capturing = false, pending = step, session = step))
+        assertTrue(shouldResumeLive(streaming = true, liveEnabled = false, capturing = false, pending = step, session = step))
+    }
+    @Test fun `a pause for another inspection or step never restarts live assist here`() {
+        assertFalse(shouldResumeLive(streaming = true, liveEnabled = false, capturing = false, pending = null, session = step))
+        assertFalse(shouldResumeLive(streaming = true, liveEnabled = false, capturing = false, pending = step.copy(targetConcept = "oil filter"), session = step))
+        assertFalse(shouldResumeLive(streaming = true, liveEnabled = false, capturing = false, pending = step.copy(id = "task-2"), session = step))
+        // A different label is the same work.
+        assertTrue(shouldResumeLive(streaming = true, liveEnabled = false, capturing = false, pending = step.copy(label = "Step 2 · Loosen"), session = step))
+    }
     @Test fun `decoder plane addressing respects offsets padding and interleaved chroma`() {
         val bytes = ByteBuffer.wrap(byteArrayOf(99, 99, 10, 70, 20, 80, 0, 0, 30, 90, 40, 100))
         bytes.position(2)

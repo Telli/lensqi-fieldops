@@ -12,6 +12,7 @@ import com.lensqi.fieldops.wearables.GlassesSource
 import com.lensqi.fieldops.wearables.GlassesLiveService
 import com.lensqi.fieldops.wearables.GlassesLiveStore
 import com.lensqi.fieldops.wearables.LiveSession
+import com.lensqi.fieldops.wearables.shouldResumeLive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -51,19 +52,27 @@ class GlassesViewModel @Inject constructor(
      */
     fun capture(session: LiveSession? = null, onCaptured: (GlassesPhoto) -> Unit) {
         if (state.value.capturing || !state.value.streaming) return
-        if (session != null && live.value.enabled && session.sameAs(live.value.session)) liveStore.resumeFor.value = session
+        val resume = session != null && live.value.enabled && session.sameAs(live.value.session)
         pauseLive()
         viewModelScope.launch {
             runCatching { source.capturePhoto() }
-                .onSuccess(onCaptured)
-                .onFailure { source.reportError("The photo couldn’t be taken. Check the glasses connection and try again.") }
+                .onSuccess { photo ->
+                    // Recorded only once the photo is in hand: set before the pause it would restart the service mid-capture
+                    // (the screen's resume effect fires on the pause), and the pop would then kill it with nothing left to resume.
+                    if (resume) liveStore.resumeFor.value = session
+                    onCaptured(photo)
+                }
+                .onFailure {
+                    if (resume) liveStore.resumeFor.value = session
+                    source.reportError("The photo couldn’t be taken. Check the glasses connection and try again.")
+                }
         }
     }
 
-    /** True once, when live assist should start again for [session] after a shutter photo paused it. */
+    /** True once, when live assist should start again for [session] after a shutter photo paused it; never during a capture. */
     fun consumeResume(session: LiveSession): Boolean {
-        val pending = liveStore.resumeFor.value ?: return false
-        if (!session.sameAs(pending)) return false
+        val s = state.value
+        if (!shouldResumeLive(s.streaming, live.value.enabled, s.capturing, liveStore.resumeFor.value, session)) return false
         liveStore.resumeFor.value = null
         return true
     }
@@ -91,8 +100,12 @@ class GlassesViewModel @Inject constructor(
             .onFailure { source.reportError("This file couldn’t be opened. Choose another photo or video.") }
     }
 
+    /**
+     * The screen is gone, not the work: live assist belongs to the foreground service, which keeps the stream for as long as
+     * it runs (its notification's Stop ends it). Only a stream nobody else owns is stopped here.
+     */
     override fun onCleared() {
         source.setPreviewSurface(null)
-        stop()
+        if (!live.value.enabled) source.stopStreaming()
     }
 }

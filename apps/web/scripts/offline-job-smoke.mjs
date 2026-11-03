@@ -15,7 +15,7 @@ const [a,b]=t.plan.steps;
 t.phase='InProgress';t.currentStepId=a.id;a.status='Active';
 t.photos=[{evidenceId:'reference-1',purpose:'Manual'}];a.referencePhotoIds=['reference-1'];
 const acceptedKeys=[];
-let offline=false;
+let offline=false, holdMoves=false;
 const endpoint='/v1/tasks/'+t.taskId;
 const server=http.createServer((req,res)=>{
   if(offline){req.socket.destroy();return;}
@@ -23,6 +23,7 @@ const server=http.createServer((req,res)=>{
   const json=v=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(v));};
   if(p===endpoint)return json(t);
   if(p===endpoint+'/steps/'+a.id+':complete' && req.method==='POST'){
+    if(holdMoves){res.writeHead(503);return res.end();}
     acceptedKeys.push(req.headers['idempotency-key']);a.status='Done';b.status='Active';t.currentStepId=b.id;
     t.updatedAt=new Date().toISOString();return json(t);
   }
@@ -55,6 +56,9 @@ try{
   await nav(job);
   await ready('Boolean(navigator.serviceWorker.controller)');
   await ready('document.body.innerText.includes('+JSON.stringify(t.plan.title)+')');
+  // Mode-filtered histories are cached under their own URLs; the server answers every mode with the same row here.
+  await ev('fetch("/v1/tasks?mode='+t.mode+'").then(r=>r.json())');
+  await ev('fetch("/v1/tasks?mode=Technician").then(r=>r.json())');
   await ev('fetch('+JSON.stringify(endpoint)+').then(r=>r.json())');
   offline=true;
   // Fresh document/process state. The worker must serve the shell, plan, manual and task history from disk.
@@ -62,16 +66,23 @@ try{
   await ready('document.body.innerText.includes("Saved job") && document.body.innerText.includes('+JSON.stringify(t.plan.title)+')');
   assert.equal(await ev('fetch('+JSON.stringify(endpoint+'/artifacts/reference-1')+').then(r=>r.text())'),'reference image fixture');
   assert.equal(await ev('fetch("/v1/tasks").then(r=>r.json()).then(rows=>rows[0].taskId)'),t.taskId);
+  // Saving the job rewrote each mode-filtered list: the job's own mode lists it, another mode no longer does.
+  assert.equal(await ev('fetch("/v1/tasks?mode='+t.mode+'").then(r=>r.json()).then(rows=>rows[0].taskId)'),t.taskId);
+  assert.deepEqual(await ev('fetch("/v1/tasks?mode=Technician").then(r=>r.json())'),[]);
   const move=endpoint+'/steps/'+a.id+':complete';
   for(let i=0;i<2;i++)assert.equal(await ev('fetch('+JSON.stringify(move)+',{method:"POST",headers:{"Idempotency-Key":"offline-move"}}).then(r=>r.json()).then(x=>x.code)'),'job_update_saved');
   await nav(job);
   const cached=await ev('fetch('+JSON.stringify(endpoint)+').then(r=>r.json())');
   assert.equal(cached.currentStepId,b.id);assert.equal(cached.pendingUpdates,1);
-  offline=false;
+  // Back online while the server still cannot take the update: the queued step stays done in the online answer too.
+  offline=false;holdMoves=true;
+  await ev('navigator.serviceWorker.controller.postMessage({type:"sync-jobs"})');
+  await until(()=>ev('fetch('+JSON.stringify(endpoint)+').then(r=>r.json()).then(x=>x.cached===false && x.pendingUpdates===1 && x.currentStepId==='+JSON.stringify(b.id)+')'),'online overlay');
+  holdMoves=false;
   await ev('navigator.serviceWorker.controller.postMessage({type:"sync-jobs"})');
   await until(()=>acceptedKeys.length>0,'sync');await ready('fetch("/job-updates").then(r=>r.json()).then(x=>x.length===0)');
   assert.deepEqual(acceptedKeys,['offline-move']);
-  console.log('PASS: offline shell, history, accepted plan, reference, pending step, single replay.');
+  console.log('PASS: offline shell, history, mode lists, accepted plan, reference, pending step online and offline, single replay.');
 }finally{
   ws?.close(); server.closeAllConnections();server.close();
   chrome.kill('SIGTERM');await Promise.race([once(chrome,'exit').catch(()=>{}),wait(2000)]); if(chrome.exitCode===null)chrome.kill('SIGKILL');

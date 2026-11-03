@@ -32,10 +32,13 @@ object NetworkModule {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    // Each screen gets a client pinned to the selected server. Existing requests cannot change destinations.
+    /**
+     * The screens' client is built on the placeholder base, so [baseUrlInterceptor] points every request at the server
+     * selected when it is sent: a view model that outlives a server switch (the task list, the home tabs) then reads from
+     * the same server its library files history under. Queued commands keep their own server through [ApiFactory].
+     */
     @Provides
-    fun api(client: OkHttpClient, json: Json, settings: SettingsStore): FieldOpsApi =
-        retrofit(client, json, settings.currentBase().toString()).create(FieldOpsApi::class.java)
+    fun api(client: OkHttpClient, json: Json): FieldOpsApi = retrofit(client, json).create(FieldOpsApi::class.java)
 
     fun retrofit(client: OkHttpClient, json: Json, base: String = PLACEHOLDER_BASE): Retrofit = Retrofit.Builder()
         .baseUrl(base)

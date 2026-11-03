@@ -1,6 +1,12 @@
 # Feature status
 
-## As of 3 November 2026 (Pacific), PR 17 `codex/offline-work-packages`
+## As of 3 November 2026 (Pacific), `codex/mobile-review-nov3` (response to the 3 November mobile review)
+
+Every claim in the external mobile review was checked against the code; the verdicts and what shipped are in `docs/quality-pass/2026-11-03-mobile-review-response.md`. Policy `fieldproof-policy/1.5` refuses a checklist review that cites a photo taken before the repair claim. Task creation, step checks and inspection links refuse a reused idempotency key for a different command, task photos are turned by their EXIF orientation before the model sees them, and a question's frame records its capture device. On Android a simulated verification is labelled as such everywhere it appears, the server's change check is labelled as compared by the server, a rejected later post-repair photo is reported ahead of the earlier acceptance, the glasses live service survives leaving its screen, live coaching returns after a step photo, model and plan text is spoken as written, and the outbox holds only the task a retryable server answer concerns, refuses a row after five attempts with the server's code, holds a task's later rows behind a refused one until it is removed, and lets a waiting step photo be withdrawn. Mobile web keeps a queued step visible in online answers, opens an offline-finished job on its summary, holds hands-free while paused, counts receipt photos once and names the photo an assessment is about.
+
+Gates on the branch: 330 .NET tests, 67 web tests with the production build reproducing `wwwroot` and the worker smoke in headless Chrome, 270 Android unit tests with debug assembly and debug and release lint, secret scan. No physical Android device, live model or production deployment was used.
+
+## PR 17 `codex/offline-work-packages`
 
 The Android client keeps a server-specific history, confirmed task plans and cited reference images. Pending step updates are shown separately and replay with their original keys. The production web client supports reopening previously loaded jobs using a service worker on HTTPS or localhost; saved jobs are bounded to the newest 50 and a finished or stopped job is dropped after 14 days with its reference pages, unless an update is still queued; the offline history lists only jobs whose record is still saved, and a job whose every step was finished offline opens its summary with a pending label, never a completed phase. Mobile web Home searches every job status, including stopped work.
 

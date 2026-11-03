@@ -31,6 +31,17 @@ fun hasPermission(context: Context, permission: String) = ContextCompat.checkSel
 fun permanentlyDenied(context: Context, permission: String): Boolean =
     !hasPermission(context, permission) && (context.findActivity()?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, permission) } ?: false)
 
+/** Whether Android would still explain a request for [permission]: on after one refusal, off before any and after the last. */
+fun rationaleShown(context: Context, permission: String): Boolean =
+    context.findActivity()?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, permission) } ?: false
+
+/**
+ * Whether a refusal just returned was the last one Android will ask about. The rationale flag alone cannot tell: it is
+ * off before the first request and off again after a prompt dismissed with Back, so "will not ask again" would be
+ * shown wrongly. Only a flag that was on before the request and off after it means Android stopped asking.
+ */
+fun deniedForGood(rationaleBefore: Boolean, rationaleAfter: Boolean): Boolean = rationaleBefore && !rationaleAfter
+
 /** The app's page in Android Settings, where a permission Android no longer asks about can be allowed. */
 fun openAppSettings(context: Context) {
     runCatching {

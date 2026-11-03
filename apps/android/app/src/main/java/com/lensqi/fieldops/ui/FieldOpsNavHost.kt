@@ -96,7 +96,8 @@ fun FieldOpsNavHost(modifier: Modifier = Modifier) {
         if (r == "taskHome") taskList.refresh()
         // The start tab is the root: return to it. Restoring its saved stack would reopen whatever was pushed on it (Profile).
         if (r == "taskHome") nav.popBackStack("taskHome", inclusive = false)
-        else nav.navigate(r) { popUpTo(nav.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true }
+        // A new task starts empty: restoring the tab's saved stack would bring back a newTask?goal=… entry pushed from a details link.
+        else nav.navigate(r) { popUpTo(nav.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = r != "newTask" }
     }
     Column(modifier) {
         Box(Modifier.weight(1f)) {
