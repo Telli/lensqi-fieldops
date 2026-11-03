@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -72,6 +73,8 @@ fun ScanAssetScreen(vm: HomeViewModel, onBack: () -> Unit, onCreated: (String) -
     var asked by remember { mutableStateOf(false) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it; asked = true }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
+    // Back from Settings: what was allowed there takes effect without reopening the screen.
+    LifecycleResumeEffect(Unit) { granted = hasPermission(context, Manifest.permission.CAMERA); onPauseOrDispose { } }
     val fixtures by rememberUpdatedState(s.fixtures)
     var payload by remember { mutableStateOf<String?>(null) }
     var found by remember { mutableStateOf<ScannedAsset?>(null) }
