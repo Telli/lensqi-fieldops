@@ -20,6 +20,7 @@ data class TaskStep(
     /** On a ladder or step-stool step: the part it reaches, so the phone can check whether it is needed. */
     val accessFor: String? = null, val skipReason: SkipReason? = null,
     val sourceFacts: List<KnowledgeFact> = emptyList(),
+    val referencePhotoIds: List<String> = emptyList(),
 )
 
 /** Why a step was skipped, with the measured numbers when the phone took them. */
@@ -36,9 +37,9 @@ data class TaskPlan(
 )
 
 @Serializable data class TaskSite(val fixtureId: String, val assetId: String)
-@Serializable data class TaskAnswer(val stepId: String? = null, val question: String, val answer: String, val photoId: String? = null, val modelId: String = "")
+@Serializable data class TaskAnswer(val stepId: String? = null, val question: String, val answer: String, val photoId: String? = null, val modelId: String = "", val at: String = "")
 /** [origin] is the capture device the client declared; an older server leaves it out, which means a phone photo. */
-@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null, val origin: EvidenceOrigin? = null)
+@Serializable data class TaskPhoto(val evidenceId: String, val purpose: String, val stepId: String? = null, val origin: EvidenceOrigin? = null, val sha256: String? = null)
 
 @Serializable
 data class TaskView(

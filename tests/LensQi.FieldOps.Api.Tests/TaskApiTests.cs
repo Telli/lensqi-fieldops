@@ -187,6 +187,14 @@ public class TaskApiTests
         var inspectionId = linked.GetProperty("inspectionId").GetString();
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/v1/inspections/{inspectionId}")).StatusCode);
         Assert.Equal(inspectionId, (await Body(await c.PostAsync($"/v1/tasks/{id}/link-inspection", null))).GetProperty("inspectionId").GetString());
+        using var capture = Image();
+        Assert.True((await c.PostAsync($"/v1/inspections/{inspectionId}/observations", capture)).IsSuccessStatusCode);
+        Assert.True((await c.PostAsync($"/v1/inspections/{inspectionId}/diagnostics/NODE-A-HEALTH:run", null)).IsSuccessStatusCode);
+        using var package = new System.IO.Compression.ZipArchive(new MemoryStream(await c.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
+        Assert.NotNull(package.GetEntry("fieldproof/receipt.html"));
+        Assert.Contains(package.Entries, e => e.FullName.StartsWith("fieldproof/artifacts/", StringComparison.Ordinal));
+        using var html = new StreamReader(package.GetEntry("summary.html")!.Open());
+        Assert.Contains("Simulated", await html.ReadToEndAsync());
 
         var (diy, _) = await Create(c, new { mode = "Diy", goal = "Change the oil" });
         Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/tasks/{diy}/link-inspection", null)).StatusCode);
@@ -411,6 +419,56 @@ public class TaskApiTests
         Assert.Equal("InProgress", body.GetProperty("task").GetProperty("phase").GetString());
         var events = await c.GetStringAsync($"/v1/tasks/{id}/events");
         Assert.DoesNotContain("Remove the panel cover", events);
+    }
+
+    [Fact]
+    public async Task Selected_conversation_and_reference_pages_survive_restart_and_export()
+    {
+        using var factory = new FieldOpsApiFactory();
+        using var client = factory.CreateClient();
+        var (sourceId, _) = await Create(client, new { mode = "Freeform", details = "Variant B" });
+        factory.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "The label says B.", focus = Array.Empty<string>() });
+        using var ask = Image();
+        ask.Add(new StringContent("Which variant?"), "question");
+        Assert.True((await client.PostAsync($"/v1/tasks/{sourceId}/ask", ask)).IsSuccessStatusCode);
+        var session = await Body(await client.GetAsync($"/v1/tasks/{sourceId}"));
+        var answer = session.GetProperty("answers")[0];
+        var photo = session.GetProperty("photos")[0].GetProperty("evidenceId").GetString()!;
+        MultipartFormDataContent Form(string selectedPhoto) => new()
+        {
+            { new StringContent("Diy"), "mode" }, { new StringContent("Inspect the labelled equipment"), "goal" },
+            { new StringContent(sourceId), "sourceTaskId" }, { new StringContent(selectedPhoto), "sourcePhotoId" },
+            { new StringContent(answer.GetProperty("at").GetString()!), "sourceAnswerAt" }
+        };
+        using var invalid = Form("unrelated-photo");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/v1/tasks", invalid)).StatusCode);
+        var plan = System.Text.Json.Nodes.JsonNode.Parse(PlanJson())!;
+        plan["steps"]![0]!["referencePhotoIds"] = new System.Text.Json.Nodes.JsonArray("fabricated-page");
+        factory.FakeChat.CannedResponse = plan.ToJsonString();
+        using var form = Form(photo);
+        var result = await Body(await client.PostAsync("/v1/tasks", form));
+        Assert.Equal("invalid_model_output", result.GetProperty("planError").GetProperty("code").GetString());
+        var job = result.GetProperty("task"); var id = job.GetProperty("taskId").GetString()!;
+        var reference = job.GetProperty("photos")[0].GetProperty("evidenceId").GetString()!;
+        plan["steps"]![0]!["referencePhotoIds"] = new System.Text.Json.Nodes.JsonArray(reference);
+        factory.FakeChat.CannedResponse = plan.ToJsonString();
+        Assert.True((await client.PostAsync($"/v1/tasks/{id}/plan", null)).IsSuccessStatusCode);
+        using var restart = FieldOpsApiFactory.Over(factory.DataDir); using var after = restart.CreateClient();
+        var saved = await Body(await after.GetAsync($"/v1/tasks/{id}"));
+        var handoff = saved.GetProperty("handoff");
+        Assert.Equal("Variant B", handoff.GetProperty("equipmentDetails").GetString());
+        Assert.Equal(sourceId, handoff.GetProperty("sourceTaskId").GetString());
+        Assert.Equal("The label says B.", handoff.GetProperty("answers")[0].GetProperty("answer").GetString());
+        Assert.Equal(reference, saved.GetProperty("plan").GetProperty("steps")[0].GetProperty("referencePhotoIds")[0].GetString());
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await after.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
+        using var reader = new StreamReader(zip.GetEntry("summary.html")!.Open());
+        var summary = await reader.ReadToEndAsync();
+        Assert.Contains("No linked verification record", summary);
+        Assert.Contains("Variant B", summary);
+        Assert.Contains(reference, summary);
+        using var file = Assert.Single(zip.Entries, e => e.FullName.StartsWith("photos/", StringComparison.Ordinal)).Open();
+        using var bytes = new MemoryStream(); await file.CopyToAsync(bytes);
+        Assert.Equal(TestImages.Png(640, 480), bytes.ToArray());
     }
 
     [Fact]

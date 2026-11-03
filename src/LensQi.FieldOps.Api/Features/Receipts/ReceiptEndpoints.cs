@@ -25,6 +25,20 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
 {
     private readonly Lock _issuing = new();
 
+    public (string Directory, string[] Paths, int Number) VerifiedExport(string id)
+    {
+        if (Current(id) is not { } bundle || store.Find(id) is not { } session)
+            throw new InvalidDataException("Linked inspection is unavailable");
+        if (!ReceiptVerifier.Verify(bundle.BundleDir).IsValid
+                || BundleManifest(bundle.BundleDir) != bundle.Issue.ManifestSha256
+                || AgainstRecord(bundle.BundleDir, Expected(session.Events.Take(bundle.Issue.EventCount))).Any()
+                // The digest check alone passes an edited page that keeps the digest string; it must be the issued rendering.
+                || !File.Exists(Path.Combine(bundle.BundleDir, "receipt.html"))
+                || !ReceiptHtml.IsRenderingOf(File.ReadAllText(Path.Combine(bundle.BundleDir, "receipt.html")), bundle.Receipt))
+            throw new InvalidDataException("The issued record failed its integrity check");
+        return (bundle.BundleDir, new[] { "receipt.json", "receipt.html" }.Concat(bundle.Receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray(), bundle.Issue.Number);
+    }
+
     public string BundleRoot => Path.Combine(files.DataDirectoryPath, "receipts");
 
     private string IssueLog(string inspectionId) => Path.Combine(BundleRoot, inspectionId + ".issued.jsonl");
@@ -107,6 +121,8 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
     /// Segmentations recorded before their geometry digest was kept are listed in the events only.</summary>
     public static IEnumerable<(string EvidenceId, string Kind, string Sha256, string Origin, DateTimeOffset At)> Expected(IEnumerable<InspectionEvent> events) =>
         events.OfType<PhotoRecorded>().Select(p => (p.EvidenceId, "photo", p.ArtifactSha256, p.Origin.ToString(), p.ObservedAt))
+            .Concat(events.OfType<PhotoRecorded>().Where(p => p.OriginalSha256 is not null)
+                .Select(p => ("original-" + p.EvidenceId, "original", p.OriginalSha256!, p.Origin.ToString(), p.ObservedAt)))
             .Concat(events.OfType<SegmentationRecorded>().Where(s => s.GeometrySha256 is not null)
                 .Select(s => (s.EvidenceId, "segmentation", s.GeometrySha256!, "Sam", s.OccurredAt)));
 
@@ -157,16 +173,11 @@ public static class ReceiptEndpoints
         // Export the issued snapshot, including original evidence; never silently repair a damaged bundle.
         app.MapGet("/v1/inspections/{id}/receipt.zip", (string id, ReceiptService svc, InspectionStore store) =>
         {
-            if (svc.Current(id) is not { } bundle || store.Find(id) is not { } session)
-                return ApiResults.NotFound($"Inspection '{id}' not found");
-            if (!ReceiptVerifier.Verify(bundle.BundleDir).IsValid
-                || ReceiptService.BundleManifest(bundle.BundleDir) != bundle.Issue.ManifestSha256
-                || ReceiptService.AgainstRecord(bundle.BundleDir, ReceiptService.Expected(session.Events.Take(bundle.Issue.EventCount))).Any()
-                // The digest check alone passes an edited page that keeps the digest string; it must be the issued rendering.
-                || !File.Exists(Path.Combine(bundle.BundleDir, "receipt.html"))
-                || !ReceiptHtml.IsRenderingOf(File.ReadAllText(Path.Combine(bundle.BundleDir, "receipt.html")), bundle.Receipt))
-                return ApiResults.Conflict("receipt_invalid", "The issued record failed its integrity check; review it before exporting");
-            var paths = new[] { "receipt.json", "receipt.html" }.Concat(bundle.Receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray();
+            if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
+            (string Directory, string[] Paths, int Number) export;
+            try { export = svc.VerifiedExport(id); }
+            catch (InvalidDataException ex) { return ApiResults.Conflict("receipt_invalid", ex.Message); }
+            var paths = export.Paths;
             return Results.Stream(async output =>
             {
                 // Zip finalisation can write synchronously. Spool to a disposable file instead of buffering all
@@ -179,13 +190,13 @@ public static class ReceiptEndpoints
                     {
                         var entry = zip.CreateEntry(path.Replace('\\', '/'));
                         using var target = entry.Open();
-                        await using var source = File.OpenRead(Path.Combine(bundle.BundleDir, path));
+                        await using var source = File.OpenRead(Path.Combine(export.Directory, path));
                         await source.CopyToAsync(target);
                     }
                 }
                 spool.Position = 0;
                 await spool.CopyToAsync(output);
-            }, "application/zip", $"fieldproof-{id}-v{bundle.Issue.Number}.zip");
+            }, "application/zip", $"fieldproof-{id}-v{export.Number}.zip");
         });
 
         app.MapGet("/v1/inspections/{id}/receipts", (string id, ReceiptService svc, InspectionStore store) =>

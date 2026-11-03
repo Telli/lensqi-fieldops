@@ -1,3 +1,4 @@
+import { TaskSources } from "@/components/fo/task-sources";
 import { useState } from "react";
 import { Link, Redirect, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -8,14 +9,14 @@ import { AiCard } from "@/components/fo/ai";
 import { cautionLabel, riskTone, tasks, useTask, useTaskAct, type Task, type TaskStep } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
-function StepItem({ step, n }: { step: TaskStep; n: number }) {
+function StepItem({ id, step, n }: { id: string; step: TaskStep; n: number }) {
   return (
     <li className="flex gap-3 p-3.5">
       <span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold",
         step.status === "Done" ? "bg-success/15 text-success" : step.status === "Active" ? "bg-primary text-primary-foreground" : step.status === "Skipped" ? "bg-muted text-muted-foreground line-through" : "bg-muted")}>{n}</span>
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2 text-sm font-medium">{step.title}{step.handsOn && <Hand className="size-3.5 text-muted-foreground" aria-label="Hands-on" />}{step.check?.required && <Camera className="size-3.5 text-muted-foreground" aria-label="Photo check" />}</div>
-        <p className="text-xs text-muted-foreground">{step.instruction}</p>
+        <p className="text-xs text-muted-foreground">{step.instruction}</p><TaskSources id={id} step={step} />
         {step.cautions.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {step.cautions.map((c, k) => <span key={k} className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning">{cautionLabel[c.kind]} · {c.text}</span>)}
@@ -85,6 +86,8 @@ export default function TaskPlanPage({ id }: { id: string }) {
     <>
       <TopBar title={t.mode === "Diy" ? "Your plan" : "Job plan"} back="/m" />
       <Page className="space-y-4">
+        {t.cached && <p role="status">Saved job · {t.pendingUpdates ?? 0} updates awaiting sync</p>}
+        <a download href={`/v1/tasks/${encodeURIComponent(id)}/package.zip`}>Download work package</a>
         <div className="space-y-1.5">
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{plan.sourceNote}</p>
           <h1 className="text-xl font-semibold tracking-tight">{plan.title}</h1>
@@ -111,7 +114,7 @@ export default function TaskPlanPage({ id }: { id: string }) {
         )}
 
         <ol className="divide-y divide-border/70 overflow-hidden rounded-3xl border border-border bg-surface">
-          {plan.steps.map((s, n) => <StepItem key={s.id} step={s} n={n + 1} />)}
+          {plan.steps.map((s, n) => <StepItem id={id} key={s.id} step={s} n={n + 1} />)}
         </ol>
 
         {t.phase === "Abandoned" ? (

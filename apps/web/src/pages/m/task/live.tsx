@@ -91,7 +91,7 @@ export default function FreeformLive({ id }: { id: string }) {
     try { qc.setQueryData(taskKeys.one(id), await tasks.finish(id)); qc.invalidateQueries({ queryKey: taskKeys.list }); nav("/m"); }
     catch (e) { toast.error(friendlyError(e)); }
   }
-  const planHref = `/m/new?mode=Diy&goal=${encodeURIComponent(answers[0]?.question && answers[0].question !== LOOK ? answers[0].question : "")}`;
+  const planHref = `/m/new?mode=Diy&source=${encodeURIComponent(id)}&goal=${encodeURIComponent(answers[0]?.question && answers[0].question !== LOOK ? answers[0].question : "")}`;
 
   return (
     <div className="dark flex h-dvh flex-col overflow-hidden bg-overlay text-overlay-foreground md:h-full">
