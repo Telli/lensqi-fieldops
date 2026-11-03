@@ -155,12 +155,13 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
 
     fun refresh() = viewModelScope.launch {
         if (_state.value.task == null) library.job(taskId)?.let { cached ->
+            speakNewChecks(cached.value)
             _state.update { it.copy(task = cached.value, cachedAt = cached.fetchedAt) }
         }
         val r = apiCall { api.task(taskId) }
-        if (r is ApiOutcome.Ok) library.remember(r.value)
+        if (r is ApiOutcome.Ok) { library.remember(r.value); speakNewChecks(r.value) }
         _state.update { it.copy(task = (r as? ApiOutcome.Ok)?.value ?: it.task, cachedAt = if (r is ApiOutcome.Ok) null else it.cachedAt, error = r.errorText()) }
-        (r as? ApiOutcome.Ok)?.value?.let { speakNewChecks(it); library.cacheReferences(it, api) }
+        (r as? ApiOutcome.Ok)?.value?.let { library.cacheReferences(it, api) }
         _state.value.task?.inspectionId?.let { id -> (apiCall { api.inspection(id) } as? ApiOutcome.Ok)?.value?.let { i -> _state.update { it.copy(linked = i) } } }
     }
 

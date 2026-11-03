@@ -43,6 +43,34 @@ public class TaskApiTests
     }
 
     [Fact]
+    public async Task Freeform_job_titles_follow_the_work_and_survive_a_restart()
+    {
+        using var factory = new FieldOpsApiFactory(); using var client = factory.CreateClient();
+        var (id, created) = await Create(client, new { mode = "Freeform" });
+        Assert.Equal("Just ask", created.GetProperty("task").GetProperty("title").GetString());
+        async Task Ask(string question, string? title)
+        {
+            factory.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = "Inspect the switch label.", focus = Array.Empty<string>(), sessionTitle = title });
+            using var form = new MultipartFormDataContent { { new StringContent(question), "question" } };
+            Assert.True((await client.PostAsync($"/v1/tasks/{id}/ask", form)).IsSuccessStatusCode);
+        }
+        await Ask("What is this switch?", null);
+        Assert.Equal("What is this switch?", (await Body(await client.GetAsync($"/v1/tasks/{id}"))).GetProperty("title").GetString());
+        const string topic = "Diagnosing a switch cable";
+        await Ask("How can I tell which cable is loose?", topic);
+        await Ask("What next?", "Just ask");
+        Assert.True((await client.PostAsync($"/v1/tasks/{id}/finish", null)).IsSuccessStatusCode);
+        using var restart = FieldOpsApiFactory.Over(factory.DataDir); using var after = restart.CreateClient();
+        var job = await Body(await after.GetAsync($"/v1/tasks/{id}"));
+        Assert.Equal(topic, job.GetProperty("title").GetString());
+        var history = await Body(await after.GetAsync("/v1/tasks"));
+        Assert.Equal(topic, history.EnumerateArray().Single(t => t.GetProperty("taskId").GetString() == id).GetProperty("title").GetString());
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(await after.GetByteArrayAsync($"/v1/tasks/{id}/package.zip")));
+        using var html = new StreamReader(zip.GetEntry("summary.html")!.Open());
+        Assert.Contains($"<h1>{topic}</h1>", await html.ReadToEndAsync());
+    }
+
+    [Fact]
     public async Task A_step_check_keeps_the_photo_s_capture_device_and_refuses_an_unknown_one()
     {
         using var f = new FieldOpsApiFactory(); f.FakeChat.CannedResponse = PlanJson(); using var c = f.CreateClient();

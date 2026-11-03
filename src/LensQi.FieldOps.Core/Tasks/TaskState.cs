@@ -42,6 +42,27 @@ public sealed record TaskState
     public string? AbandonReason { get; init; }
     public long LastSequence { get; init; }
 
+    public string? SessionTitle { get; init; }
+    public string? DisplayTitle
+    {
+        get
+        {
+            if (Mode != TaskMode.Freeform) return Plan?.Title;
+            if (!Goal.Equals(TaskSession.FreeformGoal, StringComparison.OrdinalIgnoreCase) &&
+                !Goal.Equals("Just ask", StringComparison.OrdinalIgnoreCase)) return Goal;
+            if (SessionTitle is not null) return SessionTitle;
+            // Logs written before session titles existed still have the original questions and guarded answers.
+            const string look = "What am I looking at, and is anything wrong?";
+            var questions = Answers.Select(a => a.Question).Where(q => !q.Equals(look, StringComparison.OrdinalIgnoreCase));
+            var topic = questions.LastOrDefault(q => q.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 3)
+                ?? questions.FirstOrDefault() ?? Answers.LastOrDefault()?.Answer;
+            if (string.IsNullOrWhiteSpace(topic)) return "Just ask";
+            var words = topic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var title = string.Join(" ", words.Take(12));
+            return title.Length > 80 ? title[..77] + "…" : title;
+        }
+    }
+
     public TaskStep? CurrentStep => Plan?.Steps.FirstOrDefault(s => s.Id == CurrentStepId);
     public bool IsClosed => Phase is TaskPhase.Completed or TaskPhase.Abandoned;
     public bool IsFinished(string stepId) => CompletedStepIds.Contains(stepId) || SkippedStepIds.Contains(stepId);
@@ -69,7 +90,7 @@ public sealed record TaskState
             TaskPhotoRecorded ph => next with { Photos = [.. Photos, new TaskPhoto(ph.EvidenceId, ph.Sha256, ph.Width, ph.Height, ph.Purpose, ph.StepId, ph.OccurredAt, ph.Origin)] },
             StepStarted s => next with { CurrentStepId = s.StepId },
             StepChecked c => next with { Checks = [.. Checks, new StepCheckRecord(c.StepId, c.PhotoId, c.Verdict, c.Reason, c.ModelId, c.OccurredAt)] },
-            QuestionAnswered q => next with { Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },
+            QuestionAnswered q => next with { SessionTitle = q.SessionTitle ?? SessionTitle, Answers = [.. Answers, new AnswerRecord(q.StepId, q.Question, q.Answer, q.PhotoId, q.ModelId, q.OccurredAt)] },
             StepCompleted s => next with { CompletedStepIds = [.. CompletedStepIds, s.StepId], CurrentStepId = CurrentStepId == s.StepId ? null : CurrentStepId },
             StepSkipped s => next with
             {

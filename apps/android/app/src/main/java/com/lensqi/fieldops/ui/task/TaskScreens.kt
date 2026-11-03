@@ -727,7 +727,7 @@ fun TaskDoneScreen(vm: TaskViewModel, onHome: () -> Unit, onInspection: (String)
         item { WorkPackageButton(vm) }
         if (plan == null) {
             item { Panel {
-                Text(t.goal)
+                Text(t.title ?: t.goal)
                 Text(if (t.phase == TaskPhase.Abandoned) "Stopped · record retained" else if (t.phase == TaskPhase.Completed) "Session ended · record retained" else "No plan was recorded")
                 Text("${t.photos.size} saved photos")
                 t.answers.forEach { answer -> Text("You asked: ${answer.question}"); Text(answer.answer) }
@@ -801,7 +801,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         analyzeLive = vm::analyzeLiveFrame,
         onClose = onClose,
         onCaptured = { file -> vm.askAboutPhoto(LOOK, file) },
-        header = "Camera assistant",
+        header = t?.title ?: "Just ask",
         onGuidance = pace::guidance,
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
@@ -824,7 +824,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
                 StepButton(Icons.Outlined.CameraAlt, "Take a photo and ask what it shows", enabled = open && !handle.capturing && s.busy == null, busy = handle.capturing) { handle.capture() }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onPlan(answers.firstOrNull()?.question?.takeIf { it != LOOK }.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
+                TextButton(onClick = { onPlan(t?.title?.takeUnless { it == "Just ask" } ?: answers.firstOrNull { it.question != LOOK }?.question.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
                 Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                 if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }
             }

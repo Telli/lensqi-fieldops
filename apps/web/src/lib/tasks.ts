@@ -28,7 +28,7 @@ export interface TaskPlan {
 export interface TaskPhoto { evidenceId: string; sha256: string; width: number; height: number; purpose: "StepCheck" | "Manual" | "Question"; stepId: string | null; recordedAt: string }
 export interface TaskAnswer { stepId: string | null; question: string; answer: string; photoId: string | null; modelId: string; at: string }
 export interface Task {
-  cached?: boolean; pendingUpdates?: number;
+  title?: string | null; cached?: boolean; pendingUpdates?: number;
   taskId: string; mode: TaskMode; goal: string; details: string | null; site: { fixtureId: string; assetId: string } | null; phase: TaskPhase;
   currentStepId: string | null; inspectionId: string | null; createdAt: string; updatedAt: string; safetyAcknowledged: boolean; abandonReason: string | null;
   plan: TaskPlan | null; photos: TaskPhoto[]; answers: TaskAnswer[];

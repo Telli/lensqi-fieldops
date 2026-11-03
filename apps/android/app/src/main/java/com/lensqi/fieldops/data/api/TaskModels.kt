@@ -46,7 +46,7 @@ data class TaskView(
     val taskId: String, val mode: TaskMode, val goal: String, val details: String? = null, val site: TaskSite? = null, val phase: TaskPhase,
     val currentStepId: String? = null, val inspectionId: String? = null, val updatedAt: String, val safetyAcknowledged: Boolean = false,
     val plan: TaskPlan? = null, val photos: List<TaskPhoto> = emptyList(), val answers: List<TaskAnswer> = emptyList(),
-    val person: TaskPerson? = null,
+    val person: TaskPerson? = null, val title: String? = null,
 ) {
     val currentStep: TaskStep? get() = plan?.steps?.firstOrNull { it.id == currentStepId }
     /** The capture device of one of the task's photos, as the server recorded it. */

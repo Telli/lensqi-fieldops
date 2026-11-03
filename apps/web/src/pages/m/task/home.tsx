@@ -26,7 +26,7 @@ export function TaskRow({ t }: { t: TaskSummary }) {
         {t.mode === "Diy" ? <Sparkles className="size-[18px]" /> : t.mode === "Freeform" ? <MessageCircle className="size-[18px]" /> : <Wrench className="size-[18px]" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{t.mode === "Freeform" ? "Just ask" : t.title ?? t.goal}</span>
+        <span className="block truncate text-sm font-medium">{t.title ?? t.goal}</span>
         <span className="block truncate text-xs text-muted-foreground">
           {t.mode === "Freeform" ? `Free-form help · ${t.phase === "Completed" ? "ended" : t.phase === "Abandoned" ? "stopped" : "open"}` : t.phase === "Completed" ? "Done" : t.phase === "Abandoned" ? "Stopped" : t.phase === "Planned" ? (t.title ? "Plan ready" : "No plan yet") : t.currentStepTitle ?? "In progress"}
           {t.steps > 0 && t.phase === "InProgress" ? ` · ${t.finished}/${t.steps}` : ""} · {fmtWhen(t.updatedAt)}
