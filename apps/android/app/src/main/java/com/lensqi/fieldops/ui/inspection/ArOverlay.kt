@@ -45,7 +45,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lensqi.fieldops.data.api.Fixture
+import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.ObservationStatus
+import com.lensqi.fieldops.data.api.PhotoEvidence
 import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.SegmentBox
 import com.lensqi.fieldops.data.api.Segmentation
@@ -57,6 +59,8 @@ import com.lensqi.fieldops.ui.common.featureName
 import com.lensqi.fieldops.ui.common.sentence
 import com.lensqi.fieldops.ui.theme.Fo
 import com.lensqi.fieldops.ui.theme.FoDark
+import java.time.Instant
+import java.time.OffsetDateTime
 
 /** A label pinned to a part SAM outlined. Tags exist only where a real outline exists; nothing is placed by guesswork. */
 data class ArTag(val concept: String, val label: String, val tone: Color, val detail: String, val box: SegmentBox, val cropFile: String? = null)
@@ -96,6 +100,17 @@ fun registrationSubject(fixture: Fixture?, assetId: String?): com.lensqi.fieldop
     )
 }
 
+/**
+ * The pre-repair photo the server compares against: the last one taken before the claim. Without a claim time the first
+ * photo stands in; with one, a photo the technician took after the claim is never shown as "before", so there may be none.
+ */
+fun beforePhoto(view: InspectionView): PhotoEvidence? {
+    val claimedAt = view.repairClaimedAt?.let(::instantOf) ?: return view.photos.firstOrNull()
+    return view.photos.lastOrNull { p -> instantOf(p.observedAt)?.let { it <= claimedAt } == true }
+}
+
+internal fun instantOf(s: String): Instant? = runCatching { OffsetDateTime.parse(s).toInstant() }.getOrNull()
+
 /** One tag per outline: the AI's finding for the matching checklist item, or the change verdict after a repair. */
 fun arTags(fixture: Fixture?, assessment: VisualAssessment?, outlines: List<Segmentation>, change: VisualChangeAnalysis? = null): List<ArTag> =
     outlines.mapNotNull { g ->
@@ -126,9 +141,10 @@ fun arTags(fixture: Fixture?, assessment: VisualAssessment?, outlines: List<Segm
 /**
  * The captured photo with the AI's outlines on its original pixels and numbered markers pinned to each part.
  * The overlay labels the still it was computed from; it is never projected onto a moving camera feed.
+ * [sourceWidth] is the width of the stored image the outlines were computed on: [photo] may be a downscaled decode of it.
  */
 @Composable
-fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, guide: String? = null, guideLabel: String = "Target region", modifier: Modifier = Modifier) {
+fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, guide: String? = null, guideLabel: String = "Target region", modifier: Modifier = Modifier, sourceWidth: Int = photo.width) {
     val image = remember(photo) { photo.asImageBitmap() }
     val masks = remember(outlines, tags) {
         outlines.flatMap { g ->
@@ -143,7 +159,8 @@ fun ArOverlay(photo: Bitmap, outlines: List<Segmentation>, tags: List<ArTag>, gu
 
     Column(modifier.fillMaxWidth().background(FoDark.Overlay)) {
         BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(photo.width.toFloat() / photo.height).clickable { selected = null }) {
-            val scale = constraints.maxWidth.toFloat() / photo.width
+            // Outline, mask and box coordinates are in source pixels, whatever size the photo was decoded at.
+            val scale = constraints.maxWidth.toFloat() / sourceWidth.coerceAtLeast(1)
             val dpPerPx = maxWidth.value / constraints.maxWidth
             Canvas(Modifier.matchParentSize()) {
                 drawImage(image, dstSize = IntSize(size.width.toInt(), size.height.toInt()))

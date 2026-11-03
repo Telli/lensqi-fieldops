@@ -50,6 +50,11 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     // Main thread only. The first stop request wins; a stop the app makes (not the user) marks the recording Interrupted.
     private var stopReason: String? = null
     private var stopInterrupted = false
+    /** A stop asked for while the recording was still starting (recording not yet assigned); applied once it is. */
+    private var pendingStop: PendingStop? = null
+    /** From a start being accepted until CameraX is recording, so a stop in that window is kept rather than lost. */
+    @Volatile private var starting = false
+    private class PendingStop(val reason: String?)
     private var lastSampleNs = 0L
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
@@ -76,16 +81,22 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
     fun select(id: String?) = work { refresh(id) }
 
     fun start(controller: LifecycleCameraController, goal: String, equipment: String, demonstrator: String, permission: Boolean, training: Boolean) {
-        if (mutable.value.busy || activeId != null) return
+        if (mutable.value.busy || activeId != null || starting) return
+        // Accepted now, before any asynchronous work: a stop asked from here on belongs to this recording, and the previous
+        // recording's stop state must not swallow it.
+        starting = true; pendingStop = null; stopReason = null; stopInterrupted = false
         mutable.update { it.copy(busy = true, error = null, message = null) }
         val now = Instant.now().toString()
         val elapsed = SystemClock.elapsedRealtimeNanos()
         work {
-            val root = File(getApplication<Application>().filesDir, "teaching")
-            require(root.usableSpace > 300L * 1024 * 1024) { "Free at least 300 MB before recording." }
-            require(root.walkTopDown().filter { it.isFile }.sumOf { it.length() } < 768L * 1024 * 1024) { "Export and delete older sessions before recording more." }
-            val record = store.create(goal, equipment, demonstrator, TeachingConsent(permission, training, now), now, elapsed,
-                "${if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone") || Build.MODEL.contains("Emulator")) "Emulator" else "Phone camera"} · ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}", taskId)
+            // A failed pre-check (free space, the sessions kept) ends this start: the next tap must be able to start again.
+            val record = try {
+                val root = File(getApplication<Application>().filesDir, "teaching")
+                require(root.usableSpace > 300L * 1024 * 1024) { "Free at least 300 MB before recording." }
+                require(root.walkTopDown().filter { it.isFile }.sumOf { it.length() } < 768L * 1024 * 1024) { "Export and delete older sessions before recording more." }
+                store.create(goal, equipment, demonstrator, TeachingConsent(permission, training, now), now, elapsed,
+                    "${if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone") || Build.MODEL.contains("Emulator")) "Emulator" else "Phone camera"} · ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE}", taskId)
+            } catch (e: Exception) { starting = false; pendingStop = null; throw e }
             activeId = record.id; lastSampleNs = 0
             try {
                 // Snapshot the visible plan immediately; live frames, personal profiles and server audio are not uploaded.
@@ -96,14 +107,16 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
                 refresh(record.id)
                 withContext(Dispatchers.Main) {
                     check(foreground) { "The recorder is no longer in the foreground." }
-                    stopReason = null; stopInterrupted = false
                     recording = controller.startRecording(FileOutputOptions.Builder(store.video(record.id))
                         .setFileSizeLimit(256L * 1024 * 1024).setDurationLimitMillis(10 * 60 * 1000L).build(),
                         AudioConfig.AUDIO_DISABLED, ContextCompat.getMainExecutor(getApplication()), ::onVideoEvent)
+                    starting = false
+                    // A stop asked for during start-up (the app left the foreground, the camera closed, the user) applies now.
+                    pendingStop?.let { pendingStop = null; stop(it.reason) }
                 }
-            } catch (e: CancellationException) { throw e }
+            } catch (e: CancellationException) { starting = false; throw e }
             catch (_: Exception) {
-                activeId = null
+                starting = false; activeId = null; pendingStop = null
                 store.save(record.copy(state = RecordingState.Failed, stopReason = "Recording could not start."))
                 refresh(record.id)
                 mutable.update { it.copy(busy = false, error = "Recording could not start. Check free space and camera access, then try again.") }
@@ -152,8 +165,12 @@ class TeachingViewModel @Inject constructor(app: Application, saved: SavedStateH
 
     /** With no reason the user chose to stop; the app passes a reason when it stops on leaving the foreground or closing the camera. */
     fun stop(reason: String? = null) {
+        // Still starting (no record yet, or no recording object yet): the first request is kept and applied once recording runs.
+        if (starting && recording == null) { if (pendingStop == null) pendingStop = PendingStop(reason); return }
         val id = activeId ?: return
-        if (recording == null || stopReason != null) return
+        if (stopReason != null) return
+        // Still starting: the recording object does not exist yet, so the request is kept and applied once it does.
+        if (recording == null) { if (pendingStop == null) pendingStop = PendingStop(reason); return }
         stopReason = reason ?: USER_STOP
         stopInterrupted = reason != null
         val now = SystemClock.elapsedRealtimeNanos()

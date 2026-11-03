@@ -29,6 +29,12 @@ class SnapshotStore(private val dir: File, private val json: Json) {
         tmp.renameTo(File(dir, "$key.json"))
     }
 
+    /** The same save and load off the main thread, for callers that are already in a coroutine. */
+    suspend fun <T> saveOn(key: String, serializer: KSerializer<T>, value: T) =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { save(key, serializer, value) }
+    suspend fun <T> loadOn(key: String, serializer: KSerializer<T>): Snapshot<T>? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { load(key, serializer) }
+
     @Synchronized
     fun <T> load(key: String, serializer: KSerializer<T>): Snapshot<T>? {
         val file = File(dir, "$key.json")

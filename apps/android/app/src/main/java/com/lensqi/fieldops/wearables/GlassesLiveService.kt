@@ -135,9 +135,10 @@ class GlassesLiveService : Service() {
         val f = state.feedback
         // The recommendation is inferred from camera frames, mock or not; the HUD says so even with the phone locked.
         val badge = if (source.state.value.mode == GlassesMode.Mock) "Mock glasses · simulated · inferred" else "Glasses assistance · inferred"
-        // Formatted once, so the HUD shows the words that are spoken (speech leaves out the changing distance numbers).
-        val advice = com.lensqi.fieldops.ui.common.TechnicianText.guidance(f.recommendation)
-        val spoken = com.lensqi.fieldops.ui.common.TechnicianText.guidance(f.spoken)
+        // The model's words are shown and spoken as written; the vocabulary pass is for internal status strings only,
+        // since it would rename equipment ("Delta") or a person ("Sam") it knows nothing about.
+        val advice = f.recommendation
+        val spoken = f.spoken
         val hud = advice to "$badge · ${f.status}"
         if (hud != lastHud && now - lastHudAt >= 2000) { source.showHud(hud.first, hud.second); lastHud = hud; lastHudAt = now }
         // Losing the target cuts off a part-specific line still being spoken; the recovery advice follows at once.

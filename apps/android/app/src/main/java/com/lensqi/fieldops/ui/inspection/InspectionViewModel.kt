@@ -2,7 +2,8 @@ package com.lensqi.fieldops.ui.inspection
 
 import com.lensqi.fieldops.ui.theme.Fo
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import com.lensqi.fieldops.ui.camera.DecodedPhoto
+import com.lensqi.fieldops.ui.camera.decodeBounded
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -45,6 +46,7 @@ import com.lensqi.fieldops.data.settings.SettingsStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,8 +87,13 @@ data class Review(
     val refused: String? = null,
 )
 
+/** One photo's stored outlines and the pixels they were computed on, decoded for display; [sourceWidth] is the stored image's width. */
+data class OutlineSet(val outlines: List<Segmentation>, val image: Bitmap, val sourceWidth: Int)
+
 data class InspectionUi(
     val view: InspectionView? = null,
+    /** A shutter or gallery photo is being saved for review; the review screen shows that rather than "nothing to review". */
+    val preparingReview: Boolean = false,
     val fixture: Fixture? = null,
     val diagnosticsMode: DiagnosticSource? = null,
     val pending: List<PendingCommand> = emptyList(),
@@ -120,6 +127,8 @@ data class InspectionUi(
     val outlines: List<Segmentation> = emptyList(),
     val outlinePhotoId: String? = null,
     val outlineImage: Bitmap? = null,
+    /** Outlines by photo id for every photo the screen can show (the latest, and the before photo once a repair is claimed). */
+    val outlineSets: Map<String, OutlineSet> = emptyMap(),
     val review: Review? = null,
     val busy: String? = null,
     val error: String? = null,
@@ -178,7 +187,7 @@ class InspectionViewModel @Inject constructor(
         }
         // Every server view is kept on the device so the screen still shows the last known state offline.
         viewModelScope.launch {
-            cache.observe(inspectionId, serverBase).collect { v -> if (v != null) snapshots.save(viewKey, InspectionView.serializer(), v) }
+            cache.observe(inspectionId, serverBase).collect { v -> if (v != null) snapshots.saveOn(viewKey, InspectionView.serializer(), v) }
         }
         // New photos (from the queue or another client) need their artifact names for thumbnails.
         viewModelScope.launch {
@@ -204,7 +213,7 @@ class InspectionViewModel @Inject constructor(
             }
             is ApiOutcome.Unreachable -> {
                 report(r)
-                if (state.value.view == null) snapshots.load(viewKey, InspectionView.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
+                if (state.value.view == null) snapshots.loadOn(viewKey, InspectionView.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
                     local.update { it.copy(view = snap.value, viewCachedAt = snap.fetchedAt) }
                 }
             }
@@ -224,21 +233,37 @@ class InspectionViewModel @Inject constructor(
         local.update { it.copy(latestAssessment = assessment ?: it.latestAssessment, attempts = attempts, attempt = currentAttempt(events, json), history = com.lensqi.fieldops.domain.attemptHistory(events, json)) }
         val view = state.value.view ?: return
         val photo = view.photos.lastOrNull() ?: return
-        val latest = view.segmentations.filter { it.sourcePhotoEvidenceId == photo.evidenceId && it.matched }.associateBy { it.concept }.values.toList()
-        val ui = local.value
-        if (ui.outlinePhotoId != photo.evidenceId || ui.outlines.map { it.segmentationId }.toSet() != latest.map { it.evidenceId }.toSet()) {
-            val geometries = latest.mapNotNull { seg ->
-                (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
-                    ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
-            }
-            val image = ui.outlineImage.takeIf { ui.outlinePhotoId == photo.evidenceId } ?: loadArtifactBitmap(photo.evidenceId)
-            local.update { it.copy(outlines = geometries, outlinePhotoId = photo.evidenceId, outlineImage = image) }
-        }
+        // The latest photo; while a repair is being verified also the before photo (toggling "Before" keeps its outlines) and
+        // the accepted after photo, which the screen shows while a newer photo is still being compared. Anything else is
+        // dropped: each set holds a decoded photo.
+        val wanted = (listOf(photo) + listOfNotNull(
+            beforePhoto(view)?.takeIf { view.currentClaimId != null },
+            view.photos.firstOrNull { it.evidenceId == view.acceptedPostRepairPhotoId },
+        )).distinctBy { it.evidenceId }
+        val sets = wanted.mapNotNull { p -> outlineSet(view, p.evidenceId, local.value.outlineSets[p.evidenceId])?.let { p.evidenceId to it } }.toMap()
+        val latest = sets[photo.evidenceId]
+        local.update { it.copy(outlineSets = sets, outlines = latest?.outlines.orEmpty(), outlinePhotoId = photo.evidenceId, outlineImage = latest?.image) }
         if (local.value.diagnosticsMode == DiagnosticSource.Simulated) {
             val sim = (apiCall { api.simulation() } as? ApiOutcome.Ok)?.value
             val id = local.value.fixture?.diagnostics?.firstOrNull()?.diagnosticId
             local.update { it.copy(simUp = sim?.get("outcomes")?.jsonObject?.get(id ?: "")?.jsonPrimitive?.booleanOrNull) }
         }
+    }
+
+    /**
+     * The newest matched outline per part for [photoId], with the photo's pixels: the cached set when it still lists the
+     * same segmentations, else the geometries fetched again (the image is reused when it is already decoded). Null when the
+     * photo itself cannot be fetched (offline), so the screen falls back to the plain artifact.
+     */
+    private suspend fun outlineSet(view: InspectionView, photoId: String, cached: OutlineSet?): OutlineSet? {
+        val refs = view.segmentations.filter { it.sourcePhotoEvidenceId == photoId && it.matched }.associateBy { it.concept }.values.toList()
+        if (cached != null && cached.outlines.map { it.segmentationId }.sorted() == refs.map { it.evidenceId }.sorted()) return cached
+        val geometries = refs.mapNotNull { seg ->
+            (apiCall { api.artifact(inspectionId, "${seg.evidenceId}.json") } as? ApiOutcome.Ok)?.value
+                ?.let { body -> runCatching { json.decodeFromString(Segmentation.serializer(), body.string()) }.getOrNull() }
+        }
+        val photo = cached?.let { DecodedPhoto(it.image, it.sourceWidth, 0) } ?: loadArtifactBitmap(photoId) ?: return null
+        return OutlineSet(geometries, photo.bitmap, photo.sourceWidth)
     }
 
     /** What the camera asks for: the AI's requested view, or a post-repair photo once a repair is claimed. */
@@ -283,19 +308,33 @@ class InspectionViewModel @Inject constructor(
      */
 
     fun captureForReview(file: File, origin: String, measured: String? = null) {
-        viewModelScope.launch {
-            val afterRepair = state.value.view?.currentClaimId != null
-            val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
-            try {
-                val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair, measured)
-                resumeReview(command)
-            } catch (e: java.io.IOException) {
-                local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
-            } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) {
-                local.update { it.copy(error = "Only JPEG or PNG photos can be used as evidence. Choose another photo.") }
-            }
-        }
+        viewModelScope.launch { prepareReview(file, origin, measured) }
     }
+
+    /**
+     * Same as [captureForReview], but answers whether the review is open: a screen that navigates to the review waits for
+     * this, so a photo that could not be saved or read (HEIC, WebP, a full disk) leaves the error on the inspection screen
+     * instead of opening a blank review. The work runs in the view model's scope, so leaving the screen does not cancel it.
+     */
+    suspend fun prepareReview(file: File, origin: String, measured: String? = null): Boolean = viewModelScope.async {
+        val afterRepair = state.value.view?.currentClaimId != null
+        val shotAt = file.lastModified().takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli) ?: java.time.Instant.now()
+        local.update { it.copy(preparingReview = true) }
+        try {
+            val command = queue.enqueuePhoto(inspectionId, file, origin, serverBase, shotAt, afterRepair, measured)
+            resumeReview(command)
+            true
+        } catch (e: java.io.IOException) {
+            local.update { it.copy(error = "The photo couldn't be saved. Free some space and try again.") }
+            false
+        } catch (e: com.lensqi.fieldops.data.queue.UnsupportedImageException) {
+            local.update { it.copy(error = "Only JPEG or PNG photos can be used as evidence. Choose another photo.") }
+            false
+        } finally { local.update { it.copy(preparingReview = false) } }
+    }.await()
+
+    /** A picked photo that could not be copied from its provider (no stream, revoked access, file gone). */
+    fun importFailed() = local.update { it.copy(error = "The photo couldn't be read from the gallery. Choose another photo.") }
 
     private fun resumeReview(command: PendingCommand) {
         if (reviewCommandId == command.id) return
@@ -396,7 +435,7 @@ class InspectionViewModel @Inject constructor(
         val photo = latestPhotoId()
         keys.command(action("segment:$photo:${concept.ifBlank { "auto" }}")) { k -> api.segment(inspectionId, k, SegmentRequest(photoEvidenceId = photo, concept = concept.ifBlank { null })) }.onOk { r ->
             cacheView(r.state)
-            val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)
+            val bitmap = loadArtifactBitmap(r.segmentation.photoEvidenceId)?.bitmap
             local.update { it.copy(segmentation = r.segmentation, segmentationImage = bitmap) }
         }
     }
@@ -520,10 +559,10 @@ class InspectionViewModel @Inject constructor(
     private suspend fun loadKnowledge() {
         when (val k = apiCall { api.knowledge(inspectionId) }) {
             is ApiOutcome.Ok -> {
-                snapshots.save(knowledgeKey, KnowledgeResponse.serializer(), k.value)
+                snapshots.saveOn(knowledgeKey, KnowledgeResponse.serializer(), k.value)
                 local.update { it.copy(knowledge = k.value, knowledgeCachedAt = null) }
             }
-            is ApiOutcome.Unreachable -> snapshots.load(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
+            is ApiOutcome.Unreachable -> snapshots.loadOn(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
                 local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
             }
             is ApiOutcome.Rejected -> report(k)
@@ -541,12 +580,17 @@ class InspectionViewModel @Inject constructor(
         return withContext(Dispatchers.IO) { body.byteStream().use { com.lensqi.fieldops.ui.camera.uprightBitmap(it.readBytes(), 1600) } }
     }
 
-    private suspend fun loadArtifactBitmap(evidenceId: String): Bitmap? {
+    /**
+     * The stored photo (already turned upright by the server) decoded to at most [MAX_OUTLINE_SIDE] pixels on its long side:
+     * a full-size decode of a 12 MP photo is ~48 MB and two of them (before and after) would risk an OOM. The source size is
+     * kept so the outlines, which are in the stored image's pixels, still line up.
+     */
+    private suspend fun loadArtifactBitmap(evidenceId: String): DecodedPhoto? {
         val names = (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.value ?: return null
         local.update { it.copy(artifacts = names) }
         val name = names.firstOrNull { it.startsWith("$evidenceId-") } ?: return null
         val body = (apiCall { api.artifact(inspectionId, name) } as? ApiOutcome.Ok)?.value ?: return null
-        return withContext(Dispatchers.IO) { body.byteStream().use { BitmapFactory.decodeStream(it) } }
+        return withContext(Dispatchers.IO) { body.byteStream().use { runCatching { decodeBounded(it.readBytes(), MAX_OUTLINE_SIDE) }.getOrNull() } }
     }
 
     private fun act(label: String, block: suspend () -> Unit) {
@@ -577,6 +621,8 @@ class InspectionViewModel @Inject constructor(
     private val keys = com.lensqi.fieldops.data.api.RetryKeys(savedState)
 
     companion object {
+        /** Long-side bound for photos decoded for the outline overlays. */
+        const val MAX_OUTLINE_SIDE = 2048
         const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
         const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
         const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."

@@ -68,9 +68,16 @@ interface PendingCommandDao {
     @Query("SELECT * FROM pending_command WHERE inspectionId = :sessionId AND (serverBase = :serverBase OR serverBase IS NULL) ORDER BY createdAtMillis")
     fun observe(sessionId: String, serverBase: String): Flow<List<PendingCommand>>
 
-    /** The oldest pending command whose server is not in [skip]; unbound legacy rows always qualify (they are refused). */
-    @Query("SELECT * FROM pending_command WHERE state = 'Pending' AND (serverBase IS NULL OR serverBase NOT IN (:skip)) ORDER BY createdAtMillis, rowid LIMIT 1")
-    suspend fun nextPending(skip: List<String>): PendingCommand?
+    /**
+     * The oldest pending command whose server is not in [skip] and whose session is not in [skipSessions]; unbound legacy
+     * rows always qualify (they are refused). A held session keeps its later rows in order behind the one that stopped.
+     */
+    @Query("SELECT * FROM pending_command WHERE state = 'Pending' AND (serverBase IS NULL OR serverBase NOT IN (:skip)) AND inspectionId NOT IN (:skipSessions) ORDER BY createdAtMillis, rowid LIMIT 1")
+    suspend fun nextPending(skip: List<String>, skipSessions: List<String>): PendingCommand?
+
+    /** Sessions with a refused row still on the phone: their later rows wait until the person removes or retries it. */
+    @Query("SELECT DISTINCT inspectionId FROM pending_command WHERE state = 'Rejected'")
+    suspend fun rejectedSessions(): List<String>
 
     @Query("UPDATE pending_command SET attempts = attempts + 1 WHERE id = :id")
     suspend fun countAttempt(id: String)
@@ -81,7 +88,8 @@ interface PendingCommandDao {
     @Query("UPDATE pending_command SET state = 'Uploaded', resultEvidenceId = :evidenceId WHERE id = :id")
     suspend fun uploaded(id: String, evidenceId: String)
 
-    @Query("UPDATE pending_command SET state = 'Pending', serverBase = :serverBase, errorCode = NULL, errorMessage = NULL WHERE id = :id")
+    /** A retry the person asked for starts the attempt count again, so the bounded retries are theirs, not the refused run's. */
+    @Query("UPDATE pending_command SET state = 'Pending', serverBase = :serverBase, errorCode = NULL, errorMessage = NULL, attempts = 0 WHERE id = :id")
     suspend fun retry(id: String, serverBase: String)
 
     @Query("DELETE FROM pending_command WHERE id = :id")

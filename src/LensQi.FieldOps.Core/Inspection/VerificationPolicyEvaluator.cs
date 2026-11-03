@@ -7,13 +7,13 @@ namespace LensQi.FieldOps.Core.Inspection;
 /// <summary>A verification prerequisite that is not met, as <see cref="VerificationPolicyEvaluator.Blockers"/> reports it.</summary>
 public enum VerifyBlocker
 {
-    FixtureMismatch, NoClaim, NotAcknowledged, PhotoBeingCompared, PhotoRequired, ReviewCitesRejectedPhoto,
+    FixtureMismatch, NoClaim, NotAcknowledged, PhotoBeingCompared, PhotoRequired, ReviewCitesRejectedPhoto, ReviewCitesPreClaimPhoto,
     ReviewMissing, ReviewConflicting, ReviewUnknown, ReviewNotSatisfied, ReviewInvalid,
 }
 
 public static class VerificationPolicyEvaluator
 {
-    public const string PolicyVersion = "fieldproof-policy/1.4";
+    public const string PolicyVersion = "fieldproof-policy/1.5";
 
     /// <summary>Every denial caused by a fresh failing diagnostic starts with this; the session maps it to VerificationFailed.</summary>
     public const string DiagnosticFailedPrefix = "Diagnostic failed after the repair claim";
@@ -62,6 +62,13 @@ public static class VerificationPolicyEvaluator
         foreach (var entry in state.Checklist.Values)
             if (entry.ReviewedByEvidenceId is { } cited && state.IsRejectedForCurrentClaim(cited))
                 yield return (VerifyBlocker.ReviewCitesRejectedPhoto, Deny(loaded, $"Visual requirement '{entry.RequirementId}' was reviewed against {cited}, which change analysis rejected"));
+
+        // 1.5: a review is post-repair evidence only when the photo it cites is. A review made before the claim is merely stale
+        // (ReviewMissing below asks for a new one); one made after the claim against a pre-claim photo would verify the repair
+        // on a view of the fault, so it is denied.
+        foreach (var entry in state.Checklist.Values)
+            if (entry.ReviewedAt > state.RepairClaimedAt && entry.ReviewedByEvidenceId is { } cited && state.Photos.FirstOrDefault(p => p.EvidenceId == cited) is { } photo && !state.IsPostClaim(photo))
+                yield return (VerifyBlocker.ReviewCitesPreClaimPhoto, Deny(loaded, $"Visual requirement '{entry.RequirementId}' was reviewed against {cited}, which was taken before the repair claim"));
 
         if (policy.RequireHumanReviewedVisualChecklist)
         {

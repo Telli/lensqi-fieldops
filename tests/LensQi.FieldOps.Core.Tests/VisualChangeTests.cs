@@ -234,4 +234,51 @@ public class VisualChangeTests
         Assert.Contains("change analysis rejected", d.Reasons[0]);
         Assert.Equal(VerificationPolicyEvaluator.PolicyVersion, d.PolicyVersion);
     }
+
+    [Fact]
+    public void Policy_denies_a_checklist_reviewed_against_a_photo_taken_before_the_repair_claim()
+    {
+        var k = new InspectionTestKit();
+        var pre = k.ReachRepairClaim();
+        k.Tick();
+        var post = k.Photo();   // accepted post-repair photo: the photo requirement is met
+        // Reviews recorded after the claim, so their time passes, but each one cites the view of the fault.
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("rv-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, pre, k.Now);
+        k.Session.Acknowledge("ack", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        var blockers = VerificationPolicyEvaluator.Blockers(k.Session.State, k.Twin).ToList();
+        Assert.Contains(blockers, b => b.Blocker == VerifyBlocker.ReviewCitesPreClaimPhoto);
+        var d = VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now);
+        Assert.Equal(VerificationResult.Denied, d.Result);
+        Assert.Contains("taken before the repair claim", d.Reasons[0]);
+        Assert.Contains(pre, d.Reasons[0]);
+
+        // The same reviews against the post-repair photo satisfy the gate and the passing probe verifies.
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("rv2-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, post, k.Now);
+        k.Session.Acknowledge("ack-2", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        Assert.DoesNotContain(VerificationPolicyEvaluator.Blockers(k.Session.State, k.Twin), b => b.Blocker == VerifyBlocker.ReviewCitesPreClaimPhoto);
+        Assert.Equal(VerificationResult.Verified, VerificationPolicyEvaluator.Evaluate(k.Session.State, k.Twin, k.Now).Result);
+    }
+
+    [Fact]
+    public void A_review_from_the_previous_claim_is_only_stale_not_denied()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        var firstPost = k.PostRepairEvidence();          // reviews cite the first claim's post-repair photo, valid for that claim
+        k.Tick(); k.RecordProbe(k.Probe(false));
+        Assert.Equal(VerificationResult.Denied, k.Verify().Result);
+        k.Tick(); k.Session.ClaimRepair("claim-2", "claim-2", "Tried again", k.Now);
+        k.Tick(); k.Photo();                            // the new claim's accepted photo
+        // Under the new claim the old reviews are merely stale: the technician is asked to review again, not told the
+        // repair was verified on a view of the fault. The denial is for a review made after the claim against an older photo.
+        var blockers = VerificationPolicyEvaluator.Blockers(k.Session.State, k.Twin).ToList();
+        Assert.Contains(blockers, b => b.Blocker == VerifyBlocker.ReviewMissing);
+        Assert.DoesNotContain(blockers, b => b.Blocker == VerifyBlocker.ReviewCitesPreClaimPhoto);
+        k.Session.ReviewChecklist("rv-stale", k.Twin.Twin.MandatoryRequirements.First().RequirementId, ChecklistStatus.Satisfied, firstPost, k.Now);
+        Assert.Contains(VerificationPolicyEvaluator.Blockers(k.Session.State, k.Twin), b => b.Blocker == VerifyBlocker.ReviewCitesPreClaimPhoto);
+    }
 }

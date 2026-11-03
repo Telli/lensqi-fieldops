@@ -174,10 +174,13 @@ fun verifyPreflight(v: InspectionView, required: List<String>): List<PreflightRo
     // Rejected as the server sees it: the last change check of each photo under the current claim; older claims do not count.
     val rejected = v.changeAnalyses.filter { it.claimId == v.currentClaimId }.groupBy { it.photoEvidenceId }
         .filterValues { it.last().verdict == VisualChangeVerdict.DuplicateImage || it.last().verdict == VisualChangeVerdict.NoVisualChange }.keys
+    // Policy 1.5: a review against a photo taken before the claim shows the fault, not the repair. The server decides by its
+    // own receipt time; here a photo observed more than two minutes before the claim is certainly pre-claim.
+    val preClaim = if (claimedAt == null) emptySet() else v.photos.filter { p -> at(p.observedAt)?.isBefore(claimedAt.minusSeconds(120)) == true }.map { it.evidenceId }.toSet()
     val answers = required.mapNotNull { req ->
         v.checklist.firstOrNull { it.requirementId == req }?.takeIf { e ->
             val reviewed = at(e.reviewedAt)
-            (claimedAt == null || reviewed == null || !reviewed.isBefore(claimedAt)) && e.reviewedByEvidenceId !in rejected
+            (claimedAt == null || reviewed == null || !reviewed.isBefore(claimedAt)) && e.reviewedByEvidenceId !in rejected && e.reviewedByEvidenceId !in preClaim
         }
     }
     val review = when {

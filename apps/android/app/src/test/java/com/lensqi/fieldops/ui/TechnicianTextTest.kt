@@ -47,6 +47,14 @@ class TechnicianTextTest {
         assertFalse(low.contains("0.42"), low)
         assertTrue(low.contains("uncertain"), low)
     }
+    @Test fun `what the model or the plan wrote is shown and spoken as written`() {
+        // Step speech is the text handed to the speaker: no vocabulary pass, so the equipment keeps its name.
+        val step = TaskStep("s1", "Cartridge", "Replace the Delta cartridge.", handsOn = true)
+        assertEquals("Cartridge. Replace the Delta cartridge.", com.lensqi.fieldops.ui.task.stepSpeech(step))
+        // The pass is for status strings, where "delta" is a change score and "SAM" a model, not a product.
+        assertEquals("change observed", TechnicianText.guidance("Delta observed"))
+        assertEquals("camera assessment ran", TechnicianText.guidance("SAM ran"))
+    }
     @Test fun `an already-done step is not told to complete checks, a not-ready verify is`() {
         assertFalse(friendly("invalid_state", "The step is already done").contains("complete the required checks"))
         assertTrue(friendly("verification_not_ready", "").contains("complete the required checks"))

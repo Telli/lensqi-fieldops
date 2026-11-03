@@ -53,14 +53,25 @@ class SettingsStore internal constructor(private val store: androidx.datastore.c
         }
     }
 
-    /** Read the persisted selection before creating any server-bound client, including on cold start. */
-    fun currentBase(): HttpUrl = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+    /**
+     * The selected server, read by every request at send time and by the libraries that file history under it. Only the
+     * first call reads the preferences file (blocking, once, before the first screen); [setApiBase] is the one writer, so
+     * the value kept here is the stored one and later calls on the main thread do no I/O.
+     */
+    fun currentBase(): HttpUrl = known ?: kotlinx.coroutines.runBlocking(Dispatchers.IO) {
         normalize(apiBase.first()) ?: DEFAULT_BASE.toHttpUrlOrNull()!!
-    }
+    }.also { known = it }
+    @Volatile private var known: HttpUrl? = null
 
     suspend fun setApiBase(value: String): Boolean {
         val url = normalize(value) ?: return false
-        return try { store.edit { it[key] = url.toString() }; true } catch (e: java.io.IOException) { false }
+        return try {
+            store.edit { it[key] = url.toString() }
+            // The clock offset was measured against the old server; the new one is unknown until it answers.
+            if (known != url) com.lensqi.fieldops.data.api.ClockSkew.reset()
+            known = url
+            true
+        } catch (e: java.io.IOException) { false }
     }
 
     companion object {
