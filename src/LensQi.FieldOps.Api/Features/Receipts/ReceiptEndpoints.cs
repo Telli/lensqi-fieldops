@@ -41,7 +41,8 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
 
     /// <summary>The last receipt already issued for this inspection, checked the same way as <see cref="VerifiedExport"/> but
     /// never issuing a new one, so a work package records what was issued without changing the issue log. Null when none has
-    /// been issued. <c>Covers</c> is false when the inspection has recorded events since.</summary>
+    /// been issued. <c>Covers</c> is false only when the inspection has recorded events since; a newer receipt format alone
+    /// does not change what the issued receipt covers.</summary>
     public (string Directory, string[] Paths, ReceiptIssue Issue, bool Covers)? IssuedExport(string id)
     {
         if (store.Find(id) is not { } session || Issues(id).LastOrDefault() is not { } last) return null;
@@ -56,7 +57,7 @@ public sealed class ReceiptService(InspectionStore store, EvidenceFileStore file
                 || !ReceiptHtml.IsRenderingOf(File.ReadAllText(Path.Combine(dir, "receipt.html")), receipt))
             throw new InvalidDataException("The issued record failed its integrity check");
         var paths = new[] { "receipt.json", "receipt.html" }.Concat(receipt.Artifacts.Select(a => a.Path)).Distinct().ToArray();
-        return (dir, paths, last, last.EventCount == session.Events.Count && last.ReceiptVersion == EvidenceReceipt.Version);
+        return (dir, paths, last, last.EventCount == session.Events.Count);
     }
 
     public string BundleRoot => Path.Combine(files.DataDirectoryPath, "receipts");
