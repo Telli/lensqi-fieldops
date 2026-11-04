@@ -81,6 +81,11 @@ interface FieldOpsApi {
     @POST("v1/inspections/{id}/work-order")
     suspend fun workOrder(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: WorkOrderRequest): InspectionView
 
+    /** A draft only; this endpoint never records a claim or changes inspection state. */
+    @Multipart
+    @POST("v1/inspections/{id}/voice/transcribe")
+    suspend fun transcribeClaim(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part audio: MultipartBody.Part): VoiceTranscript
+
     @POST("v1/inspections/{id}/repair-claims")
     suspend fun repairClaim(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Body body: RepairClaimRequest): RepairClaimResponse
 

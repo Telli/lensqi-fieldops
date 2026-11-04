@@ -276,8 +276,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                     PrimaryButton("Save plan", { vm.workOrder(s.workOrderText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.workOrderText.isNotBlank(), icon = Icons.Outlined.Build)
                 }
                 MoveKind.Repair -> {
-                    ClaimField(s.claimText, vm::onClaimChanged, "What did you do?")
-                    PrimaryButton("Repair done — verify", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Build)
+                    RepairClaimInput(s.claimText, vm::onClaimChanged, "What did you do?", "Repair done — verify", Icons.Outlined.Build, enabled = s.busy == null, onSubmit = vm::claim)
                 }
                 else -> {}
             }
@@ -337,8 +336,7 @@ private fun LazyListScope.verificationItems(s: InspectionUi, vm: InspectionViewM
         ) { req, st -> accepted?.let { vm.review(req, st, it.evidenceId) } }
     }
     val claimAgain: @Composable () -> Unit = {
-        ClaimField(s.claimText, vm::onClaimChanged, "What did you do this time?")
-        PrimaryButton("Record the repair", { vm.claim(s.claimText) }, Modifier.fillMaxWidth(), enabled = s.busy == null && s.claimText.isNotBlank(), icon = Icons.Outlined.Refresh)
+        RepairClaimInput(s.claimText, vm::onClaimChanged, "What did you do this time?", "Record the repair", Icons.Outlined.Refresh, enabled = s.busy == null, onSubmit = vm::claim)
     }
 
     item(key = HERO_KEY) { VerifyHero(s, vm, before, after, afterAccepted = rejectedLater == null, camera = card != VerifyCard.Closed, onCapture) }
@@ -640,7 +638,7 @@ private fun ReviewRows(requirements: List<String>, current: (String) -> Checklis
 }
 
 @Composable
-private fun Muted(text: String) = Text(TechnicianText.guidance(text), style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
+internal fun Muted(text: String) = Text(TechnicianText.guidance(text), style = MaterialTheme.typography.bodySmall, color = Fo.Muted)
 
 @Composable
 private fun Outcome(color: Color, icon: ImageVector, title: String, body: String, content: @Composable () -> Unit) {
@@ -933,7 +931,7 @@ private fun PredictionPanel(s: InspectionUi, vm: InspectionViewModel, view: Insp
 }
 
 @Composable
-private fun Field(value: String, onChange: (String) -> Unit, label: String) {
+internal fun Field(value: String, onChange: (String) -> Unit, label: String) {
     OutlinedTextField(
         value, onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Fo.Primary, unfocusedBorderColor = Fo.Border),
@@ -944,19 +942,4 @@ private suspend fun copyToCache(context: Context, uri: Uri): File = withContext(
     val file = File(context.cacheDir, "import-${System.nanoTime()}")
     context.contentResolver.openInputStream(uri).use { input -> file.outputStream().use { requireNotNull(input).copyTo(it) } }
     file
-}
-
-/** Dictation edits only the draft: the person reviews it before pressing the separate record/verify button. */
-@Composable
-private fun ClaimField(text: String, onChange: (String) -> Unit, label: String) {
-    val voice = com.lensqi.fieldops.voice.rememberVoiceInput(onFinal = onChange)
-    Field(text, onChange, label)
-    if (voice.supported) {
-        TextButton(onClick = { if (voice.listening) voice.stop() else voice.start() }) {
-            Text(if (voice.listening) "Finish dictating" else "Dictate repair claim")
-        }
-        if (voice.listening) Text(voice.heard.ifBlank { "Listening…" })
-        Muted("Review the text before recording the repair. Voice uses your phone’s speech service.")
-        voice.error?.let { Text(it, color = Fo.Warning) }
-    }
 }

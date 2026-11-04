@@ -473,3 +473,6 @@ data class InspectionSummary(
 /** A segmentation recorded on the inspection; its geometry is the artifact "<evidenceId>.json". */
 @Serializable
 data class SegmentationRef(val evidenceId: String, val sourcePhotoEvidenceId: String, val concept: String, val matched: Boolean, val maskSha256: String? = null)
+
+@Serializable
+data class VoiceTranscript(val transcript: String, val modelId: String)

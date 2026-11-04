@@ -3,6 +3,7 @@ using LensQi.FieldOps.Api.Features.LiveVision;
 using LensQi.FieldOps.Api.Features.Receipts;
 using LensQi.FieldOps.Api.Features.Segmentation;
 using LensQi.FieldOps.Api.Features.Simulation;
+using LensQi.FieldOps.Api.Features.Voice;
 using LensQi.FieldOps.Api.Features.SitePacks;
 using LensQi.FieldOps.Api.Features.Tasks;
 using LensQi.FieldOps.Api.Infrastructure.Tasks;
@@ -71,6 +72,12 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddHttpClient("muse");
 builder.Services.AddSingleton<IChatClient>(sp =>
     new MuseSparkChatClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("muse"), sp.GetRequiredService<MuseOptions>()));
+
+// Muse Voice Transcribe: an optional draft of a repair claim, on the same server-held key.
+builder.Services.AddSingleton(sp => { var o = new LensQi.FieldOps.Meta.Voice.VoiceOptions(); builder.Configuration.GetSection(LensQi.FieldOps.Meta.Voice.VoiceOptions.SectionName).Bind(o); return o; });
+builder.Services.AddHttpClient("voice");
+builder.Services.AddSingleton<LensQi.FieldOps.Meta.Voice.IVoiceTranscriber>(sp =>
+    new LensQi.FieldOps.Meta.Voice.VoiceTranscriber(sp.GetRequiredService<IHttpClientFactory>().CreateClient("voice"), sp.GetRequiredService<MuseOptions>(), sp.GetRequiredService<LensQi.FieldOps.Meta.Voice.VoiceOptions>()));
 
 // Expected twin (parent FR-01): schema + invariants + byte-exact digest; fail closed at startup.
 builder.Services.Configure<FixturesOptions>(builder.Configuration.GetSection(FixturesOptions.SectionName));
@@ -186,6 +193,7 @@ app.MapReceipts();
 app.MapInspectionKnowledge();
 app.MapSitePacks();
 app.MapSegmentation();
+app.MapVoice();
 app.MapLiveVision();
 app.MapTasks();
 

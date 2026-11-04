@@ -148,6 +148,17 @@ Physical-phone task runs are in `tasks/s23-phone-run-1/`, `s23-phone-run-2/` and
 records what was and was not observed; screenshots that show the surroundings are not kept. Run 2 includes a recognized spoken question and ARCore anchors with estimated
 distances on a ceiling smoke detector.
 
+## Android voice claims (`android/voice-claim/`)
+
+Recording a repair claim with Muse Voice on the emulator, on 2026-11-04. The spoken audio is synthetic speech from macOS
+`say`. To reach the review screens, a local test proxy replaced the emulator's silent recording with it.
+
+| File | What it shows | Labels |
+|---|---|---|
+| `android/voice-claim/live-transcribe-20261104.json` | Five genuine `muse-voice-transcribe-1.0` calls: spoken audio, silence reported as `no_speech`, and what was not shown. | `LIVE_META` |
+| `android/voice-claim/01-claim-options.png` | The repair claim with typing, dictation and Muse Voice, and the notice that audio goes to Meta. | `EMULATOR` |
+| `android/voice-claim/02-transcript-review.png` | The editable transcript labelled inferred, with stray punctuation from the provider, before anything is recorded. | `EMULATOR`, `LIVE_META` |
+
 ## Live camera assistance (`live-ar/`, `live-glasses/`, `ar-ux/`)
 
 Each folder has its own README. The Galaxy S23 Ultra ARCore live-assist run is described in `docs/LIVE_AR.md`; no
@@ -162,5 +173,6 @@ diagnostics are `SIMULATED_PROBE`). The Android contract tests decode every one 
 
 - A live measurement of owned lab hardware (`receipt-live/`), produced by the owner with `docs/LIVE_PROBE_RUNBOOK.md`.
 - Photographs of real equipment (`fixtures/telecom-lab/images/real/`).
+- A repair claim recorded from a physical phone microphone or a person's voice.
 - SAM outlines on a real step part, "next step" as a voice command, and spoken output checked by ear.
 - ARCore anchors or distances on lab equipment. The phone runs above used a household smoke detector.

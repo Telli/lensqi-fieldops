@@ -20,6 +20,10 @@ Base `https://api.meta.ai/v1/`, header `Authorization: Bearer $MODEL_API_KEY`. K
 - The sidecar's Python resolves from `FIELDOPS_PYTHON` or a repo-root `.venv` with `tools/sam-parser/requirements.txt` installed.
 - On synthetic renders: wide views match; close-ups returned no-match. Record whatever happens; do not tune prompts to force a match without saying so.
 
+## Muse Voice (`muse-voice-transcribe-1.0`) — `POST asr/transcribe` (verified November 4, 2026)
+- Implemented in `src/LensQi.FieldOps.Meta/Voice/VoiceTranscriber.cs`. Multipart `request` (JSON: `model`, `audioEncoding: "WAV"`, `mode: "PUSH_TO_TALK"`) and `audio` (mono 16-bit PCM WAV, 16 or 24 kHz). The response has `transcript`.
+- Silence returns HTTP 200 with an empty transcript; the API reports it as `no_speech`. Punctuation varies between calls on the same audio, so a transcript is always an inferred draft. Priced per hour of audio.
+
 ## Evidence discipline
 - Every genuine call that matters for judging gets a record under `docs/evidence/` with model id, prompt digest, response digest, usage and the `LIVE_META` label (`tools/LensQi.FieldOps.StageOneGate`, `tools/sam-parser/sam_spike.py`, the eval runner).
 - Run `scripts/secret_scan.sh` before committing anything under `docs/evidence/`.

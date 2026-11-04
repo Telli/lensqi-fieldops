@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-04",
+  "labels": ["LIVE_META", "EMULATOR"],
+  "model": "muse-voice-transcribe-1.0",
+  "endpoint": "POST /v1/inspections/{id}/voice/transcribe -> POST https://api.meta.ai/v1/asr/transcribe",
+  "audio": {
+    "spoken": {
+      "source": "Synthetic speech from macOS `say`, not a person and not a phone microphone",
+      "text": "I reseated the yellow cable in port two and the link light came back on.",
+      "format": "mono 16-bit PCM WAV, 24 kHz, 4.13 s",
+      "sha256": "0c1d95c0618403eb8af2b40c33b4ffc8846bd4e0076ca8f13606e8dc107cd4ab"
+    },
+    "silent": {
+      "source": "Generated digital silence",
+      "format": "mono 16-bit PCM WAV, 24 kHz, 2.00 s",
+      "sha256": "ec36dcbee7a0ddbda819515572c041b232fbe4f4e94bc9d71a7421fcbe3b8082"
+    }
+  },
+  "calls": [
+    { "client": "curl to the local API", "audio": "spoken", "http": 200, "transcript": "I reseated the yellow cable in port two and the link light came back on..", "seconds": 2.69 },
+    { "client": "curl to the local API", "audio": "silent", "http": 409, "code": "no_speech", "seconds": 1.09 },
+    { "client": "Android app on the emulator", "audio": "emulator microphone, which captured no speech", "http": 409, "code": "no_speech" },
+    { "client": "Android app on the emulator", "audio": "spoken, substituted by a local test proxy for the uploaded emulator recording", "http": 200, "transcript": "I reseated the yellow cable in port two, and the link light came back on.,", "screenshot": "02-transcript-review.png" },
+    { "client": "Android app on the emulator", "audio": "spoken, substituted by the same proxy", "http": 200, "transcript": "I reseated the yellow cable in port two and the link light came back on..", "result": "Edited in review, then confirmed: one RepairClaimed event held the edited words" }
+  ],
+  "observed": [
+    "The same audio gave different punctuation on repeated calls, so the transcript is an inference the person must review.",
+    "Rejecting a transcript recorded no claim. Transcribing recorded no event. No WAV remained in the server data directory or the app cache.",
+    "Real AudioRecord capture from the emulator passed the server's WAV validation and reached the provider."
+  ],
+  "notShown": [
+    "A physical phone microphone or a person's voice.",
+    "Recognition quality in a noisy site.",
+    "A spoken question or transcript from real speech captured by the app; the emulator microphone provided no speech."
+  ]
+}
