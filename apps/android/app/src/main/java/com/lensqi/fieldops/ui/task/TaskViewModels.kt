@@ -46,7 +46,11 @@ private fun <T> ApiOutcome<T>.errorText(): String? = when (this) {
     is ApiOutcome.Unreachable -> friendly("offline", message)
 }
 
-data class TaskListUi(val tasks: List<TaskSummary> = emptyList(), val cached: Boolean = false, val creating: Boolean = false, val error: String? = null)
+data class TaskListUi(
+    val tasks: List<TaskSummary> = emptyList(), val cached: Boolean = false, val creating: Boolean = false, val error: String? = null,
+    /** The server couldn't be reached on the last try; the home screen keeps trying and this clears itself when it answers. */
+    val offline: Boolean = false,
+)
 
 /** The task list and starting a new task: the server writes and checks the plan; the id always comes from the API. */
 @HiltViewModel
@@ -60,8 +64,9 @@ class TaskListViewModel @Inject constructor(private val api: FieldOpsApi, privat
         val cached = library.history()
         if (cached.isNotEmpty()) _state.update { it.copy(tasks = cached, cached = true) }
         when (val r = apiCall { api.tasks() }) {
-            is ApiOutcome.Ok -> { library.history(r.value); _state.update { it.copy(tasks = r.value, cached = false) } }
-            else -> _state.update { it.copy(error = r.errorText()) }
+            // Back online: "can't connect" no longer applies. Any other error is about something the person did, and stays.
+            is ApiOutcome.Ok -> { library.history(r.value); _state.update { it.copy(tasks = r.value, cached = false, offline = false, error = if (it.offline) null else it.error) } }
+            else -> _state.update { it.copy(error = r.errorText(), offline = r is ApiOutcome.Unreachable) }
         }
     }
 
@@ -98,6 +103,8 @@ data class TaskUi(
     /** A delay, not a failure: a step update saved on this phone until the server confirms it. */
     val notice: String? = null,
     val answer: Pair<String, String>? = null,
+    /** The last answer was given without a camera frame, because the camera had none ready. */
+    val askedWithoutView: Boolean = false,
     /** The FieldProof inspection a technician task is linked to, for its stage and live or simulated outcome. */
     val linked: InspectionView? = null,
     val cachedAt: String? = null,
@@ -301,7 +308,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     }
 
     /**
-     * A question by voice or text, with the latest camera frame when live coaching has one. The answer is spoken.
+     * A question by voice or text, with what the camera sees now. The answer is spoken, and the screen says when no frame was ready.
      * [source] is the device the frame came from ("Phone", "Glasses" or "MockWearables"), sent with it like a check's.
      */
     fun ask(question: String, frame: ByteArray?, source: String = "Phone") = viewModelScope.launch {
@@ -311,7 +318,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
         val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text), frame?.let { text(source) }) }
         settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
-        _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer) }
+        _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer, askedWithoutView = if (answer != null) frame == null else it.askedWithoutView) }
         answer?.let { speaker.speak(it, force = true) }
         // The answer is now part of the task's record; reload it so conversation views show it.
         if (answer != null) refresh()
@@ -322,7 +329,7 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     /** A check photo still waiting to be sent that the person no longer wants checked. */
     fun withdrawCheck(command: PendingCommand) = viewModelScope.launch { queue.withdraw(command) }
 
-    fun clearAnswer() = _state.update { it.copy(answer = null) }
+    fun clearAnswer() = _state.update { it.copy(answer = null, askedWithoutView = false) }
 
     /** Ends free-form help. */
     fun finish(onDone: () -> Unit) = act("finish", "finish", { k -> api.finishTask(taskId, k) }) { onDone() }

@@ -8,8 +8,9 @@ labels, and nothing is described more strongly than its label allows.
 | `LIVE_META` | A genuine call to the Meta Model API (`muse-spark-1.3` or `sam-3.1`). The output is a model interpretation, never proof of a repair. |
 | `LIVE_LOCAL_PROBE (loopback)` | A genuine HTTP measurement by the live probe of a `python3 -m http.server` on this Mac's loopback, standing in for an owned lab endpoint. Not lab hardware. |
 | `SIMULATED_PROBE` | The demo's simulated endpoint. Every verification that relies on it is `VerifiedCompleteSimulated`, never live. |
-| `SYNTHETIC_IMAGE` | A Pillow render of a fictional switch (`tools/sam-parser/render_fixture.py`). No photographs of real equipment are included yet. |
+| `SYNTHETIC_IMAGE` | A Pillow render of a fictional switch (`tools/sam-parser/render_fixture.py`). FieldProof's equipment images are all synthetic; the phone stills in `android/camera-layout/` show a real ceiling smoke detector. |
 | `EMULATOR` | The Android client running on the Android emulator (Medium Phone, API 36.1) on this Mac. Not a physical phone. |
+| `PHYSICAL_PHONE` | The Android client on a Galaxy S23 Ultra, with its real camera and microphone. |
 | `FAKE_MODELS` | An automated test run with fake Muse and SAM (`FakeVisionChat`, `FakeSegmenter`). Exercises the real API, stores and gate; no model was called. |
 
 ## Meta model calls
@@ -36,8 +37,7 @@ unchanged. The dates inside the screens are the original recording dates.
 | `ui-v3/06-ops-inspection-workspace.jpg` | Operations workspace for the same inspection: evidence strip with origins and digests, AI observations, required evidence, verification state. | `I-60601b447fa5`, complete log | `LIVE_META`, `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
 
 The screens read "AI outlines · captured photo" because that is the UI's wording; the images are synthetic renders. The
-README also shows `tasks/android-live-coaching.png`, an emulator capture from 2026-10-28 (`LIVE_META`, `EMULATOR`). The
-Android step screen has changed since then.
+README's three live camera shots are not part of this set: see the Android camera layout section below.
 
 ## Web app (2026-10-28 walkthrough)
 
@@ -158,6 +158,18 @@ Recording a repair claim with Muse Voice on the emulator, on 2026-11-04. The spo
 | `android/voice-claim/live-transcribe-20261104.json` | Five genuine `muse-voice-transcribe-1.0` calls: spoken audio, silence reported as `no_speech`, and what was not shown. | `LIVE_META` |
 | `android/voice-claim/01-claim-options.png` | The repair claim with typing, dictation and Muse Voice, and the notice that audio goes to Meta. | `EMULATOR` |
 | `android/voice-claim/02-transcript-review.png` | The editable transcript labelled inferred, with stray punctuation from the provider, before anything is recorded. | `EMULATOR`, `LIVE_META` |
+
+## Android camera layout (`android/camera-layout/`)
+
+The camera screen on the Android emulator on 2026-11-04, pointed at the emulator's virtual room, with genuine model calls.
+No real equipment is shown.
+
+| File | What it shows | Labels |
+|---|---|---|
+| `android/camera-layout/01-labels-with-assistance-on.png` | SAM's outlines on the TV and its stand, with two-line labels marked as AI suggestions, the live guidance, the fixed assistance bar and the safety line. | `EMULATOR`, `LIVE_META` |
+| `android/camera-layout/02-answer-with-assistance-off.png` | A full answer to a typed question with assistance off, and **Start camera assistance** in place. | `EMULATOR`, `LIVE_META` |
+| `android/camera-layout/s23-run-20261104.json` | The run on a Galaxy S23 Ultra with a person's voice and a real ceiling detector: questions with their frames and answers, draft transcripts and confirmed claims, and what was not shown. | `PHYSICAL_PHONE`, `LIVE_META` |
+| `android/camera-layout/s23-1-finds-the-part.jpg`, `s23-2-label-holds.jpg`, `s23-3-ask-what-it-sees.jpg` | Stills from that run, shown in the README: the first label on the detector, the label holding at a closer view, and the answer to "Is that the test button?". Only the detector and ceiling are in view. The full recordings are not committed because they show the person's home. | `PHYSICAL_PHONE`, `LIVE_META` |
 
 ## Speech input (`meta-voice-input/`)
 

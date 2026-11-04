@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -108,6 +109,7 @@ import com.lensqi.fieldops.voice.parseCommand
 import com.lensqi.fieldops.voice.rememberHandsFree
 import com.lensqi.fieldops.voice.rememberVoiceInput
 import com.lensqi.fieldops.voice.speechNotice
+import com.lensqi.fieldops.voice.ASK_NOTICE
 import androidx.compose.material.icons.outlined.Hearing
 import java.io.File
 
@@ -148,6 +150,10 @@ private fun SpeechBadge(onDevice: Boolean) =
     Text(speechNotice(onDevice), color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .55f)).padding(horizontal = 12.dp, vertical = 6.dp))
 
+/** On the camera: what a question sends and where it goes, read before it is relied on. */
+@Composable
+private fun AskNotice() =Text(ASK_NOTICE, color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp))
+
 @Composable
 private fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 48) {
     Box(Modifier.size(size.dp).clip(RoundedCornerShape(16.dp)).background(if (listening) Fo.Primary else Fo.Surface).border(1.dp, Fo.Border, RoundedCornerShape(16.dp)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
@@ -182,6 +188,8 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
     val writing = planning && s.creating
     val voice = rememberVoiceInput { goal = it }
     LaunchedEffect(Unit) { vm.refresh() }
+    // When the server comes back the list and its error catch up by themselves; nothing on this screen would otherwise ask again.
+    LaunchedEffect(s.offline) { while (s.offline) { delay(5_000); vm.refresh() } }
     LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -243,7 +251,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
         item { TextButton(onClick = onTeaching) { Text("Teaching recordings") } }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (s.cached) Text("Saved task history · connect to refresh")
+                if (s.cached) Text(if (s.offline) "Saved task history · refreshes when the server is back" else "Saved task history")
                 Text("All tasks", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(search, { search = it }, label = { Text("Search tasks") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -551,8 +559,11 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         // The current step, not the one being reviewed: looking back at an earlier step keeps the confirmed part.
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
-        detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on,
+        detailsSummary = safetySummary(step),
+        detailsFocus = s.answer,
+        // Only what needs attention now holds the details open. Safety has its own line that is always on screen, and the
+        // reference pages wait for a tap, so the picture isn't covered by text nobody asked for.
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -588,12 +599,19 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                     TextButton(onClick = { vm.removeCheck(command) }) { Text("Remove saved photo") }
                 }
             }
-            StepDetails(vm, t, step, s.answer, voice.listening, voice.heard, s.error ?: voiceError, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice)
+            StepDetails(t, step, s.answer, s.askedWithoutView, voice.listening, voice.heard, s.error ?: voiceError, if (voice.settingsNeeded) voice.openSettings else null, notice = s.notice, hint = if (handsFree.on) HANDS_FREE_HINT else null)
+        },
+        moreDetails = {
+            StepReference(vm, step, when {
+                needsCheck -> "Tip: a quick check photo can confirm this step."
+                voice.supported && !handsFree.on -> "Say “next”, “repeat”, “check this”, or ask a question. Hands-free keeps listening."
+                else -> null
+            })
         },
         controls = { handle ->
             camera.value = handle
-            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next mic tap.
-            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
+            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next question.
+            if (!reviewing) AskNotice()
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
                 // LensQi stops talking while it listens, so it never hears itself as the question; the voice input's hold
                 // does that and reads a cut-off step again afterwards. With hands-free on, the mic button is its off switch.
@@ -614,12 +632,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
                 if (voice.supported) HandsFreeChip(handsFree.on, voice.listening, handsFree.toggle)
-                Text(when {
-                    needsCheck -> "Tip: a quick check photo can confirm this step."
-                    handsFree.on -> "Hands-free: the microphone opens again after each answer."
-                    voice.supported -> "Say “next”, “repeat”, “check this”, or ask a question. Hands-free keeps listening."
-                    else -> ""
-                }, color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
                 if (!reviewing) TextButton(onClick = { vm.skip(step.id) {} }, enabled = s.busy == null) { Text("Skip", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },
@@ -669,6 +682,8 @@ private fun StopTask(phase: TaskPhase, busy: Boolean, onStop: () -> Unit) {
 private class HandleRef { var value: CameraHandle? = null }
 
 private const val STILL_WORKING = "One moment, LensQi is still working on the last request."
+private const val HANDS_FREE_HINT = "Hands-free: the microphone opens again after each answer."
+private const val ASKED_WITHOUT_VIEW = "The camera wasn't ready, so this was answered without seeing the view."
 
 /** What is read aloud for a step: the instruction, then each caution and stop condition the screen shows. */
 internal fun stepSpeech(step: TaskStep, number: Int? = null): String {
@@ -762,7 +777,7 @@ private fun QuestionRow(typed: String, onTyped: (String) -> Unit, voiceSupported
             Icon(if (listening) Icons.Outlined.Stop else Icons.Outlined.Mic, if (listening) "Stop listening" else "Ask or say a command", tint = FoDark.Foreground)
         }
         OutlinedTextField(typed, onTyped, Modifier.weight(1f), enabled = typingEnabled && !asking, singleLine = true,
-            placeholder = { Text(if (asking) "Thinking…" else hint) },
+            placeholder = { Text(if (asking) "Thinking…" else hint, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = FoDark.Foreground, unfocusedTextColor = FoDark.Foreground, disabledTextColor = FoDark.Muted,
                 focusedPlaceholderColor = FoDark.Muted, unfocusedPlaceholderColor = FoDark.Muted, disabledPlaceholderColor = FoDark.Muted,
                 focusedBorderColor = FoDark.Primary, unfocusedBorderColor = FoDark.Border, disabledBorderColor = FoDark.Border, cursorColor = FoDark.Primary,
@@ -782,24 +797,51 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
+/** What needs attention on this step now: its last check, an answer, what is being heard, anything that went wrong. */
 @Composable
-private fun ColumnScope.StepDetails(vm: TaskViewModel, task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null, notice: String? = null) {
+private fun StepDetails(task: com.lensqi.fieldops.data.api.TaskView, step: TaskStep, answer: Pair<String, String>?, askedWithoutView: Boolean, listening: Boolean, heard: String, error: String?, onOpenSettings: (() -> Unit)? = null, notice: String? = null, hint: String? = null) {
+    if (step.lastCheck == null && answer == null && !listening && error == null && notice == null && onOpenSettings == null && hint == null) return
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        TaskSources(step, vm)
-        if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp)
-        if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp)
         // The model's reason and answers are shown as written: they name the equipment, which is not vocabulary to translate.
         step.lastCheck?.let { c ->
             Text("Camera check: ${verdictText(c.verdict)} · ${c.reason}" + checkPhotoNote(task, c), color = verdictColor(c.verdict), fontSize = 12.sp)
             Text("A suggestion. You decide when the step is done.", color = FoDark.Muted, fontSize = 10.sp)
         }
-        answer?.let { (q, a) -> Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, maxLines = 1); Text(a, color = FoDark.Foreground, fontSize = 13.sp) }
+        answer?.let { (q, a) ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("You asked: $q", color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp)
+                Text(a, color = FoDark.Foreground, fontSize = 14.sp, lineHeight = 19.sp)
+                if (askedWithoutView) Text(ASKED_WITHOUT_VIEW, color = FoDark.Warning, fontSize = 12.sp)
+            }
+        }
         if (listening) Text(heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
         error?.let { Text(it, color = FoDark.Warning, fontSize = 12.sp) }
         // Saved for later is a delay, not a failure: shown in the plain colour, not the warning one.
         notice?.let { Text(it, color = FoDark.Muted, fontSize = 12.sp) }
+        hint?.let { Text(it, color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp) }
         onOpenSettings?.let { TextButton(onClick = it, contentPadding = PaddingValues(0.dp)) { Text("Open settings for the microphone", color = FoDark.Primary, fontSize = 12.sp) } }
     }
+}
+
+/** What the person opens the details for: the step's sources, its full safety list and how to use voice. */
+@Composable
+private fun StepReference(vm: TaskViewModel, step: TaskStep, hint: String?) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TaskSources(step, vm)
+        if (step.cautions.isNotEmpty()) Text(step.cautions.joinToString("  ·  ") { "${it.kind}: ${it.text}" }, color = FoDark.Warning, fontSize = 12.sp, lineHeight = 16.sp)
+        if (step.stopIf.isNotEmpty()) Text("Stop if ${step.stopIf.joinToString("; ")}.", color = FoDark.Failure, fontSize = 12.sp, lineHeight = 16.sp)
+        hint?.let { Text(it, color = FoDark.Muted, fontSize = 12.sp, lineHeight = 16.sp) }
+    }
+}
+
+/**
+ * The safety line that stays on the camera whatever else is hidden: the step's first stop condition, or its first caution,
+ * and how many more a tap on it shows. Null when the step has none.
+ */
+internal fun safetySummary(step: TaskStep): String? {
+    val first = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text ?: return null
+    val more = step.stopIf.size + step.cautions.size - 1
+    return if (more > 0) "$first · +$more more" else first
 }
 
 /** What was done, skipped and asked. Technician tasks on a site record continue to FieldProof. */
@@ -916,7 +958,9 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         // A title the AI named from the conversation is labelled as such, as the plan and summary label it.
         header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
-        showDetails = handsFree.on || voiceError != null || pace.paused,
+        showDetails = handsFree.on || voiceError != null || pace.paused || s.askedWithoutView,
+        detailsFocus = answers.firstOrNull()?.answer,
+        moreDetails = { if (voice.supported && !handsFree.on) Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 12.sp) },
         // A tapped outline becomes a question about that part, with the live frame, in the web app's words.
         onAskPart = { part ->
             when {
@@ -931,6 +975,8 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
             val note = s.error ?: voiceError
+            if (handsFree.on) Text(HANDS_FREE_HINT, color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp)
+            if (s.askedWithoutView) Text(ASKED_WITHOUT_VIEW, color = FoDark.Warning, fontSize = 12.sp)
             if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }
                 if (voice.listening) Text(voice.heard.ifEmpty { "Listening…" }, color = FoDark.Primary, fontSize = 13.sp)
@@ -940,11 +986,11 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         },
         controls = { handle ->
             camera.value = handle
-            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next mic tap.
-            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
+            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next question.
+            AskNotice()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",
+                    QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask about what you see…",
                         onMic = { if (handsFree.on) handsFree.toggle() else if (voice.listening) voice.stop() else voice.start() },
                         onSend = { if (voice.listening) voice.abort(); vm.ask(typed, handle.latestFrame()); typed = "" })
                 }
@@ -954,7 +1000,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
                 MuteButton(muted) { if (muted) vm.speaker.unmute() else vm.speaker.mute(); muted = !muted }
                 if (voice.supported && open) HandsFreeChip(handsFree.on, voice.listening, handsFree.toggle)
                 TextButton(onClick = { onPlan(t?.title?.takeUnless { it == "Just ask" } ?: answers.firstOrNull { it.question != LOOK }?.question.orEmpty()) }) { Text("Make a plan", color = FoDark.Primary, fontSize = 12.sp) }
-                Text(if (handsFree.on) "Hands-free: the microphone opens again after each answer." else "Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
                 if (open) TextButton(onClick = { vm.finish(onClose) }, enabled = s.busy == null) { Text("End", color = FoDark.Muted, fontSize = 12.sp) }
             }
         },

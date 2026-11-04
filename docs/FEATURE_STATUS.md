@@ -1,5 +1,15 @@
 # Feature status
 
+## As of 4 November 2026 (Pacific), `claude/android-camera-layout` (Android camera questions and AR display)
+
+A question asked on the Android camera now carries what the camera sees, whether camera assistance is on or off. Before this, a question sent no image unless assistance was running, and assistance starts off, so the model answered without seeing anything. The phone keeps one recent frame in memory, about once a second, and sends it only when the person asks; the screen says so, and says when no frame was ready.
+
+The camera screen is laid out again. The picture sits above the controls at the camera's own 4:3. **Start camera assistance** is a fixed bar, the text panel is one scrolling area with an answer scrolled into view, and the first safety line stays on screen with a count of the rest. Part labels are two lines marked as AI suggestions or the person's target, stay inside the visible picture and clear of each other, and outlines are steadier and readable on pale surfaces. The task list retries by itself after a lost connection, and the camera says when the server can't be reached.
+
+Verified on the emulator's virtual scene with genuine Muse Spark and SAM 3.1 calls, and on a Galaxy S23 Ultra with a person's voice and a real ceiling smoke detector (`docs/evidence/android/camera-layout/`): ARCore ran, labels tracked the detector with estimated distances, and spoken questions carried a frame and were answered from the view. On the same phone, Muse Voice misheard "reseated" on all three takes that used it, so the review step mattered. Three stills showing only the detector and ceiling are committed; the full recordings are not, because they show the person's home.
+
+Gates: Android 335 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No server or web code changed.
+
 ## As of 4 November 2026 (Pacific), `codex/meta-voice-input` (speech input through Meta)
 
 Web and Android speech input now goes through LensQi to `muse-voice-transcribe-1.0`, with no fallback to browser or phone recognition; spoken output is unchanged. General speech input has its own per-IP limit, so hands-free cannot use up the budget for plans and questions. The repair claim keeps one voice path, recording with review, beside typing.

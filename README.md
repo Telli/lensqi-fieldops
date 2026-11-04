@@ -2,6 +2,8 @@
 
 **Visual guidance for technical work. A clear record of what was done and checked.**
 
+**[▶ Watch the 3-minute demo](https://youtu.be/juiMoFNiuqQ)**
+
 LensQi FieldOps guides technicians and DIY users through hands-on technical jobs with camera assistance, step-by-step
 plans, voice questions and cited references. Browser and Android clients support the work on site, and an operations
 dashboard brings inspections, evidence and outcomes into one place.
@@ -14,17 +16,23 @@ verification decision. Completing a guided task and verifying a repair are separ
 > This is a development and demonstration application. It has no authentication or tenant isolation, so run it only in
 > a local or controlled environment. See [Scope and limits](#scope-and-limits).
 
-[Screens](#screens) · [Features](#what-you-can-do) · [Quick start](#quick-start) ·
+[Demo video](https://youtu.be/juiMoFNiuqQ) · [Screens](#screens) · [Features](#what-you-can-do) · [Quick start](#quick-start) ·
 [Verification](#how-fieldproof-verifies-a-repair) · [Development](#development-and-testing) ·
 [Architecture](#architecture) · [Evidence](#validation-and-evidence) · [Docs](#documentation)
 
 ## Screens
 
-**Guided work:** describe the job, review the plan, then work through it with the camera.
+**Guided work:** describe the job, then review the plan before you start.
 
-| Choose how to work | Review the AI-written plan | Follow the step · Android emulator |
+| Choose how to work | Review the AI-written plan |
+|---|---|
+| <img src="docs/evidence/ui-v3/01-home-modes.jpg" alt="Home screen offering Do it yourself, Just ask and Technician" width="260"> | <img src="docs/evidence/ui-v3/02-guided-plan.jpg" alt="Plan for testing a smoke detector with risk level, tools, cautions and stop conditions" width="260"> |
+
+**The live camera, on a Galaxy S23 Ultra:** point at the part and ask. Labels are AI suggestions with estimated distances, and you decide when a step is done.
+
+| It finds the part | The label holds as you move | Ask what it sees |
 |---|---|---|
-| <img src="docs/evidence/ui-v3/01-home-modes.jpg" alt="Home screen offering Do it yourself, Just ask and Technician" width="260"> | <img src="docs/evidence/ui-v3/02-guided-plan.jpg" alt="Plan for testing a smoke detector with risk level, tools, cautions and stop conditions" width="260"> | <img src="docs/evidence/tasks/android-live-coaching.png" alt="Android step screen on the emulator with AI guidance, cautions, a stop condition and step controls over a virtual room" width="260"> |
+| <img src="docs/evidence/android/camera-layout/s23-1-finds-the-part.jpg" alt="Phone camera on a ceiling smoke detector, outlined and labelled as an AI suggestion about 50 cm away, with the step's stop condition below" width="260"> | <img src="docs/evidence/android/camera-layout/s23-2-label-holds.jpg" alt="Closer view of the detector with the label still on it, now about 33 cm away" width="260"> | <img src="docs/evidence/android/camera-layout/s23-3-ask-what-it-sees.jpg" alt="Answer to a spoken question: the model sees the detector, cannot clearly see a test button from this view and asks to move closer" width="260"> |
 
 **FieldProof:** a plausible photo is not enough. The repair must also pass the approved equipment check.
 
@@ -36,8 +44,8 @@ verification decision. Completing a guided task and verifying a repair are separ
 
 ![Operations workspace for an inspection, showing evidence photos, AI observations and verification state](docs/evidence/ui-v3/06-ops-inspection-workspace.jpg)
 
-*The web screens replay recorded inspections and use synthetic equipment images and simulated diagnostics. The Android
-step is an earlier capture from the emulator's virtual room, not a physical phone. The
+*The phone shots are from a November 4 run on a real ceiling smoke detector, with ARCore and genuine Muse Spark and SAM 3.1
+calls. The web screens replay recorded inspections and use synthetic equipment images and simulated diagnostics. The
 [evidence index](docs/evidence/README.md#readme-screens-ui-v3) gives the origin and scope of each image.*
 
 ## What you can do
@@ -284,11 +292,14 @@ flow, receipt tamper detection and a byte-for-byte web rebuild. It did not make 
   verification loop recorded zero false completions and verified all 12 issued receipts. These are results on synthetic
   renders, not field accuracy estimates.
 - **Physical phone.** The [S23 guided-task run](docs/evidence/tasks/s23-phone-run-2/run.json) recorded ARCore anchors,
-  estimated distances and a recognized spoken question. A [separate phone inspection](docs/evidence/live-phone/README.md)
-  used real camera captures of a synthetic image and a live loopback HTTP check, not a measurement of physical equipment.
+  estimated distances and a recognized spoken question. A [November 4 S23 run](docs/evidence/android/camera-layout/s23-run-20261104.json)
+  used a person's voice on a real ceiling smoke detector: questions carried a camera frame, SAM 3.1 labels tracked the
+  detector, and [Muse Voice repair claims](docs/ANDROID_VOICE.md) worked end to end, with misheard words corrected in
+  review. A [separate phone inspection](docs/evidence/live-phone/README.md) used real camera captures of a synthetic image
+  and a live loopback HTTP check, not a measurement of physical equipment.
 - **Not yet validated.** Recent hands-free, offline, knowledge and spatial-AR changes are not all covered by
-  physical-device runs. Real Meta glasses have not been tested. [Muse Voice repair claims](docs/ANDROID_VOICE.md) have genuine
-  provider calls and emulator evidence, not a physical phone microphone or a person's voice. The [teaching recorder](docs/evidence/android/teaching/README.md)
+  physical-device runs. Real Meta glasses have not been tested. Speech recognition has not been measured on a noisy site
+  or tried with a person's voice on a browser microphone. The [teaching recorder](docs/evidence/android/teaching/README.md)
   has emulator evidence, not a physical-device or training-quality benchmark.
 
 See [feature status](docs/FEATURE_STATUS.md) for dated implementation and validation records.

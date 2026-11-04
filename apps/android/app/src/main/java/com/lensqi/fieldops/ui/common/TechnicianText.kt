@@ -68,7 +68,9 @@ object TechnicianText {
         .replace(Regex("\\s+about \\d+ cm"), "")
         .replace(Regex("[ \t]{2,}"), " ").trim()
 
-    fun cameraStatus(selectedAndTracked: Boolean, lost: Boolean, paused: Boolean, hasObjects: Boolean): String = when {
+    fun cameraStatus(selectedAndTracked: Boolean, lost: Boolean, paused: Boolean, hasObjects: Boolean, offline: Boolean = false): String = when {
+        // Said first: no amount of aiming fixes a lost connection.
+        offline -> "Can't reach the LensQi server · check the connection"
         lost -> "Point the camera back at the equipment"
         paused -> "Analysis paused briefly · retrying"
         selectedAndTracked -> "Keeping your selected equipment in view"

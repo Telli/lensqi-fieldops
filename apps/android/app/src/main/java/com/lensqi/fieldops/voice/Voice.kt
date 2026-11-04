@@ -227,6 +227,9 @@ class VoiceInputState(val listening: Boolean, val heard: String, val error: Stri
 fun speechNotice(@Suppress("UNUSED_PARAMETER") onDevice: Boolean): String =
     "Audio is sent through LensQi to Meta Voice Transcribe. Internet required; you can type instead."
 
+/** On the camera, a question also carries what the camera sees now, whether it was spoken or typed. */
+const val ASK_NOTICE = "Asking sends your voice or text and camera view to Meta via LensQi."
+
 /** The recognizer heard nothing: an ordinary outcome, not a failure; said once by push-to-talk and never in hands-free. */
 const val NOTHING_HEARD = "I didn't catch that."
 

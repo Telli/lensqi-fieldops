@@ -1,0 +1,98 @@
+{
+  "recorded": "2026-11-04",
+  "device": "Galaxy S23 Ultra, Android 16, with ARCore; app reached the API over USB",
+  "labels": [
+    "LIVE_META",
+    "PHYSICAL_PHONE",
+    "SIMULATED_PROBE"
+  ],
+  "whatRan": "A person spoke to the phone on a real ceiling smoke detector. ARCore ran (the app showed Spatial guidance), SAM 3.1 labels tracked the detector with estimated distances of about 30 to 46 cm, and questions carried a camera frame.",
+  "questionsOnAPlanStep": [
+    {
+      "at": "2026-11-04T20:33:14.45005+00:00",
+      "stepId": "s1",
+      "question": "Is that the test button?",
+      "answer": "Yes, that's your smoke detector on the ceiling. I can't clearly see a test button from this view. Point the camera closer at the center of the detector.",
+      "modelId": "muse-spark-1.3",
+      "frameSent": true,
+      "frameBytes": 26604,
+      "frameSha256": "f55f65af8a208bbb861744872a2ab43ccf3fe59cc3224a000f949b7a72a080e3"
+    },
+    {
+      "at": "2026-11-04T20:33:42.738024+00:00",
+      "stepId": "s1",
+      "question": "How about now?",
+      "answer": "Yes, that's your smoke detector centered in view on the ceiling. It looks intact and mounted flat, not cracked or hanging loose.",
+      "modelId": "muse-spark-1.3",
+      "frameSent": true,
+      "frameBytes": 31218,
+      "frameSha256": "278a917b509362f7762bb3049173fde2a683a8d16cee952cb11fdeda328f3843"
+    },
+    {
+      "at": "2026-11-04T20:34:18.773473+00:00",
+      "stepId": "s1",
+      "question": "I'm looking I just I'm looking for the test button.",
+      "answer": "Yes, you found it right in the center of the view. That's the white round smoke detector on the ceiling. You can reach it standing, no ladder is needed.",
+      "modelId": "muse-spark-1.3",
+      "frameSent": true,
+      "frameBytes": 34697,
+      "frameSha256": "fe0374e4690f4662b04f84cfba0adf376747d4dcb2aa9bcc797fd1d74c3cd1c7"
+    }
+  ],
+  "questionsInJustAsk": [
+    {
+      "at": "2026-11-04T20:15:56.596994+00:00",
+      "stepId": null,
+      "question": "Is that the test button?",
+      "answer": "Yes, that small dark spot on the face looks like the test button. Point the camera closer to read the label around it to confirm.",
+      "modelId": "muse-spark-1.3",
+      "frameSent": true,
+      "frameBytes": 32114,
+      "frameSha256": "4c56f949c437c2bf412384670b88cffb23965a5621e208bc6b3698b5800a0e86"
+    },
+    {
+      "at": "2026-11-04T20:16:19.132786+00:00",
+      "stepId": null,
+      "question": "Ah, thanks.",
+      "answer": "You're welcome. I'm here if you need help testing it or checking anything else.",
+      "modelId": "muse-spark-1.3",
+      "frameSent": true,
+      "frameBytes": 13022,
+      "frameSha256": "1c495f6b974bc9cc36bf9fce9efc3d0ffe5cb006e042b3274acafe9096c002f6"
+    }
+  ],
+  "voiceClaim": {
+    "confirmedClaimsAsRecorded": [
+      {
+        "at": "2026-11-04T20:18:51.038615+00:00",
+        "claim": "I reseated the yellow cable in part two. part two."
+      },
+      {
+        "at": "2026-11-04T20:36:20.986512+00:00",
+        "claim": "I plugged the yellow cable back into port two."
+      }
+    ],
+    "draftTranscriptsReadFromTheScreenRecording": [
+      "I visited the yellow cable in Port 2.",
+      "I recited the yellow cable in part two.",
+      "I recited the yellow cable in part two. part two.",
+      "I plug the yellow cable back into port two."
+    ],
+    "finding": "Muse Voice misheard the word \"reseated\" on all three takes that used it, once as \"visited\" and twice as \"recited\"; it heard \"port\" as \"part\" twice and repeated the last words once. Simpler words came back nearly right. The person corrected the drafts in the review step before confirming; one confirmed claim still carries the repeated words."
+  },
+  "notCommitted": "The screen recordings and the frames sent with questions, because they can show the person's home.",
+  "notShown": [
+    "A real repair or real equipment beyond the ceiling detector",
+    "A live equipment check: FieldProof checks were simulated",
+    "Recognition quality in a noisy site",
+    "Whether the part the answer points at is right: the model hedged, and a person decides"
+  ],
+  "stills": {
+    "files": [
+      "s23-1-finds-the-part.jpg",
+      "s23-2-label-holds.jpg",
+      "s23-3-ask-what-it-sees.jpg"
+    ],
+    "note": "Cropped from the screen recording of the plan step. Only the detector and ceiling are in view; the status and navigation bars are cropped out."
+  }
+}
