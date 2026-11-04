@@ -5,6 +5,7 @@ using LensQi.FieldOps.Api.Infrastructure.Hardening;
 using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using LensQi.FieldOps.Api.Shared;
 using LensQi.FieldOps.Core.Inspection;
+using LensQi.FieldOps.Core.Knowledge;
 using LensQi.FieldOps.Diagnostics;
 using LensQi.FieldOps.Meta.Segmentation;
 using LensQi.FieldOps.Meta.Vision;
@@ -291,7 +292,7 @@ public static class InspectionEndpoints
         // already decide the outcome no probe is spent. The stage check, the probes and the decision run under one lock,
         // so a concurrent or retried verify waits and then replays its recorded decision or is refused, instead of
         // running the probes a second time. The probes are read-only health checks, so one cut off mid-call is safe to run again.
-        g.MapPost("/inspections/{id}/verify", async (string id, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, TimeProvider clock, CancellationToken ct) =>
+        g.MapPost("/inspections/{id}/verify", async (string id, HttpRequest http, InspectionStore store, DiagnosticDispatcher dispatcher, IReadOnlyList<FixtureKnowledgeBinding> bindings, IVendorKnowledgeResolver resolver, TimeProvider clock, CancellationToken ct) =>
         {
             if (store.Find(id) is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             var requestId = RequestId(http, "verify:" + Guid.NewGuid().ToString("N"));
@@ -312,7 +313,7 @@ public static class InspectionEndpoints
                     // The evidence id marks a measurement taken by verify, so clients can show which checks a decision used.
                     s.RecordDiagnostic("verify-diag:" + traceId, VerifyDiagnosticPrefix + traceId[..10], result, clock.GetUtcNow());
                 }
-                var decision = s.Verify(requestId, clock.GetUtcNow());
+                var decision = s.Verify(requestId, clock.GetUtcNow(), RequiredKnowledgeCheck.For(bindings, resolver, s.State.FixtureId, s.State.AssetId));
                 return Results.Ok(new { decision, state = View(s), replayed = false });
             }, ct));
         });

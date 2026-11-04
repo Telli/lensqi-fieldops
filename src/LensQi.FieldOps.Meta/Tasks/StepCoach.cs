@@ -82,9 +82,9 @@ public sealed class StepCoach(IChatClient chat)
                Retain the existing topic on follow-up questions unless the work changes. No instructions,
                claims of completion, or invented model details. Otherwise return an empty sessionTitle.
             """, new { task = Context(task, measured: measured), question, previousTitle = task.Mode == TaskMode.Freeform ? task.DisplayTitle : null,
-                recentQuestions = task.Mode == TaskMode.Freeform ? task.Answers.TakeLast(3).Select(a => a.Question).ToArray() : null, restrictedTopic = Restricted(question) }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
+                recentQuestions = task.Mode == TaskMode.Freeform ? task.Answers.TakeLast(3).Select(a => a.Question).ToArray() : null, restrictedTopic = Restricted(task, question) }, frame is { } f ? [f] : [], "Answer the question.", AnswerSchema.Value, "StepAnswer", "low", 3000, ct);
 
-    private static string? Restricted(string text) => RestrictedTopics.Classify(text) is var c && c != RestrictedCategory.None ? c.ToString() : null;
+    private static string? Restricted(TaskState task, string? text = null) => TaskSafety.Topic(task, text) is var c && c != RestrictedCategory.None ? c.ToString() : null;
 
     /// <summary>Suggests whether a step photo looks done. The person decides; this is never a verification.</summary>
     public Task<MuseResult<StepCheckResult>> CheckAsync(TaskState task, TaskStep step, byte[] photo, string mediaType, CancellationToken ct) =>
@@ -102,7 +102,7 @@ public sealed class StepCoach(IChatClient chat)
         var index = plan is null || step is null ? -1 : plan.Steps.ToList().FindIndex(s => s.Id == step.Id);
         return new
         {
-            mode = task.Mode.ToString(), task.Goal, task.Details,
+            mode = task.Mode.ToString(), task.Goal, task.Details, restrictedTopic = Restricted(task),
             person = task.Person is { } p ? new { p.HeightCm, p.StandingReachCm, p.Tools } : null,
             measured = measured is { Count: > 0 } ? measured : null,
             plan = plan is null ? null : new { plan.Title, risk = plan.Risk.ToString(), plan.ProfessionalRequired, plan.ProfessionalReason, plan.Tools },

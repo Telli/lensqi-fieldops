@@ -244,6 +244,8 @@ public sealed class InspectionSession
     public IReadOnlyList<InspectionEvent> ReviewChecklist(string requestId, string requirementId, ChecklistStatus status, string reviewedByEvidenceId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
+            // A closed inspection keeps the evidence its decision rested on; a retry of an earlier review replays above.
+            Require(State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive), "Inspection is closed");
             Require(_twin.Twin.VisualRequirements.Any(v => v.RequirementId == requirementId), $"Unknown visual requirement '{requirementId}'");
             Require(State.RepairClaimedAt is not null, "Checklist review applies after a repair claim");
             Require(Enum.IsDefined(status), $"Unknown checklist status '{status}'");
@@ -293,16 +295,21 @@ public sealed class InspectionSession
     public IReadOnlyList<InspectionEvent> Acknowledge(string requestId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
+            Require(State.Stage is not (InspectionStage.VerifiedComplete or InspectionStage.Inconclusive), "Inspection is closed");
             Require(State.CurrentClaimId is not null, "Nothing to acknowledge");
             return Commit([new TechnicianAcknowledged(Next(), State.InspectionId, now, State.FixtureDigest, State.CurrentClaimId!)]);
         });
 
-    /// <summary>Server-owned deterministic gate. Idempotent per request ID: a duplicate returns the same decision, appends nothing.</summary>
-    public VerificationDecision Verify(string requestId, DateTimeOffset now)
+    /// <summary>
+    /// Server-owned deterministic gate. Idempotent per request ID: a duplicate returns the same decision, appends nothing.
+    /// <paramref name="requiredKnowledge"/> is what the site binding requires of vendor documentation, resolved by the caller
+    /// (null when it requires nothing); the decision records it, so replay never needs the pack again.
+    /// </summary>
+    public VerificationDecision Verify(string requestId, DateTimeOffset now, RequiredKnowledgeCheck? requiredKnowledge = null)
     {
         if (State.DecisionsByRequest.TryGetValue(requestId, out var earlier)) return earlier;
         Require(State.Stage == InspectionStage.ReadyToVerify, "Verification requires a pending repair claim");
-        var decision = VerificationPolicyEvaluator.Evaluate(State, _twin, now);
+        var decision = VerificationPolicyEvaluator.Evaluate(State, _twin, now, requiredKnowledge);
         var batch = new List<InspectionEvent> { new VerificationEvaluated(Next(), State.InspectionId, now, State.FixtureDigest, requestId, decision) };
         var target = decision.Result switch
         {

@@ -84,6 +84,11 @@ class LabelsTest {
         // The model can close it too; a closed inspection must never read "try again".
         val stopped = plainReason("model proposed StopInconclusive")
         assertTrue(stopped.startsWith("LensQi couldn't settle this"), stopped)
+        // Held for its documentation: a new photo alone will not settle it, so it must not read as a photo problem.
+        val held = "Required vendor facts are not confirmed for this equipment (ApplicabilityUnverified): LAB-PORT-MAP-01"
+        assertTrue(plainReason(held).contains("documentation couldn't be confirmed"), plainReason(held))
+        val sentBack = plainReason("The last check sent the claim back for a new photo: $held")
+        assertTrue(sentBack.contains("documentation couldn't be confirmed"), sentBack)
         val budget = plainReason("view budget of 3 exhausted")
         assertTrue(budget.contains("as many views as it may") && budget.contains("no fault or repair record"), budget)
     }

@@ -305,6 +305,17 @@ public class TaskSessionTests
     [InlineData("Have an electrician come over and remove the cover yourself.", true)]
     [InlineData("Let a plumber disconnect the gas line and replace the valve.", false)]
     [InlineData("Have your electrician turn off the main breaker and replace the panel.", false)]
+    [InlineData("Only a licensed electrician may remove the panel cover.", false)]
+    [InlineData("Contact a licensed electrician to inspect and replace the garage breaker panel.", false)]
+    [InlineData("Contact a licensed electrician, then remove the panel cover.", true)]
+    [InlineData("Do not touch it or remove the cover.", false)]
+    [InlineData("Do not switch off main, pull breakers, or unscrew the panel.", false)]
+    [InlineData("Do not touch it and remove the cover.", true)]
+    [InlineData("Don't wait. Remove the cover.", true)]
+    [InlineData("Don't wait, remove the panel cover.", true)]
+    [InlineData("Do not wait for the electrician, then open the box or remove the cover.", true)]
+    [InlineData("The door is open with exposed wires.", false)]
+    [InlineData("Open the panel with exposed wires.", true)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
 
@@ -335,4 +346,77 @@ public class TaskSessionTests
     [InlineData("Relight my gas fireplace", RestrictedCategory.GasLinesOrAppliances)]
     public void More_restricted_topics_are_recognised(string goal, RestrictedCategory expected) =>
         Assert.Equal(expected, RestrictedTopics.Classify(goal));
+
+    private static TaskPlan Referral(string? summary = null, string? reason = null, string? caution = null, string? stopIf = null, string? check = null) =>
+        new("Replace garage breaker panel - arrange professional", summary ?? "Observe and refer to an electrician.", RiskLevel.High, 5, RestrictedCategory.MainsElectrical, true, reason ?? "Only a licensed electrician may do this work.", [], [],
+            [new TaskStep("s1", "Observe the panel", "Photograph the closed panel from a safe distance.", false, [], caution is null ? [] : [new Caution(CautionKind.Electrical, caution)], stopIf is null ? [] : [stopIf], check is null ? null : new StepPhotoCheck(true, check))], "AI-written plan");
+
+    [Fact]
+    public void A_restricted_plan_is_checked_in_everything_the_person_reads_or_hears()
+    {
+        const string bad = "Remove the panel cover.";
+        TaskPlanValidator.Validate(Referral(), "Replace my breaker panel", null);   // the title names the job and tells no one to do it
+        foreach (var plan in new[] { Referral(caution: bad), Referral(stopIf: bad), Referral(check: bad), Referral(summary: bad), Referral(reason: bad) })
+            Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(plan, "Replace my breaker panel", null)).Code);
+    }
+
+    [Fact]
+    public void The_same_words_are_fine_in_a_plan_that_is_not_restricted()
+    {
+        var plan = Referral(caution: "Turn off the breaker first.") with { Restricted = RestrictedCategory.None, ProfessionalRequired = false, ProfessionalReason = null };
+        TaskPlanValidator.Validate(plan, "Replace a ceiling light", null);
+    }
+
+    [Theory]
+    [InlineData("you would need to open the panel", false)]
+    [InlineData("you need to remove the cover to see it", false)]
+    [InlineData("the job requires you to open the panel", false)]
+    [InlineData("you open the panel", false)]
+    [InlineData("the cover is open", false)]
+    [InlineData("you smell burning or see smoke", false)]
+    [InlineData("door is open with exposed wires", false)]
+    [InlineData("Remove the panel cover.", true)]
+    [InlineData("the door sticks. Pry the panel open.", true)]
+    public void A_stop_condition_may_name_the_situation_but_not_give_the_command(string text, bool instructs) =>
+        Assert.Equal(instructs, TaskSafety.InstructsHandsOnInCondition(text));
+
+    [Theory]
+    [InlineData("plan-panel.json")]
+    [InlineData("plan-panel-text-checked.json")]
+    public void Recorded_genuine_referral_plans_still_pass(string file)
+    {
+        // Muse's own wording for restricted work: stricter checks must not turn real referrals into failures.
+        var path = Path.Combine(RepoPaths.FixturesDir, "..", "..", "docs", "evidence", "tasks", file);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+        var task = JsonDocument.Parse(File.ReadAllBytes(path)).RootElement.GetProperty("task");
+        var plan = task.GetProperty("plan").Deserialize<TaskPlan>(options)!;
+        Assert.Equal(RestrictedCategory.MainsElectrical, plan.Restricted);
+        TaskPlanValidator.Validate(plan, task.GetProperty("goal").GetString()!, null);
+    }
+
+    [Fact]
+    public void A_follow_up_stays_restricted_after_an_earlier_question_named_the_work()
+    {
+        const string bad = "Remove the panel cover.";
+        var s = TaskSession.Create("T-1", TaskMode.Freeform, "", null, null, T0);
+        Assert.False(TaskSafety.IsRestricted(s.State, "How do I open it?"));
+        s.RecordAnswer("q1", null, "Can I work on the breaker panel?", TaskSafety.Referral, null, "muse", T0);
+
+        Assert.Equal(RestrictedCategory.MainsElectrical, TaskSafety.Topic(s.State, "How do I open it?"));
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(s.State, bad, "How do I open it?"));
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(s.State, bad));   // live guidance and step checks have no question of their own
+        Assert.EndsWith(TaskSafety.Referral, TaskSafety.Guard(s.State, "It is the grey box."));
+
+        // It is on the log, so a restart keeps it.
+        var back = TaskSession.Rehydrate(s.Events);
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(back.State, bad));
+    }
+
+    [Fact]
+    public void An_earlier_answer_alone_does_not_make_a_task_restricted()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Freeform, "", null, null, T0);
+        s.RecordAnswer("q1", null, "Which oil does it take?", "0W-20. Unrelated: never open a breaker panel yourself.", null, "muse", T0);
+        Assert.False(TaskSafety.IsRestricted(s.State, "How much?"));
+    }
 }
