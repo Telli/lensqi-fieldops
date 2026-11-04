@@ -132,8 +132,10 @@ public static class TaskSafety
     // A comma after the last item ends it ("don't wait, remove the cover", "do not call or wait, remove the cover" are
     // commands) and so does a new clause.
     private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+((\S*[^\s,]\s+){0,2}|((?!\b(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)\b).)*\b(or|nor)\s+(\S*[^\s,]\s+){0,2})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    // "The door is open with exposed wires": a description, not a command.
+    // "The door is open with exposed wires": a description, not a command. It needs a word that can describe a state with no
+    // object after it: "what you need to do is open the panel" and "all that remains is disconnect the wires" still instruct.
     private static readonly Regex StateBefore = new(@"(?<![a-z])(is|are|was|were|been|being|stays|remains)\s+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex StateWord = new(@"^(open|close|cut)\s+(with|to|near|by|on|at|in|and|or)(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     // "Have a licensed electrician replace…", "ask a plumber to disconnect…", "a plumber should disconnect…": the action
     // belongs to someone else, but only when the delegation comes before it in the same clause. Merely contacting a
     // professional hands nothing over: "call an electrician for advice and remove the cover", "remove the cover, and call
@@ -180,7 +182,7 @@ public static class TaskSafety
 
     private static bool Instructs(string? text, bool situation) =>
         !string.IsNullOrWhiteSpace(text) && Regex.Split(text.Replace('’', '\''), @"(?<=[.!?;:])\s+|\n+").Any(sentence =>
-            Action.Matches(sentence).Any(m => !NegatedBefore.IsMatch(sentence[..m.Index]) && !StateBefore.IsMatch(sentence[..m.Index]) && !DelegatedBefore(sentence, m.Index)
+            Action.Matches(sentence).Any(m => !NegatedBefore.IsMatch(sentence[..m.Index]) && !(StateBefore.IsMatch(sentence[..m.Index]) && StateWord.IsMatch(sentence[m.Index..])) && !DelegatedBefore(sentence, m.Index)
                 && !(situation && SituationBefore.IsMatch(sentence[..m.Index]))));
 
     private static bool DelegatedBefore(string sentence, int actionAt)
