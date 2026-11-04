@@ -514,7 +514,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
     }
     var typed by remember { mutableStateOf("") }
     var muted by remember { mutableStateOf(!vm.speaker.enabled) }
-    val pace = rememberVoicePace(vm.speaker, camera) { !reviewingNow }
+    // Read from the view model each time: the timer outlives this composition's values.
+    val pace = rememberVoicePace(vm.speaker, camera, asking = { vm.state.value.busy == "ask" }) { !reviewingNow && vm.state.value.busy == null }
     val voice = rememberVoiceInput(vm.speaker) { said ->
         val now = vm.state.value
         val current = now.displayed?.currentStep ?: return@rememberVoiceInput
@@ -702,7 +703,9 @@ private fun SpokenErrors(speaker: SpeechOutput, error: String?, voiceError: Stri
 /**
  * Spoken live guidance and the pause command for one camera screen. Guidance goes through [SpokenFeedbackGate], so
  * unchanged advice is not repeated and lines are spaced; "pause" holds speech and live coaching until "resume". A hint
- * waits while the speaker is busy (a step, answer or check result being read, or the microphone listening).
+ * waits while the speaker is busy (a step, answer or check result being read, or the microphone listening). A question
+ * holds coaching: nothing is hinted while it is waiting for its answer, where a hint would sound like the reply, or for
+ * [QUIET_AFTER_QUESTION_MS] after the answer ends, so the person can act on it or ask again.
  */
 internal class VoicePace(private val speaker: SpeechOutput) {
     var paused by mutableStateOf(false)
@@ -711,6 +714,8 @@ internal class VoicePace(private val speaker: SpeechOutput) {
     private var gate = SpokenFeedbackGate()
     private var latest = ""
     private var waited = false
+    private var wasAsking = false
+    private var quietUntil = Long.MIN_VALUE
 
     /**
      * Losing the target cuts off a part-specific hint still being spoken and drops the gate's spacing, so the
@@ -722,11 +727,20 @@ internal class VoicePace(private val speaker: SpeechOutput) {
     }
 
     /** Called on a short timer; speaks the latest guidance when the gate allows it. */
-    fun tick(now: Long, allowed: Boolean) {
-        if (paused || !allowed) return
+    fun tick(now: Long, allowed: Boolean, asking: Boolean = false) {
+        if (paused) return
+        if (asking) {
+            // Only a hint can be playing when busy is false; it is cut off rather than left to sound like the answer.
+            if (!wasAsking && !speaker.busy) speaker.stop()
+            wasAsking = true; waited = true; quietUntil = now + QUIET_AFTER_QUESTION_MS
+            return
+        }
+        wasAsking = false
+        if (!allowed) return
         // Busy: the gate isn't asked, so the hint stays pending and plays 1.5 s after the speaker is free, however
-        // long it had settled before.
-        if (speaker.busy) { waited = true; return }
+        // long it had settled before. An answer still being read moves the quiet time to its end.
+        if (speaker.busy) { waited = true; if (now < quietUntil) quietUntil = now + QUIET_AFTER_QUESTION_MS; return }
+        if (now < quietUntil) return
         if (waited) { gate.restartSettle(); waited = false }
         gate.next(latest, now)?.let { speaker.speak(it) }
     }
@@ -746,15 +760,17 @@ internal class VoicePace(private val speaker: SpeechOutput) {
         speaker.held = false
         if (wasLive) camera?.setLive?.invoke(true)
     }
+
+    companion object { const val QUIET_AFTER_QUESTION_MS = 20_000L }
 }
 
 @Composable
-private fun rememberVoicePace(speaker: SpeechOutput, camera: HandleRef, allowed: () -> Boolean): VoicePace {
+private fun rememberVoicePace(speaker: SpeechOutput, camera: HandleRef, asking: () -> Boolean = { false }, allowed: () -> Boolean): VoicePace {
     val pace = remember { VoicePace(speaker) }
     LaunchedEffect(pace) {
         while (true) {
             delay(500)
-            pace.tick(SystemClock.elapsedRealtime(), allowed() && camera.value?.live == true)
+            pace.tick(SystemClock.elapsedRealtime(), allowed() && camera.value?.live == true, asking())
         }
     }
     // Leaving the screen never leaves the app's voice held.
@@ -930,7 +946,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
     val answers = t?.answers.orEmpty().asReversed()
     var typed by remember { mutableStateOf("") }
     var muted by remember { mutableStateOf(!vm.speaker.enabled) }
-    val pace = rememberVoicePace(vm.speaker, camera) { true }
+    val pace = rememberVoicePace(vm.speaker, camera, asking = { vm.state.value.busy == "ask" }) { vm.state.value.busy == null }
     val voice = rememberVoiceInput(vm.speaker) { said ->
         val command = parseCommand(said)
         // While paused nothing said is a command or a question; only "resume" (and the voice switch) is heard, so ambient
