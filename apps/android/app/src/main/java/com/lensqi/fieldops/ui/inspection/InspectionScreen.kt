@@ -256,7 +256,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
     // One AI card: what LensQi sees, the next move, the single action. A closed inspection shows how it closed instead.
     item {
         if (view.stage == InspectionStage.Inconclusive) AiCard(plainReason(s.stageReason ?: "The inspection is closed (Inconclusive)"), "Inspection closed · inconclusive",
-            "Nothing is marked as a fault or as repaired. The record keeps how it closed.")
+            "Closing added no fault or repair record; earlier work stays on record, and the record keeps how it closed.")
         else AiCard(aiSummary(view, a), move?.title, move?.hint) {
             when (move?.kind) {
                 MoveKind.Scan -> {
@@ -866,7 +866,7 @@ private fun DeclineView(s: InspectionUi, vm: InspectionViewModel) {
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text("Close this inspection as inconclusive?") },
-        text = { Text("LensQi asked for a view you can't safely capture. The inspection closes as inconclusive: nothing is marked as a fault or as repaired, and the record keeps that the view was declined.") },
+        text = { Text("LensQi asked for a view you can't safely capture. The inspection closes as inconclusive: this adds no fault or repair record, earlier work stays on record, and the record keeps that the view was declined.") },
         confirmButton = { TextButton(onClick = { confirm = false; vm.declineView() }) { Text("Close as inconclusive") } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Keep going") } },
     )

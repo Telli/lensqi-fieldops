@@ -550,7 +550,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on,
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on || (voice.supported && !handsFree.onDevice),
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -913,8 +913,9 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         // A title the AI named from the conversation is labelled as such, as the plan and summary label it.
         header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
-        // The speech badge must be readable while hands-free keeps the microphone open.
-        showDetails = handsFree.on,
+        // The speech badge must be readable while hands-free keeps the microphone open, and whenever the phone's standard
+        // speech service is in use (it may send audio to its provider), so the notice is seen before the next mic tap.
+        showDetails = handsFree.on || (voice.supported && !handsFree.onDevice) || voiceError != null || pace.paused,
         // A tapped outline becomes a question about that part, with the live frame, in the web app's words.
         onAskPart = { part ->
             when {

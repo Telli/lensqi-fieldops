@@ -793,7 +793,9 @@ private data class TapState(val ar: Boolean, val parts: List<LiveObject>, val fl
 internal fun visibleSelection(tapped: LiveObject, parts: List<LiveObject>): LiveObject? {
     tapped.anchorId?.let { anchor -> return parts.firstOrNull { it.anchorId == anchor } }
     val unanchored = parts.filter { it.anchorId == null }
-    return unanchored.firstOrNull { it.id == tapped.id } ?: unanchored.singleOrNull { it.concept == tapped.concept }
+    // An id is "<prompt position>-<object>", and prompt order changes with the focus, so the same id can name another
+    // concept in a later batch; the concept must match too.
+    return unanchored.firstOrNull { it.id == tapped.id && it.concept == tapped.concept } ?: unanchored.singleOrNull { it.concept == tapped.concept }
 }
 
 /**

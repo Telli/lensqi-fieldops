@@ -100,8 +100,8 @@ fun plainReason(reason: String) = when {
     reason.contains("unavailable") -> "The equipment check is unavailable. Try it again when connected."
     reason.contains("change analysis rejected") -> "The reviewed photo was not accepted. Review against the new photo."
     reason.contains("taken before the repair claim") -> "The reviewed photo was taken before the repair. Review against the new photo."
-    reason == "technician declined the requested view" -> "You declined the requested view. Nothing is marked as a fault or as repaired."
-    reason.startsWith("view budget of") -> "LensQi asked for as many views as it may; the photos didn't settle it. Nothing is marked as a fault or as repaired."
+    reason == "technician declined the requested view" -> "You declined the requested view. Closing adds no fault or repair record; earlier work stays on record."
+    reason.startsWith("view budget of") -> "LensQi asked for as many views as it may; the photos didn't settle it. Closing adds no fault or repair record; earlier work stays on record."
     reason.startsWith("The inspection is closed") -> "This inspection is closed."
     else -> "A required check is unresolved. Review the evidence and try again."
 }

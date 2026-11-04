@@ -82,7 +82,7 @@ class LabelsTest {
         assertEquals("This inspection is closed.", plainReason("The inspection is closed (Inconclusive)"))
         // The other way an inspection closes inconclusive without a claim: the view budget ran out. Same promise, not the generic retry line.
         val budget = plainReason("view budget of 3 exhausted")
-        assertTrue(budget.contains("as many views as it may") && budget.contains("Nothing is marked"), budget)
+        assertTrue(budget.contains("as many views as it may") && budget.contains("no fault or repair record"), budget)
     }
 
     @Test fun `a record that fails its integrity check says so instead of blaming the connection`() {
