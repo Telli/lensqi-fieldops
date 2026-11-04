@@ -1,3 +1,7 @@
+> General web and Android dictation now also uses Meta Voice Transcribe through `POST /v1/voice/transcribe`.
+> The inspection-specific recorded-claim path below remains available for explicit transcript review.
+> Browser and Android text-to-speech output is unchanged. See [speech input integration](META_VOICE_INPUT.md).
+
 # Android repair claims by voice
 
 The repair step, including a retry after failed verification, offers three ways to write the claim. Each one fills a draft
@@ -6,7 +10,7 @@ that the technician reviews before it becomes a claim.
 | Method | Where the words come from | Sent off the phone |
 |---|---|---|
 | Typing | The technician | The confirmed text |
-| **Dictate repair claim** | The phone's speech service | Whatever that service sends, then the confirmed text |
+| **Dictate repair claim** | Meta Voice Transcribe through LensQi | The recording, then the confirmed text |
 | **Record with Muse Voice** | `muse-voice-transcribe-1.0`, through the LensQi server | The recording, then the confirmed text |
 
 ## Recording with Muse Voice

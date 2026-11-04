@@ -71,7 +71,7 @@ Node.js, a database server or Docker to run the application.
 | To do this | You need |
 |---|---|
 | Run the API and image processing | .NET 10 SDK, Python with `venv` and `pip`, and Git |
-| Use AI features | A Meta Model API key with access to `muse-spark-1.3` and `sam-3.1`, plus `muse-voice-transcribe-1.0` for recorded repair claims |
+| Use AI features | A Meta Model API key with access to `muse-spark-1.3` and `sam-3.1`, plus `muse-voice-transcribe-1.0` for speech input |
 | Develop the web app, or run the full reproducibility check | Node.js 22.12+ on the 22.x line, or Node.js 24, with npm |
 | Develop the Android app | JDK 21 and Android SDK platform 35. The app supports Android 12 (API 31) and later |
 
@@ -306,9 +306,10 @@ response guards retain the restricted context of recorded questions. These wordi
 **Guidance is not proof.** Step checks, AR distances, model confidence and documentation citations do not establish
 that a repair succeeded. A live HTTP result proves only what that endpoint measured at that time.
 
-**Photos and speech may leave the device.** Speech recognition may use the phone or browser vendor's service. Android
-prefers on-device recognition when available, and LensQi receives recognized text. A repair claim recorded with Muse
-Voice is different: the audio goes through the LensQi server to Meta for transcription, and LensQi does not save it.
+**Photos and speech may leave the device.** Web and Android speech input sends bounded WAV audio through the LensQi
+server to Meta Voice Transcribe. It requires connectivity; there is no automatic fallback to another speech provider.
+LensQi does not persist transcription audio on the server; Android deletes its temporary recording after processing or
+cancellation. Spoken output still uses browser/Android text-to-speech. You can type instead.
 Uploaded evidence and question photos can be stored on the server, so camera questions should not be treated as ephemeral.
 
 ## Documentation

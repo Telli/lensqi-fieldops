@@ -1,3 +1,8 @@
+> November 4 speech-input update: the user requested Meta Voice Transcribe for web and Android.
+> Bounded microphone audio now passes through LensQi to Meta; it is not persisted on the server.
+> Existing browser/Android text-to-speech stays in place. This supersedes the earlier platform-recognition and
+> text-only transport requirements below. See `docs/META_VOICE_INPUT.md` for implementation and verification limits.
+
 # LensQi — Guided Tasks
 ## Kiro Implementation Tasks
 
@@ -117,7 +122,9 @@ From the code review of `40ed417`. None breaks the FieldProof gate; the first th
 - [ ] DIY task end to end on web and Android with genuine plans and SAM outlines
 - [ ] Restricted plans with hands-on steps rejected in tests and in a genuine run
 - [ ] Live AR step runner: ARCore distance only from measured depth; 2D elsewhere
-- [ ] Spoken guidance, push-to-talk questions and voice commands; no audio sent to the LensQi server
+- [ ] Spoken guidance, push-to-talk questions and voice commands; Meta transcription disclosed and temporary audio cleaned up
 - [ ] Step check suggests; the user decides
 - [ ] Technician task linked to a site record reaches a FieldProof decision; receipt verifies
 - [ ] Evidence under `docs/evidence/tasks/`; docs claim only what ran
+
+- [x] **GT-T18a — Meta speech input on web and Android.** *(done Nov 4: shared bounded transcription endpoint, client PCM capture, silence handling, cancellation and Meta privacy notices; existing TTS retained. 427 .NET, 83 web and 322 Android tests passed; genuine synthetic-audio transcription recorded. Physical microphone acceptance remains in GT-T25.)*

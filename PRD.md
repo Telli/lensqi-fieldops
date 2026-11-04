@@ -1,3 +1,8 @@
+> November 4 speech-input update: the user requested Meta Voice Transcribe for web and Android.
+> Bounded microphone audio now passes through LensQi to Meta; it is not persisted on the server.
+> Existing browser/Android text-to-speech stays in place. This supersedes the earlier platform-recognition and
+> text-only transport requirements below. See `docs/META_VOICE_INPUT.md` for implementation and verification limits.
+
 # LensQi
 ## Product Requirements Document — Meta Global AI Developer Hackathon
 
@@ -591,7 +596,7 @@ Repository: **`lensqi-fieldops`**, initialized from scratch during the build win
 - [ ] DIY task from spoken or typed goal to done screen, on web at phone size and on Android, with genuine Muse plans and SAM outlines.
 - [ ] Restricted-category plans rejected when they contain hands-on steps, in tests and in one genuine-call run.
 - [ ] Step runner with live AR: SAM outlines of step parts; ARCore distance only from measured depth; 2D elsewhere.
-- [ ] Voice: spoken guidance, push-to-talk question answered within the step, voice commands; no audio sent to the LensQi server.
+- [ ] Voice: spoken guidance, push-to-talk question answered within the step, voice commands; Meta transcription disclosed and temporary audio cleaned up.
 - [ ] Step photo check suggests a verdict; the user decides.
 - [ ] Technician task linked to a site record reaches a FieldProof decision; fake fix rejected; receipt verifies.
 - [ ] Genuine-call evidence under `docs/evidence/tasks/` with model ids and digests; every claim matches what ran.

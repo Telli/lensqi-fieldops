@@ -25,13 +25,18 @@ import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
+class NoVoiceDetected : Exception()
+
 interface ClaimAudioRecorder {
     suspend fun record(stop: AtomicBoolean): File
+    suspend fun recordUtterance(stop: AtomicBoolean): File = record(stop)
 }
 
 /** Each invocation owns its microphone and temporary WAV; cancellation releases both in finally. */
 class WavClaimAudioRecorder @Inject constructor(@ApplicationContext private val context: Context) : ClaimAudioRecorder {
-    override suspend fun record(stop: AtomicBoolean): File {
+    override suspend fun record(stop: AtomicBoolean): File = capture(stop, false)
+    override suspend fun recordUtterance(stop: AtomicBoolean): File = capture(stop, true)
+    private suspend fun capture(stop: AtomicBoolean, endpoint: Boolean): File {
         var file: File? = null
         try {
             return withContext(Dispatchers.IO) {
@@ -51,13 +56,18 @@ class WavClaimAudioRecorder @Inject constructor(@ApplicationContext private val 
                         check(microphone.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone could not start." }
                         val buffer = ByteArray(4096)
                         var bytes = 0
+                        val endpointer = UtteranceEndpointer(SAMPLE_RATE)
                         val deadline = SystemClock.elapsedRealtime() + 60_000
                         while (!stop.get() && bytes < MAX_AUDIO_BYTES && SystemClock.elapsedRealtime() < deadline) {
                             currentCoroutineContext().ensureActive()
                             val count = microphone.read(buffer, 0, minOf(buffer.size, MAX_AUDIO_BYTES - bytes), AudioRecord.READ_NON_BLOCKING)
                             check(count >= 0) { "Microphone recording failed. Try again or type the claim." }
-                            if (count > 0) { output.write(buffer, 0, count); bytes += count } else delay(10)
+                            if (count > 0) {
+                                output.write(buffer, 0, count); bytes += count
+                                if (endpoint && endpointer.accept(buffer, count)) break
+                            } else delay(10)
                         }
+                        if (endpoint && !endpointer.spoken) throw NoVoiceDetected()
                         check(bytes >= SAMPLE_RATE / 5 * 2) { "Recording was too short. Speak for at least a moment and try again." }
                         output.seek(0)
                         output.write(wavHeader(bytes))

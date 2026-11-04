@@ -83,6 +83,10 @@ interface FieldOpsApi {
 
     /** A draft only; this endpoint never records a claim or changes inspection state. */
     @Multipart
+    @POST("v1/voice/transcribe")
+    suspend fun transcribeVoice(@Part audio: MultipartBody.Part): VoiceTranscript
+
+    @Multipart
     @POST("v1/inspections/{id}/voice/transcribe")
     suspend fun transcribeClaim(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part audio: MultipartBody.Part): VoiceTranscript
 

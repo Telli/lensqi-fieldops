@@ -7,8 +7,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -28,6 +26,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 
 /** Hands-free commands. Anything else said to LensQi is a question. Same grammar as the web app. */
 enum class VoiceCommand { Next, Back, Repeat, Check, Skip, Mute, Unmute, Pause, Resume }
@@ -221,10 +223,9 @@ class VoiceInputState(val listening: Boolean, val heard: String, val error: Stri
     /** Ends an open listen and delivers nothing from it, unlike [stop], which still hands over the final text. */
     val abort: () -> Unit = stop)
 
-/** What the shown speech badge says about where audio goes; it never says audio reaches LensQi, because it does not. */
-fun speechNotice(onDevice: Boolean): String =
-    if (onDevice) "On-device speech recognition · no audio leaves the phone"
-    else "The phone's speech service may send audio to its provider. Only the recognised text reaches LensQi."
+/** Discloses the current server-mediated Meta transcription path. */
+fun speechNotice(@Suppress("UNUSED_PARAMETER") onDevice: Boolean): String =
+    "Audio is sent through LensQi to Meta Voice Transcribe. Internet required; you can type instead."
 
 /** The recognizer heard nothing: an ordinary outcome, not a failure; said once by push-to-talk and never in hands-free. */
 const val NOTHING_HEARD = "I didn't catch that."
@@ -244,7 +245,7 @@ object HandsFreePolicy {
     fun startFailure(errorCode: Int): Boolean =
         errorCode != SpeechRecognizer.ERROR_NO_MATCH && errorCode != SpeechRecognizer.ERROR_SPEECH_TIMEOUT
     /**
-     * While paused nothing said is a command or a question, so ambient speech never reaches the server; only "resume"
+     * While paused nothing said is a command or a question, so ambient speech is not sent as a question; only "resume"
      * (and the voice switch) is heard. Hands-free keeps listening for it, or a pause by voice could only be ended by a tap.
      */
     fun pausedCommandAllowed(command: VoiceCommand?, paused: Boolean): Boolean =
@@ -308,8 +309,7 @@ fun rememberHandsFree(voice: VoiceInputState, speech: SpeechOutput, busy: Boolea
 }
 
 /**
- * Push-to-talk speech recognition. The on-device recognizer is used where Android offers one (Android 12+); otherwise the
- * system recognizer, which may send audio to its provider. Only the final text reaches LensQi.
+ * Meta speech input through the configured API. Output still uses Android TextToSpeech.
  */
 @Composable
 fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit): VoiceInputState {
@@ -329,56 +329,57 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
         if (settingsNeeded && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { settingsNeeded = false; error = null }
         onPauseOrDispose { }
     }
-    val supported = remember { SpeechRecognizer.isRecognitionAvailable(context) }
-    val canOnDevice = remember { supported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
-    var onDevice by remember { mutableStateOf(canOnDevice) }
-    // The on-device recognizer is preferred; without its language pack the phone's standard recognizer takes over.
-    var recognizerReset by remember { mutableStateOf(0) }
-    val recognizer = remember(onDevice, recognizerReset) {
-        if (!supported) null
-        else if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        else SpeechRecognizer.createSpeechRecognizer(context)
-    }
-    DisposableEffect(recognizer) { onDispose { recognizer?.destroy() } }
+    val supported = true
+    val onDevice = false
+    val dependencies = remember(context) { dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext, VoiceDependencies::class.java) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var transcribing by remember { mutableStateOf(false) }
+    var operation by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var stopSignal by remember { mutableStateOf(java.util.concurrent.atomic.AtomicBoolean(false)) }
     val session = remember { ListenSession() }
     var permissionToken by remember { mutableStateOf<Long?>(null) }
-    DisposableEffect(session) { onDispose { session.invalidate() } }
+    val cancel = {
+        session.invalidate(); permissionToken = null; stopSignal.set(true); operation?.cancel(); operation = null
+        listening = false; transcribing = false; heard = ""; hold.cancel()
+    }
+    val currentCancel by rememberUpdatedState(cancel)
+    DisposableEffect(session) { onDispose { currentCancel() } }
+    androidx.lifecycle.compose.LifecycleStartEffect(Unit) { onStopOrDispose { currentCancel() } }
     val begin = {
-        val token = session.start()
-        heard = ""; error = null; listening = true; hold.started()
-        recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onPartialResults(partial: Bundle?) { if (!session.active(token)) return; partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { heard = it } }
-            override fun onResults(results: Bundle?) {
-                if (!session.active(token)) return
-                session.invalidate()
-                listening = false
-                hold.result(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()) { heard = it; deliver(it) }
+        if (operation?.isActive != true) {
+            val token = session.start()
+            val stop = java.util.concurrent.atomic.AtomicBoolean(false); stopSignal = stop
+            heard = ""; error = null; listening = true; transcribing = false; hold.started()
+            operation = scope.launch {
+                try {
+                    val audio = dependencies.recorder().recordUtterance(stop)
+                    try {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        transcribing = true; heard = "Transcribing with Meta…"
+                        val result = com.lensqi.fieldops.data.api.apiCall {
+                            dependencies.api().transcribeVoice(okhttp3.MultipartBody.Part.createFormData("audio", "speech.wav", audio.asRequestBody("audio/wav".toMediaType())))
+                        }
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        if (session.active(token)) {
+                            when (result) {
+                                is com.lensqi.fieldops.data.api.ApiOutcome.Ok -> {
+                                    listening = false
+                                    hold.result(result.value.transcript) { heard = it; deliver(it) }
+                                }
+                                is com.lensqi.fieldops.data.api.ApiOutcome.Rejected -> {
+                                    error = if (result.code == "no_speech") NOTHING_HEARD else result.message
+                                    if (result.code != "no_speech") startFailures++
+                                }
+                                is com.lensqi.fieldops.data.api.ApiOutcome.Unreachable -> { error = "Meta transcription requires a connection. Try again or type instead."; startFailures++ }
+                            }
+                        }
+                    } finally { audio.delete() }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: NoVoiceDetected) { if (session.active(token)) error = NOTHING_HEARD }
+                catch (e: Exception) { if (session.active(token)) { error = "Voice input failed. Try again or type instead."; startFailures++ } }
+                finally { if (session.active(token)) { listening = false; transcribing = false; hold.ended(); operation = null } }
             }
-            override fun onError(code: Int) {
-                if (!session.active(token)) return
-                session.invalidate()
-                listening = false; hold.ended()
-                if (HandsFreePolicy.startFailure(code)) startFailures++
-                // 12/13: ERROR_LANGUAGE_NOT_SUPPORTED / ERROR_LANGUAGE_UNAVAILABLE (Android 12+), the on-device pack is missing.
-                // Stop continuous listening before a new provider can receive audio.
-                if (onDevice && (code == 12 || code == 13)) { onDevice = false; error = "Switched to the phone's standard speech service. Tap the mic again."; return }
-                error = when (code) { SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> NOTHING_HEARD; SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."; else -> "Voice input stopped." }
-            }
-            override fun onReadyForSpeech(params: Bundle?) = Unit
-            override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = Unit
-            override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
-            override fun onEvent(eventType: Int, params: Bundle?) = Unit
-        })
-        // A recognizer that refuses to start never reports an end, so the button would stay on "listening" without this.
-        try {
-            recognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            })
-        } catch (e: RuntimeException) { session.invalidate(); listening = false; hold.ended(); error = "Voice input couldn't start. Try again."; startFailures++ }
+        }
         Unit
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -397,7 +398,7 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
             startFailures++
         }
     }
-    return VoiceInputState(listening, heard, error, supported && recognizer != null,
+    return VoiceInputState(listening, heard, error, supported,
         start = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
             // Android answers a second request made while the dialog is up with an instant refusal, which would read as the
@@ -409,22 +410,17 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
                 permission.launch(Manifest.permission.RECORD_AUDIO)
             }
         },
-        stop = { recognizer?.stopListening(); Unit },
+        stop = { if (transcribing) cancel() else stopSignal.set(true) },
         settingsNeeded = settingsNeeded, openSettings = { com.lensqi.fieldops.ui.common.openAppSettings(context) },
         onDevice = onDevice,
         startFailures = startFailures,
-        // cancel() delivers no result and no callback, so the listening state and the speech hold are released here.
-        abort = {
-            session.invalidate()
-            // Hands-free ending hides nothing it kept quiet: an old silence must not be said aloud once the mode is off.
-            if (error == NOTHING_HEARD) error = null
-            if (listening) {
-                recognizer?.cancel()
-                recognizerReset++
-                listening = false
-                heard = ""
-                hold.ended()
-            }
-        },
+        abort = cancel,
     )
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface VoiceDependencies {
+    fun api(): com.lensqi.fieldops.data.api.FieldOpsApi
+    fun recorder(): ClaimAudioRecorder
 }

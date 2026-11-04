@@ -1,3 +1,8 @@
+> November 4 speech-input update: the user requested Meta Voice Transcribe for web and Android.
+> Bounded microphone audio now passes through LensQi to Meta; it is not persisted on the server.
+> Existing browser/Android text-to-speech stays in place. This supersedes the earlier platform-recognition and
+> text-only transport requirements below. See `docs/META_VOICE_INPUT.md` for implementation and verification limits.
+
 # LensQi — Guided Tasks for DIY Users and Technicians
 ## Kiro Requirements Specification
 

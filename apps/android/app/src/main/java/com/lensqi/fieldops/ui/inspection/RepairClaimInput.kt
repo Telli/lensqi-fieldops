@@ -72,7 +72,7 @@ fun RepairClaimInput(
                         Text(if (dictation.listening) "Finish dictating" else "Dictate repair claim")
                     }
                     if (dictation.listening) Text(dictation.heard.ifBlank { "Listening…" })
-                    Muted("Review the text before recording the repair. Voice uses your phone’s speech service.")
+                    Muted("Review the text before recording the repair. Voice sends audio through LensQi to Meta Voice Transcribe.")
                     dictation.error?.let { Text(it, color = Fo.Warning) }
                 }
                 // One microphone: the recorder stays closed while dictation holds it.
