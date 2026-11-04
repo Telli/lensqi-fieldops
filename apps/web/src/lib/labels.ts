@@ -83,6 +83,7 @@ export function greeting(): string {
 
 /** Turn a policy reason into a short sentence for the banner; the full text stays in the details. */
 export function plainReason(reason: string): string {
+  if (reason.includes("Required vendor facts are not confirmed")) return "The required documentation couldn't be confirmed for this equipment. Ask the site administrator to review it.";
   if (reason.startsWith("Diagnostic failed after the repair claim")) return "The equipment still fails its check after the repair.";
   if (reason.includes("post-repair image")) return "A new photo taken after the repair is needed.";
   if (reason.includes("acknowledged")) return "Confirm that you reviewed the evidence.";

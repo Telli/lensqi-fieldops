@@ -54,7 +54,9 @@ public sealed record EvidenceReceipt(
     IReadOnlyList<string> Disclaimers,
     string? ManifestSha256)
 {
-    public const string Version = "fieldproof-receipt/1.2";
+    /// <summary>1.3: the verifier compares receipt.html with this version's rendering. Changing what <see cref="ReceiptHtml.Render"/>
+    /// writes needs a new version, or pages already issued would read as altered.</summary>
+    public const string Version = "fieldproof-receipt/1.3";
 
     public static readonly IReadOnlyList<string> StandardDisclaimers =
     [

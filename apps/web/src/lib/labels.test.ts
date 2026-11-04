@@ -42,4 +42,7 @@ it("tells the technician a declined view closed the inspection, in their own ter
   expect(plainReason("technician declined the requested view")).toBe("You declined the requested view.");
   expect(plainReason("view budget of 3 exhausted")).toContain("didn't settle");
   expect(plainReason("model proposed StopInconclusive")).toBe("LensQi couldn't settle this from the photos.");
+  const held = "Required vendor facts are not confirmed for this equipment (ApplicabilityUnverified): LAB-PORT-MAP-01";
+  expect(plainReason(held)).toContain("documentation couldn't be confirmed");
+  expect(plainReason(`The last check sent the claim back for a new photo: ${held}`)).toContain("documentation couldn't be confirmed");
 });

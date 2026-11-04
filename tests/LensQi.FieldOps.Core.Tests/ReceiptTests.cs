@@ -107,7 +107,7 @@ public class ReceiptTests
         k.Tick(); k.RecordProbe(k.Probe(true)); k.Verify();
 
         var receipt = ReceiptBuilder.Build(k.Session, [], null, k.Now, "visual-assessment/1.1");
-        Assert.Equal("fieldproof-receipt/1.2", receipt.ReceiptVersion);
+        Assert.Equal("fieldproof-receipt/1.3", receipt.ReceiptVersion);
         Assert.Equal(new ReceiptPredictionTally(1, 1, 0, 0), receipt.Predictions.Tally);
         Assert.Equal(["Falsified", "Confirmed"], receipt.Predictions.Items.Select(p => p.Outcome));
         Assert.Equal(["Reachable", "Reachable"], receipt.Predictions.Items.Select(p => p.PredictedValue));
@@ -152,5 +152,53 @@ public class ReceiptTests
             Assert.False(ReceiptHtml.IsRenderingOf(issued.Replace("0.500", "0.900"), receipt));
         }
         finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Fact]
+    public void An_edited_page_fails_even_when_it_keeps_the_manifest_digest()
+    {
+        var (receipt, dir) = IssueBundle();
+        var html = Path.Combine(dir, "receipt.html");
+        File.WriteAllText(html, File.ReadAllText(html).Replace("SIMULATED", "LIVE"));
+        Assert.Contains(receipt.ManifestSha256!, File.ReadAllText(html));
+        var v = ReceiptVerifier.Verify(dir);
+        Assert.False(v.IsValid);
+        Assert.Contains(v.Failures, f => f.Contains("not the rendering of this receipt"));
+    }
+
+    [Fact]
+    public void A_missing_page_fails()
+    {
+        var (_, dir) = IssueBundle();
+        File.Delete(Path.Combine(dir, "receipt.html"));
+        var v = ReceiptVerifier.Verify(dir);
+        Assert.False(v.IsValid);
+        Assert.Contains(v.Failures, f => f.Contains("receipt.html is missing"));
+    }
+
+    [Theory]
+    [InlineData("receipt-sample")]
+    [InlineData("receipt-loopback")]
+    [InlineData("tasks/technician-journey-fakes/receipt")]
+    public void A_receipt_issued_in_an_older_format_keeps_passing_and_says_what_was_not_compared(string bundle)
+    {
+        var source = Path.Combine(RepoPaths.FixturesDir, "..", "..", "docs", "evidence", bundle);
+        var v = ReceiptVerifier.Verify(source);
+        Assert.True(v.IsValid, string.Join("; ", v.Failures));
+        Assert.Contains(v.Checks, c => c.Contains("its wording cannot be compared"));
+
+        // Its page must still be there and still carry the digest.
+        var dir = Directory.CreateTempSubdirectory("receipt-old-").FullName;
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(dir, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        var html = Path.Combine(dir, "receipt.html");
+        File.WriteAllText(html, "<html>no digest</html>");
+        Assert.False(ReceiptVerifier.Verify(dir).IsValid);
+        File.Delete(html);
+        Assert.False(ReceiptVerifier.Verify(dir).IsValid);
     }
 }

@@ -1,8 +1,11 @@
+using LensQi.FieldOps.Core.Knowledge;
+
 namespace LensQi.FieldOps.Core.Inspection;
 
 /// <summary>
-/// Deterministic dual-proof gate (PRD FR-08, §7 pseudocode, §17). Pure function of state, twin and server time.
-/// No model output, confidence score or prediction outcome is consulted. Every denial carries a reason.
+/// Deterministic dual-proof gate (PRD FR-08, §7 pseudocode, §17). Pure function of state, twin, server time and the
+/// resolved documentation requirement. No model output, confidence score or prediction outcome is consulted. Every denial
+/// carries a reason.
 /// </summary>
 /// <summary>A verification prerequisite that is not met, as <see cref="VerificationPolicyEvaluator.Blockers"/> reports it.</summary>
 public enum VerifyBlocker
@@ -13,10 +16,13 @@ public enum VerifyBlocker
 
 public static class VerificationPolicyEvaluator
 {
-    public const string PolicyVersion = "fieldproof-policy/1.5";
+    public const string PolicyVersion = "fieldproof-policy/1.6";
 
     /// <summary>Every denial caused by a fresh failing diagnostic starts with this; the session maps it to VerificationFailed.</summary>
     public const string DiagnosticFailedPrefix = "Diagnostic failed after the repair claim";
+
+    /// <summary>A decision held because documentation the site requires is not confirmed for this equipment starts with this.</summary>
+    public const string KnowledgeUnconfirmedPrefix = "Required vendor facts are not confirmed for this equipment";
 
     /// <summary>
     /// Everything the gate checks before diagnostics: fixture, claim, acknowledgement, photo and checklist. A non-null
@@ -93,7 +99,7 @@ public static class VerificationPolicyEvaluator
 
     private static VerificationDecision Deny(LoadedExpectedTwin loaded, string reason) => new(VerificationResult.Denied, null, [reason], [], PolicyVersion, loaded.Sha256);
 
-    public static VerificationDecision Evaluate(InspectionState state, LoadedExpectedTwin loaded, DateTimeOffset now)
+    public static VerificationDecision Evaluate(InspectionState state, LoadedExpectedTwin loaded, DateTimeOffset now, RequiredKnowledgeCheck? requiredKnowledge = null)
     {
         var twin = loaded.Twin;
         var policy = twin.VerificationPolicy;
@@ -129,11 +135,17 @@ public static class VerificationPolicyEvaluator
             }
         }
 
+        // 1.6 (VK-R08): documentation adds a gate and never replaces one. It comes after the probes, so a failing measurement
+        // still decides VerificationFailed; unconfirmed documentation only holds an otherwise passing inspection for review.
+        if (requiredKnowledge is { Confirmed: false })
+            return new VerificationDecision(VerificationResult.NeedsHumanReview, null,
+                [$"{KnowledgeUnconfirmedPrefix} ({requiredKnowledge.Status}): {string.Join(", ", requiredKnowledge.UnconfirmedFactIds)}"], [], PolicyVersion, loaded.Sha256, requiredKnowledge);
+
         var kind = weakestSource is null ? VerificationOutcomeKind.VerifiedCompleteLive : VerificationOutcomeKind.VerifiedCompleteSimulated;
         reasons.Add(kind == VerificationOutcomeKind.VerifiedCompleteLive
             ? "Specified live fixture checks passed"
             : $"Qualifying {weakestSource} fixture checks passed; this is not a live measurement");
-        return new VerificationDecision(VerificationResult.Verified, kind, reasons, claims, PolicyVersion, loaded.Sha256);
+        return new VerificationDecision(VerificationResult.Verified, kind, reasons, claims, PolicyVersion, loaded.Sha256, requiredKnowledge);
 
         VerificationDecision Deny(string reason) => VerificationPolicyEvaluator.Deny(loaded, reason);
     }
