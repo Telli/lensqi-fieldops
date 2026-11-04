@@ -159,6 +159,16 @@ Recording a repair claim with Muse Voice on the emulator, on 2026-11-04. The spo
 | `android/voice-claim/01-claim-options.png` | The repair claim with typing, dictation and Muse Voice, and the notice that audio goes to Meta. | `EMULATOR` |
 | `android/voice-claim/02-transcript-review.png` | The editable transcript labelled inferred, with stray punctuation from the provider, before anything is recorded. | `EMULATOR`, `LIVE_META` |
 
+## Android camera layout (`android/camera-layout/`)
+
+The camera screen on the Android emulator on 2026-11-04, pointed at the emulator's virtual room, with genuine model calls.
+No real equipment is shown.
+
+| File | What it shows | Labels |
+|---|---|---|
+| `android/camera-layout/01-labels-with-assistance-on.png` | SAM's outlines on the TV and its stand, with two-line labels marked as AI suggestions, the live guidance, the fixed assistance bar and the safety line. | `EMULATOR`, `LIVE_META` |
+| `android/camera-layout/02-answer-with-assistance-off.png` | A full answer to a typed question with assistance off, and **Start camera assistance** in place. | `EMULATOR`, `LIVE_META` |
+
 ## Speech input (`meta-voice-input/`)
 
 | File | What it shows | Labels |

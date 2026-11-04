@@ -97,9 +97,9 @@ class LiveCameraSession(
 
     fun nextFrameId(): String = synchronized(lock) { "live-$prefix-${++sequence}" }
 
-    @Volatile private var lastUpload: ByteArray? = null
-    /** The most recent frame sent for detection or guidance (at most a few seconds old), for a question about the view. */
-    fun latestJpeg(): ByteArray? = lastUpload
+    private val view = ViewFrames()
+    /** The view for a question: refreshed about once a second, because a detection or guidance upload can be many seconds old. */
+    fun latestJpeg(now: Long = SystemClock.elapsedRealtime()): ByteArray? = view.latest(now)
 
     /** True when a detection or guidance request would be sent for a frame analysed now. */
     fun uploadDue(now: Long): Boolean = synchronized(lock) { !closed && KINDS.any { it !in busy && now >= (due[it] ?: 0) } }
@@ -153,7 +153,7 @@ class LiveCameraSession(
             val inView = spatial?.target?.let { it.state == com.lensqi.fieldops.arcore.TargetState.Tracking && !it.ambiguous && it.cue == null }
             val lost = (detected && objects.isEmpty() && !paused) || inView == false
             val statusText = TechnicianText.cameraStatus(
-                selectedAndTracked = inView == true, lost = lost, paused = paused, hasObjects = objects.isNotEmpty(),
+                selectedAndTracked = inView == true, lost = lost, paused = paused, hasObjects = objects.isNotEmpty(), offline = error == OFFLINE,
             )
             val recommendation = TechnicianText.cameraAdvice(advice, lost, paused)
             mutable.value = LiveCameraState(
@@ -165,9 +165,10 @@ class LiveCameraSession(
             )
             KINDS.filter { it !in busy && now >= (due[it] ?: 0) }.also { busy.addAll(it) }
         }
-        if (kinds.isEmpty()) return
+        val viewDue = view.due(now)
+        if (kinds.isEmpty() && !viewDue) return
         val bytes = encode()
-        lastUpload = bytes
+        view.store(bytes, now)
         for (kind in kinds) scope.launch {
             val interval = if (kind == "detect") 4000L else 12000L
             synchronized(lock) { due[kind] = now + interval }
@@ -194,10 +195,13 @@ class LiveCameraSession(
             } catch (e: Exception) {
                 DiagnosticHistory.record("camera", "analysis_unavailable", (e as? HttpException)?.code())
                 val retry = (e as? HttpException)?.response()?.headers()?.get("Retry-After")?.toLongOrNull()?.times(1000) ?: 5000
-                synchronized(lock) { error = if (e is HttpException && e.code() == 429) "rate_limited" else "analysis_unavailable"; due[kind] = SystemClock.elapsedRealtime() + retry.coerceAtLeast(1000) }
+                synchronized(lock) { error = if (e is java.io.IOException) OFFLINE else if (e is HttpException && e.code() == 429) "rate_limited" else "analysis_unavailable"; due[kind] = SystemClock.elapsedRealtime() + retry.coerceAtLeast(1000) }
             } finally { synchronized(lock) { busy.remove(kind) } }
         }
     }
 
-    private companion object { val KINDS = listOf("detect", "guide") }
+    private companion object {
+        val KINDS = listOf("detect", "guide")
+        const val OFFLINE = "offline"
+    }
 }

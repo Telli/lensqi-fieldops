@@ -64,6 +64,7 @@ class TechnicianTextTest {
         assertEquals("Keeping your selected equipment in view", TechnicianText.cameraStatus(true, false, false, true))
         assertEquals("Point the camera back at the equipment", TechnicianText.cameraStatus(true, true, true, true))
         assertEquals("Analysis paused briefly · retrying", TechnicianText.cameraStatus(false, false, true, true))
+        assertEquals("Can't reach the LensQi server · check the connection", TechnicianText.cameraStatus(true, true, true, true, offline = true), "no amount of aiming fixes a lost connection")
     }
     @Test fun `tracking loss suppresses old target instruction and recovery restores current advice`() {
         assertFalse(TechnicianText.cameraAdvice("Remove the plug", true).contains("Remove"))

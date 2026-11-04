@@ -137,6 +137,23 @@ class TaskViewModelTest {
         assertEquals(1, speech.spoken.count { it.startsWith("Looks done") }, "one verdict, one announcement, whichever screen saw it first")
     }
 
+    @Test
+    fun `the task list says it can't connect, then clears that when the server is back`() {
+        // A port nothing listens on: a refused connection, as when the phone's link to the server is gone.
+        var base = okhttp3.HttpUrl.Builder().scheme("http").host("127.0.0.1").port(1).build()
+        val link = NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { base }).build(), json).create(FieldOpsApi::class.java)
+        val settings = com.lensqi.fieldops.data.settings.SettingsStore(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)) { File(temp, "settings.preferences_pb") })
+        val list = com.lensqi.fieldops.ui.task.TaskListViewModel(link, settings, library())
+        runBlocking { withTimeout(5000) { list.state.first { it.offline } } }
+        assertTrue(list.state.value.error.orEmpty().contains("connect"), "says why")
+        base = server.url("/")
+        scripted += "/v1/tasks" to MockResponse().setBody("[]")
+        list.refresh()
+        val back = runBlocking { withTimeout(5000) { list.state.first { !it.offline } } }
+        assertNull(back.error, "the old message doesn't linger")
+        assertFalse(back.cached)
+    }
+
     private fun await(vm: TaskViewModel, what: (TaskUi) -> Boolean): TaskUi = runBlocking { withTimeout(5000) { vm.state.first(what) } }
     private fun until(what: () -> Boolean) = runBlocking { withTimeout(5000) { while (!what()) kotlinx.coroutines.delay(10) } }
     private fun keysFor(suffix: String) = requests.filter { it.method == "POST" && it.path.orEmpty().endsWith(suffix) }.map { it.getHeader("Idempotency-Key") }
