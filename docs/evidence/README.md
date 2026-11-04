@@ -168,6 +168,7 @@ No real equipment is shown.
 |---|---|---|
 | `android/camera-layout/01-labels-with-assistance-on.png` | SAM's outlines on the TV and its stand, with two-line labels marked as AI suggestions, the live guidance, the fixed assistance bar and the safety line. | `EMULATOR`, `LIVE_META` |
 | `android/camera-layout/02-answer-with-assistance-off.png` | A full answer to a typed question with assistance off, and **Start camera assistance** in place. | `EMULATOR`, `LIVE_META` |
+| `android/camera-layout/s23-run-20261104.json` | The run on a Galaxy S23 Ultra with a person's voice and a real ceiling detector: questions with their frames and answers, draft transcripts and confirmed claims, and what was not shown. The recordings are not committed because they show the person's home. | `PHYSICAL_PHONE`, `LIVE_META` |
 
 ## Speech input (`meta-voice-input/`)
 

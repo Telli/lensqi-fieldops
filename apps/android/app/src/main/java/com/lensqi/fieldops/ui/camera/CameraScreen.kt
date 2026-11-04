@@ -18,6 +18,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
@@ -179,8 +182,11 @@ fun CameraScreen(
      */
     onAskPart: ((LiveObject) -> Unit)? = null,
 ) = ForceDark {
-    CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, moreDetails, controls, targetConcept, liveAllowed, detailsSummary, showDetails, detailsFocus, onObjects,
-        scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter, onAskPart)
+    // The app's Scaffold has already made room for the system bars; without this they are padded twice, and the camera loses that space.
+    Box(Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.systemBars)) {
+        CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, moreDetails, controls, targetConcept, liveAllowed, detailsSummary, showDetails, detailsFocus, onObjects,
+            scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter, onAskPart)
+    }
 }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read what the camera sees now, for a question. */
@@ -309,6 +315,7 @@ private fun CameraContent(
     // The drawn part last tapped, while its options (ask about it, hold it as the AR target) are offered.
     var tapped by remember { mutableStateOf<LiveObject?>(null) }
     var tapNumber by remember { mutableStateOf(0) }
+    var tipDone by rememberSaveable { mutableStateOf(false) }
     // A new step, task or inspection starts clean: no labels, anchors, answers or target from the one before.
     LaunchedEffect(scopeKey) {
         if (memory.scope != scopeKey) { memory.forget(); memory.scope = scopeKey }
@@ -392,6 +399,9 @@ private fun CameraContent(
         val pictureHeight = remember(portrait) { if (portrait) minOf(maxWidth * 4f / 3f, maxHeight * 0.62f) else maxHeight }
         var pictureTop by remember { mutableStateOf(0f) }
         var panelTop by remember { mutableStateOf(Float.MAX_VALUE) }
+        // The notes under the header cover the top of the picture while they show; labels stay below them.
+        val notesShown = visiblePick != null || (arActive && (!hideChrome || target?.state == TargetState.Lost || registered?.guidance?.level == GuideLevel.Refused))
+        var notesBottom by remember { mutableStateOf(0f) }
         val referenceImage = remember(reference) { reference?.asImageBitmap() }
         Box(Modifier.statusBarsPadding().fillMaxWidth().height(pictureHeight).onGloballyPositioned { pictureTop = it.positionInWindow().y }) {
             if (arActive && session != null) ArCameraFeed(session, spatial) { arFailure = it }
@@ -428,9 +438,9 @@ private fun CameraContent(
                 val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 14.sp.toPx(); typeface = Typeface.DEFAULT_BOLD }
                 val detailPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(201, 209, 217); textSize = 12.sp.toPx() }
                 val pad = 8.dp.toPx(); val accent = 3.dp.toPx(); val lineGap = 2.dp.toPx()
-                // Labels stay on the part of the picture that can be seen: below the header, above the controls.
+                // Labels stay on the part of the picture that can be seen: below the header and its notes, above the controls.
                 val edge = 4.dp.toPx()
-                val bounds = LabelRect(ox + edge, maxOf(oy, 60.dp.toPx()), ox + w - edge, minOf(oy + h, panelTop - pictureTop, size.height) - edge)
+                val bounds = labelBounds(LabelRect(ox, oy, ox + w, minOf(oy + h, size.height)), maxOf(60.dp.toPx(), if (notesShown) notesBottom - pictureTop else 0f), panelTop - pictureTop, edge)
                 val taken = mutableListOf<LabelRect>()
                 // At most two parts are drawn, the step's own first; the rest are counted in a note, not stacked on the view.
                 for (part in drawn) {
@@ -569,17 +579,20 @@ private fun CameraContent(
 
         // Below the header: what to do with a tapped part, or the target's state and the floor control while AR runs.
         val pick = visiblePick
-        if (pick != null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.85f)) {
+        if (pick != null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.85f).onGloballyPositioned { notesBottom = it.boundsInWindow().bottom }) {
             PartChips(pick,
                 onAsk = onAskPart?.let { ask -> { ask(pick); tapped = null } },
                 onHold = pick.anchorId?.takeIf { arActive }?.let { anchor -> { spatial.confirm(anchor); tapped = null } },
                 onCancel = { tapped = null })
         }
         else if (arActive && (!hideChrome || target?.state == TargetState.Lost || registered?.guidance?.level == GuideLevel.Refused)) Column(
-            Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.7f),
+            Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.7f).onGloballyPositioned { notesBottom = it.boundsInWindow().bottom },
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })?.takeUnless { target?.state == TargetState.Tracking && !target.ambiguous }?.let {
+            val note = targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })
+            // A warning stays as long as it is true; the tip has made its point after a few seconds, and it covers the picture.
+            LaunchedEffect(note == TARGET_TIP) { if (note == TARGET_TIP) { delay(TARGET_TIP_MS); tipDone = true } }
+            note?.takeUnless { (target?.state == TargetState.Tracking && !target.ambiguous) || (it == TARGET_TIP && tipDone) }?.let {
                 Text(it, color = if (target?.state == TargetState.Tracking || target == null) FoDark.Foreground else FoDark.Warning, fontSize = 12.sp,
                     modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 12.dp, vertical = 6.dp))
             }
@@ -674,7 +687,9 @@ private fun CameraContent(
                     }
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(glass).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         // What the live camera says now, above LensQi's standing ask: the step's instruction stays readable while it runs.
-                        if (liveEnabled) Text(TechnicianText.guidance(feedback.recommendation), color = FoDark.Primary, fontSize = 14.sp, lineHeight = 19.sp)
+                        // While an answer is on screen it gets the room; the full advice is still a tap away.
+                        if (liveEnabled) Text(TechnicianText.guidance(feedback.recommendation), color = FoDark.Primary, fontSize = 14.sp, lineHeight = 19.sp,
+                            maxLines = if (detailsFocus != null && !expanded) 2 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
                         Row(
                             Modifier.fillMaxWidth().clickable(onClickLabel = "Show or hide details") { expanded = !expanded },
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -882,6 +897,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.edgeArrow(cue: com.
     drawRoundRect(Color.Black.copy(alpha = 0.62f), Offset(left - pad, base - th - pad / 2), Size(tw + pad * 2, th + pad * 1.5f), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
     drawContext.canvas.nativeCanvas.drawText(text, left, base, paint)
 }
+
+private const val TARGET_TIP_MS = 6_000L
 
 private data class TapState(val ar: Boolean, val parts: List<LiveObject>, val floorPick: Boolean, val markLabel: String?, val checking: Boolean,
     val viewSpace: Boolean, val frameWidth: Int, val frameHeight: Int, val askable: Boolean)

@@ -26,6 +26,10 @@ internal data class LabelRect(val left: Float, val top: Float, val right: Float,
     fun overlaps(other: LabelRect): Boolean = left < other.right && other.left < right && top < other.bottom && other.top < bottom
 }
 
+/** The part of the [image] a label may use: clear of whatever covers the picture above [clearTop] and below [clearBottom]. */
+internal fun labelBounds(image: LabelRect, clearTop: Float, clearBottom: Float, edge: Float): LabelRect =
+    LabelRect(image.left + edge, maxOf(image.top, clearTop) + edge, image.right - edge, minOf(image.bottom, clearBottom) - edge)
+
 /**
  * Where a [width] by [height] label goes for a part drawn at [part]: above it, else below it, else just inside its top
  * edge, always wholly inside [bounds] and clear of the labels in [taken] where there is room. [bounds] excludes whatever

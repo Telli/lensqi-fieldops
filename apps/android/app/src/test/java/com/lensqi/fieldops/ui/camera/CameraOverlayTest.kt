@@ -70,6 +70,15 @@ class CameraOverlayTest {
         assertTrue(low.bottom <= covered.bottom)
     }
 
+    @Test fun `a label stays clear of the notes under the header and of the controls`() {
+        val image = LabelRect(0f, 0f, 400f, 600f)
+        val visible = labelBounds(image, clearTop = 100f, clearBottom = 450f, edge = 4f)
+        assertEquals(LabelRect(4f, 104f, 396f, 446f), visible)
+        // Right under the note: there is no room above the part, so the label goes below it instead of under the note.
+        val label = placeLabel(LabelRect(100f, 110f, 200f, 200f), 120f, 40f, visible, 8f)
+        assertEquals(208f, label.top)
+    }
+
     @Test fun `two labels do not land on each other`() {
         val part = LabelRect(100f, 200f, 200f, 300f)
         val first = placeLabel(part, 120f, 40f, bounds, 8f)

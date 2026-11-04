@@ -6,9 +6,9 @@ A question asked on the Android camera now carries what the camera sees, whether
 
 The camera screen is laid out again. The picture sits above the controls at the camera's own 4:3. **Start camera assistance** is a fixed bar, the text panel is one scrolling area with an answer scrolled into view, and the first safety line stays on screen with a count of the rest. Part labels are two lines marked as AI suggestions or the person's target, stay inside the visible picture and clear of each other, and outlines are steadier and readable on pale surfaces. The task list retries by itself after a lost connection, and the camera says when the server can't be reached.
 
-Verified on the emulator's virtual scene with genuine Muse Spark and SAM 3.1 calls (`docs/evidence/android/camera-layout/`): a question with assistance off sent a frame and got an answer describing the view, and live labels were drawn. On the Galaxy S23 Ultra, this build started an ARCore session, SAM calls succeeded and nothing crashed, and the tester reported it working. A label on real equipment and a spoken question with its frame have not been recorded from the phone on this build.
+Verified on the emulator's virtual scene with genuine Muse Spark and SAM 3.1 calls, and on a Galaxy S23 Ultra with a person's voice and a real ceiling smoke detector (`docs/evidence/android/camera-layout/`): ARCore ran, labels tracked the detector with estimated distances, and spoken questions carried a frame and were answered from the view. On the same phone, Muse Voice misheard "reseated" on all three takes that used it, so the review step mattered; the phone's recordings and frames are not committed because they show the person's home.
 
-Gates: Android 334 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No server or web code changed.
+Gates: Android 335 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No server or web code changed.
 
 ## As of 4 November 2026 (Pacific), `codex/meta-voice-input` (speech input through Meta)
 

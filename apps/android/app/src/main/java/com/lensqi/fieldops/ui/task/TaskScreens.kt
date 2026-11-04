@@ -959,6 +959,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
         showDetails = handsFree.on || voiceError != null || pace.paused || s.askedWithoutView,
+        detailsFocus = answers.firstOrNull()?.answer,
         moreDetails = { if (voice.supported && !handsFree.on) Text("Say “repeat”, “check this”, or ask anything.", color = FoDark.Muted, fontSize = 12.sp) },
         // A tapped outline becomes a question about that part, with the live frame, in the web app's words.
         onAskPart = { part ->

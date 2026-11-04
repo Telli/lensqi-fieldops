@@ -24,6 +24,8 @@ class TargetMemory {
     fun forget() { concept = null; label = null }
 }
 
+internal const val TARGET_TIP = "Tap a part to hold it as the target"
+
 /** What the screen tells the technician about the target, or null when there is nothing to say. */
 fun targetNote(target: TargetView?, remembered: String?, anchoredParts: Boolean): String? {
     val label = target?.label?.lowercase()
@@ -34,7 +36,7 @@ fun targetNote(target: TargetView?, remembered: String?, anchoredParts: Boolean)
             "Not seeing the $label${if (target.seenSecondsAgo > 0) " · last matched ${target.seenSecondsAgo}s ago" else ""} · keep it in view"
         target != null -> null
         remembered != null -> "Find the ${remembered.lowercase()} again and tap it to confirm"
-        anchoredParts -> "Tap a part to hold it as the target"
+        anchoredParts -> TARGET_TIP
         else -> null
     }
 }

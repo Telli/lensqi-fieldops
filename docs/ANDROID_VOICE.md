@@ -63,4 +63,6 @@ Dated November 4, 2026. See the [call record](evidence/android/voice-claim/live-
 - **Screenshots.** [Claim options](evidence/android/voice-claim/01-claim-options.png) and
   [transcript review](evidence/android/voice-claim/02-transcript-review.png).
 
-Not verified: a physical phone microphone, a person's voice, or recognition quality in a noisy site.
+On a Galaxy S23 Ultra with a person's voice, the path worked end to end, and the review step proved its worth: Muse Voice heard "reseated" as "visited" or "recited", heard "port" as "part" twice and repeated the last words once, while simpler words came back nearly right ([run record](evidence/android/camera-layout/s23-run-20261104.json)).
+
+Not verified: recognition quality in a noisy site.
