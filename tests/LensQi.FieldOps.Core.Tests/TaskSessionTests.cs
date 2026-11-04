@@ -356,11 +356,11 @@ public class TaskSessionTests
     public void A_restricted_plan_is_checked_in_everything_the_person_reads_or_hears()
     {
         const string bad = "Remove the panel cover.";
-        TaskPlanValidator.Validate(Referral(), "Replace my breaker panel", null);   // the title hands the job over
+        TaskPlanValidator.Validate(Referral(), "Replace my garage breaker panel", null);   // the title hands the job over
         var command = Referral() with { Title = "Unscrew the panel cover and disconnect the wires" };
-        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(command, "Replace my breaker panel", null)).Code);
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(command, "Replace my garage breaker panel", null)).Code);
         foreach (var plan in new[] { Referral(caution: bad), Referral(stopIf: bad), Referral(check: bad), Referral(summary: bad), Referral(reason: bad) })
-            Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(plan, "Replace my breaker panel", null)).Code);
+            Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(plan, "Replace my garage breaker panel", null)).Code);
     }
 
     [Fact]
@@ -379,8 +379,14 @@ public class TaskSessionTests
     [InlineData("Replace garage breaker panel", true)]
     [InlineData("No professional needed: unscrew the panel cover", true)]
     [InlineData("Unscrew the panel cover - call an electrician if it sticks", true)]
-    public void A_plan_title_may_name_a_job_only_by_handing_it_over(string title, bool instructs) =>
-        Assert.Equal(instructs, TaskSafety.TitleInstructsHandsOn(title));
+    [InlineData("Unscrew the panel cover - call a licensed electrician", true)]
+    [InlineData("Remove the breaker panel - call a licensed electrician", true)]
+    public void A_plan_title_may_only_repeat_the_job_asked_about_and_hand_it_over(string title, bool instructs) =>
+        Assert.Equal(instructs, TaskSafety.TitleInstructsHandsOn(title, "Replace the breaker panel in my garage"));
+
+    [Fact]
+    public void A_person_who_asked_about_that_very_action_can_be_referred_in_the_title() =>
+        Assert.False(TaskSafety.TitleInstructsHandsOn("Unscrew the panel cover - call a licensed electrician", "How do I unscrew my panel cover?"));
 
     [Theory]
     [InlineData("you would need to open the panel", false)]
