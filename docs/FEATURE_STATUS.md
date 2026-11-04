@@ -1,5 +1,11 @@
 # Feature status
 
+## As of 4 November 2026 (Pacific), `claude/android-voice-claim` (repair claims recorded with Muse Voice)
+
+Android can record a repair claim and transcribe it with `muse-voice-transcribe-1.0` through a new draft-only endpoint, beside the existing typing and phone dictation. The person reviews, edits or rejects the transcript; confirming sends it through the normal claim path. The endpoint records no event and stores no audio, and it refuses a closed inspection before any model call. Silence returns `no_speech`.
+
+Verified with genuine provider calls on synthetic speech and on the emulator (`docs/evidence/android/voice-claim/`). The emulator microphone provided no speech, so the review screens used a local proxy that substituted the synthetic speech. A physical phone microphone and a person's voice have not been tested. See `docs/ANDROID_VOICE.md`.
+
 ## As of 4 November 2026 (Pacific), `main` (the last three findings from the 3 November application review)
 
 A fixture that does not require a fresh equipment check can no longer verify anything: the policy (now `fieldproof-policy/1.7`) denies it, and the Core invariants, the schema and the Python validator refuse such a fixture at load. A live outcome now needs a passing `LiveLocal` measurement, even if a fixture names another source. The supplied fixture already required a fresh check, so its outcomes do not change. The web task summary no longer offers Verify with FieldProof on a stopped task, while an existing linked inspection stays reachable; Android already did this. Web step coaching and the Android camera and glasses notes now say that a frame sent with a question is saved. The wording was not checked on a device.

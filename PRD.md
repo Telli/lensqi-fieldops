@@ -476,7 +476,7 @@ lensqi-fieldops/
 
 - **Muse Spark 1.3 (P0):** write task plans (strict schema, low reasoning), coach the current step and answer questions from a frame, suggest step-check verdicts, and in Technician mode assess inspection photos and propose evidence requests.
 - **SAM 3.1 (P0):** outline one concrete concept per request (a step's `lookFor`, a guidance focus phrase, or a fixture's `segmentationPrompt`). It does not judge whether a step is done or certify anything.
-- **Muse Voice Transcribe (P2):** not used in P0; speech recognition uses the client platform APIs, which may use a provider service.
+- **Muse Voice Transcribe (P2):** not used in P0, where speech recognition uses the client platform APIs, which may use a provider service. Android also offers it as an optional way to draft a repair claim (`docs/ANDROID_VOICE.md`).
 - **Muse Image (stretch):** conceptual illustration only, labelled as generated.
 - **Muse Code:** development tool only.
 

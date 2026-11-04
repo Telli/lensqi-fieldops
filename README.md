@@ -59,7 +59,7 @@ step is an earlier capture from the emulator's virtual room, not a physical phon
 |---|---|
 | **Both** | Spoken guidance, optional hands-free questions and typed questions |
 | **Web** | Browser camera and speech capabilities |
-| **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones and an optional Meta glasses integration |
+| **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones, an optional Meta glasses integration and repair claims recorded with Muse Voice |
 
 ## Quick start
 
@@ -71,7 +71,7 @@ Node.js, a database server or Docker to run the application.
 | To do this | You need |
 |---|---|
 | Run the API and image processing | .NET 10 SDK, Python with `venv` and `pip`, and Git |
-| Use AI features | A Meta Model API key with access to `muse-spark-1.3` and `sam-3.1` |
+| Use AI features | A Meta Model API key with access to `muse-spark-1.3` and `sam-3.1`, plus `muse-voice-transcribe-1.0` for recorded repair claims |
 | Develop the web app, or run the full reproducibility check | Node.js 22.12+ on the 22.x line, or Node.js 24, with npm |
 | Develop the Android app | JDK 21 and Android SDK platform 35. The app supports Android 12 (API 31) and later |
 
@@ -249,7 +249,7 @@ dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 
 | Component | Responsibility | Location |
 |---|---|---|
 | **Core** | Guided-task and inspection state machines, plan validation, knowledge applicability, verification policy and receipts | [src/LensQi.FieldOps.Core](src/LensQi.FieldOps.Core/) |
-| **Meta integration** | Muse Spark planning, coaching, assessment and cited proposals; SAM segmentation and the Python image-processing sidecar | [src/LensQi.FieldOps.Meta](src/LensQi.FieldOps.Meta/), [tools/sam-parser](tools/sam-parser/) |
+| **Meta integration** | Muse Spark planning, coaching, assessment and cited proposals; Muse Voice transcription; SAM segmentation and the Python image-processing sidecar | [src/LensQi.FieldOps.Meta](src/LensQi.FieldOps.Meta/), [tools/sam-parser](tools/sam-parser/) |
 | **Diagnostics** | Simulated, replay and guarded live HTTP probes | [src/LensQi.FieldOps.Diagnostics](src/LensQi.FieldOps.Diagnostics/) |
 | **API** | ASP.NET Core endpoints, event and evidence storage, model-call limits, site packs and static web hosting | [src/LensQi.FieldOps.Api](src/LensQi.FieldOps.Api/) |
 | **Web** | React, TypeScript, Tailwind CSS and TanStack Query; technician and operations views | [apps/web](apps/web/) |
@@ -287,7 +287,8 @@ flow, receipt tamper detection and a byte-for-byte web rebuild. It did not make 
   estimated distances and a recognized spoken question. A [separate phone inspection](docs/evidence/live-phone/README.md)
   used real camera captures of a synthetic image and a live loopback HTTP check, not a measurement of physical equipment.
 - **Not yet validated.** Recent hands-free, offline, knowledge and spatial-AR changes are not all covered by
-  physical-device runs. Real Meta glasses have not been tested. The [teaching recorder](docs/evidence/android/teaching/README.md)
+  physical-device runs. Real Meta glasses have not been tested. [Muse Voice repair claims](docs/ANDROID_VOICE.md) have genuine
+  provider calls and emulator evidence, not a physical phone microphone or a person's voice. The [teaching recorder](docs/evidence/android/teaching/README.md)
   has emulator evidence, not a physical-device or training-quality benchmark.
 
 See [feature status](docs/FEATURE_STATUS.md) for dated implementation and validation records.
@@ -306,8 +307,9 @@ response guards retain the restricted context of recorded questions. These wordi
 that a repair succeeded. A live HTTP result proves only what that endpoint measured at that time.
 
 **Photos and speech may leave the device.** Speech recognition may use the phone or browser vendor's service. Android
-prefers on-device recognition when available, and LensQi receives recognized text. Uploaded evidence and question
-photos can be stored on the server, so camera questions should not be treated as ephemeral.
+prefers on-device recognition when available, and LensQi receives recognized text. A repair claim recorded with Muse
+Voice is different: the audio goes through the LensQi server to Meta for transcription, and LensQi does not save it.
+Uploaded evidence and question photos can be stored on the server, so camera questions should not be treated as ephemeral.
 
 ## Documentation
 
@@ -319,12 +321,13 @@ photos can be stored on the server, so camera questions should not be treated as
 | [Demo storyboard](docs/DEMO_STORYBOARD.md) | The demonstration sequence and its live/simulated boundaries |
 | [Live-probe runbook](docs/LIVE_PROBE_RUNBOOK.md) | Configure and verify an owned HTTP endpoint |
 | [Teaching recordings](docs/TEACHING_RECORDINGS.md) | Capture, review, consent and export format |
+| [Android voice claims](docs/ANDROID_VOICE.md) | Recording a repair claim, the transcribe API and what has been verified |
 | [Sources and rights](docs/SOURCES_AND_RIGHTS.md) | Project licensing, third-party terms and documentation rights |
 
 ## Project background
 
-Built for the **Meta Global AI Developer Hackathon 2026**, Indie track, *Push the Frontier*, using `muse-spark-1.3`
-and `sam-3.1`. Muse Spark Open is [not integrated](docs/evidence/tasks/open-model-feasibility.md).
+Built for the **Meta Global AI Developer Hackathon 2026**, Indie track, *Push the Frontier*, using `muse-spark-1.3`,
+`sam-3.1` and `muse-voice-transcribe-1.0`. Muse Spark Open is [not integrated](docs/evidence/tasks/open-model-feasibility.md).
 
 No source from the private `Telli/LensIQ-Monorepo` is copied. Earlier specification kits and design material are not
 claimed as new implemented functionality. The [contribution ledger](docs/HACKATHON_CONTRIBUTIONS.md) and

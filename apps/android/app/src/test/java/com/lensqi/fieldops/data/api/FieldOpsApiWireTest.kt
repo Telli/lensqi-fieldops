@@ -110,6 +110,23 @@ class FieldOpsApiWireTest {
     }
 
     @Test
+    fun voice_upload_sends_wav_and_only_returns_an_unconfirmed_draft() = runTest {
+        server.enqueue(MockResponse().setBody("""{"transcript":"Reseated cable","modelId":"muse-voice-transcribe-1.0"}"""))
+        val wav = com.lensqi.fieldops.voice.WavClaimAudioRecorder.wavHeader(2) + byteArrayOf(1, 2)
+        val result = api.transcribeClaim(id, "voice-key", MultipartBody.Part.createFormData("audio", "claim.wav", wav.toRequestBody("audio/wav".toMediaType())))
+        val req = server.takeRequest()
+        assertEquals("POST", req.method)
+        assertEquals("/v1/inspections/$id/voice/transcribe", req.path)
+        assertEquals("voice-key", req.getHeader(FieldOpsApi.IDEMPOTENCY_KEY))
+        val body = req.body.readString(Charsets.ISO_8859_1)
+        assertTrue(body.contains("name=\"audio\"; filename=\"claim.wav\""))
+        assertTrue(body.contains("Content-Type: audio/wav"))
+        assertTrue(body.contains(String(wav, Charsets.ISO_8859_1)))
+        assertEquals("Reseated cable", result.transcript)
+        assertEquals(1, server.requestCount, "Transcribing must never call repair-claims")
+    }
+
+    @Test
     fun rejections_surface_the_server_code_verbatim() = runTest {
         server.enqueue(MockResponse().setResponseCode(409).setBody(Recordings.text("error-verify-closed")))
         val outcome = apiCall { api.verify(id, "k") }
