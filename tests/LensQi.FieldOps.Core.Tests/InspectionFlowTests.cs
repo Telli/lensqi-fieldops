@@ -90,7 +90,10 @@ public class InspectionFlowTests
         var again = k.Session.RecordAssessment("same-request", "a1", k.Assessment(ProposedNextAction.RequestView, ObservationStatus.Unknown, p), k.Now);
         Assert.Same(first, again);
         Assert.Equal(count, k.Session.Events.Count);
+        Assert.True(k.Session.State.AwaitingRequestedView);
+        Assert.True(InspectionSession.Rehydrate(k.Session.Twin, k.Session.Events).State.AwaitingRequestedView);
         k.Session.DeclineView("decline", k.Now);
+        Assert.False(InspectionSession.Rehydrate(k.Session.Twin, k.Session.Events).State.AwaitingRequestedView);
         Assert.Equal(InspectionStage.Inconclusive, k.Session.State.Stage);
         Assert.Equal(InspectionErrorCodes.InvalidState, Assert.Throws<InspectionConflictException>(() => k.Photo()).Code);
     }

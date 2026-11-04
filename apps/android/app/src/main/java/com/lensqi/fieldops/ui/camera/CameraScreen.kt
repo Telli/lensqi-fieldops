@@ -32,6 +32,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import com.lensqi.fieldops.arcore.partsToShow
 import com.lensqi.fieldops.domain.live.LiveObject
+import com.lensqi.fieldops.domain.live.staleAlpha
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
@@ -157,9 +158,14 @@ fun CameraScreen(
     registration: RegistrationSubject? = null,
     /** The shutter press itself, before live assist stops and before any confirmation of the still: what the photo is of is decided now. */
     onShutter: () -> Unit = {},
+    /**
+     * Tasks only: a tap on a drawn outline offers "Ask about the <part>", which hands the part here; the screen asks its
+     * question with the live frame, as a spoken question would be. Null leaves the outlines display-only.
+     */
+    onAskPart: ((LiveObject) -> Unit)? = null,
 ) = ForceDark {
     CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, controls, targetConcept, liveAllowed, detailsSummary, showDetails, onObjects,
-        scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter)
+        scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter, onAskPart)
 }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read the latest live frame. */
@@ -182,6 +188,7 @@ private fun CameraContent(
     reference: Bitmap?,
     registrationSubject: RegistrationSubject?,
     onShutter: () -> Unit,
+    onAskPart: ((LiveObject) -> Unit)?,
 ) {
     // The view stays clear: details start collapsed, and a tap on the picture hides every panel but the controls.
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -283,18 +290,20 @@ private fun CameraContent(
     SideEffect { session?.targetConcept = targetConcept; session?.framingCm = framingCm }
     val spatial = remember { SpatialControl() }
     var pickingFloor by remember { mutableStateOf(false) }
-    var candidate by remember { mutableStateOf<LiveObject?>(null) }
+    // The drawn part last tapped, while its options (ask about it, hold it as the AR target) are offered.
+    var tapped by remember { mutableStateOf<LiveObject?>(null) }
+    var tapNumber by remember { mutableStateOf(0) }
     // A new step, task or inspection starts clean: no labels, anchors, answers or target from the one before.
     LaunchedEffect(scopeKey) {
         if (memory.scope != scopeKey) { memory.forget(); memory.scope = scopeKey }
-        session?.reset(); spatial.reset(); candidate = null
+        session?.reset(); spatial.reset(); tapped = null
     }
     val feedback = session?.state?.collectAsState()?.value ?: LiveCameraState()
     val target = feedback.target
     // The confirmed part is remembered beyond this AR session, so it can be found again after the shutter or a pause.
     LaunchedEffect(target?.id, target?.state) {
         if (target != null && target.state != TargetState.Lost) memory.hold(target.concept, target.label)
-        if (target?.state == TargetState.Tracking && !target.ambiguous) candidate = null
+        if (target?.state == TargetState.Tracking && !target.ambiguous) tapped = null
     }
     // Registration: the port layout is kept on this phone per fixture and asset; marks made in AR are saved as they come.
     val layouts = remember { AssetLayoutStore(File(context.filesDir, "layouts")) }
@@ -344,6 +353,11 @@ private fun CameraContent(
     val glass = Color(0xB30B0F14)
     val shown = remember(feedback.objects, targetConcept) { partsToShow(feedback.objects, targetConcept) }
     LaunchedEffect(feedback.objects) { onObjects(feedback.objects) }
+    // The options for a tapped part last 8 s, and go sooner when the part is no longer drawn (matched by id, or by
+    // concept where the server numbers each detection afresh).
+    LaunchedEffect(tapNumber) { if (tapped != null) { delay(8_000); tapped = null } }
+    val visiblePick = tapped?.let { visibleSelection(it, shown.first) }
+    LaunchedEffect(visiblePick, tapped) { tapped = visiblePick }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val screenHeight = maxHeight
         if (arActive && session != null) ArCameraFeed(session, spatial) { arFailure = it }
@@ -352,25 +366,27 @@ private fun CameraContent(
         val referenceImage = remember(reference) { reference?.asImageBitmap() }
         if (referenceImage != null && ghost) Image(referenceImage, null, Modifier.fillMaxSize().alpha(0.35f), contentScale = if (arActive) ContentScale.Crop else ContentScale.Fit)
         // A tap on the picture hides the guidance panels for a clear view; another tap brings them back.
-        // In AR, a tap on an anchored part offers to hold it as the target, and while setting the floor a tap marks it.
-        val tapState by rememberUpdatedState(TapState(arActive && feedback.viewSpace, shown.first, pickingFloor, markLabel, checking))
+        // A tap on a drawn part (2D or AR) offers to ask about it and, in AR, to hold it as the target; while setting the
+        // floor a tap marks it.
+        val tapState by rememberUpdatedState(TapState(arActive && feedback.viewSpace, shown.first, pickingFloor, markLabel, checking, feedback.viewSpace, feedback.width, feedback.height, onAskPart != null))
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures { at ->
                 val st = tapState
-                val u = at.x / size.width; val v = at.y / size.height
-                val hit = if (st.ar) st.parts.firstOrNull { it.anchorId != null && u in it.box.left..it.box.right && v in it.box.top..it.box.bottom } else null
+                val hit = tappedPart(st.parts, at.x, at.y, size.width.toFloat(), size.height.toFloat(), st.viewSpace, st.frameWidth, st.frameHeight)
                 val mark = st.markLabel
                 when {
                     st.floorPick -> { spatial.tapFloor(at.x, at.y); pickingFloor = false }
                     st.ar && mark != null -> spatial.markPort(at.x, at.y, mark)
                     st.ar && st.checking -> spatial.checkPort(at.x, at.y)
-                    hit != null -> candidate = hit
+                    // A box is tapped only when something can be done with it: a question, or holding an anchored part as the
+                    // target. Elsewhere (the inspection camera, an unanchored AR box) the tap clears the chrome as before.
+                    hit != null && (st.askable || (st.ar && hit.anchorId != null)) -> { tapped = hit; tapNumber++ }
                     else -> hideChrome = !hideChrome
                 }
             }
         })
 
-        if (liveEnabled && (feedback.viewSpace || feedback.width > 0)) Canvas(Modifier.fillMaxSize().semantics { contentDescription = shown.first.joinToString(". ") { (if (it.target) "Selected equipment: " else "Camera suggestion: ") + it.label + if (it.uncertain || it.seenSecondsAgo != null) ", last seen; confirm again" else "" } }) {
+        if (liveEnabled && (feedback.viewSpace || feedback.width > 0)) Canvas(Modifier.fillMaxSize().semantics { contentDescription = shown.first.joinToString(". ") { (if (it.target) "Selected equipment: " else "Camera suggestion: ") + it.label + (it.seenSecondsAgo?.let { s -> ", last seen $s s ago; confirm again" } ?: if (it.uncertain) ", last seen; confirm again" else "") } }) {
             // ARCore draws the camera across the whole view; CameraX letterboxes the image inside it.
             val scale = if (feedback.viewSpace) 1f else min(size.width / feedback.width, size.height / feedback.height)
             val w = if (feedback.viewSpace) size.width else feedback.width * scale
@@ -382,12 +398,14 @@ private fun CameraContent(
             for (part in shown.first) {
                 val b = part.box; val x = ox + (b.left * w).toFloat(); val y = oy + (b.top * h).toFloat()
                 val bw = ((b.right - b.left) * w).toFloat(); val bh = ((b.bottom - b.top) * h).toFloat()
-                // A box held only by its world anchor (no live 2D track), or a target that is uncertain, is drawn fainter
-                // and says when it was last seen. The confirmed target has a solid outline.
+                // A box held only by its world anchor (no live 2D track) fades with its age (staleAlpha) and says how long
+                // ago it was seen; a target that is uncertain is drawn fainter. The confirmed target has a solid outline.
                 val anchorOnly = part.seenSecondsAgo != null || part.uncertain
-                val tone = if (anchorOnly) FoDark.Primary.copy(alpha = 0.6f) else FoDark.Primary
-                drawRect(FoDark.Primary.copy(alpha = if (anchorOnly) 0.04f else 0.08f), Offset(x, y), Size(bw, bh))
-                drawRect(FoDark.Primary.copy(alpha = if (part.target) 0.9f else 0.55f), Offset(x, y), Size(bw, bh),
+                val fade = part.seenSecondsAgo?.let(::staleAlpha) ?: if (part.uncertain) 0.6f else 1f
+                val tone = FoDark.Primary.copy(alpha = fade)
+                val dim = if (part.seenSecondsAgo != null) fade / 0.6f else 1f
+                drawRect(FoDark.Primary.copy(alpha = (if (anchorOnly) 0.04f else 0.08f) * dim), Offset(x, y), Size(bw, bh))
+                drawRect(FoDark.Primary.copy(alpha = (if (part.target) 0.9f else 0.55f) * dim), Offset(x, y), Size(bw, bh),
                     style = Stroke((if (part.target) 2.5 else 1.5).dp.toPx(), pathEffect = if (part.target) null else dash))
                 val c = maxOf(12.dp.toPx(), min(bw, bh) * 0.22f)
                 val strokeW = 3.dp.toPx()
@@ -404,7 +422,7 @@ private fun CameraContent(
                 // Distances are estimates (the median depth in the box) and are left off while the target is uncertain.
                 val text = (if (part.target) "◎ " else "") + part.label.replaceFirstChar { it.uppercase() } +
                     part.distanceCm?.takeUnless { part.uncertain }?.let { " · est. ${metres(it)} away" }.orEmpty() +
-                    part.heightAboveFloorCm?.let { " · ${metres(it)} up" }.orEmpty() + part.seenSecondsAgo?.let { " · last seen" }.orEmpty()
+                    part.heightAboveFloorCm?.let { " · ${metres(it)} up" }.orEmpty() + part.seenSecondsAgo?.let { " · last seen $it s ago" }.orEmpty()
                 val pad = 6.dp.toPx(); val tw = paint.measureText(text); val th = paint.textSize
                 val above = y - pad * 2 - th >= oy + 4.dp.toPx()
                 val ty = if (above) y - pad * 2 else y + bh + pad + th
@@ -490,18 +508,19 @@ private fun CameraContent(
             }
         }
 
-        // Below the header: the target's state or the question to hold a tapped part, and the floor control.
-        if (arActive && (!hideChrome || target?.state == TargetState.Lost || registered?.guidance?.level == GuideLevel.Refused)) Column(
+        // Below the header: what to do with a tapped part, or the target's state and the floor control while AR runs.
+        val pick = visiblePick
+        if (pick != null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.85f)) {
+            PartChips(pick,
+                onAsk = onAskPart?.let { ask -> { ask(pick); tapped = null } },
+                onHold = pick.anchorId?.takeIf { arActive }?.let { anchor -> { spatial.confirm(anchor); tapped = null } },
+                onCancel = { tapped = null })
+        }
+        else if (arActive && (!hideChrome || target?.state == TargetState.Lost || registered?.guidance?.level == GuideLevel.Refused)) Column(
             Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.7f),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            val pick = candidate
-            if (pick != null) Row(Modifier.clip(RoundedCornerShape(16.dp)).background(glass).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Hold this as the ${pick.label.lowercase()}?", color = FoDark.Foreground, fontSize = 12.sp, modifier = Modifier.weight(1f, fill = false))
-                TextButton(onClick = { pick.anchorId?.let(spatial::confirm); candidate = null }) { Text("Confirm", color = FoDark.Primary, fontSize = 12.sp) }
-                TextButton(onClick = { candidate = null }) { Text("Cancel", color = FoDark.Muted, fontSize = 12.sp) }
-            }
-            else targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })?.takeUnless { target?.state == TargetState.Tracking && !target.ambiguous }?.let {
+            targetNote(target, memory.label, feedback.objects.any { it.anchorId != null })?.takeUnless { target?.state == TargetState.Tracking && !target.ambiguous }?.let {
                 Text(it, color = if (target?.state == TargetState.Tracking || target == null) FoDark.Foreground else FoDark.Warning, fontSize = 12.sp,
                     modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(glass).padding(horizontal = 12.dp, vertical = 6.dp))
             }
@@ -767,4 +786,47 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.edgeArrow(cue: com.
     drawContext.canvas.nativeCanvas.drawText(text, left, base, paint)
 }
 
-private data class TapState(val ar: Boolean, val parts: List<LiveObject>, val floorPick: Boolean, val markLabel: String?, val checking: Boolean)
+private data class TapState(val ar: Boolean, val parts: List<LiveObject>, val floorPick: Boolean, val markLabel: String?, val checking: Boolean,
+    val viewSpace: Boolean, val frameWidth: Int, val frameHeight: Int, val askable: Boolean)
+
+/** Rebind only to the same anchor or one unambiguous unanchored part. */
+internal fun visibleSelection(tapped: LiveObject, parts: List<LiveObject>): LiveObject? {
+    tapped.anchorId?.let { anchor -> return parts.firstOrNull { it.anchorId == anchor } }
+    val unanchored = parts.filter { it.anchorId == null }
+    // An id is "<prompt position>-<object>", and prompt order changes with the focus, so the same id can name another
+    // concept in a later batch; the concept must match too.
+    return unanchored.firstOrNull { it.id == tapped.id && it.concept == tapped.concept } ?: unanchored.singleOrNull { it.concept == tapped.concept }
+}
+
+/**
+ * The drawn part under a tap at ([x], [y]) in a view [viewW] by [viewH], or null. Boxes are fractions of the camera
+ * image: in AR ([viewSpace]) the image fills the view; with CameraX a [frameWidth] by [frameHeight] image is letterboxed
+ * inside it, the same mapping the canvas draws the outlines with, so a tap lands on the box the technician sees.
+ */
+internal fun tappedPart(parts: List<LiveObject>, x: Float, y: Float, viewW: Float, viewH: Float, viewSpace: Boolean, frameWidth: Int, frameHeight: Int): LiveObject? {
+    if (viewW <= 0f || viewH <= 0f) return null
+    val (u, v) = if (viewSpace || frameWidth <= 0 || frameHeight <= 0) (x / viewW).toDouble() to (y / viewH).toDouble()
+    else {
+        val scale = min(viewW / frameWidth, viewH / frameHeight)
+        val w = frameWidth * scale; val h = frameHeight * scale
+        ((x - (viewW - w) / 2) / w).toDouble() to ((y - (viewH - h) / 2) / h).toDouble()
+    }
+    return parts.firstOrNull { u in it.box.left..it.box.right && v in it.box.top..it.box.bottom }
+}
+
+/** What to do with a tapped part: ask LensQi about it, hold it as the AR target, or nothing. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PartChips(part: LiveObject, onAsk: (() -> Unit)?, onHold: (() -> Unit)?, onCancel: () -> Unit) {
+    val name = part.label.lowercase()
+    FlowRow(Modifier.semantics { contentDescription = "Options for the $name" }, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        onAsk?.let { PartChip("Ask about the $name", FoDark.Primary, it) }
+        onHold?.let { PartChip("Hold as target", FoDark.Foreground, it) }
+        PartChip("Cancel", FoDark.Muted, onCancel)
+    }
+}
+
+@Composable
+private fun PartChip(text: String, color: Color, onClick: () -> Unit) =
+    Text(text, color = color, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xB30B0F14))
+        .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp))

@@ -89,6 +89,17 @@ fun trackBox(a: GrayFrame, b: GrayFrame, box: LiveBox): LiveBox? {
     return LiveBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
 }
 
+/**
+ * How strongly a box held only by its world anchor is drawn: 0.6 for the first two seconds since a detection confirmed
+ * it, falling in a straight line to 0.25 at ten seconds and no further, so an outline nobody has confirmed lately reads
+ * as a memory, not a sighting. A live box (null) is drawn in full.
+ */
+fun staleAlpha(seenSecondsAgo: Int?): Float {
+    if (seenSecondsAgo == null) return 1f
+    val s = seenSecondsAgo.coerceIn(2, 10)
+    return 0.6f - (s - 2) * (0.35f / 8)
+}
+
 /** Bounded history replays late detections onto the current frame, instead of painting old coordinates onto live video. */
 class LiveTracker {
     val frames = ArrayDeque<GrayFrame>()

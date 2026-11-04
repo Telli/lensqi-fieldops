@@ -20,16 +20,8 @@ public static class InspectionKnowledgeEndpoints
             var s = store.Find(id);
             if (s is null) return ApiResults.NotFound($"Inspection '{id}' not found");
             var binding = bindings.FirstOrDefault(b => b.FixtureId == s.State.FixtureId && b.AssetId == s.State.AssetId);
-            if (binding is null) return Results.Ok(new { inspectionId = id, status = KnowledgeResolutionStatus.NoPack.ToString(), facts = Array.Empty<object>(), excluded = Array.Empty<object>(), warnings = new[] { "No vendor-knowledge binding for this asset" } });
-            var r = resolver.Resolve(binding, binding.ToAssetIdentity(), []);
-            return Results.Ok(new
-            {
-                inspectionId = id, status = r.Status.ToString(), r.PackId, r.PackSha256, r.PackRevision,
-                originKind = r.PackId is { } packId ? packs.Find(packId)?.Pack.OriginKind.ToString() : null,
-                facts = r.Facts.Select(f => new { f.FactId, f.FactKey, f.AssertedValue, f.Statement, claimKind = f.ClaimKind.ToString(), provenance = f.Provenance.ToString(), safety = f.Safety.ToString(), f.Tags,
-                    citation = new { f.Citation.DocumentTitle, f.Citation.Publisher, sourceUrl = f.Citation.SourceUrl?.ToString(), f.Citation.SourceLocator, f.Citation.AccessedOn } }),
-                excluded = r.Excluded, r.Warnings, approvedDiagnostics = binding.ApprovedDiagnostics,
-            });
+            var k = KnowledgeView(binding, resolver, packs);
+            return Results.Ok(new { inspectionId = id, k.Status, k.PackId, k.PackSha256, k.PackRevision, k.OriginKind, k.Facts, k.Excluded, k.Warnings, k.ApprovedDiagnostics });
         });
 
         // VK-T06/T25: every proposal call lands on the inspection log, accepted or rejected. An accepted RunApprovedProbe
@@ -89,6 +81,22 @@ public static class InspectionKnowledgeEndpoints
             });
         });
         return app;
+    }
+
+    /// <summary>What a client shows for one asset's vendor knowledge: GET /v1/inspections/{id}/knowledge and each asset of a site pack.</summary>
+    public sealed record AssetKnowledge(string Status, string? PackId, string? PackSha256, int? PackRevision, string? OriginKind,
+        IReadOnlyList<object> Facts, IReadOnlyList<ExcludedFact> Excluded, IReadOnlyList<string> Warnings, IReadOnlyList<string> ApprovedDiagnostics);
+
+    /// <summary>Resolves the binding's pack against the asset identity it asserts. No binding is a NoPack view, never an error: the asset simply has no documentation.</summary>
+    public static AssetKnowledge KnowledgeView(FixtureKnowledgeBinding? binding, IVendorKnowledgeResolver resolver, IKnowledgePackStore packs)
+    {
+        if (binding is null) return new(KnowledgeResolutionStatus.NoPack.ToString(), null, null, null, null, [], [], ["No vendor-knowledge binding for this asset"], []);
+        var r = resolver.Resolve(binding, binding.ToAssetIdentity(), []);
+        return new(r.Status.ToString(), r.PackId, r.PackSha256, r.PackRevision,
+            r.PackId is { } packId ? packs.Find(packId)?.Pack.OriginKind.ToString() : null,
+            r.Facts.Select(f => (object)new { f.FactId, f.FactKey, f.AssertedValue, f.Statement, claimKind = f.ClaimKind.ToString(), provenance = f.Provenance.ToString(), safety = f.Safety.ToString(), f.Tags,
+                citation = new { f.Citation.DocumentTitle, f.Citation.Publisher, sourceUrl = f.Citation.SourceUrl?.ToString(), f.Citation.SourceLocator, f.Citation.AccessedOn } }).ToList(),
+            r.Excluded, r.Warnings, binding.ApprovedDiagnostics);
     }
 
     private sealed record ReasonOutcome(bool Accepted, string ProposalId, string ModelId, string PromptDigest, string ResponseDigest,

@@ -92,7 +92,24 @@ export function plainReason(reason: string): string {
   if (reason.includes("unavailable")) return "The equipment check could not reach the endpoint.";
   if (reason.includes("change analysis rejected")) return "The reviewed photo was not accepted. Review against the new photo.";
   if (reason.includes("taken before the repair claim")) return "The reviewed photo was taken before the repair. Review against the new photo.";
+  if (reason === "technician declined the requested view") return "You declined the requested view.";
+  if (reason.startsWith("view budget of")) return "LensQi asked for as many views as it may; the photos didn't settle it.";
+  if (reason === "model proposed StopInconclusive") return "LensQi couldn't settle this from the photos.";
   return reason;
+}
+
+/** Why a pack fact was not applied to this unit (VK-R03.4), by the resolver's reason code. Unknown codes are shown as words, never hidden. */
+export const excludedReasonLabel: Record<string, string> = {
+  firmware_unknown: "Unverified: firmware not known",
+  firmware_mismatch: "Not applicable: different firmware",
+  hardware_revision_unknown: "Unverified: hardware revision not known",
+  hardware_revision_mismatch: "Not applicable: different hardware revision",
+  manufacturer_mismatch: "Not applicable: different equipment",
+  model_mismatch: "Not applicable: different equipment",
+  knowledge_conflict: "Conflicting sources; needs review",
+};
+export function excludedReason(code: string): string {
+  return excludedReasonLabel[code] ?? (code ? `Not applied: ${code.replace(/_/g, " ")}` : "Not applied");
 }
 
 /** A before-repair photo can never show the post-repair view; that item is expected to be unknown and is not "unclear". */
