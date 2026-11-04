@@ -31,6 +31,10 @@ Labels: `LIVE_META`, `PHYSICAL_PHONE`. Galaxy S23 Ultra over USB, with the serve
 | Server with no ElevenLabs key | Route answered `speech_not_configured`. The person confirmed the phone's own voice read the answer, and the phone played no server audio |
 | Crashes | None from LensQi in the phone's crash log |
 
+Coaching hints first played while a question waited for its answer and sounded like the reply, so the person asked three
+times. Hints now hold while a request is pending and for 20 seconds after an answer ends. In a second recording on the same
+phone, one question got one answer, with no spoken line between them.
+
 An earlier run seemed silent. The audio had gone to a Bluetooth earbud that wasn't being worn, and the speaker's media volume
 was 0 once the earbud was removed. Spoken output of either kind follows the media volume.
 
