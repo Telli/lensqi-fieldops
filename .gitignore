@@ -41,3 +41,6 @@ data/
 # Agent worktrees
 .claude/worktrees/
 .agents/
+
+# Local working notes
+scratch/
