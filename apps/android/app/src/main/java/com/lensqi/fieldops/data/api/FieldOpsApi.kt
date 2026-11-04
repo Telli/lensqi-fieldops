@@ -86,6 +86,10 @@ interface FieldOpsApi {
     @POST("v1/voice/transcribe")
     suspend fun transcribeVoice(@Part audio: MultipartBody.Part): VoiceTranscript
 
+    /** A line read aloud by the server's voice. Any failure means the phone's own voice reads it instead. */
+    @POST("v1/voice/speak")
+    suspend fun speak(@Body request: SpeakRequest): ResponseBody
+
     @Multipart
     @POST("v1/inspections/{id}/voice/transcribe")
     suspend fun transcribeClaim(@Path("id") id: String, @Header(IDEMPOTENCY_KEY) key: String, @Part audio: MultipartBody.Part): VoiceTranscript

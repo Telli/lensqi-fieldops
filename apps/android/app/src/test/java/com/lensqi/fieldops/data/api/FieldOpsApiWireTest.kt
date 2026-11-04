@@ -138,4 +138,15 @@ class FieldOpsApiWireTest {
         server.shutdown()
         assertTrue(apiCall { api.health() } is ApiOutcome.Unreachable)
     }
+
+    @Test
+    fun `speak posts the text as JSON and returns the audio bytes`() = runTest {
+        server.enqueue(MockResponse().setHeader("Content-Type", "audio/mpeg").setBody("mp3-bytes"))
+        val audio = api.speak(SpeakRequest("Point the camera closer.")).use { it.string() }
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/v1/voice/speak", request.requestUrl!!.encodedPath)
+        assertEquals("""{"text":"Point the camera closer."}""", request.body.readUtf8())
+        assertEquals("mp3-bytes", audio)
+    }
 }

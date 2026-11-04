@@ -22,7 +22,25 @@ public static class VoiceEndpoints
         }).DisableAntiforgery().AsModelCall().WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(ClaimAudio.MaxBytes + 65_536));
         app.MapPost("/v1/voice/transcribe", Transcribe).DisableAntiforgery().AsVoiceInputCall()
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(ClaimAudio.MaxBytes + 65_536));
+        // Records no event and saves no audio. Any refusal here tells the client to use the device's own voice.
+        app.MapPost("/v1/voice/speak", Speak).DisableAntiforgery().AsSpeechOutputCall();
         return app;
+    }
+
+    public sealed record SpeakRequest(string? Text);
+
+    private static async Task<IResult> Speak(SpeakRequest request, ISpeechSynthesizer speech, SpeechOptions options, ILoggerFactory logs, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > options.MaxCharacters)
+            return ApiResults.BadRequest("text_invalid", $"Text must be 1 to {options.MaxCharacters} characters");
+        try { return Results.File(await speech.SynthesizeAsync(request.Text, ct), "audio/mpeg"); }
+        catch (SpeechNotConfiguredException) { return ApiResults.Conflict("speech_not_configured", "Server speech is not configured"); }
+        catch (Exception ex) when ((ex is HttpRequestException or OperationCanceledException or InvalidOperationException) && !ct.IsCancellationRequested)
+        {
+            // The message holds a status at most, and the spoken text is never logged.
+            logs.CreateLogger("VoiceSpeak").LogWarning("Speech failed: {Reason}", ex is HttpRequestException ? ex.Message : ex.GetType().Name);
+            return ApiResults.Conflict("provider_unavailable", "Speech failed. The device's voice can read this instead.");
+        }
     }
     private static async Task<IResult> Transcribe(HttpRequest http, IVoiceTranscriber voice, ILoggerFactory logs, CancellationToken ct)
     {

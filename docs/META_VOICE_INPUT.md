@@ -1,7 +1,7 @@
 # Meta speech input on web and Android
 
 Web and Android dictation use `muse-voice-transcribe-1.0` through the configured LensQi server.
-Browser speech synthesis and Android TextToSpeech are unchanged. Goals, questions and voice commands continue through
+This covers input. For Android spoken output, see [its record](evidence/android/speech-output/README.md). Goals, questions and voice commands continue through
 existing text handlers; a transcription alone cannot verify an inspection or submit a repair claim.
 
 Clients capture mono PCM WAV, stop after a pause or 60 seconds, and POST multipart `audio` to `/v1/voice/transcribe`.
