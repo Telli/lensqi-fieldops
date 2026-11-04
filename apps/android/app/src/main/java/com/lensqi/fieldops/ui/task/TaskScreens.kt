@@ -142,7 +142,7 @@ private fun HandsFreeChip(on: Boolean, listening: Boolean, onToggle: () -> Unit)
     }
 }
 
-/** Where the microphone's audio goes while hands-free keeps it open; shown in the details so it is read before it is relied on. */
+/** Where the microphone's audio goes; shown with the controls so it is read before it is relied on. */
 @Composable
 private fun SpeechBadge(onDevice: Boolean) =
     Text(speechNotice(onDevice), color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp,
@@ -530,9 +530,9 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
                 else vm.ask(said, camera.value?.latestFrame?.invoke())
         }
     }
-    // Hands-free holds while a request is pending (the question being answered, a step moving) and while an earlier step is
-    // on screen, where questions are not taken; it listens through a pause, so "resume" is heard.
-    val handsFree = rememberHandsFree(voice, vm.speaker, busy = s.busy != null || reviewing, paused = pace.paused)
+    // Hands-free holds while a request is pending (the question being answered, a step moving). It listens through a pause,
+    // so "resume" is heard, and on an earlier step, so "next" brings the technician back; the handler above takes no questions there.
+    val handsFree = rememberHandsFree(voice, vm.speaker, busy = s.busy != null, paused = pace.paused)
     // Silence between questions is the normal state of hands-free, not something to say or show.
     val voiceError = voice.error?.takeUnless { handsFree.on && it == NOTHING_HEARD }
     SpokenErrors(vm.speaker, s.error ?: s.notice, voiceError)
@@ -550,7 +550,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         scopeKey = current?.id ?: step.id,
         targetMemory = vm.spatialTarget,
         detailsSummary = step.stopIf.firstOrNull()?.let { "Stop if $it" } ?: step.cautions.firstOrNull()?.text,
-        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on || (voice.supported && !handsFree.onDevice),
+        showDetails = s.cachedAt != null || s.pendingSteps.isNotEmpty() || step.referencePhotoIds.isNotEmpty() || step.sourceFacts.isNotEmpty() || step.cautions.isNotEmpty() || step.stopIf.isNotEmpty() || s.answer != null || s.error != null || s.notice != null || voiceError != null || voice.listening || voice.heard.isNotEmpty() || pace.paused || s.queuedChecks > 0 || s.refusedChecks.isNotEmpty() || reach?.canSkip == true || handsFree.on,
         onObjects = { measured = it; vm.measured = it },
         onClose = onClose,
         onCaptured = { file -> vm.check(step.id, file) },
@@ -571,7 +571,6 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
-            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.cachedAt != null) Text("Saved plan · ${s.cachedAt}")
             s.pendingSteps.filter { it.state == CommandState.Pending }.forEach { Text("Step ${it.stepId}: update waiting for sync") }
@@ -591,6 +590,8 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         },
         controls = { handle ->
             camera.value = handle
+            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next mic tap.
+            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", true, if (reviewing) "Go to the current step to ask" else "Ask about this step…", typingEnabled = !reviewing,
                 // LensQi stops talking while it listens, so it never hears itself as the question; the voice input's hold
                 // does that and reads a cut-off step again afterwards. With hands-free on, the mic button is its off switch.
@@ -913,9 +914,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         // A title the AI named from the conversation is labelled as such, as the plan and summary label it.
         header = t?.let { if (it.titleByAi) "${it.title ?: it.goal} · AI-named" else it.title } ?: "Just ask",
         onGuidance = pace::guidance,
-        // The speech badge must be readable while hands-free keeps the microphone open, and whenever the phone's standard
-        // speech service is in use (it may send audio to its provider), so the notice is seen before the next mic tap.
-        showDetails = handsFree.on || (voice.supported && !handsFree.onDevice) || voiceError != null || pace.paused,
+        showDetails = handsFree.on || voiceError != null || pace.paused,
         // A tapped outline becomes a question about that part, with the live frame, in the web app's words.
         onAskPart = { part ->
             when {
@@ -929,7 +928,6 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
-            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             val note = s.error ?: voiceError
             if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }
@@ -940,6 +938,8 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         },
         controls = { handle ->
             camera.value = handle
+            // Beside the microphone, not in the details: a tap on the picture can hide those, and the notice must be seen before the next mic tap.
+            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     QuestionRow(typed, { typed = it }, voice.supported, voice.listening, s.busy == "ask", open, "Ask anything about what you see…",

@@ -102,6 +102,7 @@ fun plainReason(reason: String) = when {
     reason.contains("taken before the repair claim") -> "The reviewed photo was taken before the repair. Review against the new photo."
     reason == "technician declined the requested view" -> "You declined the requested view. Closing adds no fault or repair record; earlier work stays on record."
     reason.startsWith("view budget of") -> "LensQi asked for as many views as it may; the photos didn't settle it. Closing adds no fault or repair record; earlier work stays on record."
+    reason == "model proposed StopInconclusive" -> "LensQi couldn't settle this from the photos. Closing adds no fault or repair record; earlier work stays on record."
     reason.startsWith("The inspection is closed") -> "This inspection is closed."
     else -> "A required check is unresolved. Review the evidence and try again."
 }

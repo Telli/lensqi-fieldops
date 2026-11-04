@@ -113,7 +113,7 @@ data class InspectionUi(
     val knowledgeCachedAt: String? = null,
     /** The grounded advisor's last answer this session, accepted or refused; the server holds the record either way. */
     val advice: ReasonResponse? = null,
-    /** Null until the technician edits it; the screen then prefills a one-line observation from the latest assessment. */
+    /** What the technician typed for the advisor; starts blank, so nothing the model said is ever sent back as their words. */
     val observationText: String? = null,
     /** Registered predictions and the server's scores. Calibration only: the measurement decides, never the prediction. */
     val predictions: PredictionsResponse? = null,
@@ -725,6 +725,10 @@ class InspectionViewModel @Inject constructor(
         const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."
         const val NEEDS_CONNECTION_ADVISOR = "Couldn't confirm the advisor’s response. Reconnect and retry the same question to retrieve its result."
         const val NEEDS_CONNECTION_DECLINE = "Couldn't confirm whether the inspection closed. Reconnect and refresh its status before retrying."
+
+        /** What asks the advisor to predict the check, from the claim the server recorded; null until that claim has loaded. */
+        fun predictionQuestion(recordedClaim: String?): String? =
+            recordedClaim?.takeIf { it.isNotBlank() }?.let { "Technician's repair claim: $it. Predict what the approved equipment check will report." }
 
         /**
          * The newest knowledge proposal recorded since the claim, when it was a refusal: its codes, so the screen can say the

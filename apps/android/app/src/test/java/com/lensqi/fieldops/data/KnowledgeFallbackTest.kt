@@ -195,4 +195,11 @@ class KnowledgeFallbackTest {
         assertNull(InspectionViewModel.refusedSinceClaim(listOf(before), claim), "a refusal before the claim is about older evidence")
         assertNull(InspectionViewModel.refusedSinceClaim(listOf(rejected), null), "no claim, no card")
     }
+
+    @Test fun `a prediction is asked only from the claim the server recorded`() {
+        assertEquals("Technician's repair claim: Swapped the cable. Predict what the approved equipment check will report.", InspectionViewModel.predictionQuestion("Swapped the cable"))
+        // The claim field's sample line must not stand in while the events load or when they fail: it would be recorded as the technician's words.
+        assertNull(InspectionViewModel.predictionQuestion(null))
+        assertNull(InspectionViewModel.predictionQuestion("  "))
+    }
 }

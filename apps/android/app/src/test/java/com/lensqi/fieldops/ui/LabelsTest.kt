@@ -81,6 +81,9 @@ class LabelsTest {
         assertTrue(reason.startsWith("You declined the requested view"), reason)
         assertEquals("This inspection is closed.", plainReason("The inspection is closed (Inconclusive)"))
         // The other way an inspection closes inconclusive without a claim: the view budget ran out. Same promise, not the generic retry line.
+        // The model can close it too; a closed inspection must never read "try again".
+        val stopped = plainReason("model proposed StopInconclusive")
+        assertTrue(stopped.startsWith("LensQi couldn't settle this"), stopped)
         val budget = plainReason("view budget of 3 exhausted")
         assertTrue(budget.contains("as many views as it may") && budget.contains("no fault or repair record"), budget)
     }

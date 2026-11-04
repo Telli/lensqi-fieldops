@@ -264,8 +264,8 @@ class HandsFreeState(val on: Boolean, val toggle: () -> Unit, val onDevice: Bool
 /**
  * Hands-free: the microphone opens again by itself after each utterance, once the answer has been spoken and nothing is
  * pending, so the technician never touches the phone between questions. Mirrors the web app's `useHandsFree`. [busy] is
- * the screen's pending request or a state in which questions are not taken (an earlier step on screen). [paused] is not
- * a gate: hands-free listens through a pause so "resume" is heard; the screen's command handler drops everything else.
+ * the screen's pending request. [paused] is not a gate: hands-free listens through a pause so "resume" is heard; the
+ * screen's command handler drops everything else.
  * Off again, with one spoken line, when the microphone is blocked or fails to start.
  */
 @Composable
@@ -400,7 +400,9 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     return VoiceInputState(listening, heard, error, supported && recognizer != null,
         start = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin()
-            else {
+            // Android answers a second request made while the dialog is up with an instant refusal, which would read as the
+            // technician's: it would end hands-free and could send them to Settings. Hands-free retries while the dialog waits.
+            else if (permissionToken == null) {
                 rationaleBefore = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO)
                 com.lensqi.fieldops.ui.common.noteRationale(context, Manifest.permission.RECORD_AUDIO)
                 permissionToken = session.start()
@@ -414,6 +416,8 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
         // cancel() delivers no result and no callback, so the listening state and the speech hold are released here.
         abort = {
             session.invalidate()
+            // Hands-free ending hides nothing it kept quiet: an old silence must not be said aloud once the mode is off.
+            if (error == NOTHING_HEARD) error = null
             if (listening) {
                 recognizer?.cancel()
                 recognizerReset++
