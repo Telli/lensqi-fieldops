@@ -4,7 +4,7 @@
 
 Android reads each line with an ElevenLabs voice through a new server route, `POST /v1/voice/speak`, which holds the key. The phone's TextToSpeech reads the line if the server has no key, takes over 3 seconds or fails, and is used for the next minute after a failure. The route has its own per-IP limit, stores no audio and doesn't log the text. The camera notice says spoken replies may use ElevenLabs.
 
-Verified on the emulator with a local stand-in for the provider and genuine Muse Spark answers (`docs/evidence/android/speech-output/`). No real ElevenLabs call has been made, nothing has been checked by ear, and it hasn't run on a physical phone.
+Verified on the emulator with a local stand-in for the provider, and on a Galaxy S23 Ultra with the real ElevenLabs voice and with no key, where a person heard the phone's own voice instead (`docs/evidence/android/speech-output/`). A provider failure or slow response hasn't been run on a physical phone, and listening through Bluetooth hasn't been checked.
 
 ## As of 4 November 2026 (Pacific), `claude/android-camera-layout` (Android camera questions and AR display)
 
