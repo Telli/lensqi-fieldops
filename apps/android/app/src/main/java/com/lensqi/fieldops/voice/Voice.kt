@@ -145,9 +145,13 @@ class StartupBuffer {
     @Synchronized fun clear() { waiting.clear() }
 }
 
-/** Text-to-speech for guidance, shared by every screen. A new line interrupts the previous one, unless that one is forced. */
+/**
+ * Spoken guidance, shared by every screen: the server's ElevenLabs voice when it answers in time, otherwise the phone's
+ * TextToSpeech. A new line interrupts the previous one, unless that one is forced.
+ */
 @Singleton
-class Speaker @Inject constructor(@ApplicationContext context: Context) : SpeechOutput {
+class Speaker @Inject constructor(@ApplicationContext context: Context, api: dagger.Lazy<com.lensqi.fieldops.data.api.FieldOpsApi>) : SpeechOutput {
+    private val main = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
     private val startup = StartupBuffer()
     private val tts = TextToSpeech(context) { status -> startup.ready(status == TextToSpeech.SUCCESS).forEach { play(it, force = true, replace = false) } }
     private val turns = SpeechTurns(SystemClock::elapsedRealtime)
@@ -157,7 +161,7 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
     @Volatile override var listening = false
         set(value) {
             field = value
-            if (value) { synchronized(turns) { turns.hold() }; tts.stop() }
+            if (value) { synchronized(turns) { turns.hold() }; stopVoices() }
             else synchronized(turns) { turns.release() }.forEach { play(it, force = true, replace = false) }
         }
     override val busy get() = held || listening || synchronized(turns) { turns.playing }
@@ -167,16 +171,33 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
     override val speaking get() = reading || synchronized(turns) { turns.playing }
     private var last = ""
     private var count = 0
+    private val deviceEnds = java.util.concurrent.ConcurrentHashMap<String, () -> Unit>()
+    private val source = ServerSpeechSource({ api.get() }, java.io.File(context.cacheDir, "spoken-lines"))
+    // Reading covers the fetch as well as the playing, so hands-free never opens the microphone just before a line starts.
+    private val queue = SpeechQueue(main, source, MediaPlayerAudio(), object : DeviceVoice {
+        override fun say(id: String, text: String, onEnd: () -> Unit) {
+            deviceEnds[id] = onEnd
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        }
+        override fun stop() { deviceEnds.clear(); tts.stop() }
+    }, SystemClock::elapsedRealtime,
+        onStart = { reading = true },
+        onEnd = { id -> reading = false; synchronized(turns) { turns.finished(id) } })
 
     init {
+        main.launch { source.clearLeftovers() }
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) { reading = true }
-            override fun onDone(id: String?) { reading = false; id?.let { synchronized(turns) { turns.finished(it) } } }
-            @Deprecated("Deprecated in Java") override fun onError(id: String?) { reading = false; id?.let { synchronized(turns) { turns.finished(it) } } }
-            override fun onError(id: String?, errorCode: Int) { reading = false; id?.let { synchronized(turns) { turns.finished(it) } } }
-            override fun onStop(id: String?, interrupted: Boolean) { reading = false; id?.let { synchronized(turns) { turns.finished(it) } } }
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) = ended(id)
+            @Deprecated("Deprecated in Java") override fun onError(id: String?) = ended(id)
+            override fun onError(id: String?, errorCode: Int) = ended(id)
+            override fun onStop(id: String?, interrupted: Boolean) = ended(id)
+            // The engine reports from its own thread; the queue lives on the main one.
+            private fun ended(id: String?) { id?.let { deviceEnds.remove(it) }?.let { end -> main.launch { end() } } }
         })
     }
+
+    private fun stopVoices() { main.launch { queue.stop() } }
 
     // What is spoken is what the screen shows: a step, an answer or a check reason names the equipment in its own words
     // ("the Delta cartridge"); internal status strings are made readable by their callers before they reach here.
@@ -191,10 +212,10 @@ class Speaker @Inject constructor(@ApplicationContext context: Context) : Speech
         synchronized(turns) { id = "lensqi-${++count}"; play = turns.begin(id, spoken, force, replace) }
         if (play == Play.Drop) return
         last = spoken
-        tts.speak(spoken, if (play == Play.After) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH, null, id)
+        main.launch { queue.speak(id, spoken, flush = play != Play.After) }
     }
 
-    override fun stop() { startup.clear(); synchronized(turns) { turns.clear() }; tts.stop(); reading = false }
+    override fun stop() { startup.clear(); synchronized(turns) { turns.clear() }; stopVoices(); reading = false }
 }
 
 /**
@@ -228,7 +249,7 @@ fun speechNotice(@Suppress("UNUSED_PARAMETER") onDevice: Boolean): String =
     "Audio is sent through LensQi to Meta Voice Transcribe. Internet required; you can type instead."
 
 /** On the camera, a question also carries what the camera sees now, whether it was spoken or typed. */
-const val ASK_NOTICE = "Asking sends your voice or text and camera view to Meta via LensQi."
+const val ASK_NOTICE = "Asking sends your voice or text and camera view to Meta via LensQi. Spoken replies may use ElevenLabs."
 
 /** The recognizer heard nothing: an ordinary outcome, not a failure; said once by push-to-talk and never in hands-free. */
 const val NOTHING_HEARD = "I didn't catch that."
@@ -312,7 +333,7 @@ fun rememberHandsFree(voice: VoiceInputState, speech: SpeechOutput, busy: Boolea
 }
 
 /**
- * Meta speech input through the configured API. Output still uses Android TextToSpeech.
+ * Meta speech input through the configured API. Output is the [Speaker]'s.
  */
 @Composable
 fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit): VoiceInputState {

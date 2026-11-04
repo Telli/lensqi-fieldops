@@ -1,6 +1,6 @@
 > General web and Android speech input also uses Meta Voice Transcribe, through `POST /v1/voice/transcribe`.
 > The repair claim uses the inspection-specific path below, which adds an explicit transcript review.
-> Browser and Android text-to-speech output is unchanged. See [speech input integration](META_VOICE_INPUT.md).
+> See [speech input integration](META_VOICE_INPUT.md) and [spoken output](evidence/android/speech-output/README.md).
 
 # Android repair claims by voice
 

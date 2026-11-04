@@ -1,5 +1,11 @@
 # Feature status
 
+## As of 4 November 2026 (Pacific), `claude/android-elevenlabs-speech` (Android spoken output through ElevenLabs)
+
+Android reads each line with an ElevenLabs voice through a new server route, `POST /v1/voice/speak`, which holds the key. The phone's TextToSpeech reads the line if the server has no key, takes over 3 seconds or fails, and is used for the next minute after a failure. The route has its own per-IP limit, stores no audio and doesn't log the text. The camera notice says spoken replies may use ElevenLabs.
+
+Verified on the emulator with a local stand-in for the provider and genuine Muse Spark answers (`docs/evidence/android/speech-output/`). No real ElevenLabs call has been made, nothing has been checked by ear, and it hasn't run on a physical phone.
+
 ## As of 4 November 2026 (Pacific), `claude/android-camera-layout` (Android camera questions and AR display)
 
 A question asked on the Android camera now carries what the camera sees, whether camera assistance is on or off. Before this, a question sent no image unless assistance was running, and assistance starts off, so the model answered without seeing anything. The phone keeps one recent frame in memory, about once a second, and sends it only when the person asks; the screen says so, and says when no frame was ready.

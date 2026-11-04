@@ -79,6 +79,18 @@ builder.Services.AddHttpClient("voice");
 builder.Services.AddSingleton<LensQi.FieldOps.Meta.Voice.IVoiceTranscriber>(sp =>
     new LensQi.FieldOps.Meta.Voice.VoiceTranscriber(sp.GetRequiredService<IHttpClientFactory>().CreateClient("voice"), sp.GetRequiredService<MuseOptions>(), sp.GetRequiredService<LensQi.FieldOps.Meta.Voice.VoiceOptions>()));
 
+// Spoken output through ElevenLabs. Optional: with no key the route says so and the Android client uses the device's voice.
+builder.Services.AddSingleton(sp =>
+{
+    var o = new LensQi.FieldOps.Api.Features.Voice.SpeechOptions();
+    builder.Configuration.GetSection(LensQi.FieldOps.Api.Features.Voice.SpeechOptions.SectionName).Bind(o);
+    o.ApiKey ??= Environment.GetEnvironmentVariable(LensQi.FieldOps.Api.Features.Voice.SpeechOptions.ApiKeyEnvironmentVariable) ?? ReadDotEnv(builder.Environment.ContentRootPath, LensQi.FieldOps.Api.Features.Voice.SpeechOptions.ApiKeyEnvironmentVariable);
+    return o;
+});
+builder.Services.AddHttpClient("speech");
+builder.Services.AddSingleton<LensQi.FieldOps.Api.Features.Voice.ISpeechSynthesizer>(sp =>
+    new LensQi.FieldOps.Api.Features.Voice.ElevenLabsSynthesizer(sp.GetRequiredService<IHttpClientFactory>().CreateClient("speech"), sp.GetRequiredService<LensQi.FieldOps.Api.Features.Voice.SpeechOptions>()));
+
 // Expected twin (parent FR-01): schema + invariants + byte-exact digest; fail closed at startup.
 builder.Services.Configure<FixturesOptions>(builder.Configuration.GetSection(FixturesOptions.SectionName));
 builder.Services.AddSingleton(sp =>

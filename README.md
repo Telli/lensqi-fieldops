@@ -320,7 +320,12 @@ that a repair succeeded. A live HTTP result proves only what that endpoint measu
 **Photos and speech may leave the device.** Web and Android speech input sends bounded WAV audio through the LensQi
 server to Meta Voice Transcribe. It requires connectivity; there is no automatic fallback to another speech provider.
 LensQi does not persist transcription audio on the server; Android deletes its temporary recording after processing or
-cancellation. Spoken output still uses browser/Android text-to-speech. You can type instead.
+cancellation. You can type instead.
+
+**Spoken output can use ElevenLabs on Android.** When the server has an `ELEVENLABS_API_KEY`, the text of each spoken line
+goes through LensQi to ElevenLabs. If it is unconfigured, slow or unavailable, the phone's own text-to-speech reads the line.
+The web app and glasses guidance use device text-to-speech. See [Android speech output](docs/evidence/android/speech-output/README.md)
+for what has been verified.
 Uploaded evidence and question photos can be stored on the server, so camera questions should not be treated as ephemeral.
 
 ## Documentation

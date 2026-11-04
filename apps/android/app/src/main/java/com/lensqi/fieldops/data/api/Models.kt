@@ -476,3 +476,6 @@ data class SegmentationRef(val evidenceId: String, val sourcePhotoEvidenceId: St
 
 @Serializable
 data class VoiceTranscript(val transcript: String, val modelId: String)
+
+@Serializable
+data class SpeakRequest(val text: String)
