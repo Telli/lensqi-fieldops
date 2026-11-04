@@ -313,6 +313,7 @@ public class TaskSessionTests
     [InlineData("Do not touch it and remove the cover.", true)]
     [InlineData("Don't wait. Remove the cover.", true)]
     [InlineData("Don't wait, remove the panel cover.", true)]
+    [InlineData("Do not call an electrician or wait, remove the panel cover.", true)]
     [InlineData("Do not wait for the electrician, then open the box or remove the cover.", true)]
     [InlineData("The door is open with exposed wires.", false)]
     [InlineData("Open the panel with exposed wires.", true)]
@@ -355,7 +356,9 @@ public class TaskSessionTests
     public void A_restricted_plan_is_checked_in_everything_the_person_reads_or_hears()
     {
         const string bad = "Remove the panel cover.";
-        TaskPlanValidator.Validate(Referral(), "Replace my breaker panel", null);   // the title names the job and tells no one to do it
+        TaskPlanValidator.Validate(Referral(), "Replace my breaker panel", null);   // the title hands the job over
+        var command = Referral() with { Title = "Unscrew the panel cover and disconnect the wires" };
+        Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(command, "Replace my breaker panel", null)).Code);
         foreach (var plan in new[] { Referral(caution: bad), Referral(stopIf: bad), Referral(check: bad), Referral(summary: bad), Referral(reason: bad) })
             Assert.Equal(TaskErrorCodes.UnsafePlan, Assert.Throws<TaskConflictException>(() => TaskPlanValidator.Validate(plan, "Replace my breaker panel", null)).Code);
     }
@@ -366,6 +369,18 @@ public class TaskSessionTests
         var plan = Referral(caution: "Turn off the breaker first.") with { Restricted = RestrictedCategory.None, ProfessionalRequired = false, ProfessionalReason = null };
         TaskPlanValidator.Validate(plan, "Replace a ceiling light", null);
     }
+
+    [Theory]
+    [InlineData("Replace garage breaker panel - arrange professional", false)]
+    [InlineData("Replace the breaker panel: call a licensed electrician", false)]
+    [InlineData("Do not replace garage breaker panel yourself", false)]
+    [InlineData("Assess the garage breaker panel", false)]
+    [InlineData("Unscrew the panel cover and disconnect the wires", true)]
+    [InlineData("Replace garage breaker panel", true)]
+    [InlineData("No professional needed: unscrew the panel cover", true)]
+    [InlineData("Unscrew the panel cover - call an electrician if it sticks", true)]
+    public void A_plan_title_may_name_a_job_only_by_handing_it_over(string title, bool instructs) =>
+        Assert.Equal(instructs, TaskSafety.TitleInstructsHandsOn(title));
 
     [Theory]
     [InlineData("you would need to open the panel", false)]

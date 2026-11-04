@@ -166,6 +166,31 @@ public class ReceiptTests
         Assert.Contains(v.Failures, f => f.Contains("not the rendering of this receipt"));
     }
 
+    [Theory]
+    [InlineData("inspection")]
+    [InlineData("versions")]
+    [InlineData("checklist")]
+    public void A_receipt_with_a_member_nulled_is_invalid_and_does_not_throw(string member)
+    {
+        var (_, dir) = IssueBundle();
+        var path = Path.Combine(dir, "receipt.json");
+        var node = JsonNode.Parse(File.ReadAllText(path))!;
+        node[member] = null;
+        File.WriteAllText(path, node.ToJsonString());
+        Assert.False(ReceiptVerifier.Verify(dir).IsValid);
+    }
+
+    [Theory]
+    [InlineData("""{"artifacts":[null]}""")]
+    [InlineData("""{"manifestSha256":5}""")]
+    [InlineData("""{"events":"none"}""")]
+    public void A_receipt_of_the_wrong_shape_is_invalid_and_does_not_throw(string json)
+    {
+        var (_, dir) = IssueBundle();
+        File.WriteAllText(Path.Combine(dir, "receipt.json"), json);
+        Assert.False(ReceiptVerifier.Verify(dir).IsValid);
+    }
+
     [Fact]
     public void A_missing_page_fails()
     {
