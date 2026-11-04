@@ -657,7 +657,9 @@ class InspectionViewModel @Inject constructor(
     /** The technician cannot safely take the view LensQi asked for. The server closes the inspection as inconclusive and keeps the decline in the record. */
     fun declineView() = act("Closing as inconclusive…") {
         when (val r = keys.command(action("decline")) { k -> api.declineView(inspectionId, k) }) {
-            is ApiOutcome.Ok -> cacheView(r.value)
+            // The closed view arrives before the trail reloads; the reason shown with it comes from the events, so the one
+            // read before the decline is dropped rather than shown under the closed card until the trail catches up.
+            is ApiOutcome.Ok -> { cacheView(r.value); local.update { it.copy(stageReason = null) } }
             is ApiOutcome.Unreachable -> local.update { it.copy(error = NEEDS_CONNECTION_DECLINE) }
             is ApiOutcome.Rejected -> report(r)
         }
