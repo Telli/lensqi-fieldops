@@ -75,7 +75,8 @@ public sealed class KnowledgeResolver : IVendorKnowledgeResolver
 
         var facts = ranked.Select(f => ToApplicableFact(f, pack, loaded.Sha256)).ToList();
         var status = facts.Count == 0 ? KnowledgeResolutionStatus.NoApplicableKnowledge : KnowledgeResolutionStatus.Applicable;
-        return new KnowledgeResolution(status, pack.PackId, loaded.Sha256, pack.PackRevision, facts, excluded, warnings);
+        // Facts is bounded for display and prompts; the id list is not, so a gate can judge every fact a binding requires.
+        return new KnowledgeResolution(status, pack.PackId, loaded.Sha256, pack.PackRevision, facts, excluded, warnings, applicability.ApplicableFacts.Select(f => f.FactId).ToList());
     }
 
     private static ApplicableFact ToApplicableFact(PackFact fact, KnowledgePack pack, string sha256)

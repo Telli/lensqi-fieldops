@@ -78,7 +78,8 @@ public sealed record KnowledgeResolution(
     int? PackRevision,
     IReadOnlyList<ApplicableFact> Facts,
     IReadOnlyList<ExcludedFact> Excluded,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<string>? ApplicableFactIds = null)
 {
     public static KnowledgeResolution Empty(KnowledgeResolutionStatus status, params string[] warnings) =>
         new(status, null, null, null, [], [], warnings);

@@ -93,6 +93,16 @@ public class RequiredKnowledgeGateTests
     }
 
     [Fact]
+    public void Required_facts_beyond_the_fact_card_limit_are_still_judged()
+    {
+        var binding = TestPacks.SyntheticBinding;
+        Assert.True(binding.VendorKnowledge.RequiredKnowledgeFactIds.Count > 1);
+        var resolver = new KnowledgeResolver(TestPacks.Store(TestPacks.Synthetic), new KnowledgeResolverOptions { MaxFacts = 1 });
+        Assert.Single(resolver.Resolve(binding, binding.ToAssetIdentity(), []).Facts);
+        Assert.True(RequiredKnowledgeCheck.For([binding], resolver, binding.FixtureId, binding.AssetId)!.Confirmed);
+    }
+
+    [Fact]
     public void A_required_fact_excluded_for_this_firmware_is_unconfirmed()
     {
         var binding = TestPacks.MikroTikBinding("6", "MK-REST-GET-INTERFACE");

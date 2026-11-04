@@ -26,7 +26,7 @@ public sealed record RequiredKnowledgeCheck(
         if (binding is null || binding.VendorKnowledge.RequiredKnowledgeFactIds.Count == 0) return null;
         var required = binding.VendorKnowledge.RequiredKnowledgeFactIds;
         var resolution = resolver.Resolve(binding, binding.ToAssetIdentity(), []);
-        var applicable = resolution.Facts.Select(f => f.FactId).ToHashSet(StringComparer.Ordinal);
+        var applicable = (resolution.ApplicableFactIds ?? []).ToHashSet(StringComparer.Ordinal);
         return new(resolution.Status, resolution.PackId, resolution.PackSha256, resolution.PackRevision, required, required.Where(id => !applicable.Contains(id)).ToList());
     }
 }

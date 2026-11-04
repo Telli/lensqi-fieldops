@@ -92,8 +92,8 @@ public static class TaskPlanValidator
             foreach (var s in plan.Steps.Where(s => s.HandsOn)) unsafeRules.Add($"step {s.Id} is hands-on in {why} work");
             foreach (var s in plan.Steps.Where(s => !s.HandsOn && (TaskSafety.InstructsHandsOn(s.Instruction) || TaskSafety.InstructsHandsOn(s.Title))))
                 unsafeRules.Add($"step {s.Id} instructs hands-on work in {why} work");
-            // Everything else the person reads or hears as guidance. The plan's title is left out: it names the job they asked
-            // about ("Replace garage breaker panel - arrange professional"), and tells no one to do it.
+            // Everything else the person reads or hears as guidance.
+            if (TaskSafety.TitleInstructsHandsOn(plan.Title)) unsafeRules.Add($"the title instructs hands-on work in {why} work");
             foreach (var s in plan.Steps)
             {
                 if (s.Cautions.Any(c => TaskSafety.InstructsHandsOn(c.Text))) unsafeRules.Add($"step {s.Id} has a caution that instructs hands-on work in {why} work");
@@ -129,8 +129,9 @@ public static class TaskSafety
     private const string Pro = @"(licensed |qualified |certified |a |an |the |your )*(electrician|plumber|professional|pro|technician|installer|contractor|engineer|dealer|mechanic|gas company|utility)";
     // "Do not open the panel", "never disconnect…": a negation within three words before the action, or one that carries
     // through a list ("do not touch it or remove the cover", "do not switch off main, pull breakers, or unscrew the panel").
-    // A comma ends the short form ("don't wait, remove the cover" is a command) and a new clause ends the list.
-    private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+((\S*[^\s,]\s+){0,2}|((?!\b(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)\b).)*\b(or|nor)\s+(\S+\s+){0,2})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // A comma after the last item ends it ("don't wait, remove the cover", "do not call or wait, remove the cover" are
+    // commands) and so does a new clause.
+    private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+((\S*[^\s,]\s+){0,2}|((?!\b(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)\b).)*\b(or|nor)\s+(\S*[^\s,]\s+){0,2})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     // "The door is open with exposed wires": a description, not a command.
     private static readonly Regex StateBefore = new(@"(?<![a-z])(is|are|was|were|been|being|stays|remains)\s+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     // "Have a licensed electrician replace…", "ask a plumber to disconnect…", "a plumber should disconnect…": the action
@@ -151,6 +152,12 @@ public static class TaskSafety
 
     /// <summary>True when any sentence tells the person to do hands-on work themselves.</summary>
     public static bool InstructsHandsOn(string? text) => Instructs(text, situation: false);
+
+    // A title may name the job the person asked about when it ends by handing it over: "Replace garage breaker panel - arrange professional".
+    private static readonly Regex ReferralTitle = new($@"(\s[-–—]|:)\s+(arrange|call|contact|hire|find|get|book|ask|see|consult|use)\s+(for\s+)?{Pro}(\s+\w+)?\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>The same check for a plan title, which may name a job only by handing it to a professional.</summary>
+    public static bool TitleInstructsHandsOn(string? title) => InstructsHandsOn(title) && !ReferralTitle.IsMatch(title!);
 
     /// <summary>The same check for a stop condition, where naming the situation to stop in is not an instruction.</summary>
     public static bool InstructsHandsOnInCondition(string? text) => Instructs(text, situation: true);
