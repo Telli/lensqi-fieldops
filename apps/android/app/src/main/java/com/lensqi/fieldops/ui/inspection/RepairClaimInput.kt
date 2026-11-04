@@ -15,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -32,11 +31,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lensqi.fieldops.ui.common.PrimaryButton
 import com.lensqi.fieldops.ui.common.SecondaryButton
 import com.lensqi.fieldops.ui.theme.Fo
-import com.lensqi.fieldops.voice.rememberVoiceInput
 
 /**
- * The repair claim, typed, dictated or recorded. Whichever way the words arrive, the person reviews them first and they
- * become a claim only through [onSubmit], the same path for the first repair and for a retry after failed verification.
+ * The repair claim, typed or recorded. Whichever way the words arrive, the person reviews them first and they become a
+ * claim only through [onSubmit], the same path for the first repair and for a retry after failed verification.
  */
 @Composable
 fun RepairClaimInput(
@@ -64,22 +62,11 @@ fun RepairClaimInput(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (s.phase) {
             VoiceClaimPhase.Idle -> {
-                // Dictation edits only the draft: the person reviews it before pressing the separate submit button.
-                val dictation = rememberVoiceInput(onFinal = onTextChanged)
                 Field(text, onTextChanged, label)
-                if (dictation.supported) {
-                    TextButton(onClick = { if (dictation.listening) dictation.stop() else dictation.start() }) {
-                        Text(if (dictation.listening) "Finish dictating" else "Dictate repair claim")
-                    }
-                    if (dictation.listening) Text(dictation.heard.ifBlank { "Listening…" })
-                    Muted("Review the text before recording the repair. Voice uses your phone’s speech service.")
-                    dictation.error?.let { Text(it, color = Fo.Warning) }
-                }
-                // One microphone: the recorder stays closed while dictation holds it.
                 SecondaryButton("Record with Muse Voice", {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) voice.startRecording()
                     else permission.launch(Manifest.permission.RECORD_AUDIO)
-                }, Modifier.fillMaxWidth(), enabled = enabled && !dictation.listening, icon = Icons.Outlined.Mic)
+                }, Modifier.fillMaxWidth(), enabled = enabled, icon = Icons.Outlined.Mic)
                 Muted("Recording sends your audio through the LensQi server to Meta for transcription. LensQi does not save the audio.")
                 PrimaryButton(submitLabel, { onSubmit(text) }, Modifier.fillMaxWidth(), enabled = enabled && text.isNotBlank(), icon = submitIcon)
             }

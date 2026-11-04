@@ -206,6 +206,7 @@ fun TaskHomeScreen(vm: TaskListViewModel, onPlan: (String) -> Unit, onDetails: (
                             focusedPlaceholderColor = FoDark.Muted, unfocusedPlaceholderColor = FoDark.Muted, focusedBorderColor = FoDark.Primary, unfocusedBorderColor = FoDark.Border, cursorColor = FoDark.Primary))
                     if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
                 }
+                SpeechBadge(false)
                 voice.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 if (!s.creating) s.error?.let { Text(it, color = Fo.Warning, fontSize = 12.sp) }
                 PrimaryButton(if (writing) "Writing your plan…" else "Plan it", { planning = true; onPlan(goal.trim()) }, Modifier.fillMaxWidth(), enabled = goal.trim().length >= 3 && !s.creating, icon = Icons.Outlined.AutoAwesome, busy = writing)
@@ -329,6 +330,7 @@ fun NewTaskScreen(vm: TaskListViewModel, fixtures: List<Fixture>, initialMode: T
                 if (voice.supported) MicButton(voice.listening, { if (voice.listening) voice.stop() else voice.start() })
             }
         }
+        item { Text(speechNotice(false), style = MaterialTheme.typography.bodySmall) }
         source?.let { session -> item {
             Column {
                 Text("Carry forward from Just ask")

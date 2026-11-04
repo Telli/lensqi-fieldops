@@ -1,17 +1,20 @@
+> General web and Android speech input also uses Meta Voice Transcribe, through `POST /v1/voice/transcribe`.
+> The repair claim uses the inspection-specific path below, which adds an explicit transcript review.
+> Browser and Android text-to-speech output is unchanged. See [speech input integration](META_VOICE_INPUT.md).
+
 # Android repair claims by voice
 
-The repair step, including a retry after failed verification, offers three ways to write the claim. Each one fills a draft
+The repair step, including a retry after failed verification, offers two ways to write the claim. Each one fills a draft
 that the technician reviews before it becomes a claim.
 
 | Method | Where the words come from | Sent off the phone |
 |---|---|---|
 | Typing | The technician | The confirmed text |
-| **Dictate repair claim** | The phone's speech service | Whatever that service sends, then the confirmed text |
 | **Record with Muse Voice** | `muse-voice-transcribe-1.0`, through the LensQi server | The recording, then the confirmed text |
 
 ## Recording with Muse Voice
 
-1. Tap **Record with Muse Voice** and grant microphone access. The button is disabled while dictation holds the microphone.
+1. Tap **Record with Muse Voice** and grant microphone access.
 2. Speak, then tap **Stop and transcribe**. Recording stops by itself after 60 seconds.
 3. Review the words in the **Repair claim transcript** field, which is labelled **Muse Voice (inferred)**. Edit them as needed.
 4. Tap **Confirm transcript and submit claim**, or **Reject transcript** to discard them.
@@ -22,8 +25,7 @@ claim by itself.
 
 The app records mono 16-bit PCM WAV at 24 kHz and deletes the temporary file after the upload. Leaving the screen,
 backgrounding the app or scrolling the control away cancels recording or transcription and releases the microphone. A draft
-under review survives that. Microphone denial, recording failures and transcription errors leave typing and dictation
-available.
+under review survives that. Microphone denial, recording failures and transcription errors leave typing available.
 
 Transcription needs a connection to the server; it is not queued offline.
 

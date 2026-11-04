@@ -129,6 +129,46 @@ public class VoiceApiTests
         Assert.Contains("model_timeout", await timedOut.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task General_voice_input_needs_no_inspection_and_is_bounded_and_rate_limited()
+    {
+        using var f = new FieldOpsApiFactory(); var fake = new FakeVoice();
+        using var app = WithVoice(f, fake).WithWebHostBuilder(b => b.UseSetting("Hardening:VoiceInputCallsPerHourPerIp", "3"));
+        var c = app.CreateClient();
+        async Task<HttpResponseMessage> Send(byte[] bytes) {
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(bytes), "audio", "speech.wav" } };
+            return await c.PostAsync("/v1/voice/transcribe", form);
+        }
+        var good = await Send(Wav());
+        Assert.Equal(HttpStatusCode.OK, good.StatusCode);
+        Assert.Equal("Reseated cable", (await good.Content.ReadFromJsonAsync<VoiceTranscript>())!.Transcript);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(Wav(rate: 48000))).StatusCode);
+        Assert.Equal(1, fake.Calls);
+        fake.Silent = true;
+        var silent = await Send(Wav());
+        Assert.Equal("no_speech", (await silent.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Send(Wav())).StatusCode);
+        Assert.Equal(2, fake.Calls);
+        Assert.DoesNotContain(Directory.EnumerateFiles(f.DataDir, "*", SearchOption.AllDirectories), path => path.EndsWith(".wav"));
+    }
+
+    [Fact]
+    public async Task Hands_free_speech_cannot_use_up_the_model_call_budget()
+    {
+        using var f = new FieldOpsApiFactory(); var fake = new FakeVoice();
+        using var app = WithVoice(f, fake).WithWebHostBuilder(b => b.UseSetting("Hardening:ModelCallsPerHourPerIp", "1").UseSetting("Hardening:VoiceInputCallsPerHourPerIp", "50"));
+        var c = app.CreateClient();
+        for (var i = 0; i < 5; i++)
+        {
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(Wav()), "audio", "speech.wav" } };
+            Assert.Equal(HttpStatusCode.OK, (await c.PostAsync("/v1/voice/transcribe", form)).StatusCode);
+        }
+        // The one permitted model call is still there after five utterances, and the next is refused: the budgets are separate.
+        var id = await Create(c);
+        Assert.Equal(HttpStatusCode.OK, (await Upload(c, id, Wav())).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Upload(c, id, Wav())).StatusCode);
+    }
+
     [Theory]
     [InlineData(16000)]
     [InlineData(24000)]

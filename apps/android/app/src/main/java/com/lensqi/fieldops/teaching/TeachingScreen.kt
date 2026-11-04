@@ -192,7 +192,7 @@ private fun CapturePanel(vm: TeachingViewModel, ui: TeachingUi, creating: Boolea
                 if (voice.supported) TextButton(onClick = { if (voice.listening) voice.stop() else voice.start() }, enabled = recording && !ui.busy) { Text(if (voice.listening) "Stop listening" else "Dictate note") }
                 Button(onClick = { vm.annotate(TeachingKind.Note, note, step?.id, source = noteSource); note = "" }, enabled = recording && note.isNotBlank() && !voice.listening && !ui.busy) { Text("Add note") }
             }; voice.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; if (voice.listening) Text("Listening… ${voice.heard}") }
-            item { Text("Dictation uses the phone’s speech service, which may process audio remotely. Only the resulting text is saved in the recording.", style = MaterialTheme.typography.bodySmall) }
+            item { Text("Dictation sends audio through LensQi to Meta Voice Transcribe. Only the resulting text is saved in the teaching recording.", style = MaterialTheme.typography.bodySmall) }
         }
         item { Spacer(Modifier.height(20.dp)) }
     }

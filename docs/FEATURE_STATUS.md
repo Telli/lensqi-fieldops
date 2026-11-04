@@ -1,5 +1,13 @@
 # Feature status
 
+## As of 4 November 2026 (Pacific), `codex/meta-voice-input` (speech input through Meta)
+
+Web and Android speech input now goes through LensQi to `muse-voice-transcribe-1.0`, with no fallback to browser or phone recognition; spoken output is unchanged. General speech input has its own per-IP limit, so hands-free cannot use up the budget for plans and questions. The repair claim keeps one voice path, recording with review, beside typing.
+
+Verified with genuine provider calls on synthetic speech through the web client's real recorder and upload code, using file-fed audio, and on the Android emulator with silence (`docs/evidence/meta-voice-input/`). A person's voice on a real browser or phone microphone has not been tested.
+
+Gates: 428 .NET tests (Core 228, Meta 24, Api 176); web typecheck, 85 tests, production build; Android 322 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS.
+
 ## As of 4 November 2026 (Pacific), `claude/android-voice-claim` (repair claims recorded with Muse Voice)
 
 Android can record a repair claim and transcribe it with `muse-voice-transcribe-1.0` through a new draft-only endpoint, beside the existing typing and phone dictation. The person reviews, edits or rejects the transcript; confirming sends it through the normal claim path. The endpoint records no event and stores no audio, and it refuses a closed inspection before any model call. Silence returns `no_speech`.

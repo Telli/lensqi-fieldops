@@ -159,6 +159,14 @@ Recording a repair claim with Muse Voice on the emulator, on 2026-11-04. The spo
 | `android/voice-claim/01-claim-options.png` | The repair claim with typing, dictation and Muse Voice, and the notice that audio goes to Meta. | `EMULATOR` |
 | `android/voice-claim/02-transcript-review.png` | The editable transcript labelled inferred, with stray punctuation from the provider, before anything is recorded. | `EMULATOR`, `LIVE_META` |
 
+## Speech input (`meta-voice-input/`)
+
+| File | What it shows | Labels |
+|---|---|---|
+| `meta-voice-input/live-transcribe.json` | One genuine call through the general route, on synthetic speech. | `LIVE_META` |
+| `meta-voice-input/client-paths-20261104.json` | The web client's real recorder and upload on file-fed audio, silence on the Android emulator, and what was not shown. | `LIVE_META`, `EMULATOR` |
+| `meta-voice-input/web-notice.jpg` | The web notice that audio goes through LensQi to Meta. | — |
+
 ## Live camera assistance (`live-ar/`, `live-glasses/`, `ar-ux/`)
 
 Each folder has its own README. The Galaxy S23 Ultra ARCore live-assist run is described in `docs/LIVE_AR.md`; no

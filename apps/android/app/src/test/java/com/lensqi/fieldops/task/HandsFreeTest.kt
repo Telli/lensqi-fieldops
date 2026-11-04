@@ -77,9 +77,11 @@ class HandsFreeTest {
         assertTrue(HandsFreePolicy.pausedCommandAllowed(parseCommand("ok LensQi, resume"), paused = true))
     }
 
-    @Test fun `the speech badge says where audio goes and never that it reaches LensQi`() {
-        assertEquals("On-device speech recognition · no audio leaves the phone", speechNotice(onDevice = true))
-        assertEquals("The phone's speech service may send audio to its provider. Only the recognised text reaches LensQi.", speechNotice(onDevice = false))
-        for (onDevice in listOf(true, false)) assertFalse(Regex("audio[^.]*reaches LensQi", RegexOption.IGNORE_CASE).containsMatchIn(speechNotice(onDevice)))
+    @Test fun `the speech badge discloses Meta audio processing even for a stale on device flag`() {
+        for (onDevice in listOf(true, false)) {
+            assertTrue(speechNotice(onDevice).contains("Meta Voice Transcribe"))
+            assertTrue(speechNotice(onDevice).contains("through LensQi"))
+            assertFalse(speechNotice(onDevice).contains("no audio leaves"))
+        }
     }
 }

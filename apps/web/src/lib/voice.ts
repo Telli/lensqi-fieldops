@@ -1,3 +1,4 @@
+import { MetaRecording, NOTHING_HEARD, NoSpeechError, transcribeVoice } from "./meta-voice";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Hands-free commands. Anything else said to LensQi is a question. */
@@ -92,82 +93,63 @@ export function usePause(coaching: { enabled: boolean; setEnabled: (on: boolean)
   return { paused, pause, resume };
 }
 
-interface RecognitionResult { readonly isFinal: boolean; readonly 0: { transcript: string } }
-interface RecognitionEvent { readonly resultIndex: number; readonly results: ArrayLike<RecognitionResult> }
-interface Recognition {
-  lang: string; interimResults: boolean; continuous: boolean;
-  onresult: ((e: RecognitionEvent) => void) | null; onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null;
-  start(): void; stop(): void; abort(): void;
-}
-type RecognitionCtor = new () => Recognition;
-
 const BLOCKED_MIC = "Microphone access is blocked for this site.";
 const BLOCKED_SERVICE = "Speech recognition isn't allowed for this site.";
 /** Errors that will not change by trying again, so hands-free stops asking. */
 export const voiceBlocked = (error: string | null) => error === BLOCKED_MIC || error === BLOCKED_SERVICE;
 
 /** Shown before the first use of the microphone, then not again on this device. */
-export const speechNotice = "Your browser may send microphone audio to its speech provider. Only recognised text reaches LensQi. You can type instead.";
-const NOTICE_KEY = "lensqi.speechNoticeSeen";
+export const speechNotice = "Microphone audio is sent through LensQi to Meta Voice Transcribe. An internet connection is required. You can type instead.";
+const NOTICE_KEY = "lensqi.metaSpeechNoticeSeen";
 const noticeSeen = () => { try { return localStorage.getItem(NOTICE_KEY) === "1"; } catch { return false; } };
 
-/**
- * Push-to-talk speech recognition in the browser (Web Speech API). The browser may use a remote speech provider; only the final text is
- * used. Unsupported browsers report it so the page can offer typing instead.
- */
-export function usePushToTalk(onFinal: (text: string) => void, opts?: { /** Told synchronously when the microphone opens and closes, before any final text is delivered. */ onListening?: (on: boolean) => void }) {
-  const Ctor = typeof window !== "undefined" ? ((window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor }).SpeechRecognition
-    ?? (window as unknown as { webkitSpeechRecognition?: RecognitionCtor }).webkitSpeechRecognition) : undefined;
+/** Captures a bounded utterance and sends it to Meta through the application server. */
+export function usePushToTalk(onFinal: (text: string) => void, opts?: { onListening?: (on: boolean) => void }) {
+  const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof AudioContext !== "undefined";
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const rec = useRef<Recognition | null>(null);
-  const final = useRef("");
-  const deliver = useRef(onFinal);
-  deliver.current = onFinal;
-  const tell = useRef(opts?.onListening);
-  tell.current = opts?.onListening;
   const [seen, setSeen] = useState(noticeSeen);
-  // Counts starts the recogniser refused; hands-free watches it, since the refusal leaves `listening` unchanged.
   const [startFailures, setStartFailures] = useState(0);
-
+  const rec = useRef<MetaRecording | null>(null);
+  const deliver = useRef(onFinal); deliver.current = onFinal;
+  const tell = useRef(opts?.onListening); tell.current = opts?.onListening;
+  const abort = useCallback(() => {
+    const r = rec.current; rec.current = null; r?.abort();
+    setListening(false); setHeard(""); tell.current?.(false);
+  }, []);
   const start = useCallback(() => {
-    if (!Ctor || rec.current) return;
-    try { localStorage.setItem(NOTICE_KEY, "1"); } catch { /* shown again next time */ }
-    setSeen(true);
-    const r = new Ctor();
-    r.lang = navigator.language || "en-US"; r.interimResults = true; r.continuous = false;
-    final.current = ""; setHeard(""); setError(null);
-    // Every callback is ignored once this recogniser is no longer the current one (aborted, or replaced by a newer one).
-    r.onresult = (e) => {
+    if (!supported || rec.current) return;
+    try { localStorage.setItem(NOTICE_KEY, "1"); } catch { /* show next time */ }
+    setSeen(true); setHeard(""); setError(null); setListening(true); tell.current?.(true);
+    const finish = () => { if (rec.current === r) { rec.current = null; setListening(false); tell.current?.(false); } };
+    const fail = (e: unknown) => {
       if (rec.current !== r) return;
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i]![0].transcript;
-      setHeard(text);
-      if (e.results[e.results.length - 1]?.isFinal) final.current = text;
+      r.abort(); finish();
+      // Silence is not a failure: counting it would turn hands-free off whenever a noise held no words.
+      if (e instanceof NoSpeechError) { setError(e.message); return; }
+      setError(e instanceof DOMException && e.name === "NotAllowedError" ? BLOCKED_MIC : e instanceof Error ? e.message : "Voice input failed. Try again or type instead.");
+      setStartFailures(n => n + 1);
     };
-    r.onerror = (e) => {
+    const r = new MetaRecording(audio => {
       if (rec.current !== r) return;
-      setError(e.error === "not-allowed" ? BLOCKED_MIC : e.error === "service-not-allowed" ? BLOCKED_SERVICE : e.error === "no-speech" ? "I didn't hear anything." : "Voice input stopped.");
-    };
-    r.onend = () => {
-      // Nothing is delivered after the page let go of the recognizer (unmount or abort), and nothing of a newer one is touched.
-      if (rec.current !== r) return;
-      rec.current = null; setListening(false); tell.current?.(false);
-      const text = final.current.trim();
-      if (text) deliver.current(text);
-    };
+      if (!audio) { finish(); setError(NOTHING_HEARD); return; }
+      setHeard("Transcribing with Meta…");
+      void transcribeVoice(audio, r.controller.signal).then(text => {
+        if (rec.current !== r) return;
+        finish(); setHeard(text); deliver.current(text);
+      }).catch(fail);
+    });
     rec.current = r;
-    setListening(true); tell.current?.(true);
-    // A recogniser that refuses to start never fires onend, so the button would stay on "listening" without this.
-    try { r.start(); } catch { rec.current = null; setListening(false); tell.current?.(false); setError("Voice input couldn't start. Try again."); setStartFailures((n) => n + 1); }
-  }, [Ctor]);
-
-  const stop = useCallback(() => rec.current?.stop(), []);
-  /** Ends an open listen and delivers nothing from it, unlike `stop`, which still hands over the final text. */
-  const abort = useCallback(() => { const r = rec.current; rec.current = null; r?.abort(); setListening(false); setHeard(""); tell.current?.(false); }, []);
-  useEffect(() => () => { const r = rec.current; rec.current = null; r?.abort(); }, []);
-  return { supported: !!Ctor, listening, heard, error, start, stop, abort, startFailures, notice: !!Ctor && !seen };
+    void r.start().catch(fail);
+  }, [supported]);
+  const stop = useCallback(() => { if (rec.current?.stopped) abort(); else rec.current?.stop(); }, [abort]);
+  useEffect(() => {
+    const hide = () => { if (document.hidden) abort(); };
+    document.addEventListener("visibilitychange", hide);
+    return () => { document.removeEventListener("visibilitychange", hide); const r = rec.current; rec.current = null; r?.abort(); tell.current?.(false); };
+  }, [abort]);
+  return { supported, listening, heard, error, start, stop, abort, startFailures, notice: supported && !seen };
 }
 
 /**
