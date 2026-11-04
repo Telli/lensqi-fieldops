@@ -1,4 +1,4 @@
-import { MetaRecording, transcribeVoice } from "./meta-voice";
+import { MetaRecording, NOTHING_HEARD, NoSpeechError, transcribeVoice } from "./meta-voice";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Hands-free commands. Anything else said to LensQi is a question. */
@@ -126,12 +126,14 @@ export function usePushToTalk(onFinal: (text: string) => void, opts?: { onListen
     const fail = (e: unknown) => {
       if (rec.current !== r) return;
       r.abort(); finish();
+      // Silence is not a failure: counting it would turn hands-free off whenever a noise held no words.
+      if (e instanceof NoSpeechError) { setError(e.message); return; }
       setError(e instanceof DOMException && e.name === "NotAllowedError" ? BLOCKED_MIC : e instanceof Error ? e.message : "Voice input failed. Try again or type instead.");
       setStartFailures(n => n + 1);
     };
     const r = new MetaRecording(audio => {
       if (rec.current !== r) return;
-      if (!audio) { finish(); setError("I didn't hear anything."); return; }
+      if (!audio) { finish(); setError(NOTHING_HEARD); return; }
       setHeard("Transcribing with Meta…");
       void transcribeVoice(audio, r.controller.signal).then(text => {
         if (rec.current !== r) return;

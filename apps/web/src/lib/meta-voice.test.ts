@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MetaRecording, pcmWav, transcribeVoice } from './meta-voice';
+import { MetaRecording, NoSpeechError, pcmWav, transcribeVoice } from './meta-voice';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe('Meta speech input', () => {
@@ -22,6 +22,20 @@ describe('Meta speech input', () => {
   it('does not expose upstream messages or invent a transcript on failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:false,json:async()=>({message:'secret'})}));
     await expect(transcribeVoice(new Blob(), new AbortController().signal)).rejects.toThrow('Meta transcription is unavailable');
+  });
+  it('reports silence as no speech, not as a failure, so hands-free keeps listening', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:false,json:async()=>({code:'no_speech'})}));
+    await expect(transcribeVoice(new Blob(), new AbortController().signal)).rejects.toBeInstanceOf(NoSpeechError);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true,json:async()=>({transcript:'   '})}));
+    await expect(transcribeVoice(new Blob(), new AbortController().signal)).rejects.toBeInstanceOf(NoSpeechError);
+  });
+  it('explains a lost connection but stays quiet about a cancelled upload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(transcribeVoice(new Blob(), new AbortController().signal)).rejects.toThrow('needs a connection');
+    const cancelled = new AbortController(); cancelled.abort();
+    const aborted = new DOMException('Aborted', 'AbortError');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(aborted));
+    await expect(transcribeVoice(new Blob(), cancelled.signal)).rejects.toBe(aborted);
   });
   it('releases a microphone granted after cancellation without delivering audio', async () => {
     let grant!: (s: MediaStream) => void;

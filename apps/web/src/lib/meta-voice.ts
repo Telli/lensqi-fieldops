@@ -18,15 +18,28 @@ export function pcmWav(samples: Float32Array, inputRate: number): Blob {
   return new Blob([bytes], { type: 'audio/wav' });
 }
 
+export const NOTHING_HEARD = "I didn't hear anything.";
+
+/** The audio held no words: an ordinary outcome, so hands-free keeps listening. Not a failure of the microphone or service. */
+export class NoSpeechError extends Error {
+  constructor() { super(NOTHING_HEARD); this.name = 'NoSpeechError'; }
+}
+
 export async function transcribeVoice(audio: Blob, signal: AbortSignal): Promise<string> {
   const form = new FormData(); form.append('audio', audio, 'speech.wav');
-  const response = await fetch('/v1/voice/transcribe', { method: 'POST', body: form, signal });
+  let response: Response;
+  try { response = await fetch('/v1/voice/transcribe', { method: 'POST', body: form, signal }); }
+  catch (e) {
+    if (signal.aborted) throw e;
+    throw new Error('Meta transcription needs a connection. Try again or type instead.');
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.code === 'no_speech' ? "I didn't hear anything." : 'Meta transcription is unavailable. Try again or type instead.');
+    if (body.code === 'no_speech') throw new NoSpeechError();
+    throw new Error('Meta transcription is unavailable. Try again or type instead.');
   }
   const body = await response.json();
-  if (typeof body.transcript !== 'string' || !body.transcript.trim()) throw new Error("I didn't hear anything.");
+  if (typeof body.transcript !== 'string' || !body.transcript.trim()) throw new NoSpeechError();
   return body.transcript.trim();
 }
 

@@ -127,4 +127,4 @@ From the code review of `40ed417`. None breaks the FieldProof gate; the first th
 - [ ] Technician task linked to a site record reaches a FieldProof decision; receipt verifies
 - [ ] Evidence under `docs/evidence/tasks/`; docs claim only what ran
 
-- [x] **GT-T18a — Meta speech input on web and Android.** *(done Nov 4: shared bounded transcription endpoint, client PCM capture, silence handling, cancellation and Meta privacy notices; existing TTS retained. 427 .NET, 83 web and 322 Android tests passed; genuine synthetic-audio transcription recorded. Physical microphone acceptance remains in GT-T25.)*
+- [x] **GT-T18a — Meta speech input on web and Android.** *(done Nov 4: shared bounded transcription endpoint, client PCM capture, silence handling, cancellation and Meta privacy notices; existing TTS retained. 428 .NET, 85 web and 322 Android tests passed; genuine synthetic-audio transcription recorded. Physical microphone acceptance remains in GT-T25.)*

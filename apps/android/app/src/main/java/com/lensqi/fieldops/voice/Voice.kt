@@ -338,9 +338,13 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     var stopSignal by remember { mutableStateOf(java.util.concurrent.atomic.AtomicBoolean(false)) }
     val session = remember { ListenSession() }
     var permissionToken by remember { mutableStateOf<Long?>(null) }
+    // Releases only the microphone and the upload. Speech keeps its queue: an answer being read is not this listen's to stop.
+    // The screen closing is the one case that silences speech, in the hold's own dispose effect above.
     val cancel = {
         session.invalidate(); permissionToken = null; stopSignal.set(true); operation?.cancel(); operation = null
-        listening = false; transcribing = false; heard = ""; hold.cancel()
+        val wasListening = listening
+        listening = false; transcribing = false; heard = ""
+        if (wasListening) hold.ended()
     }
     val currentCancel by rememberUpdatedState(cancel)
     DisposableEffect(session) { onDispose { currentCancel() } }
@@ -414,7 +418,8 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
         settingsNeeded = settingsNeeded, openSettings = { com.lensqi.fieldops.ui.common.openAppSettings(context) },
         onDevice = onDevice,
         startFailures = startFailures,
-        abort = cancel,
+        // Hands-free ending hides nothing it kept quiet: an old silence must not be said aloud once the mode is off.
+        abort = { if (error == NOTHING_HEARD) error = null; cancel() },
     )
 }
 

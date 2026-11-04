@@ -17,6 +17,8 @@ public sealed class HardeningOptions
     /// <summary>Model-backed requests one guided task may make in the same window: plans, questions and step checks.</summary>
     public int ModelCallsPerTask { get; set; } = 150;
     public int ModelCallsPerHourPerIp { get; set; } = 120;
+    /// <summary>General speech input per client IP. Hands-free sends every utterance, so it has its own budget and cannot use up the one for plans and questions.</summary>
+    public int VoiceInputCallsPerHourPerIp { get; set; } = 600;
     public int MinImageShortSide { get; set; } = 240;
     public int MinImageLongSide { get; set; } = 320;
     public long MaxImagePixels { get; set; } = 50_000_000;
@@ -24,6 +26,9 @@ public sealed class HardeningOptions
 
 /// <summary>Marks an endpoint that spends Meta Model API calls (Muse or SAM).</summary>
 public sealed class ModelCallEndpoint;
+
+/// <summary>Marks the general speech-input endpoint, which is limited apart from <see cref="ModelCallEndpoint"/>.</summary>
+public sealed class VoiceInputEndpoint;
 
 /// <summary>
 /// Request timeouts and rate limits for model-backed endpoints (T6.1). Limits are in-memory and reset on restart:
@@ -56,6 +61,9 @@ public static class ModelCallLimits
                 await ctx.HttpContext.Response.WriteAsJsonAsync(new ApiError("rate_limited", "Model call limit reached for this inspection or client; try again later"), ct);
             };
             r.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+                PartitionedRateLimiter.Create<HttpContext, string>(ctx => IsVoiceInput(ctx)
+                    ? RateLimitPartition.GetFixedWindowLimiter("voice-ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"), _ => Window(o.VoiceInputCallsPerHourPerIp, TimeSpan.FromHours(1)))
+                    : RateLimitPartition.GetNoLimiter("other")),
                 PartitionedRateLimiter.Create<HttpContext, string>(ctx => IsModelCall(ctx)
                     ? RateLimitPartition.GetFixedWindowLimiter("ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"), _ => Window(o.ModelCallsPerHourPerIp, TimeSpan.FromHours(1)))
                     : RateLimitPartition.GetNoLimiter("other")),
@@ -84,6 +92,16 @@ public static class ModelCallLimits
         endpoint.WithRequestTimeout(TimeoutPolicy);
         return endpoint;
     }
+
+    /// <summary>The request timeout of a model call, with the speech-input rate limit in place of the model-call one.</summary>
+    public static TBuilder AsVoiceInputCall<TBuilder>(this TBuilder endpoint) where TBuilder : IEndpointConventionBuilder
+    {
+        endpoint.WithMetadata(new VoiceInputEndpoint());
+        endpoint.WithRequestTimeout(TimeoutPolicy);
+        return endpoint;
+    }
+
+    private static bool IsVoiceInput(HttpContext ctx) => ctx.GetEndpoint()?.Metadata.GetMetadata<VoiceInputEndpoint>() is not null;
 
     private static bool IsModelCall(HttpContext ctx) => ctx.GetEndpoint()?.Metadata.GetMetadata<ModelCallEndpoint>() is not null;
 

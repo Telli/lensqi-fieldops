@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-04",
+  "labels": ["LIVE_META", "EMULATOR"],
+  "model": "muse-voice-transcribe-1.0",
+  "route": "POST /v1/voice/transcribe",
+  "web": {
+    "client": "The app's own recorder and upload code in headless Chrome",
+    "audioInput": "A live stream decoded from a WAV file, returned to the page's microphone request. Chrome's fake microphone delivered only digital silence in headless mode, so it was not used.",
+    "runs": [
+      {
+        "input": "Synthetic speech from macOS `say`",
+        "http": 200,
+        "transcript": "I reseated the yellow cable in port two and the the link light came back on.",
+        "result": "The goal box was filled with the transcript"
+      },
+      {
+        "input": "Looping bursts of generated noise with pauses, in hands-free on a guided step",
+        "http": [409, 409, 409],
+        "code": "no_speech",
+        "result": "Hands-free stayed on across all three answers"
+      }
+    ]
+  },
+  "android": {
+    "client": "Debug build on the emulator (API 36.1)",
+    "audioInput": "The emulator's microphone, which provided no speech",
+    "result": "The Meta notice appeared, the microphone opened, and silence ended locally as \"I didn't catch that.\" with no provider call and no crash."
+  },
+  "notShown": [
+    "A browser or phone microphone capturing a person's voice.",
+    "Browser audio processing on real microphone input.",
+    "Android dictation with real speech."
+  ]
+}
