@@ -135,6 +135,7 @@ import com.lensqi.fieldops.ui.common.nextActionText
 import com.lensqi.fieldops.ui.common.predictionOutcome
 import com.lensqi.fieldops.ui.common.probeValue
 import com.lensqi.fieldops.data.api.PredictionRow
+import com.lensqi.fieldops.data.api.closed
 import com.lensqi.fieldops.data.api.ReasonResponse
 import androidx.compose.material3.AlertDialog
 import com.lensqi.fieldops.ui.common.sentence
@@ -792,7 +793,7 @@ private fun Knowledge(s: InspectionUi) {
 @Composable
 private fun GroundedAdvisor(s: InspectionUi, vm: InspectionViewModel, view: InspectionView, onCapture: () -> Unit) {
     val k = s.knowledge
-    val closed = view.stage == InspectionStage.VerifiedComplete || view.stage == InspectionStage.Inconclusive
+    val closed = view.stage.closed
     Expandable("Grounded advisor") {
         Muted("Advice grounded only in this unit's documentation. The server checks every suggestion against the sources and records it, accepted or refused.")
         when {
@@ -820,6 +821,8 @@ private fun AdvisorAnswer(r: ReasonResponse, s: InspectionUi, vm: InspectionView
     val p = r.proposal
     if (r.accepted && p != null) {
         val facts = s.knowledge?.facts.orEmpty()
+        // The answer stays readable after the inspection closes (a declined view, say), but nothing it suggests can be done any more.
+        val open = s.view?.stage?.closed != true
         AiCard(p.hypothesis, "Inferred · AI suggestion, not evidence$again", nextActionText(p.nextAction), verbatim = true) {
             if (p.usedFactIds.isNotEmpty()) {
                 Text("Based on", style = Eyebrow, color = Fo.Muted)
@@ -833,14 +836,14 @@ private fun AdvisorAnswer(r: ReasonResponse, s: InspectionUi, vm: InspectionView
             }
             p.requestedVisualEvidence?.takeIf { it.isNotBlank() }?.let { asked ->
                 Text("LensQi asks for this view: $asked", fontSize = 13.sp)
-                SecondaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
+                if (open) SecondaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             }
             r.probePrediction?.let { prediction ->
                 val id = prediction.diagnosticId
                 val approved = s.fixture?.diagnostics?.any { it.diagnosticId == id } == true
                 Text("Proposed check: $id", fontSize = 13.sp)
-                if (approved) SecondaryButton("Run the check", { vm.runDiagnostic(id) }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.PlayArrow)
-                else Muted("This check isn't on the site's approved list for the equipment, so it can't run from here.")
+                if (!approved) Muted("This check isn't on the site's approved list for the equipment, so it can't run from here.")
+                else if (open) SecondaryButton("Run the check", { vm.runDiagnostic(id) }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.PlayArrow)
             }
             r.probePrediction?.predictedValue?.let { v ->
                 Muted("LensQi predicts the check will report ${probeValue(v)} · recorded before the check runs")
@@ -882,7 +885,7 @@ private fun instant(iso: String?): java.time.Instant? = iso?.let { runCatching {
 private fun PredictionPanel(s: InspectionUi, vm: InspectionViewModel, view: InspectionView) {
     val since = instant(view.repairClaimedAt)
     val registered: PredictionRow? = s.predictions?.predictions?.filter { p -> since != null && instant(p.registeredAt)?.let { !it.isBefore(since) } == true }?.maxByOrNull { it.registeredAt }
-    val canAsk = view.currentClaimId != null && view.stage != InspectionStage.VerifiedComplete && view.stage != InspectionStage.Inconclusive
+    val canAsk = view.currentClaimId != null && !view.stage.closed
     if (registered == null && !canAsk) return
     val (state, label) = predictionOutcome(registered?.outcome)
     Panel {
@@ -919,9 +922,11 @@ private fun PredictionPanel(s: InspectionUi, vm: InspectionViewModel, view: Insp
             val refused = s.refusedCodes
             Muted(if (refused != null) "The server refused LensQi's last suggestion (${refused.joinToString(", ")}). It ran nothing and the refusal is in the record."
                 else "Ask LensQi to say what the equipment check will report, before it runs. It's recorded first, then scored against the measurement.")
-            val claim = s.claimDescription ?: s.claimText
-            SecondaryButton("Ask LensQi to predict the check", { vm.askAdvisor("Technician's repair claim: $claim. Predict what the approved equipment check will report.") },
-                Modifier.fillMaxWidth(), enabled = s.busy == null && s.viewCachedAt == null, icon = Icons.Outlined.AutoAwesome)
+            // Only the claim the server recorded goes to the model: the claim field holds a sample line until it is edited, and
+            // what is sent here lands on the inspection record as the technician's words.
+            val question = InspectionViewModel.predictionQuestion(s.claimDescription)
+            SecondaryButton("Ask LensQi to predict the check", { question?.let(vm::askAdvisor) },
+                Modifier.fillMaxWidth(), enabled = question != null && s.busy == null && s.viewCachedAt == null, icon = Icons.Outlined.AutoAwesome)
         }
         Muted("A prediction is model calibration. The measurement decides verification, never the prediction.")
     }

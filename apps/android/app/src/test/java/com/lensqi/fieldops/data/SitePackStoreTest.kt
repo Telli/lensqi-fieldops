@@ -51,6 +51,20 @@ class SitePackStoreTest {
         assertNull(SnapshotStore(dir, json).load(key, InspectionView.serializer()))
     }
 
+    @Test fun `a closed detail already saved stays readable when a pack lists the inspection as closed`(@TempDir dir: File) = runBlocking {
+        val snapshots = SnapshotStore(dir, json)
+        val cache = InspectionCache()
+        val key = SitePackStore.inspectionKey(server, open.inspectionId)
+        val closedView = open.copy(stage = com.lensqi.fieldops.data.api.InspectionStage.Inconclusive, lastSequence = open.lastSequence + 1)
+        // Saved by an earlier run of the app, so the in-memory cache of this run has never seen it.
+        snapshots.reconcileView(key, closedView)
+        val row = rows.first().copy(inspectionId = open.inspectionId, stage = closedView.stage)
+        SitePackStore(snapshots, cache).store(pack().copy(inspections = listOf(row), open = emptyList()), server)
+        assertEquals(closedView, cache.observe(open.inspectionId, server).first())
+        assertTrue(!cache.hasTerminalSummary(open.inspectionId, server), "the screen reads the detail instead of treating it as gone")
+        assertEquals(closedView, snapshots.load(key, InspectionView.serializer())?.value)
+    }
+
     @Test fun `newer in-memory views are persisted when a delayed pack arrives`(@TempDir dir: File) = runBlocking {
         val cache = InspectionCache()
         val newest = open.copy(lastSequence = open.lastSequence + 5)

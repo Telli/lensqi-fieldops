@@ -33,8 +33,9 @@ class SitePackStore @Inject constructor(private val snapshots: SnapshotStore, pr
             if (newest != null) cache.put(newest, server) else cache.markClosed(view.inspectionId, server)
         }
         for (row in pack.inspections.filter { it.stage.closed }) {
-            snapshots.reconcileView(inspectionKey(server, row.inspectionId), null)
-            cache.markClosed(row.inspectionId, server)
+            // A closed detail already on this phone is kept and stays readable; only an obsolete open one is invalidated.
+            val kept = snapshots.reconcileView(inspectionKey(server, row.inspectionId), null)
+            if (kept != null) cache.put(kept, server) else cache.markClosed(row.inspectionId, server)
         }
         // This fixture's rows come from the pack; other fixtures keep whatever the list last showed.
         val listSerializer = ListSerializer(InspectionSummary.serializer())

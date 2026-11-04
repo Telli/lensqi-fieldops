@@ -45,3 +45,20 @@ Nothing here ran on a physical phone, a real microphone, a text-to-speech engine
 Regression checks cover these paths through the production models, view models, stores, API and web rendering helpers. Controlled reversions reproduced failures for the offline fixture and knowledge, advisor registration, speech boundaries, scanner selection and lifetime, stale detail handling, the decline guard and concurrent pack reads.
 
 The current gate runs 308 Android tests, 339 .NET tests and 78 web tests, plus debug and release assembly, debug and release lint, web typecheck and production build, and secret scanning. Physical camera, microphone and OCR behavior still require device validation.
+
+## Final review before merge
+
+A last independent read of the whole diff found eight more defects, all fixed:
+
+- "Ask LensQi to predict the check" fell back to the claim field's sample line while the events were loading or after they failed, and recorded it as the technician's claim. It now asks only from the claim the server recorded and is disabled until that has loaded.
+- A site pack listing an inspection as closed hid a closed detail already saved on the phone, so the inspection opened blank offline. The saved detail is now kept and shown.
+- Hands-free stopped listening while an earlier step was on screen, so after "back" the "next" the app asks for could not be heard. It now listens there too; the screen still takes no questions on an earlier step.
+- An inspection the model closed with `StopInconclusive` read "try again" on Android and showed the raw event string on the web. Both now say LensQi couldn't settle it from the photos.
+- A second microphone permission request made while the dialog was up came back as an instant refusal and ended hands-free. A request now waits for the open dialog.
+- The speech-service notice kept the camera details open for the whole session on phones without on-device recognition. It now sits with the controls, and the details collapse as usual.
+- A silence kept quiet during hands-free was spoken aloud once the mode ended. Ending the mode now clears it.
+- A retained advisor answer still offered the camera and the check after the inspection closed. Its suggestions stay readable and the buttons go.
+
+Left as they are, both low likelihood: an engine that reports the start of a line but never its end would keep hands-free waiting, and a rejected documentation read during a refresh can replace a command's error message.
+
+The final gate ran 311 Android tests, 339 .NET tests and 78 web tests, plus debug and release assembly, debug and release lint, web typecheck and production build, and secret scanning. The permission, badge, hands-free and button changes are compiled but have no test of their own, and none of this ran on a physical device.

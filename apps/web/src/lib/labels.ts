@@ -94,6 +94,7 @@ export function plainReason(reason: string): string {
   if (reason.includes("taken before the repair claim")) return "The reviewed photo was taken before the repair. Review against the new photo.";
   if (reason === "technician declined the requested view") return "You declined the requested view.";
   if (reason.startsWith("view budget of")) return "LensQi asked for as many views as it may; the photos didn't settle it.";
+  if (reason === "model proposed StopInconclusive") return "LensQi couldn't settle this from the photos.";
   return reason;
 }
 
