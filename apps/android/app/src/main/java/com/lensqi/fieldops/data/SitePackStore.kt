@@ -2,8 +2,9 @@ package com.lensqi.fieldops.data
 
 import com.lensqi.fieldops.data.api.Fixture
 import com.lensqi.fieldops.data.api.InspectionSummary
-import com.lensqi.fieldops.data.api.InspectionView
+import com.lensqi.fieldops.data.api.closed
 import com.lensqi.fieldops.data.api.SitePack
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import java.time.Instant
@@ -25,8 +26,15 @@ class SitePackStore @Inject constructor(private val snapshots: SnapshotStore, pr
         for (asset in pack.assets)
             snapshots.saveOn(knowledgeKey(server, pack.fixtureId, asset.assetId), com.lensqi.fieldops.data.api.KnowledgeResponse.serializer(), asset.knowledge)
         for (view in pack.open) {
-            cache.put(view, server)
-            snapshots.saveOn(inspectionKey(server, view.inspectionId), InspectionView.serializer(), view)
+            val current = cache.observe(view.inspectionId, server).first()
+            val candidate = if (cache.hasTerminalSummary(view.inspectionId, server)) null
+                else listOfNotNull(view, current).maxBy { it.lastSequence }
+            val newest = snapshots.reconcileView(inspectionKey(server, view.inspectionId), candidate)
+            if (newest != null) cache.put(newest, server) else cache.markClosed(view.inspectionId, server)
+        }
+        for (row in pack.inspections.filter { it.stage.closed }) {
+            snapshots.reconcileView(inspectionKey(server, row.inspectionId), null)
+            cache.markClosed(row.inspectionId, server)
         }
         // This fixture's rows come from the pack; other fixtures keep whatever the list last showed.
         val listSerializer = ListSerializer(InspectionSummary.serializer())

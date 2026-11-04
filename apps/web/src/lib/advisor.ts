@@ -44,8 +44,9 @@ export function advice(r: ReasonResponse, facts: KnowledgeFact[]): Advice {
   const out: Advice = { kind: "accepted", replayed: r.replayed, basedOn, nextStep: adviceNextStep[p.nextAction] ?? p.nextAction, refusals: [] };
   if (p.hypothesis) out.hypothesis = sentence(p.hypothesis);
   if (p.requestedVisualEvidence) out.requestedView = sentence(p.requestedVisualEvidence);
-  const check = r.prediction?.diagnosticId ?? p.proposedDiagnosticId;
+  const prediction = p.nextAction === "RunApprovedProbe" ? r.prediction : null;
+  const check = prediction?.diagnosticId;
   if (check) out.proposedCheck = check;
-  if (r.prediction) out.prediction = `LensQi predicts the check will report ${probeValue(r.prediction.predictedValue)}`;
+  if (prediction) out.prediction = `LensQi predicts the check will report ${probeValue(prediction.predictedValue)}`;
   return out;
 }

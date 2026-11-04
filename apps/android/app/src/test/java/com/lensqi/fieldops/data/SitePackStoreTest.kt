@@ -27,10 +27,37 @@ class SitePackStoreTest {
     private val fixture = json.decodeFromString(ListSerializer(Fixture.serializer()), Recordings.text("fixtures")).first()
     private val knowledge = json.decodeFromString(KnowledgeResponse.serializer(), Recordings.text("knowledge")).copy(inspectionId = null)
     private val open = json.decodeFromString(InspectionView.serializer(), Recordings.text("inspection-created"))
-    private val rows = json.decodeFromString(ListSerializer(InspectionSummary.serializer()), Recordings.text("inspections"))
+    private val rows = json.decodeFromString(ListSerializer(InspectionSummary.serializer()), Recordings.text("inspections")).map { it.copy(stage = open.stage) }
 
     private fun pack() = SitePack(fixture.fixtureId, fixture.fixtureRevision, fixture.sha256, "2026-11-03T09:00:00+00:00", fixture,
         listOf(SitePackAsset(open.assetId, knowledge)), rows, listOf(open))
+
+    @Test fun `an older pack cannot roll back a detail or reopen a terminal inspection`(@TempDir dir: File) = runBlocking {
+        val snapshots = SnapshotStore(dir, json)
+        val cache = InspectionCache()
+        val store = SitePackStore(snapshots, cache)
+        val key = SitePackStore.inspectionKey(server, open.inspectionId)
+        val newer = open.copy(lastSequence = open.lastSequence + 1)
+        snapshots.reconcileView(key, newer)
+        store.store(pack().copy(inspections = emptyList()), server)
+        assertEquals(newer, snapshots.load(key, InspectionView.serializer())?.value)
+        assertEquals(newer, cache.observe(open.inspectionId, server).first())
+
+        val closed = rows.first().copy(inspectionId = open.inspectionId, stage = com.lensqi.fieldops.data.api.InspectionStage.Inconclusive)
+        store.store(pack().copy(inspections = listOf(closed), open = emptyList()), server)
+        assertNull(snapshots.reconcileView(key, open))
+        cache.put(open, server)
+        assertNull(cache.observe(open.inspectionId, server).first())
+        assertNull(SnapshotStore(dir, json).load(key, InspectionView.serializer()))
+    }
+
+    @Test fun `newer in-memory views are persisted when a delayed pack arrives`(@TempDir dir: File) = runBlocking {
+        val cache = InspectionCache()
+        val newest = open.copy(lastSequence = open.lastSequence + 5)
+        cache.put(newest, server)
+        SitePackStore(SnapshotStore(dir, json), cache).store(pack(), server)
+        assertEquals(newest, SnapshotStore(dir, json).load(SitePackStore.inspectionKey(server, open.inspectionId), InspectionView.serializer())?.value)
+    }
 
     @Test fun `storing a pack writes the asset knowledge, the open view, the merged lists and a receipt`(@TempDir dir: File) = runBlocking {
         val snapshots = SnapshotStore(dir, json)

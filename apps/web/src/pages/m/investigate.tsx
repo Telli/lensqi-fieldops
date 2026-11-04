@@ -102,7 +102,7 @@ export default function Investigate({ id }: { id: string }) {
         ) : (
           <AiCard says={aiSummary(i, shown)} title={move?.title} hint={move?.hint}>
             {action}
-            <DeclineViewAction stage={i.stage} pending={decline.isPending} onConfirm={() => decline.mutate([])} />
+            <DeclineViewAction stage={i.stage} awaiting={i.awaitingRequestedView} pending={decline.isPending} onConfirm={() => decline.mutate([])} />
           </AiCard>
         )}
 
@@ -149,9 +149,9 @@ export default function Investigate({ id }: { id: string }) {
  * what the server will do (close as Inconclusive, mark nothing as a fault or a repair, keep the decline on record) before
  * the command is sent; the server decides the stage.
  */
-export function DeclineViewAction({ stage, pending, onConfirm }: { stage: Stage; pending?: boolean; onConfirm: () => void }) {
+export function DeclineViewAction({ stage, awaiting, pending, onConfirm }: { stage: Stage; awaiting?: boolean; pending?: boolean; onConfirm: () => void }) {
   const [confirming, setConfirming] = useState(false);
-  if (stage !== "NeedsEvidence") return null;
+  if (stage !== "NeedsEvidence" || !awaiting) return null;
   if (!confirming) {
     return (
       <button type="button" onClick={() => setConfirming(true)} className="w-full py-1 text-center text-xs text-muted-foreground underline-offset-2 hover:underline" data-decline-view>

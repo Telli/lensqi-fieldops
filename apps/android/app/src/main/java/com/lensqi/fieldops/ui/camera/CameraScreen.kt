@@ -292,6 +292,7 @@ private fun CameraContent(
     var pickingFloor by remember { mutableStateOf(false) }
     // The drawn part last tapped, while its options (ask about it, hold it as the AR target) are offered.
     var tapped by remember { mutableStateOf<LiveObject?>(null) }
+    var tapNumber by remember { mutableStateOf(0) }
     // A new step, task or inspection starts clean: no labels, anchors, answers or target from the one before.
     LaunchedEffect(scopeKey) {
         if (memory.scope != scopeKey) { memory.forget(); memory.scope = scopeKey }
@@ -354,8 +355,9 @@ private fun CameraContent(
     LaunchedEffect(feedback.objects) { onObjects(feedback.objects) }
     // The options for a tapped part last 8 s, and go sooner when the part is no longer drawn (matched by id, or by
     // concept where the server numbers each detection afresh).
-    LaunchedEffect(tapped?.id) { if (tapped != null) { delay(8_000); tapped = null } }
-    LaunchedEffect(shown.first) { tapped?.let { t -> if (shown.first.none { it.id == t.id || it.concept == t.concept }) tapped = null } }
+    LaunchedEffect(tapNumber) { if (tapped != null) { delay(8_000); tapped = null } }
+    val visiblePick = tapped?.let { visibleSelection(it, shown.first) }
+    LaunchedEffect(visiblePick, tapped) { tapped = visiblePick }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val screenHeight = maxHeight
         if (arActive && session != null) ArCameraFeed(session, spatial) { arFailure = it }
@@ -378,7 +380,7 @@ private fun CameraContent(
                     st.ar && st.checking -> spatial.checkPort(at.x, at.y)
                     // A box is tapped only when something can be done with it: a question, or holding an anchored part as the
                     // target. Elsewhere (the inspection camera, an unanchored AR box) the tap clears the chrome as before.
-                    hit != null && (st.askable || (st.ar && hit.anchorId != null)) -> tapped = hit
+                    hit != null && (st.askable || (st.ar && hit.anchorId != null)) -> { tapped = hit; tapNumber++ }
                     else -> hideChrome = !hideChrome
                 }
             }
@@ -507,7 +509,7 @@ private fun CameraContent(
         }
 
         // Below the header: what to do with a tapped part, or the target's state and the floor control while AR runs.
-        val pick = tapped
+        val pick = visiblePick
         if (pick != null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp).fillMaxWidth(0.85f)) {
             PartChips(pick,
                 onAsk = onAskPart?.let { ask -> { ask(pick); tapped = null } },
@@ -786,6 +788,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.edgeArrow(cue: com.
 
 private data class TapState(val ar: Boolean, val parts: List<LiveObject>, val floorPick: Boolean, val markLabel: String?, val checking: Boolean,
     val viewSpace: Boolean, val frameWidth: Int, val frameHeight: Int, val askable: Boolean)
+
+/** Rebind only to the same anchor or one unambiguous unanchored part. */
+internal fun visibleSelection(tapped: LiveObject, parts: List<LiveObject>): LiveObject? {
+    tapped.anchorId?.let { anchor -> return parts.firstOrNull { it.anchorId == anchor } }
+    val unanchored = parts.filter { it.anchorId == null }
+    return unanchored.firstOrNull { it.id == tapped.id } ?: unanchored.singleOrNull { it.concept == tapped.concept }
+}
 
 /**
  * The drawn part under a tap at ([x], [y]) in a view [viewW] by [viewH], or null. Boxes are fractions of the camera

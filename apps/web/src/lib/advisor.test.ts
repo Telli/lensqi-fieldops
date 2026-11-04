@@ -44,3 +44,9 @@ it("has a plain next step for every action the server can accept, none of them a
   expect(Object.keys(adviceNextStep).sort()).toEqual(["PrepareWorkOrder", "RequestHumanReview", "RequestView", "RunApprovedProbe", "SegmentRegion", "StopInconclusive"]);
   for (const step of Object.values(adviceNextStep)) expect(step).not.toMatch(/verified|confirmed|fault found/i);
 });
+
+it("keeps an incidental diagnostic out of a human-review recommendation", () => {
+  const result = advice({ ...base, accepted: true, proposal: { nextAction: "RequestHumanReview", proposedDiagnosticId: "NODE-A-HEALTH", usedFactIds: [] } }, facts);
+  expect(result.proposedCheck).toBeUndefined();
+  expect(result.prediction).toBeUndefined();
+});

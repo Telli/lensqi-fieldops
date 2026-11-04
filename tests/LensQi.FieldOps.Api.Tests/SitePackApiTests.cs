@@ -1,4 +1,6 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
+using LensQi.FieldOps.Api.Infrastructure.Inspections;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -31,6 +33,33 @@ public sealed class SitePackApiTests
     }
 
     private static IEnumerable<string> Ids(JsonElement rows) => rows.EnumerateArray().Select(x => x.GetProperty("inspectionId").GetString()!);
+
+    [Fact]
+    public async Task Pack_waits_for_a_command_and_materializes_the_matching_summary_and_view()
+    {
+        using var f = new FieldOpsApiFactory();
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        var store = f.Services.GetRequiredService<InspectionStore>();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = store.ExecuteAsync(id, async session =>
+        {
+            entered.SetResult();
+            await release.Task;
+            session.RequestEvidence("pack-race", "Show connector", "desk", DateTimeOffset.UtcNow);
+            return true;
+        }, CancellationToken.None);
+        await entered.Task;
+        var download = Pack(c);
+        try { await Assert.ThrowsAsync<TimeoutException>(async () => await download.WaitAsync(TimeSpan.FromMilliseconds(150))); }
+        finally { release.SetResult(); await command; }
+        var pack = await download;
+        var summary = Assert.Single(pack.GetProperty("inspections").EnumerateArray());
+        var view = Assert.Single(pack.GetProperty("open").EnumerateArray());
+        Assert.Equal("Show connector", summary.GetProperty("openEvidenceRequest").GetProperty("note").GetString());
+        Assert.Equal("Show connector", Assert.Single(view.GetProperty("evidenceRequests").EnumerateArray()).GetProperty("note").GetString());
+    }
 
     [Fact]
     public async Task Pack_carries_the_fixture_as_listed_and_every_assets_knowledge()

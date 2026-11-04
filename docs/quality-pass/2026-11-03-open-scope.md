@@ -32,3 +32,16 @@ Nothing here ran on a physical phone, a real microphone, a text-to-speech engine
 ## Gates on the branch
 
 336 .NET tests (Core 159, Meta 18, Api 159); web typecheck, 77 tests, production build reproducing `wwwroot`, worker smoke in headless Chrome; Android 292 unit tests with debug assembly and debug and release lint (no errors); secret scan PASS. No physical Android device, live model or production deployment was used.
+
+## PR 19 review fixes
+
+- Offline inspections restore the matching fixture and its mandatory checklist after restart. Updated site documentation supersedes older inspection copies. Pack refreshes invalidate obsolete open details and preserve newer event sequences on disk and in memory.
+- Advisor actions require the accepted probe action and its registered prediction. Scored results carry their diagnostic source, and predictions become dated cached copies when connectivity drops.
+- Hands-free stops when the screen leaves the started state or recognition switches providers. Aborted sessions reject late callbacks and pending permission results. The provider disclosure remains visible before reactivation.
+- Scanner teardown waits for admitted frames and closes both recognition clients. Unknown barcodes allow OCR, all decoded codes are considered, and the displayed fallback favors an identifier token. Selected camera parts remain tied to their anchor or an unambiguous visible detection.
+- Declining a view requires an outstanding server-recorded request. Photo capture, a replacement assessment and terminal stages clear it, including when events are replayed. Site-pack rows are captured under each inspection’s command lock.
+- Failed saves show a retryable storage error, temporary files are unique across stores, and lost command responses describe an unconfirmed outcome. Test fixtures wait for coroutine teardown before releasing their dispatchers.
+
+Regression checks cover these paths through the production models, view models, stores, API and web rendering helpers. Controlled reversions reproduced failures for the offline fixture and knowledge, advisor registration, speech boundaries, scanner selection and lifetime, stale detail handling, the decline guard and concurrent pack reads.
+
+The current gate runs 308 Android tests, 339 .NET tests and 78 web tests, plus debug and release assembly, debug and release lint, web typecheck and production build, and secret scanning. Physical camera, microphone and OCR behavior still require device validation.

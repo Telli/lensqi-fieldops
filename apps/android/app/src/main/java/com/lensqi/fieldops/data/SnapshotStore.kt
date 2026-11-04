@@ -1,5 +1,8 @@
 package com.lensqi.fieldops.data
 
+import com.lensqi.fieldops.data.api.InspectionView
+import com.lensqi.fieldops.data.api.closed
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -24,10 +27,30 @@ class SnapshotStore(private val dir: File, private val json: Json) {
     @Synchronized
     fun <T> save(key: String, serializer: KSerializer<T>, value: T, now: Instant = Instant.now()) {
         dir.mkdirs()
-        val tmp = File(dir, "$key.json.tmp")
-        tmp.writeText(json.encodeToString(Snapshot.serializer(serializer), Snapshot(now.toString(), value)))
-        tmp.renameTo(File(dir, "$key.json"))
+        val tmp = File.createTempFile("snapshot-$key-", ".tmp", dir)
+        try {
+            tmp.writeText(json.encodeToString(Snapshot.serializer(serializer), Snapshot(now.toString(), value)))
+            if (!tmp.renameTo(File(dir, "$key.json"))) throw java.io.IOException("Could not replace snapshot")
+        } finally {
+            tmp.delete()
+        }
     }
+
+    /** A terminal summary without detail is stored as a null view. Old readers see no usable detail. */
+    suspend fun reconcileView(key: String, incoming: InspectionView?): InspectionView? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            synchronized(this@SnapshotStore) {
+                val serializer = InspectionView.serializer().nullable
+                val saved = load(key, serializer)
+                val old = saved?.value
+                when {
+                    incoming == null && old?.stage?.closed == true -> old
+                    incoming != null && old != null && old.lastSequence >= incoming.lastSequence -> old
+                    incoming != null && !incoming.stage.closed && saved != null && (old == null || old.stage.closed) -> old
+                    else -> { save(key, serializer, incoming); incoming }
+                }
+            }
+        }
 
     /** The same save and load off the main thread, for callers that are already in a coroutine. */
     suspend fun <T> saveOn(key: String, serializer: KSerializer<T>, value: T) =

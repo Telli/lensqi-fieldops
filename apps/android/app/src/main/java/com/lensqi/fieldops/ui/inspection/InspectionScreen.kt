@@ -280,7 +280,7 @@ private fun LazyListScope.investigationItems(s: InspectionUi, vm: InspectionView
                 }
                 else -> {}
             }
-            if (view.stage == InspectionStage.NeedsEvidence) DeclineView(s, vm)
+            if (view.stage == InspectionStage.NeedsEvidence && view.awaitingRequestedView) DeclineView(s, vm)
         }
     }
     item { ProgressSegments(progressStep(view, a)) }
@@ -835,13 +835,14 @@ private fun AdvisorAnswer(r: ReasonResponse, s: InspectionUi, vm: InspectionView
                 Text("LensQi asks for this view: $asked", fontSize = 13.sp)
                 SecondaryButton("Open camera", onCapture, Modifier.fillMaxWidth(), icon = Icons.Outlined.CameraAlt)
             }
-            p.proposedDiagnosticId?.let { id ->
+            r.probePrediction?.let { prediction ->
+                val id = prediction.diagnosticId
                 val approved = s.fixture?.diagnostics?.any { it.diagnosticId == id } == true
                 Text("Proposed check: $id", fontSize = 13.sp)
                 if (approved) SecondaryButton("Run the check", { vm.runDiagnostic(id) }, Modifier.fillMaxWidth(), enabled = s.busy == null, icon = Icons.Outlined.PlayArrow)
                 else Muted("This check isn't on the site's approved list for the equipment, so it can't run from here.")
             }
-            (r.prediction?.predictedValue ?: p.prediction?.predictedValue)?.let { v ->
+            r.probePrediction?.predictedValue?.let { v ->
                 Muted("LensQi predicts the check will report ${probeValue(v)} · recorded before the check runs")
             }
             Muted("A suggestion from the documentation, not evidence. Your review and the equipment check decide.")
@@ -905,7 +906,11 @@ private fun PredictionPanel(s: InspectionUi, vm: InspectionViewModel, view: Insp
                 }
                 Column(Modifier.weight(1f).background(if (scored) measuredTone.copy(alpha = 0.06f) else Color.Transparent, RoundedCornerShape(12.dp))
                     .border(1.dp, if (scored) measuredTone.copy(alpha = 0.4f) else Fo.Border, RoundedCornerShape(12.dp)).padding(10.dp)) {
-                    Muted("Check measured · measured")
+                    Muted("Check result")
+                    if (scored) {
+                        val source = registered.sourceIn(view)
+                        if (source != null) SourceBadge(source) else Muted("Source unavailable")
+                    }
                     Text(if (scored) probeValue(registered.measuredValue) else "not run yet", fontWeight = FontWeight.Medium)
                 }
             }

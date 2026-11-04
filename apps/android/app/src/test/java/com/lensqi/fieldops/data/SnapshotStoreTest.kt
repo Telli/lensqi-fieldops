@@ -7,11 +7,25 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 
 class SnapshotStoreTest {
     private val json = NetworkModule.json()
+
+    @Test fun concurrent_stores_use_distinct_temporary_files(@TempDir dir: File) = kotlinx.coroutines.runBlocking {
+        val value = json.decodeFromString(KnowledgeResponse.serializer(), Recordings.text("knowledge"))
+        kotlinx.coroutines.coroutineScope {
+            repeat(20) {
+                launch(kotlinx.coroutines.Dispatchers.IO) {
+                    SnapshotStore(dir, json).save("shared", KnowledgeResponse.serializer(), value)
+                }
+            }
+        }
+        assertEquals(value, SnapshotStore(dir, json).load("shared", KnowledgeResponse.serializer())?.value)
+        assertEquals(listOf("shared.json"), dir.list()!!.toList())
+    }
 
     @Test
     fun knowledge_round_trips_with_its_fetch_time_and_pack_digest(@TempDir dir: File) {

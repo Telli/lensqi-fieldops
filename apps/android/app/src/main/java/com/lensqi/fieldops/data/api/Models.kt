@@ -13,6 +13,8 @@ enum class InspectionStage {
     AwaitingRepair, ReadyToVerify, VerificationFailed, VerifiedComplete, Inconclusive,
 }
 
+val InspectionStage.closed get() = this == InspectionStage.VerifiedComplete || this == InspectionStage.Inconclusive
+
 @Serializable
 enum class EvidenceOrigin { Phone, Glasses, RecordedFixture, MockWearables, Muse, Sam, LiveLocalProbe, SimulatedProbe, ReplayProbe, Technician }
 
@@ -171,6 +173,7 @@ data class InspectionView(
     val evidenceRequests: List<EvidenceRequest> = emptyList(),
     /** The server's next verify step and everything still blocking it; absent from an older server. */
     val readiness: Readiness? = null,
+    val awaitingRequestedView: Boolean = false,
 )
 
 /**
@@ -351,7 +354,9 @@ data class ReasonResponse(
     val prediction: RegisteredPrediction? = null,
     val replayed: Boolean = false,
     val state: InspectionView,
-)
+) {
+    val probePrediction get() = prediction?.takeIf { accepted && proposal?.nextAction == ProposedNextAction.RunApprovedProbe }
+}
 
 @Serializable
 data class GroundedProposal(
@@ -392,7 +397,9 @@ data class PredictionRow(
     val outcome: String,
     val diagnosticEvidenceId: String? = null,
     val scoredAt: String? = null,
-)
+) {
+    fun sourceIn(view: InspectionView) = view.diagnostics.firstOrNull { it.evidenceId == diagnosticEvidenceId }?.source
+}
 
 @Serializable
 data class PredictionTally(val confirmed: Int = 0, val falsified: Int = 0, val unscorable: Int = 0, val pending: Int = 0)

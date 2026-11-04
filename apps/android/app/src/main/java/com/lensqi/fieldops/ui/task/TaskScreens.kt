@@ -571,7 +571,7 @@ fun StepScreen(vm: TaskViewModel, onClose: () -> Unit, onDone: () -> Unit, onGla
         },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
-            if (handsFree.on) SpeechBadge(handsFree.onDevice)
+            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             reach?.let { r -> ReachNote(r) { vm.skipNotNeeded(step.id, r) } }
             if (s.cachedAt != null) Text("Saved plan · ${s.cachedAt}")
             s.pendingSteps.filter { it.state == CommandState.Pending }.forEach { Text("Step ${it.stepId}: update waiting for sync") }
@@ -928,7 +928,7 @@ fun FreeformScreen(vm: TaskViewModel, onClose: () -> Unit, onPlan: (String) -> U
         },
         details = {
             if (pace.paused) PausedNote { pace.resume(camera.value) }
-            if (handsFree.on) SpeechBadge(handsFree.onDevice)
+            if (voice.supported && (handsFree.on || !handsFree.onDevice)) SpeechBadge(handsFree.onDevice)
             val note = s.error ?: voiceError
             if (answers.isNotEmpty() || voice.listening || note != null || !open) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = .55f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 answers.firstOrNull()?.let { Text("You asked: ${it.question}", color = FoDark.Muted, fontSize = 11.sp, maxLines = 2) }

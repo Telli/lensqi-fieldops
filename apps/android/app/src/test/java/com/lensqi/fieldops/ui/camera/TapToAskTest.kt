@@ -12,6 +12,15 @@ class TapToAskTest {
     private val plug = LiveObject("2", "drain plug", "Drain plug", LiveBox(0.6, 0.5, 0.9, 0.9), anchorId = "a2")
     private val parts = listOf(filter, plug)
 
+    @Test fun `selection follows the same anchor or an unambiguous visible detection`() {
+        assertNull(visibleSelection(plug, listOf(plug.copy(anchorId = "other"))))
+        val moved = plug.copy(id = "3", label = "Updated label")
+        assertEquals(moved, visibleSelection(plug, listOf(moved)))
+        val rebound = filter.copy(id = "4")
+        assertEquals(rebound, visibleSelection(filter, listOf(rebound)))
+        assertNull(visibleSelection(filter, listOf(rebound, rebound.copy(id = "5"))))
+    }
+
     @Test fun `in AR the image fills the view, so a tap is read as a fraction of the view`() {
         assertEquals(filter, tappedPart(parts, 250f, 800f, 1000f, 2000f, viewSpace = true, frameWidth = 0, frameHeight = 0))
         assertEquals(plug, tappedPart(parts, 750f, 1400f, 1000f, 2000f, viewSpace = true, frameWidth = 0, frameHeight = 0))

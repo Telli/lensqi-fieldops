@@ -1,6 +1,9 @@
 package com.lensqi.fieldops.ui
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import com.lensqi.fieldops.data.InspectionCache
 import com.lensqi.fieldops.data.SitePackStore
 import com.lensqi.fieldops.data.SnapshotStore
@@ -14,7 +17,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -45,6 +47,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** The home tabs against a scripted server: a list call that fails never empties what the technician already sees. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
+    private val models = mutableListOf<HomeViewModel>()
     private lateinit var server: MockWebServer
     private val fixturesDown = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -68,7 +71,12 @@ class HomeViewModelTest {
     }
 
     @AfterEach
-    fun tearDown() { server.shutdown(); scope.cancel(); Dispatchers.resetMain() }
+    fun tearDown() = runBlocking {
+        models.forEach { it.viewModelScope.coroutineContext[Job]?.cancelAndJoin() }
+        server.shutdown()
+        scope.coroutineContext[Job]?.cancelAndJoin()
+        Dispatchers.resetMain()
+    }
 
     /** One preferences file per test (DataStore allows one open store per file); each view model is a fresh "app start". */
     private fun settings(dir: File) = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") })
@@ -78,7 +86,7 @@ class HomeViewModelTest {
         val api = NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { server.url("/") }).build(), json).create(FieldOpsApi::class.java)
         val snapshots = SnapshotStore(File(dir, "snapshots"), json)
         val cache = InspectionCache()
-        return HomeViewModel(api, settings, cache, snapshots, SitePackStore(snapshots, cache))
+        return HomeViewModel(api, settings, cache, snapshots, SitePackStore(snapshots, cache)).also(models::add)
     }
 
     @Test fun `downloading a site pack leaves a dated receipt in the state and on disk`(@TempDir dir: File) {
@@ -102,6 +110,21 @@ class HomeViewModelTest {
     }
 
     private fun await(vm: HomeViewModel, what: (HomeState) -> Boolean): HomeState = runBlocking { withTimeout(5000) { vm.state.first(what) } }
+
+    @Test fun `an unwritable pack fails visibly and can be retried`(@TempDir dir: File) {
+        val vm = viewModel(dir, settings(dir))
+        await(vm) { !it.loading && it.fixtures.isNotEmpty() }
+        val folder = File(dir, "snapshots")
+        val backup = File(dir, "saved-snapshots")
+        assertTrue(folder.renameTo(backup))
+        folder.writeText("not a directory")
+        vm.downloadSitePack("LAB-RACK-01")
+        val failed = await(vm) { it.packError != null && it.downloadingPack == null }
+        assertTrue(failed.sitePacks.isEmpty())
+        assertTrue(folder.delete() && backup.renameTo(folder))
+        vm.downloadSitePack("LAB-RACK-01")
+        await(vm) { it.sitePacks.isNotEmpty() && it.downloadingPack == null }
+    }
 
     @Test fun `a failed fixtures call keeps the assets already shown`(@TempDir dir: File) {
         val vm = viewModel(dir, settings(dir))
@@ -150,6 +173,7 @@ internal fun sitePackJson(fixtureId: String = "LAB-RACK-01", assetId: String = "
 /** An empty answer is an answer: it is saved, so a later failure cannot bring back assets the server removed. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelEmptyFixturesTest {
+    private val models = mutableListOf<HomeViewModel>()
     private lateinit var server: MockWebServer
     private val mode = java.util.concurrent.atomic.AtomicReference("full")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -175,13 +199,18 @@ class HomeViewModelEmptyFixturesTest {
     }
 
     @AfterEach
-    fun tearDown() { server.shutdown(); scope.cancel(); Dispatchers.resetMain() }
+    fun tearDown() = runBlocking {
+        models.forEach { it.viewModelScope.coroutineContext[Job]?.cancelAndJoin() }
+        server.shutdown()
+        scope.coroutineContext[Job]?.cancelAndJoin()
+        Dispatchers.resetMain()
+    }
 
     @Test fun `an empty fixtures answer replaces the saved copy`(@TempDir dir: File) {
         val json = NetworkModule.json()
         val api = NetworkModule.retrofit(OkHttpClient.Builder().addInterceptor(NetworkModule.baseUrlInterceptor { server.url("/") }).build(), json).create(FieldOpsApi::class.java)
         val settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") })
-        fun vm(): HomeViewModel { val snapshots = SnapshotStore(File(dir, "snapshots"), json); val cache = InspectionCache(); return HomeViewModel(api, settings, cache, snapshots, SitePackStore(snapshots, cache)) }
+        fun vm(): HomeViewModel { val snapshots = SnapshotStore(File(dir, "snapshots"), json); val cache = InspectionCache(); return HomeViewModel(api, settings, cache, snapshots, SitePackStore(snapshots, cache)).also(models::add) }
         fun await(vm: HomeViewModel, what: (HomeState) -> Boolean) = runBlocking { withTimeout(5000) { vm.state.first(what) } }
         await(vm()) { it.fixtures.isNotEmpty() && !it.loading }
         mode.set("empty")
