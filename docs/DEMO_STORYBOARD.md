@@ -1,5 +1,8 @@
 # Demo storyboard: guided tasks and FieldProof
 
+**The finished video is at [youtu.be/juiMoFNiuqQ](https://youtu.be/juiMoFNiuqQ).** This file remains as background, and its click paths predate the
+current UI.
+
 The main video introduces guided tasks, then the FieldProof inspection workflow. Genuine model recordings and
 fake-model integration evidence must be labelled separately. Synthetic equipment images and simulated diagnostics
 stay visibly labelled. Do not present the API journey test as footage of a person completing physical work.

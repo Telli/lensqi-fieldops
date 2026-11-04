@@ -80,11 +80,19 @@
     ],
     "finding": "Muse Voice misheard the word \"reseated\" on all three takes that used it, once as \"visited\" and twice as \"recited\"; it heard \"port\" as \"part\" twice and repeated the last words once. Simpler words came back nearly right. The person corrected the drafts in the review step before confirming; one confirmed claim still carries the repeated words."
   },
-  "notCommitted": "The screen recordings and camera frames, because they show the person's home.",
+  "notCommitted": "The screen recordings and the frames sent with questions, because they can show the person's home.",
   "notShown": [
     "A real repair or real equipment beyond the ceiling detector",
     "A live equipment check: FieldProof checks were simulated",
     "Recognition quality in a noisy site",
     "Whether the part the answer points at is right: the model hedged, and a person decides"
-  ]
+  ],
+  "stills": {
+    "files": [
+      "s23-1-finds-the-part.jpg",
+      "s23-2-label-holds.jpg",
+      "s23-3-ask-what-it-sees.jpg"
+    ],
+    "note": "Cropped from the screen recording of the plan step. Only the detector and ceiling are in view; the status and navigation bars are cropped out."
+  }
 }
