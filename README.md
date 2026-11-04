@@ -203,4 +203,18 @@ in `scripts/clean_room_check.sh`; every response the Android client codes agains
 ## Provenance
 
 New public repository created during the event. No source from the private `Telli/LensIQ-Monorepo` is copied
-(PRD §4A, `docs/SOURCES_AND_RIGHTS.md`, `docs/COMPONENT_REUSE.md`). Licensed under AGPL-3.0-only.
+(PRD §4A, `docs/SOURCES_AND_RIGHTS.md`, `docs/COMPONENT_REUSE.md`).
+
+## License
+
+Copyright (c) 2026 Telli Koroma.
+
+All versions of LensQi FieldOps are licensed under the **GNU Affero General Public License, version 3 only**
+(`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full terms.
+
+You may use, modify and distribute the software, including commercially, under those terms. If you modify it and
+let users interact with that version over a network, you must prominently offer them its corresponding source code
+at no charge, as required by section 13.
+
+Third-party components retain their own licenses and notices; see
+[docs/PRIOR_ART.md](docs/PRIOR_ART.md) and [docs/SOURCES_AND_RIGHTS.md](docs/SOURCES_AND_RIGHTS.md).
