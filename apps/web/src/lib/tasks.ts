@@ -48,6 +48,9 @@ export interface TaskSummary {
 }
 export interface PlanError { code: string; message: string }
 
+/** Whether a new FieldProof inspection can be linked. The server refuses a stopped task; an existing link stays reachable. */
+export const canLinkInspection = (t: Pick<Task, "site" | "inspectionId" | "phase">) => !!t.site && !t.inspectionId && t.phase !== "Abandoned";
+
 export function filterHistory(rows: TaskSummary[], filter: string, search: string) {
   const query = search.trim().toLowerCase();
   return rows.filter(t => {

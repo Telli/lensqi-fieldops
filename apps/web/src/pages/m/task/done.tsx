@@ -7,7 +7,7 @@ import { Page, TopBar } from "@/components/fo/mobile-shell";
 import { AiCard } from "@/components/fo/ai";
 import { friendlyError, useInspection } from "@/lib/hooks";
 import { stageLabel } from "@/lib/labels";
-import { tasks, useTask, verdictLabel } from "@/lib/tasks";
+import { canLinkInspection, tasks, useTask, verdictLabel } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 function saveBlob(blob: Blob, name: string) {
@@ -52,9 +52,8 @@ export default function TaskDone({ id }: { id: string }) {
               <ShieldCheck className="size-4" />FieldProof: {linked.data.stage === "VerifiedComplete" && linked.data.outcomeKind === "VerifiedCompleteSimulated" ? "Verified complete · simulated check" : stageLabel[linked.data.stage]}
             </p>
           )}
-          {t.site && (t.inspectionId
-            ? <Button asChild size="lg" className="h-12 w-full rounded-2xl"><Link href={linked.data?.stage === "VerifiedComplete" ? `/m/i/${t.inspectionId}/receipt` : `/m/i/${t.inspectionId}`}><ShieldCheck /> {linked.data?.stage === "VerifiedComplete" ? "See the FieldProof receipt" : "Open the FieldProof inspection"}</Link></Button>
-            : <Button size="lg" className="h-12 w-full rounded-2xl" disabled={link.isPending} onClick={() => link.mutate()}>{link.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Verify with FieldProof</Button>)}
+          {t.site && t.inspectionId && <Button asChild size="lg" className="h-12 w-full rounded-2xl"><Link href={linked.data?.stage === "VerifiedComplete" ? `/m/i/${t.inspectionId}/receipt` : `/m/i/${t.inspectionId}`}><ShieldCheck /> {linked.data?.stage === "VerifiedComplete" ? "See the FieldProof receipt" : "Open the FieldProof inspection"}</Link></Button>}
+          {canLinkInspection(t) && <Button size="lg" className="h-12 w-full rounded-2xl" disabled={link.isPending} onClick={() => link.mutate()}>{link.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Verify with FieldProof</Button>}
         </AiCard>
         <ol className="divide-y divide-border/70 overflow-hidden rounded-3xl border border-border bg-surface">
           {steps.map((s, n) => (

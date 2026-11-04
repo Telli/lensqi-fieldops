@@ -37,6 +37,7 @@ reject(lambda t: t["diagnostics"][0].update(targetAlias="http://10.0.0.1/health"
 reject(lambda t: t["diagnostics"][0].update(targetAlias="10.0.0.1"), "targetAlias is an address")
 reject(lambda t: t["diagnostics"][0].update(type="shell"), "diagnostic type shell")
 reject(lambda t: t["verificationPolicy"].update(verifiedLiveRequiresSource="Simulated"), "live requires simulated")
+reject(lambda t: t["verificationPolicy"].update(requireFreshDiagnostic=False), "policy without a fresh diagnostic")
 reject(lambda t: t["verificationPolicy"]["allowedDiagnosticSources"].append("Fabricated"), "unknown diagnostic source")
 reject(lambda t: t["verificationPolicy"].update(diagnosticMaxAgeSeconds=0), "zero diagnostic max age")
 reject(lambda t: t.update(targetHost="10.0.0.1"), "unknown root field")

@@ -204,7 +204,7 @@ fun GlassesScreen(
                 } else {
                     if (live.enabled) Text("Live assist is still running for ${live.session?.label ?: "another inspection or step"}. Start it here to switch.", color = Fo.Warning, style = MaterialTheme.typography.bodySmall)
                     PrimaryButton("Start live assist", startLive, Modifier.fillMaxWidth(), enabled = s.streaming)
-                    Text("Tracks what your glasses see and speaks guidance. Sampled frames go to AI, including with the phone locked. Only shutter photos are saved.", style = MaterialTheme.typography.bodySmall)
+                    Text("Tracks what your glasses see and speaks guidance. Sampled frames go to AI, including with the phone locked. Only shutter photos and frames sent with a question are saved.", style = MaterialTheme.typography.bodySmall)
                 }
                 live.audioNote?.let { Text(it, color = Fo.Warning, style = MaterialTheme.typography.bodySmall) }
             }

@@ -1,4 +1,4 @@
-const assets = ["/assets/index--M7IF-jM.js","/assets/index-BvdIEI3W.css","/assets/live-tracker.worker-BZOZts3G.js"];
+const assets = ["/assets/index-DcywbuRQ.js","/assets/index-BvdIEI3W.css","/assets/live-tracker.worker-BZOZts3G.js"];
 // Vite injects the exact list of generated assets.
 const shell = "fieldops-shell-" + assets.join("|");
 const recordCache = "fieldops-jobs-v1";

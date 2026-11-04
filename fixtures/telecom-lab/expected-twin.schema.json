@@ -190,7 +190,7 @@
           "type": "boolean"
         },
         "requireFreshDiagnostic": {
-          "type": "boolean"
+          "const": true
         },
         "requireTechnicianAcknowledgement": {
           "type": "boolean"

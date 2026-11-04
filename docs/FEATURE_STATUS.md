@@ -1,5 +1,11 @@
 # Feature status
 
+## As of 4 November 2026 (Pacific), `main` (the last three findings from the 3 November application review)
+
+A fixture that does not require a fresh equipment check can no longer verify anything: the policy (now `fieldproof-policy/1.7`) denies it, and the Core invariants, the schema and the Python validator refuse such a fixture at load. A live outcome now needs a passing `LiveLocal` measurement, even if a fixture names another source. The supplied fixture already required a fresh check, so its outcomes do not change. The web task summary no longer offers Verify with FieldProof on a stopped task, while an existing linked inspection stays reachable; Android already did this. Web step coaching and the Android camera and glasses notes now say that a frame sent with a question is saved. The wording was not checked on a device.
+
+Gates: 413 .NET tests (Core 228, Meta 18, Api 167); web typecheck, 79 tests, production build; Android 311 unit tests with debug and release assembly and debug and release lint (no errors); twin validators and secret scan PASS.
+
 ## As of 3 November 2026 (Pacific), `claude/verification-and-safety-gates` (response to the 3 November application review)
 
 A closed inspection refuses new checklist reviews and acknowledgements. Restricted work stays restricted on follow-up questions, live guidance and step checks, and restricted plans are checked in the title, cautions, stop conditions, photo checks, the summary and the professional reason. Verification is held while a fact the site requires is unconfirmed for the bound asset (VK-T10, policy 1.6). From receipt format 1.3 the verifier, the API check and the export all require the exact rendering of the receipt. Not addressed from that review: the live label when a fixture turns off fresh diagnostics, the saved question-frame wording, the stopped-task verify button, and the seven-day retention requirement.

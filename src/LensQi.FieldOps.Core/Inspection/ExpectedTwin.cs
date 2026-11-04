@@ -70,6 +70,10 @@ public static class ExpectedTwinInvariants
         var p = twin.VerificationPolicy;
         if (!p.AllowedDiagnosticSources.Contains(p.VerifiedLiveRequiresSource))
             errors.Add("verifiedLiveRequiresSource must be one of allowedDiagnosticSources");
+        if (p.VerifiedLiveRequiresSource != DiagnosticSource.LiveLocal)
+            errors.Add("verifiedLiveRequiresSource must be LiveLocal");
+        if (!p.RequireFreshDiagnostic)
+            errors.Add("requireFreshDiagnostic must be true: a verified outcome needs a fresh equipment check");
         if (p.RequireFreshDiagnostic && twin.Diagnostics.Count == 0)
             errors.Add("requireFreshDiagnostic is true but no diagnostics are declared");
         if (p.DiagnosticMaxAgeSeconds <= 0)

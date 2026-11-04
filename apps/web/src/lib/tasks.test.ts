@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { filterHistory, taskRoute, tasks, type TaskSummary } from "./tasks";
+import { canLinkInspection, filterHistory, taskRoute, tasks, type TaskSummary } from "./tasks";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -104,4 +104,13 @@ it("opens a job on its current step, or on the summary once every step was finis
   expect(taskRoute({ taskId: "T-1", currentStepId: "s2" })).toBe("/m/t/T-1/step/s2");
   expect(taskRoute({ taskId: "T-1", currentStepId: null, pendingCompletion: true })).toBe("/m/t/T-1/done");
   expect(taskRoute({ taskId: "T-1", currentStepId: null })).toBe("/m/t/T-1");
+});
+
+it("offers FieldProof linking only on an unlinked site task that has not been stopped", () => {
+  const site = { fixtureId: "LAB-RACK-01", assetId: "LAB-SW-01" };
+  expect(canLinkInspection({ site, inspectionId: null, phase: "Completed" })).toBe(true);
+  expect(canLinkInspection({ site, inspectionId: null, phase: "InProgress" })).toBe(true);
+  expect(canLinkInspection({ site, inspectionId: null, phase: "Abandoned" })).toBe(false);
+  expect(canLinkInspection({ site, inspectionId: "I-1", phase: "Completed" })).toBe(false);
+  expect(canLinkInspection({ site: null, inspectionId: null, phase: "Completed" })).toBe(false);
 });

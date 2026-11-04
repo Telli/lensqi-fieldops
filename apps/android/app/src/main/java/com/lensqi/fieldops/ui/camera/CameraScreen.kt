@@ -626,8 +626,8 @@ private fun CameraContent(
                     "${feedback.renderFps} FPS · ${feedback.fps} updates/s · guidance age ${feedback.guidanceAge ?: "—"}s · ${feedback.tracking.orEmpty()}",
                     fontSize = 11.sp, color = FoDark.Muted)
                 if (expanded) Text(
-                    if (arActive) "Spatial guidance estimates position and distance. Camera guidance is inferred, not proof of repair. Only shutter photos are saved."
-                    else "Guidance is based on camera images; depth is not measured. Images are sent for analysis. Only shutter photos are saved.",
+                    if (arActive) "Spatial guidance estimates position and distance. Camera guidance is inferred, not proof of repair. Only shutter photos and frames sent with a question are saved."
+                    else "Guidance is based on camera images; depth is not measured. Images are sent for analysis. Only shutter photos and frames sent with a question are saved.",
                     fontSize = 12.sp, color = FoDark.Foreground)
 
             }

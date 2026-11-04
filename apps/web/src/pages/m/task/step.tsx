@@ -234,7 +234,7 @@ export default function TaskStepPage({ id, stepId }: { id: string; stepId?: stri
               {assist.screenText && <p className="mt-1 line-clamp-3 text-xs opacity-70">On screen: “{assist.screenText}”</p>}
             </div>
           </div>
-        ) : live === "on" && !reviewing && <p className="text-[11px] opacity-60">Live coaching sends sampled frames to AI for guidance. Only check photos are saved to the task.</p>}
+        ) : live === "on" && !reviewing && <p className="text-[11px] opacity-60">Live coaching sends sampled frames to AI for guidance and doesn't keep them. Check photos and the frame sent with a question are saved to the task.</p>}
 
         {answer && (
           <div className="space-y-1 rounded-2xl border border-primary/30 bg-primary/10 p-3 text-sm" aria-live="polite">

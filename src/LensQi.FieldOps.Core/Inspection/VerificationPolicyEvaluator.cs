@@ -16,7 +16,7 @@ public enum VerifyBlocker
 
 public static class VerificationPolicyEvaluator
 {
-    public const string PolicyVersion = "fieldproof-policy/1.6";
+    public const string PolicyVersion = "fieldproof-policy/1.7";
 
     /// <summary>Every denial caused by a fresh failing diagnostic starts with this; the session maps it to VerificationFailed.</summary>
     public const string DiagnosticFailedPrefix = "Diagnostic failed after the repair claim";
@@ -109,30 +109,31 @@ public static class VerificationPolicyEvaluator
 
         var claims = new List<string>();
         DiagnosticSource? weakestSource = null;
-        if (policy.RequireFreshDiagnostic)
+        // 1.7: every verified outcome rests on a fresh measurement. A policy without one cannot verify anything, and it must
+        // never fall through to the live outcome with nothing measured.
+        if (!policy.RequireFreshDiagnostic)
+            return Deny("The fixture policy does not require a fresh equipment check, so there is no measurement to verify against");
+        if (twin.Diagnostics.Count == 0)
+            return Deny("Fixture declares no diagnostic but the policy requires one");
+        foreach (var diag in twin.Diagnostics)
         {
-            if (twin.Diagnostics.Count == 0)
-                return Deny("Fixture declares no diagnostic but the policy requires one");
-            foreach (var diag in twin.Diagnostics)
-            {
-                var latest = state.LatestDiagnosticFor(diag.DiagnosticId);
-                if (latest is null || latest.Result.CompletedAt <= state.RepairClaimedAt)
-                    return Deny($"Fresh post-repair diagnostic '{diag.DiagnosticId}' is required");
-                var r = latest.Result;
-                if (r.FixtureId != twin.FixtureId)
-                    return Deny($"Diagnostic '{diag.DiagnosticId}' was run for fixture '{r.FixtureId}', not '{twin.FixtureId}'");
-                if (!policy.AllowedDiagnosticSources.Contains(r.Source))
-                    return Deny($"Diagnostic source '{r.Source}' is not allowed by the fixture policy");
-                if ((now - r.CompletedAt).TotalSeconds > policy.DiagnosticMaxAgeSeconds)
-                    return Deny($"Diagnostic '{diag.DiagnosticId}' is older than {policy.DiagnosticMaxAgeSeconds}s");
-                if (r.Passed is null)
-                    return Deny($"Diagnostic '{diag.DiagnosticId}' was unavailable; no measurement to verify against");
-                if (r.Passed == false)
-                    return Deny($"{DiagnosticFailedPrefix}: {diag.DiagnosticId} measured {(r.HttpStatus is int status ? $"HTTP {status}" : r.NormalizedValue ?? "a failure")} ({r.Source} probe). " +
-                        $"Still required: “{diag.ClaimVerified ?? $"{diag.DiagnosticId} passes"}”");
-                claims.Add(diag.ClaimVerified ?? $"Diagnostic {diag.DiagnosticId} passed at test time");
-                if (r.Source != policy.VerifiedLiveRequiresSource) weakestSource = r.Source;
-            }
+            var latest = state.LatestDiagnosticFor(diag.DiagnosticId);
+            if (latest is null || latest.Result.CompletedAt <= state.RepairClaimedAt)
+                return Deny($"Fresh post-repair diagnostic '{diag.DiagnosticId}' is required");
+            var r = latest.Result;
+            if (r.FixtureId != twin.FixtureId)
+                return Deny($"Diagnostic '{diag.DiagnosticId}' was run for fixture '{r.FixtureId}', not '{twin.FixtureId}'");
+            if (!policy.AllowedDiagnosticSources.Contains(r.Source))
+                return Deny($"Diagnostic source '{r.Source}' is not allowed by the fixture policy");
+            if ((now - r.CompletedAt).TotalSeconds > policy.DiagnosticMaxAgeSeconds)
+                return Deny($"Diagnostic '{diag.DiagnosticId}' is older than {policy.DiagnosticMaxAgeSeconds}s");
+            if (r.Passed is null)
+                return Deny($"Diagnostic '{diag.DiagnosticId}' was unavailable; no measurement to verify against");
+            if (r.Passed == false)
+                return Deny($"{DiagnosticFailedPrefix}: {diag.DiagnosticId} measured {(r.HttpStatus is int status ? $"HTTP {status}" : r.NormalizedValue ?? "a failure")} ({r.Source} probe). " +
+                    $"Still required: “{diag.ClaimVerified ?? $"{diag.DiagnosticId} passes"}”");
+            claims.Add(diag.ClaimVerified ?? $"Diagnostic {diag.DiagnosticId} passed at test time");
+            if (r.Source != DiagnosticSource.LiveLocal || r.Source != policy.VerifiedLiveRequiresSource) weakestSource = r.Source;
         }
 
         // 1.6 (VK-R08): documentation adds a gate and never replaces one. It comes after the probes, so a failing measurement
