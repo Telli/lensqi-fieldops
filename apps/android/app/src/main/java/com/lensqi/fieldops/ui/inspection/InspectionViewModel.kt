@@ -41,6 +41,7 @@ import com.lensqi.fieldops.ui.common.AssetMatch
 import com.lensqi.fieldops.ui.common.assetMatch
 import com.lensqi.fieldops.ui.common.sentence
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -183,16 +184,13 @@ class InspectionViewModel @Inject constructor(
     private var lastAnalysis: Job? = null
 
     val state: StateFlow<InspectionUi> = combine(local, cache.observe(inspectionId, serverBase), queue.observe(inspectionId, serverBase)) { ui, view, pending ->
-        ui.copy(view = view ?: ui.view, pending = pending)
+        ui.copy(view = if (cache.hasTerminalSummary(inspectionId, serverBase)) null else view ?: ui.view, pending = pending)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InspectionUi())
 
     init {
         viewModelScope.launch {
             (apiCall { api.health() } as? ApiOutcome.Ok)?.let { h -> local.update { it.copy(diagnosticsMode = h.value.diagnosticsMode) } }
-            val view = (apiCall { api.inspection(inspectionId) } as? ApiOutcome.Ok)?.value?.also(::cacheView)
-            refresh()
-            (apiCall { api.fixtures() } as? ApiOutcome.Ok)?.value?.firstOrNull { it.fixtureId == view?.fixtureId }?.let { f -> local.update { it.copy(fixture = f) } }
-            loadKnowledge()
+            refresh().join()
         }
         // A capture made while offline drains as soon as the screen opens with a connection.
         queue.requestSync()
@@ -207,7 +205,7 @@ class InspectionViewModel @Inject constructor(
         }
         // Every server view is kept on the device so the screen still shows the last known state offline.
         viewModelScope.launch {
-            cache.observe(inspectionId, serverBase).collect { v -> if (v != null) snapshots.saveOn(viewKey, InspectionView.serializer(), v) }
+            cache.observe(inspectionId, serverBase).collect { v -> if (v != null) snapshots.reconcileView(viewKey, v) }
         }
         // New photos (from the queue or another client) need their artifact names for thumbnails.
         viewModelScope.launch {
@@ -229,19 +227,35 @@ class InspectionViewModel @Inject constructor(
             is ApiOutcome.Ok -> {
                 cacheView(r.value)
                 local.update { it.copy(viewCachedAt = null) }
-                if (local.value.knowledgeCachedAt != null) loadKnowledge()
+                loadFixture(r.value)
             }
             is ApiOutcome.Unreachable -> {
                 report(r)
-                if (state.value.view == null) snapshots.loadOn(viewKey, InspectionView.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
-                    local.update { it.copy(view = snap.value, viewCachedAt = snap.fetchedAt) }
+                val saved = snapshots.loadOn(viewKey, InspectionView.serializer().nullable)
+                val view = saved?.value?.takeIf { it.inspectionId == inspectionId }
+                if (saved != null && saved.value == null) cache.markClosed(inspectionId, serverBase)
+                if (view != null) {
+                    local.update { it.copy(view = view, viewCachedAt = saved.fetchedAt) }
+                    loadFixture(view)
                 }
             }
             else -> report(r)
         }
         (apiCall { api.artifacts(inspectionId) } as? ApiOutcome.Ok)?.let { a -> local.update { it.copy(artifacts = a.value) } }
+        loadKnowledge()
         loadPredictions()
         loadTrail()
+    }
+
+    private suspend fun loadFixture(view: InspectionView) {
+        if (local.value.fixture?.let { it.fixtureId == view.fixtureId && it.sha256 == view.fixtureDigest } == true) return
+        val fixtures = when (val result = apiCall { api.fixtures() }) {
+            is ApiOutcome.Ok -> result.value
+            is ApiOutcome.Unreachable -> snapshots.loadOn(SitePackStore.fixturesKey(serverBase),
+                kotlinx.serialization.builtins.ListSerializer(Fixture.serializer()))?.value.orEmpty()
+            is ApiOutcome.Rejected -> emptyList()
+        }
+        local.update { it.copy(fixture = fixtures.firstOrNull { f -> f.fixtureId == view.fixtureId && f.sha256 == view.fixtureDigest }) }
     }
 
     /**
@@ -254,7 +268,7 @@ class InspectionViewModel @Inject constructor(
                 snapshots.saveOn(predictionsKey, PredictionsResponse.serializer(), p.value)
                 local.update { it.copy(predictions = p.value, predictionsCachedAt = null) }
             }
-            is ApiOutcome.Unreachable -> if (local.value.predictions == null)
+            is ApiOutcome.Unreachable ->
                 snapshots.loadOn(predictionsKey, PredictionsResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }?.let { snap ->
                     local.update { it.copy(predictions = snap.value, predictionsCachedAt = snap.fetchedAt) }
                 }
@@ -605,8 +619,8 @@ class InspectionViewModel @Inject constructor(
                 local.update { it.copy(knowledge = k.value, knowledgeCachedAt = null) }
             }
             is ApiOutcome.Unreachable -> {
-                // This inspection's own copy first; else the asset's documentation a site pack left on the phone.
-                val snap = snapshots.loadOn(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId } ?: assetKnowledgeSnapshot()
+                val own = snapshots.loadOn(knowledgeKey, KnowledgeResponse.serializer())?.takeIf { it.value.inspectionId == inspectionId }
+                val snap = listOfNotNull(own, assetKnowledgeSnapshot()).maxByOrNull { java.time.Instant.parse(it.fetchedAt) }
                 if (snap != null) local.update { it.copy(knowledge = snap.value, knowledgeCachedAt = snap.fetchedAt) }
             }
             is ApiOutcome.Rejected -> report(k)
@@ -615,7 +629,7 @@ class InspectionViewModel @Inject constructor(
 
     /** The asset-keyed documentation from a site pack, found through the view (cached or saved) that names the fixture and asset. */
     private suspend fun assetKnowledgeSnapshot(): Snapshot<KnowledgeResponse>? {
-        val view = local.value.view ?: state.value.view
+        val view = cache.observe(inspectionId, serverBase).first() ?: local.value.view ?: state.value.view
             ?: snapshots.loadOn(viewKey, InspectionView.serializer())?.value?.takeIf { it.inspectionId == inspectionId } ?: return null
         return snapshots.loadOn(SitePackStore.knowledgeKey(serverBase, view.fixtureId, view.assetId), KnowledgeResponse.serializer())
     }
@@ -707,8 +721,8 @@ class InspectionViewModel @Inject constructor(
         const val SAVED_OFFLINE = "Saved on this phone. It is sent in order when the connection returns; the server's answer replaces this view then."
         const val SAVED_BEHIND = "Saved on this phone behind the answers still waiting to be sent, so the server gets them in order."
         const val ANSWERS_WAITING = "Your review answers are still waiting to be sent. Reconnect and let them go through before confirming or verifying."
-        const val NEEDS_CONNECTION_ADVISOR = "Needs a connection to ask the advisor. Nothing was sent; try again when connected."
-        const val NEEDS_CONNECTION_DECLINE = "Needs a connection; the server records the decision. Nothing was sent; try again when connected."
+        const val NEEDS_CONNECTION_ADVISOR = "Couldn't confirm the advisor’s response. Reconnect and retry the same question to retrieve its result."
+        const val NEEDS_CONNECTION_DECLINE = "Couldn't confirm whether the inspection closed. Reconnect and refresh its status before retrying."
 
         /**
          * The newest knowledge proposal recorded since the claim, when it was a refusal: its codes, so the screen can say the

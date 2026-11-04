@@ -358,7 +358,7 @@ public static class InspectionEndpoints
         return new
         {
             inspectionId = st.InspectionId, st.FixtureId, st.FixtureRevision, st.FixtureDigest, st.AssetId,
-            stage = st.Stage.ToString(), st.LastSequence, st.ViewRequests, st.CurrentClaimId, st.RepairClaimedAt, st.TechnicianAcknowledged,
+            stage = st.Stage.ToString(), st.LastSequence, st.ViewRequests, st.AwaitingRequestedView, st.CurrentClaimId, st.RepairClaimedAt, st.TechnicianAcknowledged,
             photos = st.Photos, diagnostics = st.Diagnostics.Select(d => new { d.EvidenceId, d.Result, source = d.Result.Source.ToString() }),
             checklist = st.Checklist.Values, segmentations = st.Segmentations, changeAnalyses = st.ChangeAnalyses,
             acceptedPostRepairPhotoId = st.LatestPostRepairPhoto?.EvidenceId, awaitingAnalysis = st.PhotosBeingCompared.Select(p => p.EvidenceId), pendingPredictions = st.PendingPredictions, predictionScores = st.PredictionScores,

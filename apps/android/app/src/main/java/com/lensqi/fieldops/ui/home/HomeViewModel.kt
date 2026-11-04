@@ -145,19 +145,24 @@ class HomeViewModel @Inject constructor(
     fun downloadSitePack(fixtureId: String) = viewModelScope.launch {
         if (_state.value.downloadingPack != null) return@launch
         _state.update { it.copy(downloadingPack = fixtureId, packNotice = null, packError = null) }
-        when (val r = apiCall { api.sitePack(fixtureId) }) {
-            is ApiOutcome.Ok -> {
-                sitePacks.store(r.value, serverBase)
-                val receipt = sitePacks.receipt(fixtureId, serverBase)?.value
-                _state.update {
-                    it.copy(sitePacks = if (receipt != null) it.sitePacks + (fixtureId to receipt) else it.sitePacks,
-                        packNotice = "Site pack saved on this phone: ${r.value.assets.size} asset${if (r.value.assets.size == 1) "" else "s"}, ${r.value.open.size} open inspection${if (r.value.open.size == 1) "" else "s"}. Photos are not included.")
+        try {
+            when (val r = apiCall { api.sitePack(fixtureId) }) {
+                is ApiOutcome.Ok -> {
+                    sitePacks.store(r.value, serverBase)
+                    val receipt = sitePacks.receipt(fixtureId, serverBase)?.value
+                    _state.update {
+                        it.copy(sitePacks = if (receipt != null) it.sitePacks + (fixtureId to receipt) else it.sitePacks,
+                            packNotice = "Site pack saved on this phone: ${r.value.assets.size} asset${if (r.value.assets.size == 1) "" else "s"}, ${r.value.open.size} open inspection${if (r.value.open.size == 1) "" else "s"}. Photos are not included.")
+                    }
                 }
+                is ApiOutcome.Rejected -> _state.update { it.copy(packError = friendly(r.code, r.message)) }
+                is ApiOutcome.Unreachable -> _state.update { it.copy(packError = friendly("offline", r.message)) }
             }
-            is ApiOutcome.Rejected -> _state.update { it.copy(packError = friendly(r.code, r.message)) }
-            is ApiOutcome.Unreachable -> _state.update { it.copy(packError = friendly("offline", r.message)) }
+        } catch (e: java.io.IOException) {
+            _state.update { it.copy(packError = "Couldn’t save the site pack on this phone. Check available storage and try again.") }
+        } finally {
+            _state.update { it.copy(downloadingPack = null) }
         }
-        _state.update { it.copy(downloadingPack = null) }
     }
 
     private suspend fun loadFocus() {

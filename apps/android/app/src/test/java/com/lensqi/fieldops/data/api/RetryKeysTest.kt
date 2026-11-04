@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test
 
 /** A command keeps its Idempotency-Key while the server has not answered, so a retry replays instead of acting twice. */
 class RetryKeysTest {
+    @Test fun `a lost response can follow a committed decline and must keep its retry key`() = runTest {
+        val keys = RetryKeys()
+        var recorded = false
+        val key = keys.keyFor("decline")
+        val result = keys.command<Unit>("decline") {
+            recorded = true
+            throw java.io.IOException("response lost")
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(recorded)
+        org.junit.jupiter.api.Assertions.assertTrue(result is ApiOutcome.Unreachable)
+        assertEquals(key, keys.keyFor("decline"))
+        org.junit.jupiter.api.Assertions.assertFalse(com.lensqi.fieldops.ui.inspection.InspectionViewModel.NEEDS_CONNECTION_DECLINE.contains("Nothing was sent"))
+        org.junit.jupiter.api.Assertions.assertFalse(com.lensqi.fieldops.ui.inspection.InspectionViewModel.NEEDS_CONNECTION_ADVISOR.contains("Nothing was sent"))
+    }
+
     @Test fun `the key is kept after an unreachable server, a server error or a failed model call`() {
         val keys = RetryKeys()
         val first = keys.keyFor("verify")

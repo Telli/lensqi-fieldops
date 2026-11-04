@@ -60,7 +60,6 @@ import com.lensqi.fieldops.ui.common.SecondaryButton
 import com.lensqi.fieldops.ui.common.hasPermission
 import com.lensqi.fieldops.ui.theme.Fo
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -105,12 +104,6 @@ fun AssetScanner(fixtures: List<Fixture>, modifier: Modifier = Modifier, onRead:
             imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
         }
     }
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    val barcodes = remember {
-        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATRIX, Barcode.FORMAT_CODE_128).build())
-    }
-    val text = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
-
     // Site records that arrive after a label was read: the read matches now, and takes the latch like a fresh read would.
     LaunchedEffect(fixtures) {
         val last = lastRead.get() ?: return@LaunchedEffect
@@ -119,12 +112,14 @@ fun AssetScanner(fixtures: List<Fixture>, modifier: Modifier = Modifier, onRead:
     }
 
     DisposableEffect(controller, owner) {
-        val busy = AtomicBoolean(false)
-        // Set when the scanner leaves the screen. The executor is shut down by whoever finishes last: the dispose when no
-        // frame is in flight, else the in-flight frame's completion, since ML Kit's continuations are scheduled on it and a
-        // shut-down executor would refuse them and crash on the completion thread.
-        val disposed = AtomicBoolean(false)
-        fun shutDownIfIdle() { if (disposed.get() && !busy.get()) executor.shutdown() }
+        val executor = Executors.newSingleThreadExecutor()
+        val barcodes = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATRIX, Barcode.FORMAT_CODE_128).build())
+        val text = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        val framesInFlight = ScanLifetime {
+            barcodes.close()
+            text.close()
+            executor.shutdown()
+        }
         val frames = AtomicInteger(0)
         val lastOcr = AtomicLong(0L)
         val main = ContextCompat.getMainExecutor(context)
@@ -133,42 +128,43 @@ fun AssetScanner(fixtures: List<Fixture>, modifier: Modifier = Modifier, onRead:
             if (asset != null && !taken.compareAndSet(null, shown)) return
             val changed = lastRead.getAndSet(shown) != shown
             main.execute {
+                if (framesInFlight.disposed) return@execute
                 if (changed) read.value(shown)
                 if (asset != null) matched.value(asset)
             }
         }
         controller.setImageAnalysisAnalyzer(executor) { proxy ->
             val media = proxy.image
-            if (media == null || taken.get() != null || !busy.compareAndSet(false, true)) { proxy.close(); return@setImageAnalysisAnalyzer }
+            if (media == null || taken.get() != null || !framesInFlight.begin()) { proxy.close(); return@setImageAnalysisAnalyzer }
             val image = InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees)
             val frame = frames.incrementAndGet()
             barcodes.process(image)
                 .continueWithTask(executor) { task ->
-                    val raw = if (task.isSuccessful) task.result.firstNotNullOfOrNull { it.rawValue } else null
+                    val codes = if (task.isSuccessful) task.result.mapNotNull { it.rawValue } else emptyList()
+                    val known = matchingRead(codes, fixturesNow.value)
                     val now = System.currentTimeMillis()
                     when {
-                        raw != null -> { report(raw, assetFromScan(raw, fixturesNow.value)); Tasks.forResult(null) }
-                        // No code in the frame: read the printed id, but not on every frame.
+                        known != null -> { report(known.first, known.second); Tasks.forResult(null) }
+                        // No known code in the frame: read the printed id, but not on every frame.
                         frame % OCR_EVERY_N_FRAMES == 0 && now - lastOcr.get() >= OCR_MIN_GAP_MS -> {
                             lastOcr.set(now)
                             text.process(image).continueWith(executor) { ocr ->
                                 if (!ocr.isSuccessful) return@continueWith null
                                 val lines = ocr.result.textBlocks.flatMap { b -> b.lines.map { it.text } }
                                 val fx = fixturesNow.value
-                                val asset = assetFromText(lines, fx)
-                                val shown = if (asset != null) lines.firstOrNull { assetFromScan(it, fx)?.assetId == asset.assetId }
-                                else lines.filter { looksLikeId(it) != null }.maxByOrNull { it.length }
-                                if (shown != null) report(shown, asset)
+                                val match = matchingRead(lines, fx)
+                                val shown = match?.first ?: likelyIdLine(lines) ?: codes.firstOrNull()
+                                if (shown != null) report(shown, match?.second)
                                 null
                             }
                         }
-                        else -> Tasks.forResult(null)
+                        else -> { codes.firstOrNull()?.let { report(it, null) }; Tasks.forResult(null) }
                     }
                 }
-                .addOnCompleteListener { proxy.close(); busy.set(false); shutDownIfIdle() }
+                .addOnCompleteListener { proxy.close(); framesInFlight.finish() }
         }
         controller.bindToLifecycle(owner)
-        onDispose { controller.clearImageAnalysisAnalyzer(); controller.unbind(); disposed.set(true); shutDownIfIdle() }
+        onDispose { controller.clearImageAnalysisAnalyzer(); controller.unbind(); framesInFlight.dispose() }
     }
     AndroidView(
         factory = { PreviewView(it).apply { scaleType = PreviewView.ScaleType.FILL_CENTER; this.controller = controller } },

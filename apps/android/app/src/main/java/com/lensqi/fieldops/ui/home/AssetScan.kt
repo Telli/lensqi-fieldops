@@ -49,7 +49,7 @@ private val ID_LIKE = Regex("[A-Za-z]+[-_][A-Za-z0-9_-]+")
  * a token longer than [MAX_TOKEN] is not an id and is skipped.
  */
 fun looksLikeId(line: String): String? =
-    ID_LIKE.findAll(line).map { it.value }.filter { it.length <= MAX_TOKEN }.maxByOrNull { it.length }
+    ID_LIKE.findAll(line).map { it.value }.filter { it.length <= MAX_TOKEN && it.any(Char::isDigit) }.maxByOrNull { it.length }
 
 /**
  * The first recognised text line that names an asset on a site record, by the same rule as a scanned code
@@ -57,4 +57,35 @@ fun looksLikeId(line: String): String? =
  * "ASSET TAG" heading does not hide the id printed under it.
  */
 fun assetFromText(lines: List<String>, fixtures: List<Fixture>): ScannedAsset? =
-    lines.firstNotNullOfOrNull { assetFromScan(it, fixtures) }
+    matchingRead(lines, fixtures)?.second
+
+internal fun likelyIdLine(lines: List<String>): String? =
+    lines.mapNotNull { line -> looksLikeId(line)?.let { line to it.length } }.maxByOrNull { it.second }?.first
+
+internal fun matchingRead(reads: List<String>, fixtures: List<Fixture>): Pair<String, ScannedAsset>? =
+    reads.firstNotNullOfOrNull { raw -> assetFromScan(raw, fixtures)?.let { raw to it } }
+
+/** Disposal and frame admission share a lock so ML Kit can finish scheduling work before its clients close. */
+internal class ScanLifetime(private val close: () -> Unit) {
+    @Volatile var disposed = false
+        private set
+    private var busy = false
+
+    @Synchronized fun begin(): Boolean {
+        if (disposed || busy) return false
+        busy = true
+        return true
+    }
+
+    @Synchronized fun finish() {
+        if (!busy) return
+        busy = false
+        if (disposed) close()
+    }
+
+    @Synchronized fun dispose() {
+        if (disposed) return
+        disposed = true
+        if (!busy) close()
+    }
+}

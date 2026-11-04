@@ -235,8 +235,8 @@ const val NOTHING_HEARD = "I didn't catch that."
  */
 object HandsFreePolicy {
     /** The microphone opens only when nothing else holds the floor: not listening already, LensQi not talking, no request pending. */
-    fun shouldListen(on: Boolean, supported: Boolean, listening: Boolean, speaking: Boolean, busy: Boolean): Boolean =
-        on && supported && !listening && !speaking && !busy
+    fun shouldListen(on: Boolean, supported: Boolean, listening: Boolean, speaking: Boolean, busy: Boolean, started: Boolean = true): Boolean =
+        started && on && supported && !listening && !speaking && !busy
     /** Hands-free ends when the microphone is blocked for good, or failed to start since it was switched on. */
     fun shouldStop(settingsNeeded: Boolean, startFailuresNow: Int, startFailuresAtOn: Int): Boolean =
         settingsNeeded || startFailuresNow != startFailuresAtOn
@@ -251,6 +251,13 @@ object HandsFreePolicy {
         !paused || command == VoiceCommand.Resume || command == VoiceCommand.Mute || command == VoiceCommand.Unmute
 }
 
+internal class ListenSession {
+    private var generation = 0L
+    fun start(): Long = ++generation
+    fun active(token: Long) = generation == token
+    fun invalidate() { generation++ }
+}
+
 /** Hands-free as a screen sees it: whether it is on, the switch, and whether the recognizer keeps audio on the phone. */
 class HandsFreeState(val on: Boolean, val toggle: () -> Unit, val onDevice: Boolean)
 
@@ -263,21 +270,30 @@ class HandsFreeState(val on: Boolean, val toggle: () -> Unit, val onDevice: Bool
  */
 @Composable
 fun rememberHandsFree(voice: VoiceInputState, speech: SpeechOutput, busy: Boolean, paused: Boolean): HandsFreeState {
-    var on by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var on by remember { mutableStateOf(false) }
     // A recognizer that refuses to start leaves `listening` as it was, so that refusal is watched by count. Not saved:
     // the count itself starts again with the recognizer after a rotation.
     var failuresAtOn by remember { mutableStateOf(voice.startFailures) }
     // The engine reports its progress off the main thread, so the speaker's flag is sampled rather than observed.
     val speaking by androidx.compose.runtime.produceState(speech.speaking, speech) { while (true) { value = speech.speaking; kotlinx.coroutines.delay(250) } }
     val current by rememberUpdatedState(voice)
-    LaunchedEffect(on, voice.supported, voice.listening, speaking, busy, paused, voice.settingsNeeded, voice.startFailures) {
-        if (!on) return@LaunchedEffect
+    var started by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleStartEffect(Unit) {
+        started = true
+        onStopOrDispose {
+            started = false
+            current.abort()
+            on = false
+        }
+    }
+    LaunchedEffect(started, on, voice.supported, voice.listening, speaking, busy, paused, voice.settingsNeeded, voice.startFailures) {
+        if (!started || !on) return@LaunchedEffect
         if (HandsFreePolicy.shouldStop(voice.settingsNeeded, voice.startFailures, failuresAtOn)) {
             on = false
             speech.speak("Hands-free is off: the microphone could not start.", force = true)
             return@LaunchedEffect
         }
-        if (!HandsFreePolicy.shouldListen(on, voice.supported, voice.listening, speaking, busy)) return@LaunchedEffect
+        if (!HandsFreePolicy.shouldListen(on, voice.supported, voice.listening, speaking, busy, started)) return@LaunchedEffect
         // A short settle, so a listen does not open on the tail of a line; a change meanwhile cancels it.
         kotlinx.coroutines.delay(400)
         current.start()
@@ -285,7 +301,7 @@ fun rememberHandsFree(voice: VoiceInputState, speech: SpeechOutput, busy: Boolea
     // Leaving the screen ends the effect above with it, so the listen the voice input cancels on dispose is not reopened.
     return HandsFreeState(on, toggle = {
         // Off ends a listen that is open right now, so nothing said after the tap is taken as a command.
-        if (on && current.listening) current.abort()
+        if (on) current.abort()
         if (!on) failuresAtOn = current.startFailures
         on = !on
     }, onDevice = voice.onDevice)
@@ -317,26 +333,35 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
     val canOnDevice = remember { supported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
     var onDevice by remember { mutableStateOf(canOnDevice) }
     // The on-device recognizer is preferred; without its language pack the phone's standard recognizer takes over.
-    val recognizer = remember(onDevice) {
+    var recognizerReset by remember { mutableStateOf(0) }
+    val recognizer = remember(onDevice, recognizerReset) {
         if (!supported) null
         else if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         else SpeechRecognizer.createSpeechRecognizer(context)
     }
     DisposableEffect(recognizer) { onDispose { recognizer?.destroy() } }
+    val session = remember { ListenSession() }
+    var permissionToken by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(session) { onDispose { session.invalidate() } }
     val begin = {
+        val token = session.start()
         heard = ""; error = null; listening = true; hold.started()
         recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onPartialResults(partial: Bundle?) { partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { heard = it } }
+            override fun onPartialResults(partial: Bundle?) { if (!session.active(token)) return; partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { heard = it } }
             override fun onResults(results: Bundle?) {
+                if (!session.active(token)) return
+                session.invalidate()
                 listening = false
                 hold.result(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()) { heard = it; deliver(it) }
             }
             override fun onError(code: Int) {
+                if (!session.active(token)) return
+                session.invalidate()
                 listening = false; hold.ended()
-                // 12/13: ERROR_LANGUAGE_NOT_SUPPORTED / ERROR_LANGUAGE_UNAVAILABLE (Android 12+), the on-device pack is missing.
-                // Not a failure: the next start uses the phone's standard recognizer.
-                if (onDevice && (code == 12 || code == 13)) { onDevice = false; error = "Switched to the phone's standard speech service. Tap the mic again."; return }
                 if (HandsFreePolicy.startFailure(code)) startFailures++
+                // 12/13: ERROR_LANGUAGE_NOT_SUPPORTED / ERROR_LANGUAGE_UNAVAILABLE (Android 12+), the on-device pack is missing.
+                // Stop continuous listening before a new provider can receive audio.
+                if (onDevice && (code == 12 || code == 13)) { onDevice = false; error = "Switched to the phone's standard speech service. Tap the mic again."; return }
                 error = when (code) { SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> NOTHING_HEARD; SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."; else -> "Voice input stopped." }
             }
             override fun onReadyForSpeech(params: Bundle?) = Unit
@@ -353,10 +378,13 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             })
-        } catch (e: RuntimeException) { listening = false; hold.ended(); error = "Voice input couldn't start. Try again."; startFailures++ }
+        } catch (e: RuntimeException) { session.invalidate(); listening = false; hold.ended(); error = "Voice input couldn't start. Try again."; startFailures++ }
         Unit
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val token = permissionToken
+        permissionToken = null
+        if (token == null || !session.active(token)) return@rememberLauncherForActivityResult
         if (granted) { settingsNeeded = false; begin() }
         else {
             // Sticky, and remembered across visits: once Android stops asking, every later tap is refused with no rationale
@@ -375,6 +403,7 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
             else {
                 rationaleBefore = com.lensqi.fieldops.ui.common.rationaleShown(context, Manifest.permission.RECORD_AUDIO)
                 com.lensqi.fieldops.ui.common.noteRationale(context, Manifest.permission.RECORD_AUDIO)
+                permissionToken = session.start()
                 permission.launch(Manifest.permission.RECORD_AUDIO)
             }
         },
@@ -383,6 +412,15 @@ fun rememberVoiceInput(speech: SpeechOutput? = null, onFinal: (String) -> Unit):
         onDevice = onDevice,
         startFailures = startFailures,
         // cancel() delivers no result and no callback, so the listening state and the speech hold are released here.
-        abort = { if (listening) { recognizer?.cancel(); listening = false; heard = ""; hold.ended() } },
+        abort = {
+            session.invalidate()
+            if (listening) {
+                recognizer?.cancel()
+                recognizerReset++
+                listening = false
+                heard = ""
+                hold.ended()
+            }
+        },
     )
 }

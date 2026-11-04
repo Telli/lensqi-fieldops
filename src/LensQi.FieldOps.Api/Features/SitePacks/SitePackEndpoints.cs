@@ -17,12 +17,19 @@ public static class SitePackEndpoints
 {
     public static IEndpointRouteBuilder MapSitePacks(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v1/fixtures/{fixtureId}/pack", (string fixtureId, ExpectedTwinStore twins, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings,
-            IVendorKnowledgeResolver resolver, IKnowledgePackStore packs, TimeProvider clock) =>
+        app.MapGet("/v1/fixtures/{fixtureId}/pack", async (string fixtureId, ExpectedTwinStore twins, InspectionStore store, IReadOnlyList<FixtureKnowledgeBinding> bindings,
+            IVendorKnowledgeResolver resolver, IKnowledgePackStore packs, TimeProvider clock, CancellationToken ct) =>
         {
             var twin = twins.Find(fixtureId);
             if (twin is null) return ApiResults.NotFound($"Fixture '{fixtureId}' is not installed");
-            var sessions = store.All.Where(s => s.State.FixtureId == twin.Twin.FixtureId).OrderByDescending(s => s.Events[^1].OccurredAt).ToList();
+            var rows = new List<(InspectionEndpoints.InspectionSummary Summary, object? OpenView)>();
+            foreach (var session in store.All.Where(s => s.State.FixtureId == twin.Twin.FixtureId))
+            {
+                var row = await store.ExecuteAsync(session.State.InspectionId, s => Task.FromResult((
+                    InspectionEndpoints.Summary(s), InspectionEndpoints.IsOpen(s) ? InspectionEndpoints.View(s) : null)), ct);
+                rows.Add(row);
+            }
+            var newest = rows.OrderByDescending(row => row.Summary.UpdatedAt).ToArray();
             return Results.Ok(new
             {
                 fixtureId = twin.Twin.FixtureId, twin.Twin.FixtureRevision, twin.Sha256, generatedAt = clock.GetUtcNow().ToUniversalTime(),
@@ -32,8 +39,8 @@ public static class SitePackEndpoints
                     a.AssetId,
                     knowledge = InspectionKnowledgeEndpoints.KnowledgeView(bindings.FirstOrDefault(b => b.FixtureId == twin.Twin.FixtureId && b.AssetId == a.AssetId), resolver, packs),
                 }),
-                inspections = sessions.Select(InspectionEndpoints.Summary),
-                open = sessions.Where(InspectionEndpoints.IsOpen).Select(InspectionEndpoints.View),
+                inspections = newest.Select(row => row.Summary),
+                open = newest.Select(row => row.OpenView).OfType<object>(),
             });
         });
         return app;

@@ -44,7 +44,7 @@ export interface ChangeAnalysis {
 export interface Segmentation { evidenceId: string; sourcePhotoEvidenceId: string; concept: string; matched: boolean; maskSha256?: string | null }
 export interface Inspection {
   inspectionId: string; fixtureId: string; fixtureRevision: number; fixtureDigest: string; assetId: string; stage: Stage;
-  lastSequence: number; viewRequests: number; currentClaimId?: string | null; repairClaimedAt?: string | null; technicianAcknowledged: boolean;
+  lastSequence: number; viewRequests: number; awaitingRequestedView?: boolean; currentClaimId?: string | null; repairClaimedAt?: string | null; technicianAcknowledged: boolean;
   photos: Photo[]; diagnostics: { evidenceId: string; result: DiagnosticResult; source: DiagnosticSource }[];
   checklist: { requirementId: string; status: ChecklistStatus; reviewedAt?: string; reviewedByEvidenceId?: string | null }[];
   segmentations: Segmentation[]; changeAnalyses: ChangeAnalysis[]; acceptedPostRepairPhotoId?: string | null;

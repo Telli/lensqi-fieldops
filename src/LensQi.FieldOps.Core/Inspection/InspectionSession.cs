@@ -142,7 +142,7 @@ public sealed class InspectionSession
     public IReadOnlyList<InspectionEvent> DeclineView(string requestId, DateTimeOffset now) =>
         Idempotent(requestId, () =>
         {
-            Require(State.Stage == InspectionStage.NeedsEvidence, "No view request is outstanding");
+            Require(State.Stage == InspectionStage.NeedsEvidence && State.AwaitingRequestedView, "No view request is outstanding");
             var batch = new List<InspectionEvent>
             {
                 new ViewDeclined(Next(), State.InspectionId, now, State.FixtureDigest, State.ViewRequests),

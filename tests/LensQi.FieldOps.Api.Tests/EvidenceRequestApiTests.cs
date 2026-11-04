@@ -105,6 +105,29 @@ public sealed class EvidenceRequestApiTests
         Assert.Equal(sequence, (await Json(await c.GetAsync($"/v1/inspections/{id}"))).GetProperty("lastSequence").GetInt64());
     }
 
+    [Theory]
+    [InlineData("RequestHumanReview")]
+    [InlineData("RequestView")]
+    public async Task Needs_evidence_without_an_outstanding_view_cannot_be_declined(string action)
+    {
+        using var f = new FieldOpsApiFactory();
+        var c = f.CreateClient();
+        var id = await NewInspection(c);
+        var photo = (await Json(await Upload(c, id))).GetProperty("evidenceId").GetString();
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new
+        {
+            assetId = "LAB-SW-01",
+            hypotheses = new[] { new { featureId = "yellow_cable_near_end_visible", status = "Unknown", reason = "occluded", evidenceIds = new[] { photo } } },
+            nextAction = action, requestedView = action == "RequestView" ? "Show the back" : null, requestedSegmentationConcept = (string?)null,
+        });
+        var view = (await Json(await c.PostAsync($"/v1/inspections/{id}/investigate", null))).GetProperty("state");
+        Assert.Equal("NeedsEvidence", view.GetProperty("stage").GetString());
+        Assert.Equal(action == "RequestView", view.GetProperty("awaitingRequestedView").GetBoolean());
+        if (action == "RequestView") (await Upload(c, id)).EnsureSuccessStatusCode();
+        Assert.False((await Json(await c.GetAsync($"/v1/inspections/{id}"))).GetProperty("awaitingRequestedView").GetBoolean());
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsync($"/v1/inspections/{id}/decline-view", null)).StatusCode);
+    }
+
     [Fact]
     public async Task Knowledge_packs_list_their_source_documents()
     {

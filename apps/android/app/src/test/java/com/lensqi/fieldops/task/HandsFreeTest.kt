@@ -16,8 +16,19 @@ class HandsFreeTest {
     private fun listens(on: Boolean = true, supported: Boolean = true, listening: Boolean = false, speaking: Boolean = false, busy: Boolean = false) =
         HandsFreePolicy.shouldListen(on, supported, listening, speaking, busy)
 
+    @Test fun `abort invalidates callbacks even after a new listen starts`() {
+        val sessions = com.lensqi.fieldops.voice.ListenSession()
+        val aborted = sessions.start()
+        sessions.invalidate()
+        assertFalse(sessions.active(aborted))
+        val current = sessions.start()
+        assertFalse(sessions.active(aborted))
+        assertTrue(sessions.active(current))
+    }
+
     @Test fun `the microphone opens only while idle, with hands-free on, nothing listening, LensQi silent and no request pending`() {
         assertTrue(listens())
+        assertFalse(HandsFreePolicy.shouldListen(true, true, false, false, false, started = false))
         assertFalse(listens(on = false), "push-to-talk never opens the microphone by itself")
         assertFalse(listens(supported = false), "a phone without a recognizer has nothing to open")
         assertFalse(listens(listening = true), "a listen already open is not reopened")
@@ -25,6 +36,13 @@ class HandsFreeTest {
         assertFalse(listens(busy = true), "a question being answered, or an earlier step on screen, holds the microphone")
         // Once the answer has been spoken and the request settled, it opens again.
         assertTrue(listens(speaking = false, busy = false))
+    }
+
+    @Test fun `missing on-device language stops hands-free until explicitly reenabled`() {
+        for (code in listOf(SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)) {
+            val failures = if (HandsFreePolicy.startFailure(code)) 1 else 0
+            assertTrue(HandsFreePolicy.shouldStop(false, failures, 0))
+        }
     }
 
     @Test fun `a start failure after switching on ends hands-free, as does a microphone blocked for good`() {

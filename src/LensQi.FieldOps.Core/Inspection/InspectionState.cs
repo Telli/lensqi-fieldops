@@ -31,6 +31,7 @@ public sealed record InspectionState
     public IReadOnlyList<PendingPrediction> PendingPredictions { get; init; } = [];
     public IReadOnlyList<PredictionScored> PredictionScores { get; init; } = [];
     public int ViewRequests { get; init; }
+    public bool AwaitingRequestedView { get; init; }
     public string? CurrentClaimId { get; init; }
     public DateTimeOffset? RepairClaimedAt { get; init; }
     public bool TechnicianAcknowledged { get; init; }
@@ -64,6 +65,7 @@ public sealed record InspectionState
             // New evidence or a changed review needs a fresh acknowledgement: the technician confirms what is there now.
             PhotoRecorded p => this with
             {
+                AwaitingRequestedView = false,
                 TechnicianAcknowledged = false,
                 Photos = [.. Photos, new PhotoEvidence(p.EvidenceId, p.Origin, p.ArtifactSha256, p.ObservedAt, p.Quality, p.PerceptualHash, p.OccurredAt, p.Measured)],
                 EvidenceRequests = [.. EvidenceRequests.Select(r => r.AnsweredByPhotoId is null ? r with { AnsweredByPhotoId = p.EvidenceId, AnsweredAt = p.OccurredAt } : r)],
@@ -71,8 +73,8 @@ public sealed record InspectionState
             EvidenceRequested q => this with { EvidenceRequests = [.. EvidenceRequests, new EvidenceRequest(q.RequestId, q.Note, q.RequestedBy, q.OccurredAt)] },
             SegmentationRecorded sr => this with { Segmentations = [.. Segmentations, new SegmentationEvidence(sr.EvidenceId, sr.SourcePhotoEvidenceId, sr.Concept, sr.Matched, sr.MaskSha256, sr.OccurredAt)] },
             VisualChangeAnalyzed vc => this with { ChangeAnalyses = [.. ChangeAnalyses, vc.Analysis] },
-            AssessmentRecorded a => this with { Assessments = [.. Assessments, a.Assessment] },
-            ViewRequested v => this with { ViewRequests = v.RequestNumber },
+            AssessmentRecorded a => this with { AwaitingRequestedView = false, Assessments = [.. Assessments, a.Assessment] },
+            ViewRequested v => this with { ViewRequests = v.RequestNumber, AwaitingRequestedView = true },
             PredictionRegistered pr => this with { PendingPredictions = [.. PendingPredictions, new PendingPrediction(pr.PredictionId, pr.DiagnosticId, pr.PredictedValue, pr.OccurredAt)] },
             DiagnosticCompleted d => this with { Diagnostics = [.. Diagnostics, new DiagnosticEvidence(d.EvidenceId, d.Result, d.OccurredAt)] },
             PredictionScored ps => this with
@@ -92,7 +94,7 @@ public sealed record InspectionState
                 LastDecision = v.Decision,
                 DecisionsByRequest = new Dictionary<string, VerificationDecision>(DecisionsByRequest) { [v.RequestId] = v.Decision },
             },
-            StageChanged sc => this with { Stage = sc.To },
+            StageChanged sc => this with { Stage = sc.To, AwaitingRequestedView = AwaitingRequestedView && sc.To == InspectionStage.NeedsEvidence },
             _ => this,
         };
         return next with { LastSequence = e.Sequence };

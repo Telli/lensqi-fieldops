@@ -2,11 +2,21 @@ package com.lensqi.fieldops.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import androidx.lifecycle.ViewModelStore
 import com.lensqi.fieldops.data.api.FieldOpsApi
 import com.lensqi.fieldops.data.api.Fixture
 import com.lensqi.fieldops.data.api.InspectionView
 import com.lensqi.fieldops.data.api.KnowledgeResponse
+import com.lensqi.fieldops.data.api.GroundedProposal
+import com.lensqi.fieldops.data.api.ProposedNextAction
+import com.lensqi.fieldops.data.api.RegisteredPrediction
+import com.lensqi.fieldops.data.api.ProposalPrediction
+import com.lensqi.fieldops.data.api.ReasonResponse
+import com.lensqi.fieldops.data.api.DiagnosticSource
+import com.lensqi.fieldops.data.api.PredictionRow
 import com.lensqi.fieldops.data.api.Recordings
 import com.lensqi.fieldops.data.api.SitePack
 import com.lensqi.fieldops.data.api.SitePackAsset
@@ -18,7 +28,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -53,7 +62,14 @@ class KnowledgeFallbackTest {
     private val fixture = json.decodeFromString(ListSerializer(Fixture.serializer()), Recordings.text("fixtures")).first { it.fixtureId == view.fixtureId }
     private val knowledge = json.decodeFromString(KnowledgeResponse.serializer(), Recordings.text("knowledge")).copy(inspectionId = null)
 
-    private fun scene(dir: File, seedPack: Boolean, block: suspend (InspectionViewModel) -> Unit) = runBlocking {
+    private fun scene(
+        dir: File,
+        seedPack: Boolean,
+        offline: Boolean = false,
+        staleStatus: String? = null,
+        disconnected: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
+        block: suspend (InspectionViewModel) -> Unit,
+    ) = runBlocking {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val prefsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val models = ViewModelStore()
@@ -64,7 +80,7 @@ class KnowledgeFallbackTest {
                         request.path == "/health" -> MockResponse().setBody(Recordings.text("health"))
                         request.path == "/v1/fixtures" -> MockResponse().setBody(Recordings.text("fixtures"))
                         request.path == "/v1/inspections/${view.inspectionId}" -> MockResponse().setBody(Recordings.text("inspection-created"))
-                        request.path!!.endsWith("/predictions") -> MockResponse().setResponseCode(404).setBody("""{"code":"not_found","message":"older server"}""")
+                        request.path!!.endsWith("/predictions") -> MockResponse().setBody("""{"inspectionId":"${view.inspectionId}","predictions":[],"tally":{"confirmed":0,"falsified":0,"unscorable":0,"pending":0}}""")
                         else -> MockResponse().setBody("[]")
                     }
                 }
@@ -74,19 +90,32 @@ class KnowledgeFallbackTest {
                 settings.setApiBase(base)
                 // The knowledge endpoint alone is out of reach: the connection fails before any request is sent.
                 val client = OkHttpClient.Builder().addInterceptor { chain ->
-                    if (chain.request().url.encodedPath.endsWith("/knowledge")) throw java.io.IOException("simulated: no route to host") else chain.proceed(chain.request())
+                    if (offline || disconnected.get() || chain.request().url.encodedPath.endsWith("/knowledge")) throw java.io.IOException("simulated: no route to host") else chain.proceed(chain.request())
                 }.build()
                 val api = NetworkModule.retrofit(client, json, base).create(FieldOpsApi::class.java)
                 val cache = InspectionCache()
                 val snapshots = SnapshotStore(File(dir, "snapshots"), json)
+                if (staleStatus != null) snapshots.save(SnapshotStore.key(base, "knowledge", view.inspectionId), KnowledgeResponse.serializer(),
+                    knowledge.copy(inspectionId = view.inspectionId, status = staleStatus, packSha256 = "old"))
+                val savedView = if (offline) json.decodeFromString(InspectionView.serializer(),
+                    Recordings.text("checklist-1-switch_chassis_visible")) else view
                 if (seedPack) SitePackStore(snapshots, cache).store(
-                    SitePack(fixture.fixtureId, fixture.fixtureRevision, fixture.sha256, "2026-11-03T09:00:00+00:00", fixture, listOf(SitePackAsset(view.assetId, knowledge)), emptyList(), emptyList()), base)
-                val queue = CommandQueue(File(dir, "captures"), MemoryCommands(), { api }, cache) {}
-                val vm = InspectionViewModel(SavedStateHandle(mapOf("inspectionId" to view.inspectionId)), api, cache, queue, settings, snapshots, json)
+                    SitePack(fixture.fixtureId, fixture.fixtureRevision, fixture.sha256, "2026-11-03T09:00:00+00:00", fixture, listOf(SitePackAsset(view.assetId, knowledge)), emptyList(), listOf(savedView)), base)
+                val reopenedCache = InspectionCache()
+                val queue = CommandQueue(File(dir, "captures"), MemoryCommands(), { api }, reopenedCache) {}
+                val vm = InspectionViewModel(SavedStateHandle(mapOf("inspectionId" to view.inspectionId)), api, reopenedCache, queue, settings, snapshots, json)
                 models.put("vm", vm)
-                block(vm)
+                try {
+                    block(vm)
+                } finally {
+                    vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+                }
             }
-        } finally { models.clear(); prefsScope.cancel(); Dispatchers.resetMain() }
+        } finally {
+            models.clear()
+            prefsScope.coroutineContext[Job]?.cancelAndJoin()
+            Dispatchers.resetMain()
+        }
     }
 
     @Test fun `offline knowledge falls back to the asset's site-pack copy, marked cached`(@TempDir dir: File) = scene(dir, seedPack = true) { vm ->
@@ -100,6 +129,56 @@ class KnowledgeFallbackTest {
         val s = withTimeout(5000) { vm.state.first { it.view != null && it.fixture != null } }
         assertNull(s.knowledge)
         assertNull(s.knowledgeCachedAt)
+    }
+
+    @Test fun `cold offline restart restores the mandatory checklist from the matching fixture`(@TempDir dir: File) =
+        scene(dir, seedPack = true, offline = true) { vm ->
+            val ui = withTimeout(5000) { vm.state.first { it.knowledge != null } }
+            assertEquals(fixture.visualRequirements, ui.fixture?.visualRequirements)
+            assertEquals(view.fixtureDigest, ui.fixture?.sha256)
+            assertEquals(com.lensqi.fieldops.data.api.InspectionStage.ReadyToVerify, ui.view?.stage)
+            assertNotNull(ui.view?.acceptedPostRepairPhotoId)
+        }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = ["NoPack", "Applicable"])
+    fun `new site documentation supersedes stale inspection knowledge`(status: String, @TempDir dir: File) =
+        scene(dir, seedPack = true, offline = true, staleStatus = status) { vm ->
+            val ui = withTimeout(5000) { vm.state.first { it.knowledge != null } }
+            assertEquals(knowledge.packSha256, ui.knowledge?.packSha256)
+            assertNotNull(ui.knowledgeCachedAt)
+        }
+
+    @Test fun `predictions become dated when the same screen loses its connection`(@TempDir dir: File) {
+        val disconnected = java.util.concurrent.atomic.AtomicBoolean(false)
+        scene(dir, seedPack = true, disconnected = disconnected) { vm ->
+            val online = withTimeout(5000) { vm.state.first { it.predictions != null } }
+            assertNull(online.predictionsCachedAt)
+            disconnected.set(true)
+            vm.refresh().join()
+            val saved = withTimeout(5000) { vm.state.first { it.predictionsCachedAt != null } }
+            assertEquals(online.predictions, saved.predictions)
+        }
+    }
+
+    @Test fun `only an accepted probe with a registered prediction offers a check`() {
+        val proposed = GroundedProposal(view.assetId, proposedDiagnosticId = "check", nextAction = ProposedNextAction.RequestHumanReview,
+            prediction = ProposalPrediction("check", "Up"))
+        val response = ReasonResponse(true, "p", "model", proposal = proposed, state = view)
+        assertNull(response.probePrediction)
+        val registered = RegisteredPrediction("id", "check", "Up")
+        assertNull(response.copy(prediction = registered).probePrediction)
+        val probe = response.copy(proposal = proposed.copy(nextAction = ProposedNextAction.RunApprovedProbe))
+        assertNull(probe.probePrediction)
+        assertEquals(registered, probe.copy(prediction = registered).probePrediction)
+    }
+
+    @Test fun `scored predictions use their own diagnostic evidence source after serialization`() {
+        val detail = json.decodeFromString(InspectionView.serializer(), Recordings.text("inspection"))
+        val diagnostic = detail.diagnostics.first()
+        val row = PredictionRow("p", diagnostic.result.diagnosticId, "Up", registeredAt = "now", outcome = "Confirmed", diagnosticEvidenceId = diagnostic.evidenceId)
+        assertEquals(DiagnosticSource.Simulated, row.sourceIn(detail))
+        assertNull(row.copy(diagnosticEvidenceId = "other").sourceIn(detail))
     }
 
     @Test fun `the newest proposal since the claim decides whether the refusal line shows`() {

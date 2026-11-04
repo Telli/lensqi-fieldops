@@ -17,6 +17,26 @@ class AssetScanTest {
     private val fixtures = NetworkModule.json().decodeFromString(ListSerializer(Fixture.serializer()), Recordings.text("fixtures"))
     private val asset = fixtures.first().assets.first()
 
+    @Test fun `a serial barcode cannot hide a known second barcode or OCR read`() {
+        val unrelated = listOf("serial:9988")
+        assertNull(com.lensqi.fieldops.ui.home.matchingRead(unrelated, fixtures))
+        assertEquals("LAB-SW-01", com.lensqi.fieldops.ui.home.matchingRead(unrelated + "LAB-SW-01", fixtures)?.second?.assetId)
+        assertEquals("LAB-SW-01", assetFromText(listOf("ASSET", "LAB-SW-01"), fixtures)?.assetId)
+    }
+
+    @Test fun `scanner closes once after its last frame and refuses new frames after disposal`() {
+        var closes = 0
+        val life = com.lensqi.fieldops.ui.home.ScanLifetime { closes++ }
+        assertEquals(true, life.begin())
+        life.dispose()
+        assertEquals(false, life.begin())
+        assertEquals(0, closes)
+        life.finish()
+        assertEquals(false, life.begin())
+        life.dispose()
+        assertEquals(1, closes)
+    }
+
     @Test fun `the asset id itself, or a URL or text carrying it as a whole token, names the asset`() {
         assertEquals(asset.assetId, assetFromScan(asset.assetId, fixtures)!!.assetId)
         assertEquals(asset.assetId, assetFromScan(" ${asset.assetId.lowercase()} ", fixtures)!!.assetId)
@@ -65,7 +85,7 @@ class AssetScanTest {
         // OCR took the digit 1 for the letter l: no asset, so the scan goes on, and the read is shown so the technician sees why.
         assertNull(assetFromText(listOf("ASSET TAG", "LAB-SW-0l", "Rack 2"), fixtures))
         assertEquals("LAB-SW-0l", looksLikeId("LAB-SW-0l"))
-        assertEquals("LAB-SW-0l", listOf("ASSET TAG", "LAB-SW-0l", "Rack 2").filter { looksLikeId(it) != null }.maxByOrNull { it.length })
+        assertEquals("LAB-SW-0l", com.lensqi.fieldops.ui.home.likelyIdLine(listOf("Single-mode networking description", "LAB-SW-0l", "Rack 2")))
         assertEquals("LAB-SW-01", looksLikeId("Asset: LAB-SW-01."), "edge punctuation is not part of the id-looking token")
         assertEquals("RACK_2a-01", looksLikeId("see RACK_2a-01 and A-1"), "the longest id-looking token is the read")
         assertNull(looksLikeId("ASSET TAG"))
