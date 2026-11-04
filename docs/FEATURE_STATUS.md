@@ -4,7 +4,7 @@
 
 A closed inspection refuses new checklist reviews and acknowledgements. Restricted work stays restricted on follow-up questions, live guidance and step checks, and restricted plans are checked in the title, cautions, stop conditions, photo checks, the summary and the professional reason. Verification is held while a fact the site requires is unconfirmed for the bound asset (VK-T10, policy 1.6). From receipt format 1.3 the verifier, the API check and the export all require the exact rendering of the receipt. Not addressed from that review: the live label when a fixture turns off fresh diagnostics, the saved question-frame wording, the stopped-task verify button, and the seven-day retention requirement.
 
-Gates on the branch: 404 .NET tests (Core 219, Meta 18, Api 167); web typecheck, 78 tests, production build reproducing `wwwroot`; Android 311 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No physical Android device, browser run, live model or production deployment was used.
+Gates on the branch: 407 .NET tests (Core 222, Meta 18, Api 167); web typecheck, 78 tests, production build reproducing `wwwroot`; Android 311 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No physical Android device, browser run, live model or production deployment was used.
 
 ## As of 3 November 2026 (Pacific), `codex/open-product-scope` (the six open product-scope items)
 

@@ -317,6 +317,9 @@ public class TaskSessionTests
     [InlineData("Do not wait for the electrician, then open the box or remove the cover.", true)]
     [InlineData("The door is open with exposed wires.", false)]
     [InlineData("Open the panel with exposed wires.", true)]
+    [InlineData("What you need to do is remove the panel cover.", true)]
+    [InlineData("What you need to do is open the panel.", true)]
+    [InlineData("All that remains is disconnect the wires.", true)]
     public void Hands_on_instructions_are_recognised_in_the_words(string text, bool handsOn) =>
         Assert.Equal(handsOn, TaskSafety.InstructsHandsOn(text));
 
