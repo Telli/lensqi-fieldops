@@ -176,8 +176,13 @@ public class ReceiptTests
         var path = Path.Combine(dir, "receipt.json");
         var node = JsonNode.Parse(File.ReadAllText(path))!;
         node[member] = null;
+        // The digest is recomputed, so only the missing member can make it invalid.
+        node["manifestSha256"] = null;
+        node["manifestSha256"] = CanonicalJson.Sha256(CanonicalJson.Serialize(node.AsObject()));
         File.WriteAllText(path, node.ToJsonString());
-        Assert.False(ReceiptVerifier.Verify(dir).IsValid);
+        var v = ReceiptVerifier.Verify(dir);
+        Assert.False(v.IsValid);
+        Assert.Contains(v.Checks, c => c.StartsWith("manifest digest matches"));
     }
 
     [Theory]
