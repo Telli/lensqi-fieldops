@@ -13,7 +13,7 @@ import java.sql.DriverManager
  * exactly the columns Room's generated code for the current version expects, so Room opens it without a reset.
  */
 class QueueMigrationTest {
-    /** Room's table for version 1 (a51512b^), before step checks were queued. */
+    /** Room's table for version 1 (6b67886^), before step checks were queued. */
     private val version1 = "CREATE TABLE IF NOT EXISTS `pending_command` (`id` TEXT NOT NULL, `inspectionId` TEXT NOT NULL, `kind` TEXT NOT NULL, " +
         "`createdAtMillis` INTEGER NOT NULL, `filePath` TEXT, `mediaType` TEXT, `sha256` TEXT, `source` TEXT, `observedAt` TEXT, `state` TEXT NOT NULL, " +
         "`attempts` INTEGER NOT NULL, `errorCode` TEXT, `errorMessage` TEXT, PRIMARY KEY(`id`))"

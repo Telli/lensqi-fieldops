@@ -1,6 +1,6 @@
 # Android UX polish — October 31, 2026
 
-Implemented on `codex/android-ux-polish`, based on `9505613`. No merge, deployment, credential changes or backend contract changes. Application changes are Android presentation/preferences only; verification engine, event formats, evidence uploads, target association and marker registration remain intact.
+Implemented on `codex/android-ux-polish`, based on `0e7d7e1`. No merge, deployment, credential changes or backend contract changes. Application changes are Android presentation/preferences only; verification engine, event formats, evidence uploads, target association and marker registration remain intact.
 
 ## What changed
 

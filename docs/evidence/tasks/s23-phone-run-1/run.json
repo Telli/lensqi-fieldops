@@ -1,4 +1,5 @@
 {
+  "screenshots": "Numbered screenshots that show the surroundings are not kept in the repository; the observations stand as written.",
   "date": "2026-10-30",
   "device": "Samsung Galaxy S23 Ultra (SM-S918U1), Android 16, ARCore APK 262640093 (SDK 1.46). LensQi debug build. API on the Mac reached over USB with adb reverse tcp:5199.",
   "task": "T-4fa5a945c1d1 'Replace smoke detector batteries', opened at step 6 of 7.",

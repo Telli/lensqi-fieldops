@@ -1,6 +1,6 @@
 # Review of the FieldOps v1.1 Kiro kit and PRD
 
-**Reviewed:** October 28, 2026 (UTC), against `LensQi_FieldOps_v1.1_Kiro_Kit.zip` and `LensQi_FieldOps_PRD_v1.1.md` (the PRD inside the zip is byte-identical to the standalone file). Checked against the hackathon participant guide, the Meta Model API docs as they read today, and the code already in this repository (commits `f46e967` to `c5d0984`).
+**Reviewed:** October 28, 2026 (UTC), against `LensQi_FieldOps_v1.1_Kiro_Kit.zip` and `LensQi_FieldOps_PRD_v1.1.md` (the PRD inside the zip is byte-identical to the standalone file). Checked against the hackathon participant guide, the Meta Model API docs as they read today, and the code already in this repository (commits `6a7a96f` to `56249e1`).
 
 ## 1. Verdict
 

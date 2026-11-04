@@ -4,7 +4,7 @@
 
 ## Re-baseline — Wed Oct 28 (UTC)
 
-Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public repo created; .NET 10 solution with Core/Api/Meta/Diagnostics and tests; vendor-knowledge pack loader, digests, exact applicability and bounded resolver (child VK-T01–T04); `MuseSparkChatClient` and grounded-proposal validator (VK-T05–T06); **Stage One gate passed with genuine `muse-spark-1.3` structured-output calls** (`docs/evidence/`). Not started: Android, expected-twin loader, Core state machine, SAM, probes, verification, receipts. T0.2, T0.3 (backend half) and T0.5 are done; T0.4 and the Android half of T0.3 are open. Day 2 proceeds as written with SAM first. The P0 UI-surface decision (browser vs Android) is recorded in PRD §19.
+Day 1 actuals (commits `6a7a96f`..`56249e1` in `Telli/lensqi-fieldops`): public repo created; .NET 10 solution with Core/Api/Meta/Diagnostics and tests; vendor-knowledge pack loader, digests, exact applicability and bounded resolver (child VK-T01–T04); `MuseSparkChatClient` and grounded-proposal validator (VK-T05–T06); **Stage One gate passed with genuine `muse-spark-1.3` structured-output calls** (`docs/evidence/`). Not started: Android, expected-twin loader, Core state machine, SAM, probes, verification, receipts. T0.2, T0.3 (backend half) and T0.5 are done; T0.4 and the Android half of T0.3 are open. Day 2 proceeds as written with SAM first. The P0 UI-surface decision (browser vs Android) is recorded in PRD §19.
 
 ## Day 1: Tue Oct 27 — Contract + real Muse
 

@@ -1,4 +1,4 @@
-# Response to the 3 November 2026 mobile review (`main` @ `55c117c`)
+# Response to the 3 November 2026 mobile review (`main` @ `d6d7b6e`)
 
 An external review of the Android app, the mobile web surface and the shared backend arrived on 3 November. Every claim was checked against the code before anything was changed; this note records which held, which did not, and what shipped on `codex/mobile-review-nov3`. The review's percentage verdict and its feature-parity matrix are not adopted: "built" is not "verified on hardware", and the open hardware gates in `docs/FEATURE_STATUS.md` stand.
 
@@ -6,7 +6,7 @@ An external review of the Android app, the mobile web surface and the shared bac
 
 Each claim was read against the cited lines and their callers. Verdicts: **valid** (holds as written), **partial** (the mechanism is real but the scope or trigger is narrower than stated), **invalid** (does not hold).
 
-The review's one failing automated gate did not reproduce: `./gradlew :app:testDebugUnitTest --rerun` on `55c117c` passed 240 of 240. The teardown race it describes (ViewModel coroutines resuming on `Dispatchers.Main` after `resetMain()`) is a real mechanism, so the test class now cancels every ViewModel it created before resetting the dispatcher.
+The review's one failing automated gate did not reproduce: `./gradlew :app:testDebugUnitTest --rerun` on `d6d7b6e` passed 240 of 240. The teardown race it describes (ViewModel coroutines resuming on `Dispatchers.Main` after `resetMain()`) is a real mechanism, so the test class now cancels every ViewModel it created before resetting the dispatcher.
 
 ### Backend (all valid)
 

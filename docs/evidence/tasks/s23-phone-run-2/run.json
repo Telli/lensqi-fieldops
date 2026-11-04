@@ -1,4 +1,5 @@
 {
+  "screenshots": "Numbered screenshots that show the surroundings are not kept in the repository; the observations stand as written.",
   "date": "2026-10-30",
   "device": "Samsung Galaxy S23 Ultra (SM-S918U1), Android 16, ARCore 1.46; API on the Mac over USB (adb reverse).",
   "task": "T-39dc52767669 'Check and test ceiling smoke detector', a new DIY task planned by genuine Muse (6 steps).",

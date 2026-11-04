@@ -2,7 +2,7 @@
 
 > **Superseded in part (October 29, 2026).** This plan predates the guided-task re-architecture. The product is now DIY, Technician and free-form modes on one guided-task core, with FieldProof as the technician closer: see `PRD.md` v2.0 §1 and `.kiro/specs/guided-tasks/tasks.md` for current status. The FieldProof tracks below remain accurate as history.
 
-**Written:** October 28, 2026 (UTC) at commit `cc2f72d`. **Deadline:** November 4, 2026, 9:00 PM Eastern.
+**Written:** October 28, 2026 (UTC) at commit `24d286a`. **Deadline:** November 4, 2026, 9:00 PM Eastern.
 **Repository:** <https://github.com/Telli/lensqi-fieldops>, branch `main`, 29 event-period commits, 104 passing tests.
 **Read first, in this order:** `README.md`, `docs/STATUS.md` (once it exists), `PRD.md` §3–§8 and §17, `.kiro/specs/lensqi-fieldops/tasks.md`, `docs/HACKATHON_CONTRIBUTIONS.md`, then the project skills under `.claude/skills/` (they encode the conventions and the traps already hit).
 

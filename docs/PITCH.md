@@ -1,6 +1,6 @@
 # LensQi product pitch and feature review
 
-Reviewed October 28, 2026, Pacific time, against the local `guided-tasks` branch at `364b92a`. Audience: hackathon judges and prospective pilot partners. This review compares implementation, tests and recorded evidence; it is not a fresh runtime or hardware validation.
+Reviewed October 28, 2026, Pacific time, against the local `guided-tasks` branch at `83132dd`. Audience: hackathon judges and prospective pilot partners. This review compares implementation, tests and recorded evidence; it is not a fresh runtime or hardware validation.
 
 **LensQi helps people do hands-on technical work with camera-guided instructions, and gives technicians an evidence trail for the checks that matter.**
 

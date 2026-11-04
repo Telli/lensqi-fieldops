@@ -2,7 +2,7 @@
 ## Kiro Technical Design
 
 **Spec ID:** `guided-tasks` · **Version 1.0** · October 28, 2026  
-**Status:** Design written before implementation; most of it was built on October 28–29. §0 records where the code differs, from a review of `044c906` on October 29. The sections after §0 describe the design as written.  
+**Status:** Design written before implementation; most of it was built on October 28–29. §0 records where the code differs, from a review of `40ed417` on October 29. The sections after §0 describe the design as written.  
 **Stack:** ASP.NET Core 10 minimal API · React web (`apps/web`) · Kotlin/Compose Android (`apps/android`) · Muse Spark 1.3 + SAM 3.1  
 **References:** `requirements.md`, `tasks.md`, PRD v2.0 §4 (safety policy), §7 (state machines), §9 (architecture), §18 (task trust invariants); `../lensqi-fieldops/design.md` for the FieldProof inspection loop.
 

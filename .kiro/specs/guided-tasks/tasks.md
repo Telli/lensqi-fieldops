@@ -4,7 +4,7 @@
 **Spec:** `guided-tasks` · `requirements.md` (GT-R01–GT-R13), `design.md`  
 **Dependency:** The FieldProof inspection loop (`../lensqi-fieldops/tasks.md`) stays green throughout; no task here may weaken it.  
 **Timebox:** October 29 to November 4, 2026 (submission 9 PM ET). Web (Oct 30) and Android (Oct 31) can run in parallel once the API contract is frozen at the end of Oct 29.  
-**Status:** Boxes are checked only with a commit, passing tests, and evidence where a task asks for it. Work landed early on the `guided-tasks` branch (Oct 28); notes say what is partial. Code review on Oct 29 at `044c906`: 211 .NET, 25 web and 107 Android unit tests passed; findings are in "Review findings" below and in `design.md` §0.
+**Status:** Boxes are checked only with a commit, passing tests, and evidence where a task asks for it. Work landed early on the `guided-tasks` branch (Oct 28); notes say what is partial. Code review on Oct 29 at `40ed417`: 211 .NET, 25 web and 107 Android unit tests passed; findings are in "Review findings" below and in `design.md` §0.
 
 ## Day 0: Wed Oct 28 — Plan and docs
 
@@ -13,11 +13,11 @@
 
 ## Day 1: Thu Oct 29 — Core, safety, API contract
 
-- [x] **GT-T01 — Core task contracts and events.** `Core/Tasks`: `TaskMode`, `TaskPhase`, `RiskLevel`, `CautionKind`, `RestrictedCategory`, `StepCheckVerdict`, `TaskPlan`, `TaskStep`, `SiteLink`; the eleven task events with `[JsonDerivedType]` (GT-R11.2). *(done Oct 28: c722a14; replay round trip in `TaskSessionTests`)*
+- [x] **GT-T01 — Core task contracts and events.** `Core/Tasks`: `TaskMode`, `TaskPhase`, `RiskLevel`, `CautionKind`, `RestrictedCategory`, `StepCheckVerdict`, `TaskPlan`, `TaskStep`, `SiteLink`; the eleven task events with `[JsonDerivedType]` (GT-R11.2). *(done Oct 28: 6526da7; replay round trip in `TaskSessionTests`)*
   - Tests: replay round trip for every event type.
-- [x] **GT-T02 — `TaskSession` aggregate.** Idempotent command pattern copied from `InspectionSession`; phase table and error codes from `design.md` §2.3 (GT-R04). *(done Oct 28: c722a14; 21 Core tests)*
+- [x] **GT-T02 — `TaskSession` aggregate.** Idempotent command pattern copied from `InspectionSession`; phase table and error codes from `design.md` §2.3 (GT-R04). *(done Oct 28: 6526da7; 21 Core tests)*
   - Tests: step transitions, unknown step, out-of-order command, `AcceptPlan(false)`, duplicate request id, DIY cannot link, completed/abandoned reject commands.
-- [x] **GT-T03 — `TaskPlanValidator` and `RestrictedTopics`.** Bounds, unique ids, no links, `ValidScene` noun-phrase rule for `lookFor`, restricted categories from the user's words and the model label, hands-on rejection, `professionalRequired`, server `SourceNote` (GT-R02.4, GT-R03). *(done Oct 28: c722a14, apostrophes allowed and one re-ask with the rejection reason in ba64285)*
+- [x] **GT-T03 — `TaskPlanValidator` and `RestrictedTopics`.** Bounds, unique ids, no links, `ValidScene` noun-phrase rule for `lookFor`, restricted categories from the user's words and the model label, hands-on rejection, `professionalRequired`, server `SourceNote` (GT-R02.4, GT-R03). *(done Oct 28: 6526da7, apostrophes allowed and one re-ask with the rejection reason in a0eb537)*
   - Tests: one per restricted category; model omits restriction; restricted plan with one hands-on step; link in a caution; over-long instruction; four `lookFor` phrases.
 - [x] **GT-T04 — `TaskStore` and shared JSONL helper.** Extract append-and-replay from `InspectionStore` without behaviour change; `data/tasks/{id}.jsonl` with per-id lock; task photos in `EvidenceFileStore` with digest and purpose (GT-R11). *(done Oct 28: `TaskStore` mirrors `InspectionStore`'s mechanics; the shared helper was not extracted; restart test passes)*
   - Tests: existing inspection store tests unchanged and passing; task rehydrate equals in-memory state.
@@ -27,28 +27,28 @@
   - Tests: inspection live guidance unchanged; answer with a link rejected; off-step advice dropped.
 - [x] **GT-T07 — `StepChecker`.** Muse vision, `LooksDone` / `NotYet` / `CantTell` with bounded reason (GT-R09.2). *(done Oct 28: `StepCoach.CheckAsync`; genuine CantTell checks recorded)*
   - Tests: verdict recorded as `StepChecked`; step stays incomplete.
-- [x] **GT-T08 — `TaskEndpoints`.** All `/v1/tasks` routes in `design.md` §4 with `Idempotency-Key`, `ApiResults`, limits; live detect/guide on `LiveVisionGate` with step `lookFor` first (GT-R01, GT-R05.2, GT-R05.6). *(done Oct 28: c722a14, 9 API tests)*
+- [x] **GT-T08 — `TaskEndpoints`.** All `/v1/tasks` routes in `design.md` §4 with `Idempotency-Key`, `ApiResults`, limits; live detect/guide on `LiveVisionGate` with step `lookFor` first (GT-R01, GT-R05.2, GT-R05.6). *(done Oct 28: 6526da7, 9 API tests)*
   - Tests with `FakeVisionChat` / `FakeSegmenter`: create plan; rejected unsafe plan; accept and steps; ask; step check; live detect concepts; artifact scoping.
 - [x] **Gate (end of Oct 29):** `dotnet test --nologo` passes including all new Core and API tests; FieldProof tests unchanged; API contract frozen and recorded (`fixtures/api-recordings/` or an equivalent contract note) for web and Android. *(met Oct 28: 208 .NET tests; recorded responses in `docs/evidence/tasks/` serve as the contract)*
 
 ## Day 2: Fri Oct 30 — Web DIY flow
 
-- [x] **GT-T09 — `lib/tasks.ts`.** Client, types, `useTask`, `useActTask` with idempotency keys. *(done Oct 28: ba64285)*
-- [x] **GT-T10 — `lib/voice.ts`.** `useSpeak` lifted from `glasses.tsx`; `usePushToTalk` with typed fallback and the browser-service notice; `parseCommand` grammar (GT-R07). *(done Oct 28: ba64285; `voice.test.ts`)*
+- [x] **GT-T09 — `lib/tasks.ts`.** Client, types, `useTask`, `useActTask` with idempotency keys. *(done Oct 28: a0eb537)*
+- [x] **GT-T10 — `lib/voice.ts`.** `useSpeak` lifted from `glasses.tsx`; `usePushToTalk` with typed fallback and the browser-service notice; `parseCommand` grammar (GT-R07). *(done Oct 28: a0eb537; `voice.test.ts`)*
   - Tests: shared command cases (next, back, repeat, take photo, check step, pause, synonyms, non-commands).
-- [x] **GT-T11 — Parameterize `use-live-assist.ts`.** Endpoint base for tasks and inspections. *(done Oct 28: ba64285)*
+- [x] **GT-T11 — Parameterize `use-live-assist.ts`.** Endpoint base for tasks and inspections. *(done Oct 28: a0eb537)*
   - Tests: existing live-assist tests pass; task base hits `/v1/tasks/{id}/live/*`.
-- [x] **GT-T12 — Mode home and goal entry.** `/m` and `/m/new?mode=Technician` (default Do it yourself) with mic, details, manual photos, technician site picker (GT-R01.1). *(done Oct 28: ba64285)*
-- [x] **GT-T13 — Plan screen.** `/m/t/:id`: AI-written label, risk, time, tools, parts, steps with cautions and stop-if, referral, not-a-certification note, safety acceptance (GT-R03.7, GT-R04.1). *(done Oct 28: ba64285; checked in the browser)*
-- [x] **GT-T14 — Step runner and done screen.** `/m/t/:id/step/:stepId` from `scan.tsx` camera, `LiveOverlay`, `AiCard`, `Progress`; spoken instruction; push-to-talk and typed questions; commands; "Check this step" with suggestion card; Next/Back; `/m/t/:id/done` (GT-R05, GT-R07, GT-R09.3). *(done Oct 28: ba64285; browser: plan, step, Done, check card; camera and microphone not available in the browser pane)*
+- [x] **GT-T12 — Mode home and goal entry.** `/m` and `/m/new?mode=Technician` (default Do it yourself) with mic, details, manual photos, technician site picker (GT-R01.1). *(done Oct 28: a0eb537)*
+- [x] **GT-T13 — Plan screen.** `/m/t/:id`: AI-written label, risk, time, tools, parts, steps with cautions and stop-if, referral, not-a-certification note, safety acceptance (GT-R03.7, GT-R04.1). *(done Oct 28: a0eb537; checked in the browser)*
+- [x] **GT-T14 — Step runner and done screen.** `/m/t/:id/step/:stepId` from `scan.tsx` camera, `LiveOverlay`, `AiCard`, `Progress`; spoken instruction; push-to-talk and typed questions; commands; "Check this step" with suggestion card; Next/Back; `/m/t/:id/done` (GT-R05, GT-R07, GT-R09.3). *(done Oct 28: a0eb537; browser: plan, step, Done, check card; camera and microphone not available in the browser pane)*
 - [x] **Gate:** `npm --prefix apps/web test` and `npm --prefix apps/web run build` pass; DIY flow works at phone size in the browser with fakes, and with one genuine plan. *(met Oct 28: 25 web tests, build, genuine plans in the browser)*
 
 ## Day 3: Sat Oct 31 — Android task screens
 
-- [x] **GT-T15 — Task API and `TaskViewModel`.** Retrofit endpoints on the frozen contract; StateFlow state. *(Oct 28: endpoints and view models in 3d999b6. Oct 30: `TaskViewModelTest` against a scripted server: key kept until the server answers, refusal shown and task reloaded, offline step check saved under its key, queue count/refresh/refused-and-removed, answer spoken, stop task. Speech and the step-check queue sit behind `SpeechOutput` and `StepCheckQueue`)*
+- [x] **GT-T15 — Task API and `TaskViewModel`.** Retrofit endpoints on the frozen contract; StateFlow state. *(Oct 28: endpoints and view models in f44c2f0. Oct 30: `TaskViewModelTest` against a scripted server: key kept until the server answers, refusal shown and task reloaded, offline step check saved under its key, queue count/refresh/refused-and-removed, answer spoken, stop task. Speech and the step-check queue sit behind `SpeechOutput` and `StepCheckQueue`)*
   - Tests: view-model state for plan, accept, step, check, ask, errors.
-- [x] **GT-T16 — Task screens.** `TaskHomeScreen`, `NewTaskScreen`, `PlanScreen`, `StepScreen`, `TaskDoneScreen`; `FieldOpsNavHost` starts on the mode home; technician routes unchanged (GT-R12.3). *(done Oct 28: 3d999b6)*
-- [x] **GT-T17 — Step camera.** `StepScreen` on `CameraScreen` / `LiveCameraSession` and the ARCore renderer with a task live-frame analyzer; `distanceAdvice` on the step's main `lookFor`; full-resolution shutter hand-off (GT-R05.3, GT-R05.4). *(done Oct 28: 3d999b6 via `CameraScreen` slots; Oct 29: distance advice is aimed at the step's first `lookFor` part only; shutter hand-off and ARCore distance untested on hardware)*
+- [x] **GT-T16 — Task screens.** `TaskHomeScreen`, `NewTaskScreen`, `PlanScreen`, `StepScreen`, `TaskDoneScreen`; `FieldOpsNavHost` starts on the mode home; technician routes unchanged (GT-R12.3). *(done Oct 28: f44c2f0)*
+- [x] **GT-T17 — Step camera.** `StepScreen` on `CameraScreen` / `LiveCameraSession` and the ARCore renderer with a task live-frame analyzer; `distanceAdvice` on the step's main `lookFor`; full-resolution shutter hand-off (GT-R05.3, GT-R05.4). *(done Oct 28: f44c2f0 via `CameraScreen` slots; Oct 29: distance advice is aimed at the step's first `lookFor` part only; shutter hand-off and ARCore distance untested on hardware)*
 - [ ] **GT-T18 — Voice.** `voice/Speaker` over `TextToSpeech` with `SpokenFeedbackGate`; `voice/VoiceInput` push-to-talk over `SpeechRecognizer` (on-device where available on Android 12+, otherwise the system service); `CommandGrammar`; `RECORD_AUDIO` on first use with typed fallback (GT-R07). *(partial Oct 28: Speaker, push-to-talk and grammar with tests. Oct 29: typed fallback; live guidance spoken through `SpokenFeedbackGate`; `pause`/`resume` in the grammar on both clients. Nov 3: opt-in continuous hands-free mode on the Android step and free-form screens with a speech-privacy badge, and tap-to-ask on live outlines; unit-tested policy, not exercised with a real microphone)*
   - Tests: the same command cases as web.
 - [x] **GT-T19 — Queue and glasses generalization.** `CommandQueue` / `PendingCommand` / `SyncWorker` to `sessionId` and `StepCheckPhoto`; `GlassesLiveService` / `GlassesLiveState` rename (GT-R09.5, GT-R12.1, GT-R12.2). *(Oct 29: `StepCheckPhoto` queued offline and synced (`docs/evidence/tasks/android-offline-step-check/`). Oct 30: `PendingCommand.sessionId` (column keeps its version-1 name, so no table rebuild); the 1→2 upgrade checked on SQLite by `QueueMigrationTest` against Room's generated schema; `LiveSession` (inspection or task) for `GlassesLiveService`, a task glasses route from the step screen, run with mock glasses on the emulator in `docs/evidence/tasks/android-task-glasses/`. Not on real glasses or a phone)*
@@ -61,7 +61,7 @@
 - [ ] **GT-T21 — `link-inspection`.** Create or link an `InspectionSession` for the task's asset; `InspectionLinked`; task detail shows the inspection stage and outcome (GT-R10.2–GT-R10.4). *(partial Oct 28: link-inspection works and is tested; task detail does not yet show the inspection stage, and the API journey now reaches a FieldProof decision with fakes (see GT-T21 evidence below); no continuous hardware run)*
   - Tests: linked technician task reaches `VerifiedCompleteSimulated` through existing endpoints; unlinked task shows no verification label; DIY link rejected.
 - [x] **GT-T22 — Home reorganization.** Web and Android home with both entries and recent tasks; technician jobs, site records and "verify a repair" reachable. *(done Oct 28: web and Android)*
-- [x] **GT-T23 — Ops Tasks list (P1).** Technician tasks with their linked inspections in `/ops`. *(done Oct 28: 20d2a85, `/ops/tasks`)*
+- [x] **GT-T23 — Ops Tasks list (P1).** Technician tasks with their linked inspections in `/ops`. *(done Oct 28: fcdd465, `/ops/tasks`)*
 - [x] **Gate (API integration with fakes):** a technician task linked to `LAB-SW-01` goes plan → steps → linked inspection → fake fix denied → real fix verified (simulated, labelled) → receipt verifies. *(done Oct 28: `TechnicianJourneyTests`, 211 .NET tests passed; `docs/evidence/tasks/technician-journey.md`; no inspection Core, endpoints or policy changes. User-operated/hardware journey remains unvalidated.)*
 
 ## Day 5: Mon Nov 2 — Genuine-call evidence and phone run
@@ -83,7 +83,7 @@
 
 ## Review findings (Oct 29)
 
-From the code review of `044c906`. None breaks the FieldProof gate; the first three are defects, the rest are spec gaps already noted above.
+From the code review of `40ed417`. None breaks the FieldProof gate; the first three are defects, the rest are spec gaps already noted above.
 
 - [x] **GT-T31 — Serialize `link-inspection`.** *(done Oct 29: the check, inspection creation and link run under the task's lock; `Concurrent_links_create_one_inspection`)* The "already linked" check runs outside the task lock and the inspection is created before `LinkInspection`; two concurrent calls create two inspections, one orphaned, and the second call gets 409. Check and create under the task's lock, or create the inspection only after the link is reserved.
 - [x] **GT-T32 — Step-check retry with the same key.** *(done Oct 29: a replayed key returns the recorded check without a model call; after a failed model call it re-checks the photo already saved instead of saving another; `TaskSession.Replayed`; `A_step_check_retried_with_the_same_key_reuses_its_photo_and_replays_its_verdict`)* A retry with the same `Idempotency-Key` after a model failure saves a new photo id, the photo command replays the old one, and `RecordCheck` then refuses the new id (`invalid_state`). Reuse the recorded photo for a replayed key. Current clients send a fresh key per request, so this bites only when a queue retries.

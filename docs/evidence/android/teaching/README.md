@@ -15,7 +15,7 @@ The sample `dataset.json`, `session.json`, and `timeline.jsonl` preserve the act
 
 ## Original gate failures (resolved below) and remaining device checks
 
-- Release assembly failed in Android lint: `NonNullableMutableLiveDataDetector` throws `IncompatibleClassChangeError` about `KaCallableMemberCall` while analyzing `FieldOpsApplication.kt`. An independent release build of the unchanged base commit `fdb0db569d6048d0904f47aa268999f82570268d` produced the same detector/class/file error. This change does not disable lint or alter the toolchain. See the [last 40 release log lines](release-lint-tail.txt).
+- Release assembly failed in Android lint: `NonNullableMutableLiveDataDetector` throws `IncompatibleClassChangeError` about `KaCallableMemberCall` while analyzing `FieldOpsApplication.kt`. An independent release build of the unchanged base commit `e99748a1d526f80172cba62bf71df8a61a123646` produced the same detector/class/file error. This change does not disable lint or alter the toolchain. See the [last 40 release log lines](release-lint-tail.txt).
 - The quality-pass runner reports ERROR for the .NET gate because its TRX parser rejects duplicate identities for xUnit theory rows in `KnowledgePackValidatorTests.Pack_rejections_match_the_python_validator`. The test process itself exits 0 with 303 passing cases. Formal failure equivalence remains UNKNOWN; the overall gate is not green.
 - Physical-device capture, push-to-talk recognition, camera/storage failure injection, the 10-minute/256-MB cap, and attached online task snapshots have not been exercised on a device in this change. No hand-pose, force, depth, robot-control, or learning-quality claim is made.
 

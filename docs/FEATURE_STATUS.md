@@ -26,7 +26,7 @@ A planned job can cite an uploaded reference page per step. Both clients can sta
 
 Gates on the branch: 322 .NET tests, 64 web tests with the production build reproducing `wwwroot`, 240 Android unit tests with debug assembly and debug and release lint, secret scan. A Chrome regression test exercised offline document reload, history, plan and reference recovery, repeated submission of a pending step, and a single replay on reconnect. No physical Android device, live model or production deployment was used.
 
-As of 31 October 2026 (Pacific), `main` at `4a60d38`. Submission is due 4 November, 9 PM ET.
+As of 31 October 2026 (Pacific), `main` at `36725f6`. Submission is due 4 November, 9 PM ET.
 
 This status was assembled from:
 - the three task lists in `.kiro/specs/`
@@ -106,7 +106,7 @@ The repo's rule is that no Android build is claimed until it has run on a device
 | Voice (GT-T18) | **Partial** | Push-to-talk recognised on the S23. Spoken output not checked by ear; "next step" by voice not shown. Hands-free mode (3 Nov) built, not run on a device |
 | Task linked to an inspection (GT-T21) | **Built** | Tested with fakes. Since GT-T36, the task screens show the linked inspection's stage; the note in the spec predates that. Not run on hardware |
 | Spatial AR, plan phases 0–4: safety fixes, held target, off-screen arrow, guided capture, marker registration (PR 7) | **Built** | Unit tests and debug build only; **not run on a phone or emulator**. The marker isn't scored with `arcoreimg` |
-| Technician-facing wording, Diagnostics setting, inspection record summary (PR 8) | **Built** | Emulator screenshots in `docs/evidence/android/ux-polish/` cover the original change (`e72843c`). The two review-fix commits (`83edf46`, `31cf3fe`) are unit-tested only. Lint is blocked by a crash in an AndroidX lint check. The S23 acceptance run is pending |
+| Technician-facing wording, Diagnostics setting, inspection record summary (PR 8) | **Built** | Emulator screenshots in `docs/evidence/android/ux-polish/` cover the original change (`dabe67b`). The two review-fix commits (`e9efc27`, `d18a3ed`) are unit-tested only. Lint is blocked by a crash in an AndroidX lint check. The S23 acceptance run is pending |
 | Knowledge sources in Android (VK-T07) | **Built** | Source sheet with section, revision, digest, cached and synthetic status (2 Nov); excluded facts with reasons, the grounded advisor and the prediction card (3 Nov). Unit tests and the emulator navigation evidence of 2 Nov; the 3 Nov additions are not device-checked |
 | Meta glasses (T6.3, GT-T19) | **Partial** | Mock Device Kit only (`24-*`, `26-*`, `docs/evidence/live-glasses/`). No real glasses tested |
 | Push-to-talk repair claim (T6.2, P1) | **In progress, not on `main`** | Uncommitted changes to 8 files in the Codex worktree `~/.codex/worktrees/android-voice-claim` |
@@ -120,7 +120,7 @@ The repo's rule is that no Android build is claimed until it has run on a device
 | Docs match what ran (GT-T26) | **Partial** | PRD §1 is dated 29 October. It doesn't cover spatial AR, the PR 8 changes or phone runs 2–3 |
 | Final checks (GT-T27) | **Partial** | .NET, Android and the secret scan passed on 31 October. Web tests and `clean_room_check.sh` weren't run |
 | Freeze, licence scan, tag (T8.1) | **Open** | The README has already been reproduced from a fresh clone |
-| Contributions ledger and `PRIOR_ART.md` (T7.4, VK-T14) | **Partial** | The ledger is up to date through `4a60d38`. `PRIOR_ART.md` hasn't been reviewed |
+| Contributions ledger and `PRIOR_ART.md` (T7.4, VK-T14) | **Partial** | The ledger is up to date through `36725f6`. `PRIOR_ART.md` hasn't been reviewed |
 | Public repo and video access, build-period attribution (T8.2) | **Open** | |
 | Submit via Cerebral Valley (T8.3, GT-T29) | **Open** | Due 4 November, 9 PM ET / 6 PM PT |
 

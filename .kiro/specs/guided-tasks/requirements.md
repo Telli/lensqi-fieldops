@@ -166,7 +166,7 @@ R1–R10 in `.kiro/specs/lensqi-fieldops/requirements.md` and VK-R01 onward in `
 
 ## 7. Implementation status (code review, October 29, 2026)
 
-Reviewed commit `044c906` on the `guided-tasks` branch; 211 .NET, 25 web and 107 Android unit tests passed. Updated after the Oct 29 fixes (GT-T31–T37): 220 .NET, 25 web, 107 Android. "Met" means implemented and covered by tests or recorded evidence; it does not mean validated on a phone or with a real microphone. Differences from `design.md` are listed in its §0.
+Reviewed commit `40ed417` on the `guided-tasks` branch; 211 .NET, 25 web and 107 Android unit tests passed. Updated after the Oct 29 fixes (GT-T31–T37): 220 .NET, 25 web, 107 Android. "Met" means implemented and covered by tests or recorded evidence; it does not mean validated on a phone or with a real microphone. Differences from `design.md` are listed in its §0.
 
 | Requirement | State | Gaps |
 |---|---|---|

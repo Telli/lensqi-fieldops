@@ -1,6 +1,6 @@
 # Spatial AR implementation plan — LensQi FieldOps
 
-Date: October 30, 2026. Planning baseline: repository HEAD d94f401. Read-only source inspection plus the recorded
+Date: October 30, 2026. Planning baseline: repository HEAD a705f5c. Read-only source inspection plus the recorded
 Galaxy S23 Ultra runs in `docs/evidence/tasks/s23-phone-run-{1,2,3}`. Not a new device validation. No application code
 changed.
 
