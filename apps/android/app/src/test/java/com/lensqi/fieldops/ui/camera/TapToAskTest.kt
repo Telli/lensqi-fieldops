@@ -41,4 +41,13 @@ class TapToAskTest {
         assertNull(tappedPart(emptyList(), 250f, 800f, 1000f, 2000f, viewSpace = true, frameWidth = 0, frameHeight = 0))
         assertNull(tappedPart(parts, 250f, 800f, 0f, 0f, viewSpace = true, frameWidth = 0, frameHeight = 0))
     }
+
+    @Test fun `the same id naming another concept in a later batch is not the tapped part`() {
+        val box = com.lensqi.fieldops.domain.live.LiveBox(0.1, 0.1, 0.4, 0.4)
+        val tappedFilter = com.lensqi.fieldops.domain.live.LiveObject(id = "0-1", concept = "filter", label = "filter", box = box)
+        val renumbered = com.lensqi.fieldops.domain.live.LiveObject(id = "0-1", concept = "plug", label = "plug", box = box)
+        assertNull(visibleSelection(tappedFilter, listOf(renumbered)))
+        // The filter is still there under a new id and is the only one of its concept: that is the tapped part.
+        assertEquals("1-1", visibleSelection(tappedFilter, listOf(renumbered, tappedFilter.copy(id = "1-1")))?.id)
+    }
 }

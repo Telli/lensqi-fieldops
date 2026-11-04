@@ -96,7 +96,7 @@ export default function Investigate({ id }: { id: string }) {
 
         {i.stage === "Inconclusive" ? (
           <AiCard title="Inspection closed · inconclusive" says={plainReason(closedReason ?? "The inspection was closed without a decision.")}
-            hint="Nothing was marked as a fault or a repair. The record keeps why it closed.">
+            hint="Closing added no fault or repair record; earlier work stays on record, and the record keeps why it closed.">
             <Button asChild size="lg" variant="outline" className="h-12 w-full rounded-2xl"><Link href="/m">Back to inspections</Link></Button>
           </AiCard>
         ) : (
@@ -164,7 +164,7 @@ export function DeclineViewAction({ stage, awaiting, pending, onConfirm }: { sta
       <p className="font-medium text-foreground">Close this inspection without the view?</p>
       <ul className="list-disc space-y-0.5 pl-4">
         <li>The inspection closes as inconclusive.</li>
-        <li>Nothing is marked as a fault or a repair.</li>
+        <li>No new fault or repair record is added; earlier work stays on record.</li>
         <li>The record keeps that the view was declined.</li>
       </ul>
       <div className="flex gap-2">
