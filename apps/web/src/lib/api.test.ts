@@ -87,3 +87,18 @@ it("keeps a failed claim's key only for the same wording under the same claim", 
   expect(keys[1]).toBe(keys[0]);
   expect(keys[2]).not.toBe(keys[0]);
 });
+
+it("declines the requested view under a kept Idempotency-Key, with no body", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 503 })).mockImplementation(async () => new Response(JSON.stringify({ inspectionId: "i-1", stage: "Inconclusive" })));
+  vi.stubGlobal("fetch", fetch);
+  await expect(api.declineView("i-1", "photo-3")).rejects.toMatchObject({ status: 503 });
+  const r = await api.declineView("i-1", "photo-3");
+  expect(r.stage).toBe("Inconclusive");
+  const [url, init] = fetch.mock.calls[0]! as [string, RequestInit];
+  expect(url).toBe("/v1/inspections/i-1/decline-view");
+  expect(init.method).toBe("POST");
+  expect(init.body).toBeUndefined();
+  const keys = fetch.mock.calls.map(keyOf);
+  expect(keys[0]).toBeTruthy();
+  expect(keys[1]).toBe(keys[0]);
+});

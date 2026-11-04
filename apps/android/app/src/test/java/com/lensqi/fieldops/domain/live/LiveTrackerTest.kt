@@ -33,4 +33,12 @@ class LiveTrackerTest {
     @Test fun `guidance expires on scene change and darkness is measured`() {
         val t = LiveTracker(); t.push(frame(1)); t.push(frame(2, blank = true)); assertFalse(t.current("f-1")); assertEquals(24.0, frameQuality(frame(1, blank = true)).brightness)
     }
+    @Test fun `an anchor-only box fades with its age, from 0point6 at two seconds to 0point25 at ten, and a live box does not`() {
+        assertEquals(1f, staleAlpha(null))
+        assertEquals(0.6f, staleAlpha(0), 1e-6f); assertEquals(0.6f, staleAlpha(2), 1e-6f)
+        assertEquals(0.425f, staleAlpha(6), 1e-6f, "halfway between two and ten seconds is halfway between the alphas")
+        assertEquals(0.25f, staleAlpha(10), 1e-6f); assertEquals(0.25f, staleAlpha(45), 1e-6f)
+        // Monotonic: an older box is never drawn stronger than a newer one.
+        (0..12).zipWithNext().forEach { (a, b) -> assertTrue(staleAlpha(b) <= staleAlpha(a), "$b s drawn stronger than $a s") }
+    }
 }

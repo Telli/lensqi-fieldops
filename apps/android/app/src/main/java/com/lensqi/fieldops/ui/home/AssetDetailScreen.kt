@@ -106,6 +106,14 @@ fun AssetDetailScreen(vm: HomeViewModel, assetId: String, onBack: () -> Unit, on
             }
             if (open != null) item { PrimaryButton("Continue the open inspection", { onOpen(open.inspectionId) }, Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Outlined.ArrowForward) }
             else if (fixture != null) item { PrimaryButton("Start an inspection", { onStart(fixture.fixtureId, assetId) }, Modifier.fillMaxWidth(), icon = Icons.Outlined.QrCodeScanner) }
+            // The site pack is per fixture: this asset's documentation and every open inspection of the site come with it.
+            if (fixture != null) item {
+                Panel {
+                    SitePackRow(s, vm, fixture.fixtureId)
+                    s.packNotice?.let { Text(it, color = Fo.Success, style = MaterialTheme.typography.bodySmall) }
+                    s.packError?.let { Text(it, color = Fo.Failure, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
             item { SectionTitle("Expected installation state") }
             item {
                 Panel {

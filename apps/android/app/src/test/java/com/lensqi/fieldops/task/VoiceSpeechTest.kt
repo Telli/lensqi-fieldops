@@ -31,6 +31,7 @@ class VoiceSpeechTest {
         override var listening = false
             set(value) { field = value; if (value) stop() }
         override val busy get() = held || listening || reading
+        override val speaking get() = reading
         override fun speak(text: String, force: Boolean, replace: Boolean) {
             if (!enabled || held || listening || (!force && reading)) return
             spoken += text; reading = force

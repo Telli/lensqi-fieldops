@@ -4,6 +4,7 @@ import com.lensqi.fieldops.data.api.ChecklistStatus
 import com.lensqi.fieldops.data.api.EvidenceOrigin
 import com.lensqi.fieldops.data.api.InspectionStage
 import com.lensqi.fieldops.data.api.ObservationStatus
+import com.lensqi.fieldops.data.api.ProposedNextAction
 import com.lensqi.fieldops.data.api.VerificationOutcomeKind
 import com.lensqi.fieldops.data.api.VisualChangeVerdict
 
@@ -99,7 +100,43 @@ fun plainReason(reason: String) = when {
     reason.contains("unavailable") -> "The equipment check is unavailable. Try it again when connected."
     reason.contains("change analysis rejected") -> "The reviewed photo was not accepted. Review against the new photo."
     reason.contains("taken before the repair claim") -> "The reviewed photo was taken before the repair. Review against the new photo."
+    reason == "technician declined the requested view" -> "You declined the requested view. Closing adds no fault or repair record; earlier work stays on record."
+    reason.startsWith("view budget of") -> "LensQi asked for as many views as it may; the photos didn't settle it. Closing adds no fault or repair record; earlier work stays on record."
+    reason == "model proposed StopInconclusive" -> "LensQi couldn't settle this from the photos. Closing adds no fault or repair record; earlier work stays on record."
+    reason.startsWith("The inspection is closed") -> "This inspection is closed."
     else -> "A required check is unresolved. Review the evidence and try again."
+}
+
+/** Why the server kept a documentation fact away from this unit; the code stays in the technical details. */
+fun excludedReason(code: String): String = when (code) {
+    "firmware_unknown" -> "Unverified: firmware not known"
+    "firmware_mismatch" -> "Not applicable: different firmware"
+    "hardware_revision_unknown" -> "Unverified: hardware revision not known"
+    "hardware_revision_mismatch" -> "Not applicable: different hardware revision"
+    "manufacturer_mismatch", "model_mismatch" -> "Not applicable: different equipment"
+    "knowledge_conflict" -> "Conflicting sources; needs review"
+    else -> code.replace('_', ' ')
+}
+
+/** A probe's closed-set value in plain words ("HttpOk" → "http ok"); a missing value is a dash, never a guess. */
+fun probeValue(value: String?): String = value?.takeIf { it.isNotBlank() }?.replace(Regex("([a-z])([A-Z])"), "$1 $2")?.lowercase() ?: "—"
+
+/** How a scored prediction is badged, as the web client words it. The server scores; an unknown outcome reads as pending. */
+fun predictionOutcome(outcome: String?): Pair<EvidenceState, String> = when (outcome) {
+    "Confirmed" -> EvidenceState.Verified to "Prediction confirmed"
+    "Falsified" -> EvidenceState.Failed to "Prediction falsified"
+    "Unscorable" -> EvidenceState.Unknown to "Couldn't be scored"
+    else -> EvidenceState.Hypothesis to "Waiting for the check"
+}
+
+/** The advisor's proposed next action in the technician's words. Nothing here runs anything; the buttons do, through the server. */
+fun nextActionText(action: ProposedNextAction): String = when (action) {
+    ProposedNextAction.RequestView -> "Take the view it asks for"
+    ProposedNextAction.SegmentRegion -> "Outline the part it points at"
+    ProposedNextAction.RunApprovedProbe -> "Run the approved check"
+    ProposedNextAction.PrepareWorkOrder -> "Plan the repair"
+    ProposedNextAction.RequestHumanReview -> "Ask a person to review"
+    ProposedNextAction.StopInconclusive -> "The documentation doesn't settle this; no model-specific advice"
 }
 
 @Suppress("UNUSED_PARAMETER")

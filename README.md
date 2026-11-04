@@ -28,7 +28,7 @@ has two modes built on one guided-task core:
   goal, Muse Spark writes a plan labelled "AI-written plan · check your owner's manual" with a risk level, per-step
   cautions and stop-if conditions, and the live camera and voice guide each step. SAM 3.1 outlines the parts a step needs;
   ARCore adds anchors and measured distance on supported Android phones, with 2D tracking elsewhere. Spoken guidance,
-  push-to-talk questions and voice commands send only recognised text to LensQi. Android uses `SpeechRecognizer`,
+  push-to-talk or opt-in hands-free questions and voice commands send only recognised text to LensQi. Android uses `SpeechRecognizer`,
   preferring the on-device recognizer where available on Android 12+; its system fallback may use a provider service.
   Web uses the Web Speech API, which in some browsers sends audio to the browser vendor. The web UI discloses this
   and offers typing instead. An

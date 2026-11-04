@@ -60,6 +60,35 @@
         "python3",
         "scripts/test_report_adapter.py"
       ]
+    },
+    {
+      "id": "web-tests",
+      "cwd": "apps/web",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--reporter=default",
+        "--reporter=junit",
+        "--outputFile.junit={report_dir}/web.xml"
+      ],
+      "kind": "test",
+      "timeout": 180,
+      "report": {
+        "format": "junit",
+        "path": "{report_dir}/web.xml"
+      }
+    },
+    {
+      "id": "web-production",
+      "cwd": "apps/web",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "kind": "check",
+      "timeout": 180
     }
   ]
 }
