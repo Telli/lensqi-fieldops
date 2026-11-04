@@ -202,4 +202,60 @@ class VoiceSpeechTest {
         assertTrue(speaker.enabled)
         assertEquals("Voice on.", speaker.spoken.last())
     }
+
+    /** A hint ready to play, with the gate's settle and spacing already past. */
+    private fun readyPace(speaker: FakeSpeaker): VoicePace = VoicePace(speaker).also { pace ->
+        pace.guidance("Move closer")
+        pace.tick(10_000, true)
+        pace.tick(11_600, true)
+        speaker.spoken.clear()
+        pace.guidance("Hold steady")
+    }
+
+    @Test fun `no hint plays while a question waits for its answer`() {
+        val speaker = FakeSpeaker(); val pace = readyPace(speaker)
+        for (now in 20_000L..40_000L step 500) pace.tick(now, false, asking = true)
+        assertTrue(speaker.spoken.isEmpty())
+    }
+
+    @Test fun `asking cuts off a hint being read`() {
+        val speaker = FakeSpeaker(); val pace = readyPace(speaker)
+        val before = speaker.stops
+        pace.tick(20_000, false, asking = true)
+        pace.tick(20_500, false, asking = true)
+        assertEquals(before + 1, speaker.stops)
+    }
+
+    @Test fun `coaching stays quiet after the answer and then resumes`() {
+        val speaker = FakeSpeaker(); val pace = readyPace(speaker)
+        pace.tick(20_000, false, asking = true)
+        for (now in 20_500L until 40_000L step 500) pace.tick(now, true)
+        assertTrue(speaker.spoken.isEmpty())
+        pace.tick(40_500, true)
+        pace.tick(42_100, true)
+        assertEquals(listOf("Hold steady"), speaker.spoken)
+    }
+
+    @Test fun `the quiet time counts from the end of the answer`() {
+        val speaker = FakeSpeaker(); val pace = readyPace(speaker)
+        pace.tick(20_000, false, asking = true)
+        speaker.speak("The answer", force = true)
+        for (now in 20_500L..50_000L step 500) pace.tick(now, true)
+        speaker.finish()
+        speaker.spoken.clear()
+        for (now in 50_500L until 70_000L step 500) pace.tick(now, true)
+        assertTrue(speaker.spoken.isEmpty())
+        pace.tick(70_500, true)
+        pace.tick(72_100, true)
+        assertEquals(listOf("Hold steady"), speaker.spoken)
+    }
+
+    @Test fun `a pause still holds coaching with no question involved`() {
+        val speaker = FakeSpeaker(); val pace = readyPace(speaker)
+        pace.pause(null)
+        speaker.held = false
+        pace.tick(40_000, true)
+        pace.tick(42_000, true)
+        assertTrue(speaker.spoken.isEmpty())
+    }
 }
