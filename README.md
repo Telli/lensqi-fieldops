@@ -2,7 +2,7 @@
 
 **Visual guidance for technical work. A clear record of what was done and checked.**
 
-**[▶ Watch the 3-minute demo](https://youtu.be/juiMoFNiuqQ)**
+**[▶ Watch the 3-minute demo](https://youtu.be/1dC1IM0Fg8w)**
 
 LensQi FieldOps guides technicians and DIY users through hands-on technical jobs with camera assistance, step-by-step
 plans, voice questions and cited references. Browser and Android clients support the work on site, and an operations
@@ -16,7 +16,7 @@ verification decision. Completing a guided task and verifying a repair are separ
 > This is a development and demonstration application. It has no authentication or tenant isolation, so run it only in
 > a local or controlled environment. See [Scope and limits](#scope-and-limits).
 
-[Demo video](https://youtu.be/juiMoFNiuqQ) · [Screens](#screens) · [Features](#what-you-can-do) · [Quick start](#quick-start) ·
+[Demo video](https://youtu.be/1dC1IM0Fg8w) · [Screens](#screens) · [Features](#what-you-can-do) · [Quick start](#quick-start) ·
 [Verification](#how-fieldproof-verifies-a-repair) · [Development](#development-and-testing) ·
 [Architecture](#architecture) · [Evidence](#validation-and-evidence) · [Docs](#documentation)
 

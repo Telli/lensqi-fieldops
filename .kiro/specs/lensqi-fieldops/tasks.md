@@ -64,7 +64,7 @@ Day 1 actuals (commits `6a7a96f`..`56249e1` in `Telli/lensqi-fieldops`): public 
 
 - [x] T7.1 Run 20–30 labeled observations and a few independent held-out cases; measure one-shot vs active evidence workflow. *(Done 2026-10-28: 25 labelled synthetic scenarios (4 held out) in `fixtures/telecom-lab/eval/`, runner `tools/LensQi.FieldOps.Eval`, report `docs/evaluation/eval-20261028T032756Z.md`.)*
 - [x] T7.2 Record model IDs, genuine Meta calls, measured latency, inconclusive rates and false-completion count. *(Done: report records model ids, tokens, SAM images, median wall time, baseline-A vs proposed-B false completions, receipt verification.)*
-- [x] T7.3 Record three-minute video: observe → ambiguous → request view → fake fix denied → fresh repair succeeds → receipt. *(done 2026-11-04: [video](https://youtu.be/juiMoFNiuqQ).)*
+- [x] T7.3 Record three-minute video: observe → ambiguous → request view → fake fix denied → fresh repair succeeds → receipt. *(done 2026-11-04: [video](https://youtu.be/1dC1IM0Fg8w).)*
 - [ ] T7.4 Update `HACKATHON_CONTRIBUTIONS.md` and `PRIOR_ART.md` including new-work commits.
 - [ ] **Gate:** publicly runnable code, original/cleared fixture media, video links, reproducible demo.
 
