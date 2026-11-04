@@ -20,6 +20,11 @@
 
 ## License and operational rules
 
+- From the November 4, 2026 license-change commit, project-owned software is licensed under the GNU Affero General
+  Public License, version 3 only (`AGPL-3.0-only`); see the root `LICENSE` and README license notice. Copyright
+  (c) 2026 Telli Koroma. Earlier versions published under MIT retain that license.
+- The project license does not replace third-party licenses, vendor documentation rights, model/API service terms
+  or asset-specific notices. Preserve those notices when redistributing; see `docs/PRIOR_ART.md`.
 - Vendor documentation may be protected by copyright or access terms; the public project must not mirror PDFs, scrape private support portals or ship proprietary diagrams without rights.
 - A link to a manufacturer page does not establish that a specific installed unit has the same firmware or hardware revision.
 - Before using production customer documentation, obtain tenant-level authorization, license validation, retention/deletion controls and a source-access review.
