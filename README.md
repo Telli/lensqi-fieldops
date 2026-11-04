@@ -330,7 +330,6 @@ Uploaded evidence and question photos can be stored on the server, so camera que
 | [Product requirements](PRD.md) and [implementation specs](.kiro/specs/) | Product intent, contracts and task-level scope |
 | [Feature status](docs/FEATURE_STATUS.md) | Dated implementation and validation records |
 | [Evidence index](docs/evidence/README.md) | Model calls, device recordings, receipts and provenance labels |
-| [Demo storyboard](docs/DEMO_STORYBOARD.md) | The demonstration sequence and its live/simulated boundaries |
 | [Live-probe runbook](docs/LIVE_PROBE_RUNBOOK.md) | Configure and verify an owned HTTP endpoint |
 | [Teaching recordings](docs/TEACHING_RECORDINGS.md) | Capture, review, consent and export format |
 | [Android voice claims](docs/ANDROID_VOICE.md) | Recording a repair claim, the transcribe API and what has been verified |

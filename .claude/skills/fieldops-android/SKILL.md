@@ -3,7 +3,7 @@ name: fieldops-android
 description: Plan and rules for the P1 Android (Kotlin/Compose) FieldOps client against the existing inspection API, including offline-first capture, provenance labelling, and what must not be claimed. Load before creating or editing anything under apps/android.
 ---
 
-# FieldOps Android client (Track B — starts October 28 in parallel with the backend; see docs/OPUS_HANDOFF_PLAN.md)
+# FieldOps Android client (Track B — starts October 28 in parallel with the backend)
 
 ## Non-negotiables
 - The app never decides a stage or an outcome; it renders `GET /v1/inspections/{id}` and sends commands. Every banner text comes from the API decision.

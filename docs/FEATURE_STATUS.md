@@ -140,35 +140,3 @@ The repo's rule is that no Android build is claimed until it has run on a device
 | Knowledge sources in Android (VK-T07) | **Built** | Source sheet with section, revision, digest, cached and synthetic status (2 Nov); excluded facts with reasons, the grounded advisor and the prediction card (3 Nov). Unit tests and the emulator navigation evidence of 2 Nov; the 3 Nov additions are not device-checked |
 | Meta glasses (T6.3, GT-T19) | **Partial** | Mock Device Kit only (`24-*`, `26-*`, `docs/evidence/live-glasses/`). No real glasses tested |
 | Push-to-talk repair claim (T6.2, P1) | **In progress, not on `main`** | Uncommitted changes to 8 files in the Codex worktree `~/.codex/worktrees/android-voice-claim` |
-
-## Submission work
-
-| Task | Status | Note |
-| --- | --- | --- |
-| S23 acceptance run (GT-T25) | **Partial** | Runs 1–3 are recorded. Not yet shown: a shutter step-photo check, "next step" by voice, audible speech, the spatial AR phases and the PR 8 changes |
-| Demo video (T7.3, GT-T28) | **Open** | Storyboard ready in `docs/DEMO_STORYBOARD.md` |
-| Docs match what ran (GT-T26) | **Partial** | PRD §1 is dated 29 October. It doesn't cover spatial AR, the PR 8 changes or phone runs 2–3 |
-| Final checks (GT-T27) | **Partial** | .NET, Android and the secret scan passed on 31 October. Web tests and `clean_room_check.sh` weren't run |
-| Freeze, licence scan, tag (T8.1) | **Open** | The README has already been reproduced from a fresh clone |
-| Contributions ledger and `PRIOR_ART.md` (T7.4, VK-T14) | **Partial** | The ledger is up to date through `36725f6`. `PRIOR_ART.md` hasn't been reviewed |
-| Public repo and video access, build-period attribution (T8.2) | **Open** | |
-| Submit via Cerebral Valley (T8.3, GT-T29) | **Open** | Due 4 November, 9 PM ET / 6 PM PT |
-
-## Shortest path to a complete submission
-
-1. **S23 run.**
-   - Re-run the run 2 regression on the spatial AR build.
-   - Print the 80 mm marker and check port registration.
-   - Do a shutter step-photo check.
-   - Say "next step" aloud, with sound on.
-
-   Save the screenshots to `docs/evidence/android/` and `docs/evidence/tasks/`. This one session closes most of rows 3–5 and GT-T25.
-2. **SAM outline on a real step part.** One genuine call, recorded under `docs/evidence/tasks/`. This closes GT-T24.
-3. **Video.** Record from `docs/DEMO_STORYBOARD.md`, labelling the simulated checks.
-4. **Docs.** Update PRD §1 and the README to match what ran (GT-T26). Then run the final checks, including web and `clean_room_check.sh`, freeze, and submit.
-
-These can be cut if time runs short:
-- VK-T08, VK-T09, VK-T12 and VK-T15–T18
-- the voice repair claim
-- real glasses
-- the remaining part of VK-T07

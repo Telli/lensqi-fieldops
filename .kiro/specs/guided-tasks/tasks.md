@@ -79,7 +79,7 @@
 ## Days 6–7: Tue Nov 3 – Wed Nov 4 — Buffer, polish, submit
 
 - [ ] **GT-T27 — Final checks.** `dotnet test --nologo`; `npm --prefix apps/web test` and `run build`; `./gradlew :app:testDebugUnitTest :app:assembleDebug`; `scripts/secret_scan.sh`; `scripts/clean_room_check.sh`.
-- [ ] **GT-T28 — Demo video.** Storyboard from PRD §5: DIY goal, guided step with AR, voice question and command, step check, safety boundary, technician closer, engineering proof; simulated checks labelled.
+- [x] **GT-T28 — Demo video.** *(done 2026-11-04: [video](https://youtu.be/juiMoFNiuqQ).)* Storyboard from PRD §5: DIY goal, guided step with AR, voice question and command, step check, safety boundary, technician closer, engineering proof; simulated checks labelled.
 - [ ] **GT-T29 — Submit.** Public repository and video accessible; submission before 9 PM ET / 6 PM Pacific on Nov 4.
 
 ## Added Oct 29: free-form help
