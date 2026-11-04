@@ -9,7 +9,7 @@ Day 1 actuals (commits `f46e967`..`c5d0984` in `Telli/lensqi-fieldops`): public 
 ## Day 1: Tue Oct 27 — Contract + real Muse
 
 - [x] T0.1 *(Recorded in `docs/HACKATHON_CONTRIBUTIONS.md`: clarification not received; fresh implementation per PRD §4A.)* Record official indie prior-code reuse clarification and event start in `docs/HACKATHON_CONTRIBUTIONS.md` (or mark unresolved; do not copy private source).
-- [x] T0.2 *(Done 2026-10-28: `Telli/lensqi-fieldops`, AGPL-3.0-only, `.gitignore`, `.env.example`, `scripts/secret_scan.sh`.)* Initialize clean public repo + copyright/license/data-rights review + `.gitignore` / `.env.example` / secret check.
+- [x] T0.2 *(Done 2026-10-28: `Telli/lensqi-fieldops`, AGPL-3.0-only, `.gitignore`, `.env.example`, `scripts/secret_scan.sh`. Updated 2026-11-04: README and package metadata state AGPL-3.0-only, with third-party terms preserved.)* Initialize clean public repo + copyright/license/data-rights review + `.gitignore` / `.env.example` / secret check.
 - [x] T0.3 Scaffold .NET 10 solution with Core/Api/Meta/Diagnostics and tests. *(Done; the Android app is P1 per PRD §19 and is not scaffolded.)*
 - [x] T0.4 Implement `ExpectedTwin` schema validation, cross-item invariants and version hash; load synthetic `LAB-RACK-01`. *(Done 2026-10-28: `ExpectedTwinStore` + `ExpectedTwinInvariants`; binding ⊆ diagnostics check is in the Python validator, .NET cross-check pending.)*
 - [x] T0.5 Implement Model API `muse-spark-1.3` with strict typed response; log provider name, request ID and elapsed time without image/key leakage. *(Done 2026-10-28: text-grounded call passed; the first image request is folded into T1.3.)*

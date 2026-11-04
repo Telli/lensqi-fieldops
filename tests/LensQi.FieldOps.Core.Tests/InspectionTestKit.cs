@@ -83,5 +83,5 @@ public sealed class InspectionTestKit
         return p;
     }
 
-    public VerificationDecision Verify(string? requestId = null) => Session.Verify(requestId ?? Id("verify"), Now);
+    public VerificationDecision Verify(string? requestId = null, RequiredKnowledgeCheck? knowledge = null) => Session.Verify(requestId ?? Id("verify"), Now, knowledge);
 }

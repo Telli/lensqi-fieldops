@@ -223,4 +223,51 @@ public class InspectionNegativeTests
         k.Tick(); k.RecordProbe(k.Probe(true));
         Assert.Equal(VerificationResult.NeedsHumanReview, k.Verify().Result);
     }
+
+    [Fact]
+    public void A_verified_inspection_refuses_new_reviews_and_acknowledgements_and_replays_earlier_ones()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        k.Tick();
+        var p = k.Photo();
+        var requirement = k.Twin.Twin.MandatoryRequirements.First().RequirementId;
+        foreach (var req in k.Twin.Twin.MandatoryRequirements)
+            k.Session.ReviewChecklist("review-" + req.RequirementId, req.RequirementId, ChecklistStatus.Satisfied, p, k.Now);
+        k.Session.Acknowledge("ack", k.Now);
+        k.Tick(); k.RecordProbe(k.Probe(true));
+        Assert.Equal(VerificationResult.Verified, k.Verify().Result);
+        var before = k.Session.Events.Count;
+
+        k.Tick();
+        var review = Assert.Throws<InspectionConflictException>(() => k.Session.ReviewChecklist("late", requirement, ChecklistStatus.NotSatisfied, p, k.Now));
+        Assert.Equal(InspectionErrorCodes.InvalidState, review.Code);
+        Assert.Equal(InspectionErrorCodes.InvalidState, Assert.Throws<InspectionConflictException>(() => k.Session.Acknowledge("late-ack", k.Now)).Code);
+
+        Assert.Equal(before, k.Session.Events.Count);
+        Assert.Equal(ChecklistStatus.Satisfied, k.Session.State.Checklist[requirement].Status);
+        Assert.True(k.Session.State.TechnicianAcknowledged);
+        Assert.Equal(InspectionStage.VerifiedComplete, k.Session.State.Stage);
+
+        // A client retrying a command the server already took gets its earlier outcome, not a refusal.
+        Assert.NotEmpty(k.Session.ReviewChecklist("review-" + requirement, requirement, ChecklistStatus.Satisfied, p, k.Now));
+        Assert.NotEmpty(k.Session.Acknowledge("ack", k.Now));
+        Assert.Equal(before, k.Session.Events.Count);
+    }
+
+    [Fact]
+    public void An_inconclusive_inspection_refuses_new_reviews_and_acknowledgements()
+    {
+        var k = new InspectionTestKit();
+        k.ReachRepairClaim();
+        k.Tick();
+        var p = k.Photo();
+        Assert.NotEqual(VerificationResult.Verified, k.Verify().Result);   // back to NeedsEvidence, where an assessment is accepted
+        k.Assess(ProposedNextAction.StopInconclusive, ObservationStatus.Unknown, p);
+        Assert.Equal(InspectionStage.Inconclusive, k.Session.State.Stage);
+
+        var requirement = k.Twin.Twin.MandatoryRequirements.First().RequirementId;
+        Assert.Throws<InspectionConflictException>(() => k.Session.ReviewChecklist("late", requirement, ChecklistStatus.Satisfied, p, k.Now));
+        Assert.Throws<InspectionConflictException>(() => k.Session.Acknowledge("late-ack", k.Now));
+    }
 }

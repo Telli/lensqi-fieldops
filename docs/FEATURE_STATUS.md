@@ -1,5 +1,11 @@
 # Feature status
 
+## As of 3 November 2026 (Pacific), `claude/verification-and-safety-gates` (response to the 3 November application review)
+
+A closed inspection refuses new checklist reviews and acknowledgements. Restricted work stays restricted on follow-up questions, live guidance and step checks, and restricted plans are checked in the title, cautions, stop conditions, photo checks, the summary and the professional reason. Verification is held while a fact the site requires is unconfirmed for the bound asset (VK-T10, policy 1.6). From receipt format 1.3 the verifier, the API check and the export all require the exact rendering of the receipt. Not addressed from that review: the live label when a fixture turns off fresh diagnostics, the saved question-frame wording, the stopped-task verify button, and the seven-day retention requirement.
+
+Gates on the branch: 407 .NET tests (Core 222, Meta 18, Api 167); web typecheck, 78 tests, production build reproducing `wwwroot`; Android 311 unit tests with debug and release assembly and debug and release lint (no errors); secret scan PASS. No physical Android device, browser run, live model or production deployment was used.
+
 ## As of 3 November 2026 (Pacific), `codex/open-product-scope` (the six open product-scope items)
 
 The features the 3 November review found on the server or web but missing on mobile were built; `docs/quality-pass/2026-11-03-open-scope.md` lists each with its files. Android gains the grounded advisor (`/knowledge/reason`) with excluded facts and a prediction card (`/predictions`), an opt-in continuous hands-free mode with a speech-privacy badge, tap-to-ask on live outlines with age-faded boxes, a "Download site pack" that stores the site record, every asset's vendor knowledge and the open inspections for work out of signal (new `GET /v1/fixtures/{fixtureId}/pack`), on-device OCR of printed asset tags with a typed fallback and the scanner on the technician's new-task screen, and "I can't safely get this view" closing a NeedsEvidence inspection as inconclusive. Mobile web gains the same decline, the advisor panel and the excluded facts, warnings, origin badge and pack digest on the knowledge page. All of it is **Built**: unit tests and compilation only, no phone, microphone, speech engine or camera run.
@@ -75,10 +81,11 @@ Because of the Actions problem, the test results for PRs 7 and 8 come from local
 | Area | Status | Evidence or note |
 | --- | --- | --- |
 | FieldProof inspection loop: Muse assessment, SAM outlines, fixture-approved diagnostics, fake fix denied, real fix verified | **Done** | `InspectionApiTests`; evaluation run; live loopback run on the S23 (`docs/evidence/live-phone/`) |
-| Evidence receipt with hashes, verifier CLI and tamper detection | **Done** | `docs/evidence/receipt-sample/`, `verify-receipt` |
+| Evidence receipt with hashes, verifier CLI and tamper detection | **Done** | `docs/evidence/receipt-sample/`, `verify-receipt`. From format 1.3 the page must be the exact rendering of the receipt; older bundles keep the digest check and say so |
 | Vendor knowledge: packs, applicability, cited retrieval, proposal validation (VK-T01–T06) | **Done** | Tests; recorded genuine calls |
 | Predictions, visual change analysis, references in the receipt (VK-T11, VK-T24–T27) | **Done** | Tests |
-| Diagnostic-to-fixture binding and documentation gates (VK-T08–T10) | **Open** | No `requiredKnowledgeFactIds` binding in code |
+| Documentation gate on verification (VK-T10) | **Done** | Policy 1.6 holds a passing inspection while a required fact is unconfirmed. Judged on the installed pack at verify time. `RequiredKnowledgeGateTests`, `VerificationIntegrityApiTests` |
+| Diagnostic-to-fixture binding and result constraints (VK-T08, VK-T09) | **Partial** | The `requiredKnowledgeFactIds` binding loads and is cross-checked against its pack; neither task is signed off against its full acceptance |
 | Full vendor-knowledge negative-case suite (VK-T12) | **Open** | Many cases are covered by existing tests, but the suite as specified isn't checked off |
 | RouterOS read-only probe (VK-T15–T18, P1) | **Open** | Optional, after the other vendor-knowledge P0 work |
 | Guided-task core, plan validator, planner, coach, checker, `/v1/tasks` (GT-T01–T08) | **Done** | Core and API tests; genuine calls in `docs/evidence/tasks/` |
@@ -131,7 +138,7 @@ The repo's rule is that no Android build is claimed until it has run on a device
 4. **Docs.** Update PRD §1 and the README to match what ran (GT-T26). Then run the final checks, including web and `clean_room_check.sh`, freeze, and submit.
 
 These can be cut if time runs short:
-- VK-T08–T10, VK-T12 and VK-T15–T18
+- VK-T08, VK-T09, VK-T12 and VK-T15–T18
 - the voice repair claim
 - real glasses
 - the remaining part of VK-T07

@@ -569,6 +569,48 @@ public class TaskApiTests
     }
 
     [Fact]
+    public async Task A_follow_up_and_live_guidance_stay_restricted_after_a_question_named_the_work()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        var (id, _) = await Create(c, new { mode = "Freeform" });
+        const string bad = "Remove the panel cover.";
+        async Task<string> Ask(string question)
+        {
+            f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { answer = bad, focus = Array.Empty<string>() });
+            using var form = new MultipartFormDataContent { { new StringContent(question), "question" } };
+            return (await Body(await c.PostAsync($"/v1/tasks/{id}/ask", form))).GetProperty("answer").GetString()!;
+        }
+        Assert.Equal(TaskEndpoints.Referral, await Ask("Can I work on the breaker panel?"));
+        Assert.Equal(TaskEndpoints.Referral, await Ask("How do I open it?"));
+        Assert.Contains("\"restrictedTopic\":\"MainsElectrical\"", f.FakeChat.LastText);   // the model is told too, not only checked afterwards
+
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new { seen = "A grey panel.", screenText = (string?)null, recommendation = bad, focus = new[] { "panel" }, expectedEquipmentInView = false });
+        using var frame = new MultipartFormDataContent { { new ByteArrayContent(TestImages.Png(640, 480)), "image", "preview.png" }, { new StringContent("frame-1"), "frameId" } };
+        var live = await c.PostAsync($"/v1/tasks/{id}/live/guide", frame);
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(TaskEndpoints.Referral, (await Body(live)).GetProperty("recommendation").GetString());
+    }
+
+    [Fact]
+    public async Task A_restricted_plan_with_a_hands_on_caution_is_not_recorded()
+    {
+        using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();
+        f.FakeChat.CannedResponse = JsonSerializer.Serialize(new
+        {
+            title = "Panel assessment", summary = "Observe and refer to an electrician.", risk = "High", estimatedMinutes = 5, restricted = "MainsElectrical", professionalRequired = true,
+            professionalReason = "Only a qualified electrician may do this work.", tools = Array.Empty<string>(), parts = Array.Empty<string>(),
+            steps = new object[]
+            {
+                new { title = "Observe the panel", instruction = "Photograph the closed panel from a safe distance.", handsOn = false, lookFor = Array.Empty<string>(),
+                    cautions = new[] { new { kind = "Electrical", text = "Remove the panel cover." } }, stopIf = Array.Empty<string>(), check = new { required = false, whatDoneLooksLike = "" } },
+            },
+        });
+        var (_, created) = await Create(c, new { mode = "Diy", goal = "Assess my breaker panel" });
+        Assert.Equal(JsonValueKind.Null, created.GetProperty("task").GetProperty("plan").ValueKind);
+        Assert.Contains("caution", created.GetProperty("planError").ToString());
+    }
+
+    [Fact]
     public async Task A_retried_question_returns_the_recorded_answer_without_another_model_call()
     {
         using var f = new FieldOpsApiFactory(); using var c = f.CreateClient();

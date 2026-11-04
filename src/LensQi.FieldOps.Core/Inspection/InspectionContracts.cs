@@ -63,7 +63,8 @@ public sealed record VerificationDecision(
     IReadOnlyList<string> Reasons,
     IReadOnlyList<string> VerifiedClaims,
     string PolicyVersion,
-    string FixtureDigest)
+    string FixtureDigest,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] RequiredKnowledgeCheck? RequiredKnowledge = null)
 {
     public bool IsVerified => Result == VerificationResult.Verified;
 }

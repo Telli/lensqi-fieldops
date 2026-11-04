@@ -80,6 +80,7 @@ fun sentence(t: String?) = t?.replaceFirstChar { it.uppercase() }.orEmpty()
 
 /** Short banner sentence for a policy reason; the full reason stays in the technical details. */
 fun plainReason(reason: String) = when {
+    reason.contains("Required vendor facts are not confirmed") -> "The required documentation couldn't be confirmed for this equipment. Ask the site administrator to review it."
     reason == "Specified live fixture checks passed" -> "The required live equipment checks passed."
     reason.startsWith("Qualifying ") && reason.endsWith("fixture checks passed; this is not a live measurement") -> "The required checks passed using a non-live source. This does not verify live equipment."
     reason.startsWith("Expected-state version mismatch") -> "The site record has changed. Ask the site administrator to review this inspection."

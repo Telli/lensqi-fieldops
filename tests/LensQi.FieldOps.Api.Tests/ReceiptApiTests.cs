@@ -63,7 +63,7 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         var digest = CanonicalJson.Sha256(CanonicalJson.Serialize(node.AsObject()));
         node["manifestSha256"] = digest;
         File.WriteAllText(receiptPath, node.ToJsonString());
-        File.WriteAllText(Path.Combine(bundle, "receipt.html"), digest);
+        File.WriteAllText(Path.Combine(bundle, "receipt.html"), ReceiptHtml.Render(JsonSerializer.Deserialize<EvidenceReceipt>(node.ToJsonString(), LensQi.FieldOps.Core.Knowledge.KnowledgeJson.Options)!));
         Assert.True(ReceiptVerifier.Verify(bundle).IsValid);
         var forged = JsonDocument.Parse(await _client.GetStringAsync($"/v1/inspections/{id}/receipt/verify")).RootElement;
         Assert.False(forged.GetProperty("isValid").GetBoolean());
@@ -106,7 +106,7 @@ public class ReceiptApiTests : IClassFixture<FieldOpsApiFactory>
         var digest = CanonicalJson.Sha256(CanonicalJson.Serialize(node.AsObject()));
         node["manifestSha256"] = digest;
         File.WriteAllText(receiptPath, node.ToJsonString());
-        File.WriteAllText(Path.Combine(bundle, "receipt.html"), digest);
+        File.WriteAllText(Path.Combine(bundle, "receipt.html"), ReceiptHtml.Render(JsonSerializer.Deserialize<EvidenceReceipt>(node.ToJsonString(), LensQi.FieldOps.Core.Knowledge.KnowledgeJson.Options)!));
         Assert.True(ReceiptVerifier.Verify(bundle).IsValid);
         var forged = await Check(id);
         Assert.False(forged.GetProperty("isValid").GetBoolean());

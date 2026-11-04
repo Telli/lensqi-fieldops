@@ -92,6 +92,16 @@ public static class TaskPlanValidator
             foreach (var s in plan.Steps.Where(s => s.HandsOn)) unsafeRules.Add($"step {s.Id} is hands-on in {why} work");
             foreach (var s in plan.Steps.Where(s => !s.HandsOn && (TaskSafety.InstructsHandsOn(s.Instruction) || TaskSafety.InstructsHandsOn(s.Title))))
                 unsafeRules.Add($"step {s.Id} instructs hands-on work in {why} work");
+            // Everything else the person reads or hears as guidance.
+            if (TaskSafety.TitleInstructsHandsOn(plan.Title, goal + " " + details)) unsafeRules.Add($"the title instructs hands-on work in {why} work");
+            foreach (var s in plan.Steps)
+            {
+                if (s.Cautions.Any(c => TaskSafety.InstructsHandsOn(c.Text))) unsafeRules.Add($"step {s.Id} has a caution that instructs hands-on work in {why} work");
+                if (s.StopIf.Any(TaskSafety.InstructsHandsOnInCondition)) unsafeRules.Add($"step {s.Id} has a stop condition that instructs hands-on work in {why} work");
+                if (s.Check is { } check && TaskSafety.InstructsHandsOn(check.WhatDoneLooksLike)) unsafeRules.Add($"step {s.Id} has a check that instructs hands-on work in {why} work");
+            }
+            if (TaskSafety.InstructsHandsOn(plan.Summary)) unsafeRules.Add($"the summary instructs hands-on work in {why} work");
+            if (TaskSafety.InstructsHandsOn(plan.ProfessionalReason)) unsafeRules.Add($"professionalReason instructs hands-on work in {why} work");
         }
         if (plan.ProfessionalRequired) Text(plan.ProfessionalReason, "professionalReason", 400);
 
@@ -117,13 +127,20 @@ public static class TaskSafety
     private static readonly Regex Action = new($@"(?<![a-z])((disconnect|reconnect|unscrew|unbolt|loosen|tighten|pry|cut|strip|remove|replace|install|detach|reattach|unplug|open|close|turn|take off|take out|take apart|wire)\s+(\S+\s+){{0,2}}{Hazard}(?![a-z])|(splice|solder|crimp|rewire|bleed|discharge|depressuri[sz]e|purge|recharge)(?![a-z]))",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private const string Pro = @"(licensed |qualified |certified |a |an |the |your )*(electrician|plumber|professional|pro|technician|installer|contractor|engineer|dealer|mechanic|gas company|utility)";
-    // "Do not open the panel", "never disconnect…": a negation within three words before the action.
-    private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+(\S+\s+){0,2}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // "Do not open the panel", "never disconnect…": a negation within three words before the action, or one that carries
+    // through a list ("do not touch it or remove the cover", "do not switch off main, pull breakers, or unscrew the panel").
+    // A comma after the last item ends it ("don't wait, remove the cover", "do not call or wait, remove the cover" are
+    // commands) and so does a new clause.
+    private static readonly Regex NegatedBefore = new(@"(do not|don't|dont|never|avoid|no need to)\s+((\S*[^\s,]\s+){0,2}|((?!\b(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)\b).)*\b(or|nor)\s+(\S*[^\s,]\s+){0,2})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // "The door is open with exposed wires": a description, not a command. It needs a word that can describe a state with no
+    // object after it: "what you need to do is open the panel" and "all that remains is disconnect the wires" still instruct.
+    private static readonly Regex StateBefore = new(@"(?<![a-z])(is|are|was|were|been|being|stays|remains)\s+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex StateWord = new(@"^(open|close|cut)\s+(with|to|near|by|on|at|in|and|or)(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     // "Have a licensed electrician replace…", "ask a plumber to disconnect…", "a plumber should disconnect…": the action
     // belongs to someone else, but only when the delegation comes before it in the same clause. Merely contacting a
     // professional hands nothing over: "call an electrician for advice and remove the cover", "remove the cover, and call
     // an electrician" and "call an electrician, then remove the cover" all still tell the person to act.
-    private static readonly Regex Delegated = new($@"((have|let)\s+{Pro}|(ask|call|get|hire|book|pay)\s+{Pro}\s+to(?![a-z])|{Pro}\s+(should|will|can|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex Delegated = new($@"((have|let)\s+{Pro}|(ask|call|contact|get|hire|book|pay)\s+{Pro}\s+to(?![a-z])|{Pro}\s+(should|will|can|may|must|needs to|has to))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // A delegation covers the actions after it only while the professional stays the actor. "then", "while", "but",
     // "before" and the like start a clause with its own actor, and "you"/"yourself" hand the action back to the person:
@@ -131,10 +148,42 @@ public static class TaskSafety
     private static readonly Regex ClauseBreak = new(@"(?<![a-z])(then|while|whilst|meanwhile|but|before|after|once|until|whereas|so|otherwise|yet)(?![a-z])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SecondPerson = new(@"(?<![a-z'])(you|yourself|yourselves)(?![a-z'])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // A stop condition describes a situation to stop in, shown after "Stop if": "you would need to open the panel",
+    // "you open the panel". Only a bare command in that field tells the person to act.
+    private static readonly Regex SituationBefore = new(@"((need|needs|needed|have|has|had|require|requires|required|must|would|asked|told|tempted|want|wants)\s+(you\s+)?(to\s+)?|you\s+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     /// <summary>True when any sentence tells the person to do hands-on work themselves.</summary>
-    public static bool InstructsHandsOn(string? text) =>
+    public static bool InstructsHandsOn(string? text) => Instructs(text, situation: false);
+
+    // How a title hands a job over: "Replace garage breaker panel - arrange professional".
+    private static readonly Regex ReferralTitle = new($@"(\s[-–—]|:)\s+(arrange|call|contact|hire|find|get|book|ask|see|consult|use)\s+(for\s+)?{Pro}(\s+\w+)?\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly HashSet<string> TitleFiller = ["a", "an", "the", "my", "your", "this", "that"];
+
+    private static IEnumerable<string> LowerWords(string? text) =>
+        Regex.Matches(text ?? "", "[a-z0-9]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Select(m => m.Value.ToLowerInvariant());
+
+    /// <summary>
+    /// The same check for a plan title. A title may repeat the job the person asked about, in their own words, when it ends by
+    /// handing that job over. "Unscrew the panel cover - call an electrician" is a new command with a referral attached, unless
+    /// unscrewing the cover is what they asked about.
+    /// </summary>
+    public static bool TitleInstructsHandsOn(string? title, string? personsWords)
+    {
+        if (!InstructsHandsOn(title)) return false;
+        var referral = ReferralTitle.Match(title!);
+        if (!referral.Success) return true;
+        var asked = LowerWords(personsWords).ToHashSet(StringComparer.Ordinal);
+        return !LowerWords(title![..referral.Index]).All(w => TitleFiller.Contains(w) || asked.Contains(w));
+    }
+
+    /// <summary>The same check for a stop condition, where naming the situation to stop in is not an instruction.</summary>
+    public static bool InstructsHandsOnInCondition(string? text) => Instructs(text, situation: true);
+
+    private static bool Instructs(string? text, bool situation) =>
         !string.IsNullOrWhiteSpace(text) && Regex.Split(text.Replace('’', '\''), @"(?<=[.!?;:])\s+|\n+").Any(sentence =>
-            Action.Matches(sentence).Any(m => !NegatedBefore.IsMatch(sentence[..m.Index]) && !DelegatedBefore(sentence, m.Index)));
+            Action.Matches(sentence).Any(m => !NegatedBefore.IsMatch(sentence[..m.Index]) && !(StateBefore.IsMatch(sentence[..m.Index]) && StateWord.IsMatch(sentence[m.Index..])) && !DelegatedBefore(sentence, m.Index)
+                && !(situation && SituationBefore.IsMatch(sentence[..m.Index]))));
 
     private static bool DelegatedBefore(string sentence, int actionAt)
     {
@@ -148,11 +197,24 @@ public static class TaskSafety
     private static string NextClause(string sentence, int from) =>
         ClauseBreak.Match(sentence, from) is { Success: true } brk ? sentence[from..brk.Index] : sentence[from..];
 
+    /// <summary>
+    /// The professionals-only topic of this task: the plan's label, or the person's own words in the question at hand, the goal,
+    /// a hand-off or any earlier question. "How do I open it?" after a question about a breaker panel is still about the panel.
+    /// The AI's answers are never classified. Everything here is on the task's log, so it survives a restart.
+    /// </summary>
+    public static RestrictedCategory Topic(TaskState task, string? text = null)
+    {
+        if (task.Plan is { Restricted: not RestrictedCategory.None } plan) return plan.Restricted;
+        var asked = RestrictedTopics.Classify(text);
+        if (asked != RestrictedCategory.None) return asked;
+        var job = RestrictedTopics.Classify(task.Goal + " " + task.Details + " " + task.Handoff?.UserWords());
+        return job != RestrictedCategory.None ? job
+            : task.Answers.Select(a => RestrictedTopics.Classify(a.Question)).LastOrDefault(c => c != RestrictedCategory.None);
+    }
+
     /// <summary>Whether this task, or the words of a question about it, concerns professionals-only work.</summary>
     public static bool IsRestricted(TaskState task, string? text = null) =>
-        task.Plan is { } plan && (plan.Restricted != RestrictedCategory.None || plan.ProfessionalRequired)
-        || RestrictedTopics.Classify(task.Goal + " " + task.Details) != RestrictedCategory.None
-        || RestrictedTopics.Classify(text) != RestrictedCategory.None;
+        task.Plan is { ProfessionalRequired: true } || Topic(task, text) != RestrictedCategory.None;
 
     /// <summary>
     /// What may be shown for model text in restricted work: hands-on instructions are replaced by the referral, anything
