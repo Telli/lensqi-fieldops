@@ -1,209 +1,334 @@
 # LensQi FieldOps
 
-**See the task. Do it right. Prove it when it matters.** Meta Global AI Developer Hackathon 2026, Indie track, Push the Frontier.
+**Visual guidance for technical work. A clear record of what was done and checked.**
 
-## Built for the Meta Global AI Developer Hackathon
+LensQi FieldOps guides technicians and DIY users through hands-on technical jobs with camera assistance, step-by-step
+plans, voice questions and cited references. Browser and Android clients support the work on site, and an operations
+dashboard brings inspections, evidence and outcomes into one place.
 
-Event-period implementation includes guided tasks on web and Android, “Just ask” camera help, the FieldProof
-inspection workflow, approved diagnostics, receipts and the operations dashboard. Muse Spark 1.3
-(`muse-spark-1.3`) serves plans, coaching, step checks and inspection assessment; SAM 3.1 (`sam-3.1`) serves
-segmentation. Muse Spark Open is **not integrated**: the requested hackathon alias and credentials remain unconfirmed
-([feasibility record](docs/evidence/tasks/open-model-feasibility.md)).
+For repairs tied to a site record, **FieldProof** adds a verification workflow: capture the evidence, review the work,
+run an approved equipment check and issue a receipt. AI supports the investigation; a deterministic policy makes the
+verification decision. Completing a guided task and verifying a repair are separate outcomes.
 
-The v1.1/v2.0 specification kits and pre-event design material are not claimed as new implemented functionality.
-No private LensIQ source is copied. The [contribution ledger](docs/HACKATHON_CONTRIBUTIONS.md) separates
-implementation from baseline/design material and records remaining attribution questions.
+> [!IMPORTANT]
+> This is a development and demonstration application. It has no authentication or tenant isolation, so run it only in
+> a local or controlled environment. See [Scope and limits](#scope-and-limits).
 
-From a clean checkout of this branch, `dotnet test --nologo` exercises the API with fake models and simulated probes,
-including `TechnicianJourneyTests`. `scripts/clean_room_check.sh --source . --no-meta` clones committed work and
-checks the inspection demo and receipts without paid model calls; it does not provide a fake-model interactive
-planner. Genuine calls are skipped explicitly. Neither command uses Docker. See [journey evidence and reproduction](docs/evidence/tasks/technician-journey.md).
+[Screens](#screens) · [Features](#what-you-can-do) · [Quick start](#quick-start) ·
+[Verification](#how-fieldproof-verifies-a-repair) · [Development](#development-and-testing) ·
+[Architecture](#architecture) · [Evidence](#validation-and-evidence) · [Docs](#documentation)
 
-## What this is
+## Screens
 
-LensQi walks a person through a hands-on technical job with a live camera, AR outlines, AI-written steps and voice. It
-has two modes built on one guided-task core:
+**Guided work:** describe the job, review the plan, then work through it with the camera.
 
-- **DIY mode** for everyday technical users: "change the oil in my 2025 Civic", "mount an IP camera". The user states a
-  goal, Muse Spark writes a plan labelled "AI-written plan · check your owner's manual" with a risk level, per-step
-  cautions and stop-if conditions, and the live camera and voice guide each step. SAM 3.1 outlines the parts a step needs;
-  ARCore adds anchors and measured distance on supported Android phones, with 2D tracking elsewhere. Spoken guidance,
-  push-to-talk or opt-in hands-free questions and voice commands send only recognised text to LensQi. Android uses `SpeechRecognizer`,
-  preferring the on-device recognizer where available on Android 12+; its system fallback may use a provider service.
-  Web uses the Web Speech API, which in some browsers sends audio to the browser vendor. The web UI discloses this
-  and offers typing instead. An
-  optional step photo check suggests whether a step looks done; the user decides.
-- **Technician mode** for installs, repairs and on-site help, with the same guided steps. A task tied to a site record
-  finishes with the approved equipment check and a FieldProof verified receipt.
-- **Free-form help ("Just ask")** for spontaneous use: the camera opens at once and the user asks about whatever is in
-  view by voice or text, with no plan first. "Make a plan" turns a longer job into a guided task.
-
-For recognized restricted categories (gas, mains electrical, EV high voltage, airbags, refrigerant and structural work),
-`TaskPlanValidator` structurally rejects plans containing hands-on steps or missing the required professional referral.
-Free-form answers use prompt instructions, output checks and a referral safeguard: the server appends a referral when
-a question matches the configured restricted phrases and the answer lacks “professional”. This weaker mechanism does
-not block every unsafe answer. Only FieldProof marks anything verified.
-
-**Status (October 29, 2026):** guided tasks, free-form help and the technician hand-off to FieldProof are built on
-the `guided-tasks` branch for web and Android. On October 29 the suites passed: 220 .NET tests, 25 web tests and 107
-Android unit tests. Genuine plans, typed questions, step checks and live step coaching are recorded in
-[docs/evidence/tasks/](docs/evidence/tasks/) from the browser and the emulator. A technician task linked to an
-inspection reaches `VerifiedCompleteSimulated` and an offline-verified receipt in an API journey test with fake models
-([technician-journey.md](docs/evidence/tasks/technician-journey.md)). Not yet: a phone run of the task flow, voice with
-a real microphone, ARCore anchors or distance on a real part (the first S23 Ultra ARCore run produced none,
-[docs/LIVE_AR.md](docs/LIVE_AR.md)), spoken-feedback gating on the Android step runner, the
-offline queue for step-check photos, and glasses on tasks. Plan and status per task: [PRD.md](PRD.md) §1,
-[.kiro/specs/guided-tasks/tasks.md](.kiro/specs/guided-tasks/tasks.md).
-
-### The FieldProof inspection loop (Technician mode, built)
-
-1. A field technician photographs equipment. Muse Spark 1.3 says what it observes, suspects or cannot see, and asks for a better view instead of guessing.
-2. SAM 3.1 localizes the cited part (the yellow cable) on the original pixels; the crop is never treated as independent evidence.
-3. A read-only diagnostic, chosen only from the fixture's allowlist and resolved server-side, measures the endpoint. Every result is labelled LIVE, SIMULATED or REPLAY.
-4. Vendor and site documentation guides the investigation with cited facts; it is never evidence that a repair worked.
-5. When the technician claims a repair, change evidence compares the new photo with the earlier ones: a re-submitted or unchanged photo is rejected before any probe runs.
-6. Code, not the model, owns every state transition. A repair is **Verified Complete** only when a fresh accepted post-repair photo, a human-reviewed checklist, an acknowledgement and a fresh passing diagnostic all agree.
-7. A simulated or replayed measurement can never produce `VerifiedCompleteLive`.
-8. Every inspection issues a FieldProof receipt: canonical JSON, a digest per artifact, an append-only event trail, and an offline verifier that fails on a one-byte change.
-9. Surfaces: a technician web app and an operations dashboard (React, built into the API, no Node at runtime), and an Android client (Kotlin/Compose) that works offline and syncs a hashed capture when the network returns.
-10. Everything here was written during the event; no private LensIQ source is copied.
-
-| | | |
+| Choose how to work | Review the AI-written plan | Follow the step · Android emulator |
 |---|---|---|
-| ![The AI outlines the cable and asks for a closer view](docs/evidence/ui-v2/02-scan-ambiguous-ai-outline.jpg) | ![A fake fix is refused](docs/evidence/ui-v2/05-fake-fix-verification-failed.jpg) | ![The real fix is verified, labelled simulated](docs/evidence/ui-v2/06-real-fix-verified-simulated.jpg) |
+| <img src="docs/evidence/ui-v3/01-home-modes.jpg" alt="Home screen offering Do it yourself, Just ask and Technician" width="260"> | <img src="docs/evidence/ui-v3/02-guided-plan.jpg" alt="Plan for testing a smoke detector with risk level, tools, cautions and stop conditions" width="260"> | <img src="docs/evidence/tasks/android-live-coaching.png" alt="Android step screen on the emulator with AI guidance, cautions, a stop condition and step controls over a virtual room" width="260"> |
 
-## Measured, not claimed
+**FieldProof:** a plausible photo is not enough. The repair must also pass the approved equipment check.
 
-Latest evaluation, `docs/evaluation/eval-20261028T061752Z.md`: 25 labelled scenarios (4 held out) over synthetic renders,
-genuine `muse-spark-1.3` and `sam-3.1` calls, simulated endpoint.
+| Investigate | Refused: the check still fails | Passed · simulated |
+|---|---|---|
+| <img src="docs/evidence/ui-v3/03-investigation-outline.jpg" alt="Inspection with an AI outline on the yellow cable and the approved check as the next action" width="260"> | <img src="docs/evidence/ui-v3/04-verification-refused-simulated.jpg" alt="Changed photo accepted, but the attempt is marked not verified because the equipment still fails its check" width="260"> | <img src="docs/evidence/ui-v3/05-verification-passed-simulated.jpg" alt="Verified complete, clearly labelled as a simulated check" width="260"> |
 
-| Metric | Result |
-|---|---:|
-| Deterministic expectations | 25 / 25 |
-| False completions with the full loop and gate | **0** |
-| Fake fixes a single model look would have accepted | 4 / 5 |
-| Change evidence on post-repair photos: duplicate / no change / changed / unscorable | 2 / 1 / 6 / 2 |
-| Probes run on a rejected post-repair photo | 0 |
-| Receipts verified / issued | 12 / 12 |
+**Operations dashboard:** each photo with its origin and digest, AI observations, required evidence and check results.
 
-Live code path: `docs/evidence/receipt-loopback/` is a genuine `LiveLocal` HTTP measurement of a loopback server standing
-in for the lab endpoint (`VerifiedCompleteLive`, labelled `LIVE_LOCAL_PROBE (loopback)`); the owned-hardware run is
-`docs/LIVE_PROBE_RUNBOOK.md`. Every evidence file and its label: [docs/evidence/README.md](docs/evidence/README.md).
+![Operations workspace for an inspection, showing evidence photos, AI observations and verification state](docs/evidence/ui-v3/06-ops-inspection-workspace.jpg)
 
-## Reproduce
+*The web screens replay recorded inspections and use synthetic equipment images and simulated diagnostics. The Android
+step is an earlier capture from the emulator's virtual room, not a physical phone. The
+[evidence index](docs/evidence/README.md#readme-screens-ui-v3) gives the origin and scope of each image.*
 
-Prerequisites: .NET 10 SDK, Python 3.10+, and for genuine model calls a Meta Model API key in `.env`
-(`cp .env.example .env`, then set `MODEL_API_KEY`; the key is read only from server configuration or the environment).
+## What you can do
 
-One command checks everything from a fresh clone (validators, tests, the hero flow over HTTP, receipts, two genuine-call
-scenarios) and prints `RESULT: PASS` or `FAIL`:
+- **Just ask.** Ask about the camera view by voice or text, then carry selected photos and answers into a guided plan.
+- **Guided work.** Create a plan with tools, reference photos, risk levels, cautions and stop conditions. Follow live
+  guidance, ask about visible parts and request photo checks. You decide when a step is complete.
+- **Verified inspections.** Investigate an asset, consult applicable vendor facts, record a repair claim, review
+  post-repair evidence and run the fixture's approved diagnostic. The decision is shown with its reasons.
+- **Work without signal.** Reopen saved jobs and reference pages, queue supported captures and step updates, and
+  synchronize when connectivity returns. Android can also download a site pack with asset knowledge and open
+  inspections. Model calls and verification require the server.
+- **Review and handover.** Review tasks, assets, knowledge packs and reports in the web dashboard. Export work packages
+  with photos, origins, digests and any already-issued linked receipt.
+- **Teaching recordings.** Record demonstrations on Android with timed action annotations, consent controls, human
+  review and a validated export.
+
+| Client | Capture and guidance |
+|---|---|
+| **Both** | Spoken guidance, optional hands-free questions and typed questions |
+| **Web** | Browser camera and speech capabilities |
+| **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones and an optional Meta glasses integration |
+
+## Quick start
+
+The API serves the committed web bundle and stores data in local JSONL event logs and evidence files. You don't need
+Node.js, a database server or Docker to run the application.
+
+### Prerequisites
+
+| To do this | You need |
+|---|---|
+| Run the API and image processing | .NET 10 SDK, Python with `venv` and `pip`, and Git |
+| Use AI features | A Meta Model API key with access to `muse-spark-1.3` and `sam-3.1` |
+| Develop the web app, or run the full reproducibility check | Node.js 22.12+ on the 22.x line, or Node.js 24, with npm |
+| Develop the Android app | JDK 21 and Android SDK platform 35. The app supports Android 12 (API 31) and later |
+
+Commands use a macOS or Linux shell and start in the repository root unless noted.
+
+### Run the API and web app
+
+1. Clone the repository and install the Python dependencies:
+
+   ```bash
+   git clone https://github.com/Telli/lensqi-fieldops.git
+   cd lensqi-fieldops
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt
+   ```
+
+2. Create your configuration file, then set `MODEL_API_KEY` in `.env`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Start the API:
+
+   ```bash
+   dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
+   ```
+
+4. Open the app:
+
+   | Address | Purpose |
+   |---|---|
+   | [127.0.0.1:5199/m](http://127.0.0.1:5199/m) | Guided tasks and technician inspections |
+   | [127.0.0.1:5199/ops](http://127.0.0.1:5199/ops) | Operations dashboard |
+   | [127.0.0.1:5199/health](http://127.0.0.1:5199/health) | API health, loaded fixtures and diagnostic mode |
+
+**Without a model key,** the server and deterministic inspection checks still run. Planning, visual assessment,
+segmentation and coaching require genuine model access; there is no interactive fake-model planner.
+
+<details>
+<summary>Configuration notes</summary>
+
+- The API reads the key from server configuration, the environment or the gitignored `.env` file.
+- It detects the Python virtual environment automatically. Set `FIELDOPS_PYTHON` to use another interpreter.
+- Invalid knowledge packs, bindings or site records prevent startup.
+- Simulated diagnostic controls appear only when `Diagnostics:Mode` is `Simulated`.
+- Data is stored in `src/LensQi.FieldOps.Api/data/` by default. Override it with `Storage__DataDirectory`.
+- Other defaults live in [appsettings.json](src/LensQi.FieldOps.Api/appsettings.json).
+
+</details>
+
+### Reproduce the inspection demo without model calls
 
 ```bash
-scripts/clean_room_check.sh
+scripts/clean_room_check.sh --source . --no-meta
 ```
 
-Step by step:
+This clones the current committed branch into a temporary directory, installs Python dependencies, validates fixtures,
+runs the .NET tests and starts an isolated API. It then checks:
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt -r tools/sam-parser/requirements.txt
-```
+- duplicate-photo rejection
+- a failed repair claim
+- a passing simulated repair
+- receipt verification and tamper detection
+- that a fresh web build matches the committed bundle byte for byte (when npm is installed)
+
+Genuine model evaluation is reported as **skipped**. The Android suite and web unit tests [run separately](#development-and-testing).
+
+| To change the check | Do this |
+|---|---|
+| Include two genuine model scenarios, when a key is available (provider charges may apply) | Omit `--no-meta` |
+| Test the origin repository instead of the local committed branch | Omit `--source .` |
+
+## How FieldProof verifies a repair
+
+An inspection is bound to a versioned site record: the equipment, its expected state, required visual checks and
+approved diagnostics. The supplied lab fixture follows this sequence:
+
+1. **Capture and investigate.** Muse Spark separates observations, suspicions and unknowns. SAM locates parts on the
+   original image; a crop remains a view of the same evidence.
+2. **Consult the record.** Vendor and site facts are filtered for the asset's identity and revision. Suggestions carry
+   citations, and predicted diagnostic results are recorded separately from measurements.
+3. **Document the repair.** After a repair claim is recorded, a new photo is compared with earlier evidence. A duplicate
+   or unchanged image returns the inspection for more evidence before a verification probe runs.
+4. **Review and confirm.** The technician reviews the required checklist against post-repair evidence and acknowledges
+   the repair. Missing, conflicting or rejected evidence holds or denies verification.
+5. **Measure and decide.** The supplied fixture policy requires a fresh passing diagnostic and confirmation of any
+   required vendor facts. A failed measurement overrides a model's suggestion of success.
+6. **Issue the record.** The receipt contains the decision, event history, evidence and artifact digests. Closed
+   inspections reject new checklist reviews and acknowledgements; retries of accepted requests still replay.
+
+### Diagnostic modes
+
+| Mode | What runs | What a pass means |
+|---|---|---|
+| **Simulated** (default lab) | A simulated endpoint | `VerifiedCompleteSimulated`. It is not a live equipment measurement. |
+| **RecordedReplay** | Previously recorded results, replayed in order | `VerifiedCompleteSimulated`, if the fixture policy allows replay. It is not a live equipment measurement. |
+| **LiveLocal** | Read-only HTTP checks through server-configured aliases | `VerifiedCompleteLive`. The endpoint passed at that time; this does not prove correct cabling or physical work. |
+
+Requests and model output cannot supply arbitrary probe URLs or commands. See the
+[live-probe runbook](docs/LIVE_PROBE_RUNBOOK.md) for configuration and measurement limits.
+
+### Receipts
+
+Receipts can be checked without the running application. Format 1.3 validates the rendered HTML against the receipt as
+well as checking manifest and artifact digests; older formats retain their documented legacy checks.
+
+Receipts establish bundle integrity. They are not digitally signed proof of the issuer or of physical repair quality.
+
+## Development and testing
+
+### Backend
 
 ```bash
 dotnet test --nologo
+bash scripts/secret_scan.sh
 ```
+
+Core tests exercise the state machines and policy. API tests use fake model clients and simulated diagnostics; model
+client tests use stub HTTP responses. These suites do not require a Meta key or a database.
+
+### Web
+
+Keep the API running on port 5199, then use a second terminal:
 
 ```bash
-dotnet run --project src/LensQi.FieldOps.Api --no-launch-profile --urls http://127.0.0.1:5199
+cd apps/web
+npm ci
+npm run dev
 ```
 
-Open <http://127.0.0.1:5199/m> for the technician app (a phone frame on a desktop, full screen on a phone) and
-<http://127.0.0.1:5199/ops> for the operations dashboard. Demo controls for the simulated endpoint appear only in
-Simulated mode (the default). The API refuses to start if any knowledge pack, fixture binding or expected twin is invalid.
-
-The web app's source is `apps/web` (React, Tailwind, TanStack Query); its built bundle is committed in the API's
-`wwwroot`, so running the API needs no Node. To change the UI:
+Vite serves the development UI on port 5173 and proxies API requests to port 5199. Set `FIELDOPS_API` to change that
+target. To validate and rebuild the production bundle:
 
 ```bash
-cd apps/web && npm ci && npm run dev
+# From apps/web
+npm test
+npm run build
 ```
 
-`npm run dev` serves on port 5173 and proxies the API on 5199; `npm run build` typechecks and rewrites `wwwroot`. The
-clean-room check fails if the committed bundle differs from a fresh build.
+- The build runs TypeScript checks and writes to `src/LensQi.FieldOps.Api/wwwroot/`.
+- Edit the source in `apps/web` and commit the generated bundle with UI changes.
+- Browser camera access and offline job recovery require HTTPS or localhost. Plain HTTP over a LAN does not qualify.
+
+### Android
 
 ```bash
-dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 --only c01-clear-p2,f01-seated-down
+cd apps/android
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug :app:lintRelease
 ```
+
+- The emulator's default API address is `http://10.0.2.2:5199/`.
+- On a physical device, set a reachable API address in the app's settings.
+- ARCore is optional; unsupported devices use 2D assistance.
+
+See [live AR](docs/LIVE_AR.md) and [Meta glasses setup](docs/GLASSES.md) for device-specific behavior and integration
+requirements.
+
+### Receipts and model evaluation
+
+Check a committed sample bundle offline:
 
 ```bash
 dotnet run --project tools/LensQi.FieldOps.VerifyReceipt -- docs/evidence/receipt-sample
 ```
 
-Android (JDK 21 and the Android SDK; the emulator reaches the host at `10.0.2.2:5199`):
+With the API running and a model key configured, run two evaluation scenarios:
 
 ```bash
-cd apps/android && ./gradlew :app:testDebugUnitTest :app:assembleDebug
+dotnet run --project tools/LensQi.FieldOps.Eval -- --base http://127.0.0.1:5199 --only c01-clear-p2,f01-seated-down
 ```
 
-## How it works
+## Architecture
 
-| Piece | Where |
+| Component | Responsibility | Location |
+|---|---|---|
+| **Core** | Guided-task and inspection state machines, plan validation, knowledge applicability, verification policy and receipts | [src/LensQi.FieldOps.Core](src/LensQi.FieldOps.Core/) |
+| **Meta integration** | Muse Spark planning, coaching, assessment and cited proposals; SAM segmentation and the Python image-processing sidecar | [src/LensQi.FieldOps.Meta](src/LensQi.FieldOps.Meta/), [tools/sam-parser](tools/sam-parser/) |
+| **Diagnostics** | Simulated, replay and guarded live HTTP probes | [src/LensQi.FieldOps.Diagnostics](src/LensQi.FieldOps.Diagnostics/) |
+| **API** | ASP.NET Core endpoints, event and evidence storage, model-call limits, site packs and static web hosting | [src/LensQi.FieldOps.Api](src/LensQi.FieldOps.Api/) |
+| **Web** | React, TypeScript, Tailwind CSS and TanStack Query; technician and operations views | [apps/web](apps/web/) |
+| **Android** | Kotlin and Jetpack Compose; CameraX, Room, WorkManager, voice, AR and teaching recordings | [apps/android](apps/android/) |
+| **Fixtures and tools** | Site records, vendor packs, recorded API contracts, evaluation scenarios and the receipt verifier | [fixtures](fixtures/), [tools](tools/), [scripts](scripts/) |
+
+Three rules hold across these components:
+
+- **The Core owns state transitions.** Clients display server outcomes.
+- **Models return typed inputs,** which are validated before use.
+- **Events are the record.** Inspection and task events are appended to JSONL logs and replayed on restart, including
+  the recorded task request IDs used for retries.
+
+## Validation and evidence
+
+The full local gate for [PR #20](https://github.com/Telli/lensqi-fieldops/pull/20) passed on November 4, 2026:
+
+| Check | Result |
 |---|---|
-| Guided-task session, append-only events, plan validator with restricted categories | `src/LensQi.FieldOps.Core/Tasks/` |
-| Task planner and step coach (guidance, questions, step checks) on Muse Spark | `src/LensQi.FieldOps.Meta/Tasks/` |
-| `/v1/tasks` API and its JSONL task store | `src/LensQi.FieldOps.Api/Features/Tasks/`, `Api/Infrastructure/Tasks/` |
-| Task screens: web `apps/web/src/pages/m/task/`, `lib/tasks.ts`, `lib/voice.ts`; Android `ui/task/`, `voice/Voice.kt` | `apps/web/`, `apps/android/` |
-| Inspection state machine, append-only events, dual-proof policy (`fieldproof-policy/1.6`) | `src/LensQi.FieldOps.Core/Inspection/` |
-| Change evidence: dHash duplicates, SAM mask IoU and shift, versioned thresholds | `Core/Inspection/VisualChange.cs`, `Api/Infrastructure/Evidence/ChangeEvidenceService.cs` |
-| Muse Spark client (strict JSON schema), visual assessment, grounded proposals | `src/LensQi.FieldOps.Meta/Muse`, `Vision`, `Knowledge` |
-| SAM 3.1 client (Responses API) and the Python sidecar (parser, crop, image measurements) | `src/LensQi.FieldOps.Meta/Segmentation`, `tools/sam-parser/` |
-| Probes: simulated, recorded replay, guarded live HTTP; server-side alias resolution | `src/LensQi.FieldOps.Diagnostics/` |
-| Minimal API, hardening (timeouts, rate limits, image limits) | `src/LensQi.FieldOps.Api/` |
-| Technician web app and operations dashboard (plain-language states, technical details collapsed) | `apps/web/` → `src/LensQi.FieldOps.Api/wwwroot/` |
-| FieldProof receipts and the offline verifier | `src/LensQi.FieldOps.Core/Receipts/`, `tools/LensQi.FieldOps.VerifyReceipt/` |
-| Android client: CameraX capture, Room queue, WorkManager sync, cached views | `apps/android/` |
-| Expected twin, vendor knowledge packs, evaluation scenarios, API recordings | `fixtures/` |
+| .NET: Core, Meta and API | 407 tests passed |
+| Web | 78 tests passed; typecheck and production build passed |
+| Android | 311 unit tests passed; debug/release builds and lint passed |
+| Repository checks | Secret scan and test-report adapter passed |
 
-The hero flow over HTTP, endpoint by endpoint, is in `.claude/skills/fieldops-run-and-verify/SKILL.md` and runs end to end
-in `scripts/clean_room_check.sh`; every response the Android client codes against is recorded in `fixtures/api-recordings/`
-(`fixtures/api-recordings/index.json` lists method and path) by `scripts/record_api.py`.
+The no-model clean-checkout check also passed against `main` at `e3090de` on November 4, including the HTTP inspection
+flow, receipt tamper detection and a byte-for-byte web rebuild. It did not make genuine model calls.
 
-## Read next
+### Recorded model and device evidence
 
-| Document | Purpose |
+- **Synthetic inspection evaluation.** The [October 28 run](docs/evaluation/eval-20261028T061752Z.md) used 25 labelled
+  scenarios, genuine Muse/SAM calls and a simulated endpoint. All 25 deterministic expectations passed. The full
+  verification loop recorded zero false completions and verified all 12 issued receipts. These are results on synthetic
+  renders, not field accuracy estimates.
+- **Physical phone.** The [S23 guided-task run](docs/evidence/tasks/s23-phone-run-2/run.json) recorded ARCore anchors,
+  estimated distances and a recognized spoken question. A [separate phone inspection](docs/evidence/live-phone/README.md)
+  used real camera captures of a synthetic image and a live loopback HTTP check, not a measurement of physical equipment.
+- **Not yet validated.** Recent hands-free, offline, knowledge and spatial-AR changes are not all covered by
+  physical-device runs. Real Meta glasses have not been tested. The [teaching recorder](docs/evidence/android/teaching/README.md)
+  has emulator evidence, not a physical-device or training-quality benchmark.
+
+See [feature status](docs/FEATURE_STATUS.md) for dated implementation and validation records.
+
+## Scope and limits
+
+**Not production software.** Authentication, tenant isolation, signed receipts and automatic server-side
+retention or deletion policies are not implemented. The [production design](docs/PRODUCTION_DESIGN.md) describes
+proposed work, not deployed capabilities.
+
+**Safety routing is heuristic.** Recognized restricted work, such as mains electrical, gas, EV high voltage, airbags,
+refrigerant and structural work, is routed to professional referral. Plan validation checks the text users see, and
+response guards retain the restricted context of recorded questions. These wording checks are not safety certification.
+
+**Guidance is not proof.** Step checks, AR distances, model confidence and documentation citations do not establish
+that a repair succeeded. A live HTTP result proves only what that endpoint measured at that time.
+
+**Photos and speech may leave the device.** Speech recognition may use the phone or browser vendor's service. Android
+prefers on-device recognition when available, and LensQi receives recognized text. Uploaded evidence and question
+photos can be stored on the server, so camera questions should not be treated as ephemeral.
+
+## Documentation
+
+| Document | Use it for |
 |---|---|
-| [docs/DEMO_STORYBOARD.md](docs/DEMO_STORYBOARD.md) | The three-minute video, shot by shot, with what is simulated and what is live |
-| [docs/evidence/README.md](docs/evidence/README.md) | Every recorded artifact and its label |
-| [docs/LIVE_PROBE_RUNBOOK.md](docs/LIVE_PROBE_RUNBOOK.md) | Live probe against an owned endpoint |
-| [PRD.md](PRD.md) | Product requirements: scope, state machine, trust invariants |
-| [.kiro/specs/](.kiro/specs/) | Guided-tasks spec, the FieldProof parent spec and the vendor-knowledge child spec, with task status |
-| [docs/evidence/tasks/README.md](docs/evidence/tasks/README.md) | Guided-task recordings: genuine plans, questions, checks, emulator screenshots, the technician journey |
-| [docs/PITCH.md](docs/PITCH.md) | Product pitch and feature review |
-| [docs/PRODUCTION_DESIGN.md](docs/PRODUCTION_DESIGN.md) | Beyond the demo: architecture and roadmap |
-| [docs/HACKATHON_CONTRIBUTIONS.md](docs/HACKATHON_CONTRIBUTIONS.md) | Event-period work ledger, one row per commit |
-| [docs/PRIOR_ART.md](docs/PRIOR_ART.md) | Provenance and third-party inputs |
-| [docs/OPUS_HANDOFF_PLAN.md](docs/OPUS_HANDOFF_PLAN.md) | The parallel plan to the November 4 submission |
+| [Product requirements](PRD.md) and [implementation specs](.kiro/specs/) | Product intent, contracts and task-level scope |
+| [Feature status](docs/FEATURE_STATUS.md) | Dated implementation and validation records |
+| [Evidence index](docs/evidence/README.md) | Model calls, device recordings, receipts and provenance labels |
+| [Demo storyboard](docs/DEMO_STORYBOARD.md) | The demonstration sequence and its live/simulated boundaries |
+| [Live-probe runbook](docs/LIVE_PROBE_RUNBOOK.md) | Configure and verify an owned HTTP endpoint |
+| [Teaching recordings](docs/TEACHING_RECORDINGS.md) | Capture, review, consent and export format |
+| [Sources and rights](docs/SOURCES_AND_RIGHTS.md) | Project licensing, third-party terms and documentation rights |
 
-## Limits, stated plainly
+## Project background
 
-- HTTP 200 from an endpoint is a measured fact about that endpoint at that moment, not proof of correct cabling; the
-  lab switch is unmanaged and no probe here can see which port is used.
-- Model output, documentation citations and predictions are not evidence that equipment was repaired.
-- A `Changed` change-evidence verdict means something in the target region changed; lighting or angle can cause it.
-  It is necessary for a repair claim, never sufficient.
-- A receipt detects tampering within its bundle; it cannot prove who captured the original image.
-- The images in this repository are synthetic renders. No real-equipment photographs or lab-hardware measurements are
-  included yet. The Android inspection and guided-task flows have run on the emulator; the only physical-phone run so far
-  is the S23 Ultra ARCore live-assist check in `docs/LIVE_AR.md`, which produced no anchor or distance.
-- Task plans are AI-written guidance, not manufacturer instructions or safety certification. A step photo check is a
-  suggestion; a task's `Completed` phase is not verification.
-- Free-form answers about restricted work rely on a phrase match and an appended referral, not structural rejection.
-- Task command idempotency keys are held in memory: after an API restart a retried task command is checked against
-  state again rather than replayed. Inspection verify decisions are persisted by request id.
+Built for the **Meta Global AI Developer Hackathon 2026**, Indie track, *Push the Frontier*, using `muse-spark-1.3`
+and `sam-3.1`. Muse Spark Open is [not integrated](docs/evidence/tasks/open-model-feasibility.md).
 
-## Provenance
-
-New public repository created during the event. No source from the private `Telli/LensIQ-Monorepo` is copied
-(PRD §4A, `docs/SOURCES_AND_RIGHTS.md`, `docs/COMPONENT_REUSE.md`).
+No source from the private `Telli/LensIQ-Monorepo` is copied. Earlier specification kits and design material are not
+claimed as new implemented functionality. The [contribution ledger](docs/HACKATHON_CONTRIBUTIONS.md) and
+[provenance register](docs/PRIOR_ART.md) document that boundary and remaining attribution questions.
 
 ## License
 

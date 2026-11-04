@@ -19,10 +19,31 @@ labels, and nothing is described more strongly than its label allows.
 | `stage-one-gate-20261028T014314Z.json`, `stage-one-gate-20261028T021847Z.json` | Two grounded `muse-spark-1.3` proposals per run with strict JSON schema, prompt digest, fact IDs, server-side validation (`allAccepted: true`). No diagnostic was run. | `LIVE_META` |
 | `sam-spike-20261028T022522Z.json`, `sam-spike-20261028T022522Z-overlay.jpg` | First `sam-3.1` calls through the Responses API: raw output digest, parsed boxes and masks, overlay drawn on the original image. | `LIVE_META`, `SYNTHETIC_IMAGE` |
 
-## Web app (current)
+## README screens (`ui-v3/`)
+
+Captured on 2026-11-04 from the web bundle at `e3090de` in headless Chrome. The API replayed a temporary copy of event
+logs recorded on 2026-10-28 and 2026-10-30, so **no new model calls were made and no photo was retaken**. Three records
+were replayed only up to an earlier event, to show a state the record really passed through; the original logs are
+unchanged. The dates inside the screens are the original recording dates.
+
+| File | What it shows | Source record | Labels |
+|---|---|---|---|
+| `ui-v3/01-home-modes.jpg` | Mode home: Do it yourself, Just ask and Technician. | — | — |
+| `ui-v3/02-guided-plan.jpg` | Genuine Muse plan before acceptance: risk, tools, cautions and stop conditions. | `T-39dc52767669`, replayed to `PlanProposed` | `LIVE_META` |
+| `ui-v3/03-investigation-outline.jpg` | Inspection hub: SAM's outline on the cable, one next action, the progress bar. | `I-e31344df973b`, complete log | `LIVE_META`, `SYNTHETIC_IMAGE` |
+| `ui-v3/04-verification-refused-simulated.jpg` | Changed photo accepted, equipment check still failing, attempt not verified. | `I-5cb4b038251d`, replayed to its first `VerificationFailed` | `LIVE_META`, `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
+| `ui-v3/05-verification-passed-simulated.jpg` | Second attempt: **Verified complete · simulated check**. | `I-60601b447fa5`, complete log | `LIVE_META`, `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
+| `ui-v3/06-ops-inspection-workspace.jpg` | Operations workspace for the same inspection: evidence strip with origins and digests, AI observations, required evidence, verification state. | `I-60601b447fa5`, complete log | `LIVE_META`, `SIMULATED_PROBE`, `SYNTHETIC_IMAGE` |
+
+The screens read "AI outlines · captured photo" because that is the UI's wording; the images are synthetic renders. The
+README also shows `tasks/android-live-coaching.png`, an emulator capture from 2026-10-28 (`LIVE_META`, `EMULATOR`). The
+Android step screen has changed since then.
+
+## Web app (2026-10-28 walkthrough)
 
 The rebuilt technician app and operations dashboard, walked through end to end on 2026-10-28 against the local API
-(genuine Muse and SAM calls, simulated endpoint, synthetic renders imported through the photo picker).
+(genuine Muse and SAM calls, simulated endpoint, synthetic renders imported through the photo picker). The UI has changed
+since then; these stills record that date, and `ui-v3/` shows the current screens.
 
 | File | What it shows | Labels |
 |---|---|---|
@@ -123,7 +144,9 @@ Indexed in detail in [tasks/README.md](tasks/README.md).
 | `tasks/technician-journey.md`, `technician-journey-fakes/`, `technician-journey-test-results.json` | Linked technician task: fake fix denied, `VerifiedCompleteSimulated`, offline receipt verification and tamper rejection | `FAKE_MODELS`, `SIMULATED_PROBE` |
 | `tasks/open-model-feasibility.md` | Muse Spark Open review: deferred, no call made | — |
 
-No voice recognition, spoken question or phone run of the task flow is recorded.
+Physical-phone task runs are in `tasks/s23-phone-run-1/`, `s23-phone-run-2/` and `s23-phone-run-3/`. Each `run.json`
+records what was and was not observed; screenshots that show the surroundings are not kept. Run 2 includes a recognized spoken question and ARCore anchors with estimated
+distances on a ceiling smoke detector.
 
 ## Live camera assistance (`live-ar/`, `live-glasses/`, `ar-ux/`)
 
@@ -139,6 +162,5 @@ diagnostics are `SIMULATED_PROBE`). The Android contract tests decode every one 
 
 - A live measurement of owned lab hardware (`receipt-live/`), produced by the owner with `docs/LIVE_PROBE_RUNBOOK.md`.
 - Photographs of real equipment (`fixtures/telecom-lab/images/real/`).
-- A physical-phone run of the Android inspection or guided-task flow (the only phone run so far is the ARCore live-assist check above, without a committed artifact).
-- A spoken question through real speech recognition, and SAM outlines on a real step part.
-- ARCore anchors or measured distance on real equipment.
+- SAM outlines on a real step part, "next step" as a voice command, and spoken output checked by ear.
+- ARCore anchors or distances on lab equipment. The phone runs above used a household smoke detector.
