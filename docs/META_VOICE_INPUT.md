@@ -34,6 +34,9 @@ The existing inspection-specific voice-claim endpoint still enforces closed-insp
     hands-free stayed on.
   - **Android.** On the emulator, the notice appeared, the microphone opened and silence ended as "I didn't catch that."
     with no crash. The emulator's microphone provided no speech.
-- A person's voice on a real browser or phone microphone has not been tested.
+- A person's voice on a Galaxy S23 Ultra microphone, in [this run record](evidence/android/camera-layout/s23-run-20261104.json):
+  spoken questions were answered, and Android repair claims worked end to end. Muse Voice misheard "reseated" on all three
+  takes that used it, while simpler words came back nearly right. This is one run, not an accuracy benchmark.
+- A person's voice on a real browser microphone and recognition quality on a noisy site have not been tested.
 
 Meta's [file transcription reference](https://dev.meta.ai/docs/api-reference/voice/transcribe) was checked for this integration.

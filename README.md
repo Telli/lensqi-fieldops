@@ -284,11 +284,14 @@ flow, receipt tamper detection and a byte-for-byte web rebuild. It did not make 
   verification loop recorded zero false completions and verified all 12 issued receipts. These are results on synthetic
   renders, not field accuracy estimates.
 - **Physical phone.** The [S23 guided-task run](docs/evidence/tasks/s23-phone-run-2/run.json) recorded ARCore anchors,
-  estimated distances and a recognized spoken question. A [separate phone inspection](docs/evidence/live-phone/README.md)
-  used real camera captures of a synthetic image and a live loopback HTTP check, not a measurement of physical equipment.
+  estimated distances and a recognized spoken question. A [November 4 S23 run](docs/evidence/android/camera-layout/s23-run-20261104.json)
+  used a person's voice on a real ceiling smoke detector: questions carried a camera frame, SAM 3.1 labels tracked the
+  detector, and [Muse Voice repair claims](docs/ANDROID_VOICE.md) worked end to end, with misheard words corrected in
+  review. A [separate phone inspection](docs/evidence/live-phone/README.md) used real camera captures of a synthetic image
+  and a live loopback HTTP check, not a measurement of physical equipment.
 - **Not yet validated.** Recent hands-free, offline, knowledge and spatial-AR changes are not all covered by
-  physical-device runs. Real Meta glasses have not been tested. [Muse Voice repair claims](docs/ANDROID_VOICE.md) have genuine
-  provider calls and emulator evidence, not a physical phone microphone or a person's voice. The [teaching recorder](docs/evidence/android/teaching/README.md)
+  physical-device runs. Real Meta glasses have not been tested. Speech recognition has not been measured on a noisy site
+  or tried with a person's voice on a browser microphone. The [teaching recorder](docs/evidence/android/teaching/README.md)
   has emulator evidence, not a physical-device or training-quality benchmark.
 
 See [feature status](docs/FEATURE_STATUS.md) for dated implementation and validation records.
