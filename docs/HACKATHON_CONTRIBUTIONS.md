@@ -122,6 +122,7 @@ as implementation commits land.
 | 2026-11-04T15:18:14-08:00 | `2630d95` | Android spoken output through a server route to ElevenLabs, with the phone's TextToSpeech as fallback | dotnet test 438 passed; Android 345 unit tests, debug and release assembly, debug lint; secret scan PASS; emulator with a stand-in provider; S23 by ear with the real voice and with no key | None |
 | 2026-11-04T15:54:48-08:00 | `1422853` | Live coaching stays quiet while a question waits for its answer and for 20 seconds after it ends | Android 350 unit tests, debug and release assembly, debug lint; dotnet test 438 passed; secret scan PASS; S23 recording showed one question and one answer with no spoken line between | None |
 | 2026-11-04T17:50:44-08:00 | `484fdd5` | Experimental on-device finger pointing on the Android camera: resolves a fingertip to a part and sends the spot with a question | 395 Android unit and 441 .NET tests at ee7e6c5; UI and /ask checked on the emulator with recorded landmarks; not yet run with a real hand on a phone; not re-run for the merge | None |
+| 2026-11-04T17:53:38-08:00 | `30ce5d2` | Finger pointing off by default, with steps in the README and Details for trying it | assembleDebug and 45 PointingTest tests at 30ce5d2; still not run with a real hand on a phone | None |
 | _append as work lands_ | | | | |
 
 ## Must demonstrate (status)
