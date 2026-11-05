@@ -46,6 +46,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import com.lensqi.fieldops.arcore.partsToShow
 import com.lensqi.fieldops.domain.live.LiveObject
+import com.lensqi.fieldops.domain.live.POINTING_LIMITS_NOTE
+import com.lensqi.fieldops.domain.live.POINTING_OFF_NOTE
+import com.lensqi.fieldops.domain.live.PointedAt
+import com.lensqi.fieldops.domain.live.PointedPart
+import com.lensqi.fieldops.domain.live.PointingSnapshot
+import com.lensqi.fieldops.domain.live.PointingUse
+import com.lensqi.fieldops.domain.live.pointingText
 import com.lensqi.fieldops.domain.live.staleAlpha
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -181,16 +188,20 @@ fun CameraScreen(
      * question with the live frame, as a spoken question would be. Null leaves the outlines display-only.
      */
     onAskPart: ((LiveObject) -> Unit)? = null,
+    /** Whether this screen looks for a pointing finger, on the phone, to go with questions. Evidence capture never offers it. */
+    pointing: PointingUse = PointingUse.NotOffered,
 ) = ForceDark {
     // The app's Scaffold has already made room for the system bars; without this they are padded twice, and the camera loses that space.
     Box(Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.systemBars)) {
         CameraContent(prompt, analyzeLive, onClose, onCaptured, header, onGuidance, details, moreDetails, controls, targetConcept, liveAllowed, detailsSummary, showDetails, detailsFocus, onObjects,
-            scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter, onAskPart)
+            scopeKey, targetMemory ?: remember { TargetMemory() }, framingCm, capturePart, reference, registration, onShutter, onAskPart, pointing)
     }
 }
 
 /** What a screen that embeds the camera can do with it: take the full-resolution photo, or read what the camera sees now, for a question. */
-class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {})
+class CameraHandle(val capture: () -> Unit, val latestFrame: () -> ByteArray?, val capturing: Boolean, val live: Boolean, val setLive: (Boolean) -> Unit = {},
+    /** Where the person is pointing or just pointed, with the frame from that moment, for a question being asked now. */
+    val takePointing: () -> PointingSnapshot? = { null })
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -211,6 +222,7 @@ private fun CameraContent(
     registrationSubject: RegistrationSubject?,
     onShutter: () -> Unit,
     onAskPart: ((LiveObject) -> Unit)?,
+    pointing: PointingUse,
 ) {
     // The view stays clear: details start collapsed, and a tap on the picture hides the text panel; the controls stay.
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -310,6 +322,11 @@ private fun CameraContent(
     val session = remember(liveEnabled) { if (liveEnabled) LiveCameraSession(analyze = analyzeLive) else null }
     // Distance coaching follows the current step's part, also when the step changes while live assist runs.
     SideEffect { session?.targetConcept = targetConcept; session?.framingCm = framingCm }
+    var pointingOn by rememberSaveable { mutableStateOf(true) }
+    val pointingWanted = pointing == PointingUse.Allowed && pointingOn && liveAllowed
+    val pointer = remember(pointingWanted) { if (pointingWanted) PointingSession(HandDetector(context)) else null }
+    DisposableEffect(pointer) { onDispose { pointer?.close() } }
+    val pointingState = pointer?.state?.collectAsState()?.value ?: PointingScreen()
     val spatial = remember { SpatialControl() }
     var pickingFloor by remember { mutableStateOf(false) }
     // The drawn part last tapped, while its options (ask about it, hold it as the AR target) are offered.
@@ -319,7 +336,7 @@ private fun CameraContent(
     // A new step, task or inspection starts clean: no labels, anchors, answers or target from the one before.
     LaunchedEffect(scopeKey) {
         if (memory.scope != scopeKey) { memory.forget(); memory.scope = scopeKey }
-        session?.reset(); spatial.reset(); tapped = null
+        session?.reset(); spatial.reset(); tapped = null; pointer?.reset()
     }
     val feedback = session?.state?.collectAsState()?.value ?: LiveCameraState()
     val target = feedback.target
@@ -347,12 +364,13 @@ private fun CameraContent(
     // runs. It stays on the phone unless the person asks something.
     val viewFrames = remember { ViewFrames() }
     val keepsView = controls != null
-    DisposableEffect(controller, session, arActive, keepsView) {
-        if ((session != null || keepsView) && !arActive) controller.setImageAnalysisAnalyzer(executor) { image ->
+    DisposableEffect(controller, session, arActive, keepsView, pointer) {
+        if ((session != null || keepsView || pointer != null) && !arActive) controller.setImageAnalysisAnalyzer(executor) { image ->
             try {
                 val now = SystemClock.elapsedRealtime()
                 val keep = session == null && viewFrames.due(now)
-                if (session == null && !keep) return@setImageAnalysisAnalyzer
+                val handDue = pointer?.due(now) == true
+                if (session == null && !keep && !handDue) return@setImageAnalysisAnalyzer
                 val raw = image.toBitmap()
                 val crop = image.cropRect
                 val cropped = Bitmap.createBitmap(raw, crop.left, crop.top, crop.width(), crop.height())
@@ -361,6 +379,10 @@ private fun CameraContent(
                 val preview = Bitmap.createScaledBitmap(rotated, (rotated.width * scale).toInt(), (rotated.height * scale).toInt(), true)
                 session?.frame(preview)
                 if (keep) viewFrames.store(java.io.ByteArrayOutputStream().also { preview.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray(), now)
+                // The same upright frame the boxes are fractions of. No extra frame leaves the phone for this.
+                if (handDue) pointer?.frame(preview, now, session?.state?.value?.objects.orEmpty(), viewSpace = false, toParts = { x, y -> x to y }) {
+                    java.io.ByteArrayOutputStream().also { preview.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
+                }
                 if (preview !== rotated) preview.recycle()
                 if (rotated !== cropped) rotated.recycle()
                 if (cropped !== raw) cropped.recycle()
@@ -404,7 +426,7 @@ private fun CameraContent(
         var notesBottom by remember { mutableStateOf(0f) }
         val referenceImage = remember(reference) { reference?.asImageBitmap() }
         Box(Modifier.statusBarsPadding().fillMaxWidth().height(pictureHeight).onGloballyPositioned { pictureTop = it.positionInWindow().y }) {
-            if (arActive && session != null) ArCameraFeed(session, spatial) { arFailure = it }
+            if (arActive && session != null) ArCameraFeed(session, spatial, pointer) { arFailure = it }
             else AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
             // The before photo over the view, scaled like the feed under it: ARCore fills the view, CameraX letterboxes.
             if (referenceImage != null && ghost) Image(referenceImage, null, Modifier.fillMaxSize().alpha(0.35f), contentScale = if (arActive) ContentScale.Crop else ContentScale.Fit)
@@ -493,6 +515,11 @@ private fun CameraContent(
                     drawContext.canvas.nativeCanvas.drawText(title, textLeft, titleBase, titlePaint)
                     drawContext.canvas.nativeCanvas.drawText(detail, textLeft, titleBase + lineGap + detailPaint.textSize, detailPaint)
                 }
+            }
+
+            // The fingertip and the part it resolved to, drawn with the same mapping as the outlines.
+            pointingState.view.now?.let { at ->
+                Canvas(Modifier.fillMaxSize()) { drawPointing(at, pointingState.viewSpace, pointingState.frameWidth, pointingState.frameHeight) }
             }
 
             // Framing aid, in the middle of the picture, until detection locks onto a part. The dark stroke under the light one
@@ -712,12 +739,23 @@ private fun CameraContent(
                                 }
                                 else -> Unit
                             }
+                            when {
+                                pointing == PointingUse.OffForThisWork -> Text(POINTING_OFF_NOTE, fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Warning)
+                                pointing == PointingUse.Allowed -> {
+                                    TextButton(onClick = { if (!pointingOn) HandDetector.retry(context); pointingOn = !pointingOn }, contentPadding = PaddingValues(0.dp)) {
+                                        Text(if (pointingOn) "Finger pointing: On" else "Finger pointing: Off", color = if (pointingOn) FoDark.Primary else FoDark.Muted, fontSize = 12.sp)
+                                    }
+                                    Text(if (pointingState.unavailable) "Finger pointing couldn't run here, so it is off. Turn it off and on to try again." else POINTING_LIMITS_NOTE, fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted)
+                                }
+                                else -> Unit
+                            }
                             Text(
                                 if (arActive) "Spatial guidance estimates position and distance. Camera guidance is inferred, not proof of repair. Only shutter photos and frames sent with a question are saved."
                                 else "Guidance is based on camera images; depth is not measured. Images are sent for analysis. Only shutter photos and frames sent with a question are saved.",
                                 fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted)
                             if (LocalDiagnostics.current) Text(
-                                "${feedback.renderFps} FPS · ${feedback.fps} updates/s · guidance age ${feedback.guidanceAge ?: "—"}s · ${feedback.tracking.orEmpty()}",
+                                "${feedback.renderFps} FPS · ${feedback.fps} updates/s · guidance age ${feedback.guidanceAge ?: "—"}s · ${feedback.tracking.orEmpty()}" +
+                                    (pointer?.let { " · hand ${it.inferenceMs} ms, ${it.rate}/s" } ?: ""),
                                 fontSize = 11.sp, color = FoDark.Muted)
                         }
                     }
@@ -732,6 +770,7 @@ private fun CameraContent(
             if (detailsSummary != null && !typing) Text("⚠ $detailsSummary",
                 color = FoDark.Warning, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(glass).clickable { hideChrome = false; expanded = true }.padding(horizontal = 12.dp, vertical = 6.dp))
+            if (!typing) (pointingState.view.now ?: pointingState.view.kept)?.let { at -> PointingChip(at, kept = pointingState.view.now == null) }
             if (!typing) AssistanceBar(liveEnabled, liveAllowed, feedback.status) { liveEnabled = !liveEnabled }
             val shutter = {
                 if (!capturing && still == null) {
@@ -746,7 +785,7 @@ private fun CameraContent(
                     if (arActive || controls == null) liveEnabled = false
                 }
             }
-            if (controls != null) controls(CameraHandle(shutter, { val now = SystemClock.elapsedRealtime(); session?.latestJpeg(now) ?: viewFrames.latest(now) }, capturing, liveEnabled, { liveEnabled = it && liveAllowed }))
+            if (controls != null) controls(CameraHandle(shutter, { val now = SystemClock.elapsedRealtime(); session?.latestJpeg(now) ?: viewFrames.latest(now) }, capturing, liveEnabled, { liveEnabled = it && liveAllowed }, { pointer?.take(SystemClock.elapsedRealtime()) }))
             else {
                 // The shutter waits for a camera: CameraX streaming, or ARCore holding it (the photo then waits for the hand-back).
                 val ready = !capturing && (arActive || streaming)
@@ -761,6 +800,41 @@ private fun CameraContent(
         }
         still?.let { path -> StillCheck(path, stillPart.orEmpty(), ::useStill, ::retake) }
     }
+}
+
+/** Where the finger is, in words, and what happens to it: the screen says what goes with a question before it goes. */
+@Composable
+private fun PointingChip(at: PointedAt, kept: Boolean) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(Color(0xD90B0F14)).border(1.dp, FoDark.Primary.copy(alpha = if (kept) 0.3f else 0.8f), shape).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Text(pointingText(at, kept), color = FoDark.Foreground, fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text("Goes with your next question. Only your question sends it.", color = FoDark.Muted, fontSize = 11.sp, lineHeight = 14.sp)
+    }
+}
+
+/** A ring on the fingertip and an outline on the part it resolved to; two parts in doubt are both outlined, fainter. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPointing(at: PointedAt, viewSpace: Boolean, frameWidth: Int, frameHeight: Int) {
+    if (!viewSpace && (frameWidth <= 0 || frameHeight <= 0)) return
+    val scale = if (viewSpace) 1f else min(size.width / frameWidth, size.height / frameHeight)
+    val w = if (viewSpace) size.width else frameWidth * scale
+    val h = if (viewSpace) size.height else frameHeight * scale
+    val ox = (size.width - w) / 2; val oy = (size.height - h) / 2
+    fun outline(part: LiveObject, alpha: Float) {
+        val b = part.box
+        val topLeft = Offset(ox + (b.left * w).toFloat(), oy + (b.top * h).toFloat())
+        val box = Size(((b.right - b.left) * w).toFloat(), ((b.bottom - b.top) * h).toFloat())
+        drawRect(Color.Black.copy(alpha = 0.45f * alpha), topLeft, box, style = Stroke(5.dp.toPx()))
+        drawRect(FoDark.Primary.copy(alpha = alpha), topLeft, box, style = Stroke(3.dp.toPx()))
+    }
+    when (val p = at.pointed) {
+        PointedPart.None -> Unit
+        is PointedPart.One -> outline(p.part, 1f)
+        is PointedPart.Between -> { outline(p.first, 0.6f); outline(p.second, 0.6f) }
+    }
+    val tip = Offset(ox + (at.viewX * w).toFloat(), oy + (at.viewY * h).toFloat())
+    drawCircle(Color.Black.copy(alpha = 0.5f), 13.dp.toPx(), tip, style = Stroke(5.dp.toPx()))
+    drawCircle(Color.White, 13.dp.toPx(), tip, style = Stroke(2.5.dp.toPx()))
+    drawCircle(FoDark.Primary, 3.dp.toPx(), tip)
 }
 
 /**
@@ -823,7 +897,7 @@ private fun StillCheck(path: String, part: String, onUse: () -> Unit, onRetake: 
 
 /** ARCore's camera feed with live assistance. [onFailure] falls back to CameraX 2D tracking with the reason. */
 @Composable
-private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, onFailure: (String) -> Unit) {
+private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, pointer: PointingSession?, onFailure: (String) -> Unit) {
     val context = LocalContext.current
     val host = remember(live) {
         runCatching {
@@ -841,6 +915,7 @@ private fun ArCameraFeed(live: LiveCameraSession, control: SpatialControl, onFai
         }
     }
     val started = host.getOrNull()
+    SideEffect { started?.second?.pointing = pointer }
     LaunchedEffect(host) {
         if (started == null) { onFailure("Spatial guidance is unavailable. Camera assistance is still available."); return@LaunchedEffect }
         val (session, _, view) = started

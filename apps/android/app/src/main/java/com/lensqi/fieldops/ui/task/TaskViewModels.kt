@@ -18,6 +18,10 @@ import com.lensqi.fieldops.data.queue.StepCheckQueue
 import com.lensqi.fieldops.data.queue.CommandState
 import com.lensqi.fieldops.data.queue.PendingCommand
 import com.lensqi.fieldops.domain.live.LiveResponse
+import com.lensqi.fieldops.domain.live.PointedAt
+import com.lensqi.fieldops.domain.live.pointedQuestion
+import com.lensqi.fieldops.domain.live.pointingSuffix
+import com.lensqi.fieldops.ui.camera.CameraHandle
 import com.lensqi.fieldops.ui.common.friendly
 import com.lensqi.fieldops.voice.SpeechOutput
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -310,18 +314,27 @@ class TaskViewModel @Inject constructor(saved: SavedStateHandle, private val api
     /**
      * A question by voice or text, with what the camera sees now. The answer is spoken, and the screen says when no frame was ready.
      * [source] is the device the frame came from ("Phone", "Glasses" or "MockWearables"), sent with it like a check's.
+     * [pointing] is where the person's finger was in [frame]. It travels as a note on the question, so the server's safety
+     * checks read it like the person's own words: pointing at a breaker can bring in the referral, never take one away.
      */
-    fun ask(question: String, frame: ByteArray?, source: String = "Phone") = viewModelScope.launch {
+    fun ask(question: String, frame: ByteArray?, source: String = "Phone", pointing: PointedAt? = null) = viewModelScope.launch {
         if (question.isBlank()) return@launch
         _state.update { it.copy(busy = "ask", error = null) }
-        val action = "ask:${question.trim()}:${frame?.let { com.lensqi.fieldops.data.queue.CommandQueue.sha256(it) }}"
-        val r = apiCall { api.ask(taskId, keyFor(action), text(question.trim()), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text), frame?.let { text(source) }) }
+        val sent = pointedQuestion(question, pointing)
+        val action = "ask:$sent:${frame?.let { com.lensqi.fieldops.data.queue.CommandQueue.sha256(it) }}"
+        val r = apiCall { api.ask(taskId, keyFor(action), text(sent), frame?.let { jpeg("image", it) }, measuredJson(measured)?.let(::text), frame?.let { text(source) }) }
         settle(action, r)
         val answer = (r as? ApiOutcome.Ok)?.value?.answer
-        _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> question.trim() to a } ?: it.answer, askedWithoutView = if (answer != null) frame == null else it.askedWithoutView) }
+        _state.update { it.copy(busy = null, error = r.errorText(), answer = answer?.let { a -> (question.trim() + pointingSuffix(pointing)) to a } ?: it.answer, askedWithoutView = if (answer != null) frame == null else it.askedWithoutView) }
         answer?.let { speaker.speak(it, force = true) }
         // The answer is now part of the task's record; reload it so conversation views show it.
         if (answer != null) refresh()
+    }
+
+    /** A question with what the camera sees now, or, when the person is pointing or just pointed, with that moment's frame and spot. */
+    fun askHere(question: String, camera: CameraHandle?) {
+        val pointing = camera?.takePointing?.invoke()
+        ask(question, pointing?.jpeg ?: camera?.latestFrame?.invoke(), pointing = pointing?.at)
     }
 
     fun retryCheck(command: PendingCommand) = viewModelScope.launch { queue.retry(command) }

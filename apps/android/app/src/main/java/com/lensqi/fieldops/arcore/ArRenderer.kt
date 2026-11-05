@@ -119,6 +119,9 @@ class ArLiveRenderer(
     private val markers: Boolean,
     private val displayRotation: () -> Int,
 ) : GLSurfaceView.Renderer {
+    /** Looks for a pointing finger in the sampled frames, on the worker; null while it is off. */
+    @Volatile var pointing: com.lensqi.fieldops.ui.camera.PointingSession? = null
+
     /** A frame that may be uploaded for detection: the camera and depth at that instant, and the step's part then. */
     private class Capture(val view: ArCameraView, val depth: DepthSamples, val time: Long, val preferred: String?)
 
@@ -214,6 +217,16 @@ class ArLiveRenderer(
                 live.analyse(GrayFrame(frameId, now, w, h, pixels), spatial) {
                     val bitmap = yuv.uprightBitmap(rotation, 640)
                     ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 80, it); bitmap.recycle() }.toByteArray()
+                }
+                pointing?.takeIf { it.due(now) }?.let { hand ->
+                    // Smaller than the upload: it is converted many times a second here. The frame kept for a question is full size.
+                    val small = yuv.uprightBitmap(rotation, 480)
+                    try {
+                        hand.frame(small, now, live.state.value.objects, viewSpace = true, toParts = map::point) {
+                            val bitmap = yuv.uprightBitmap(rotation, 640)
+                            ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 80, it); bitmap.recycle() }.toByteArray()
+                        }
+                    } finally { small.recycle() }
                 }
             } finally { working.set(false) }
         }
