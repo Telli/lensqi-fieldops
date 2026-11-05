@@ -14,6 +14,10 @@
 4. **Meta SAM 3.1 media segmentation** — <https://dev.meta.ai/docs/media-segmentation>.
    - Produces masks/boxes to locate relevant regions. Not a hardware diagnostic or physical 3D coordinate estimator.
 
+5. **MediaPipe Hand Landmarker** — <https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker>.
+   - On-device fingertip detection on Android; see `docs/ANDROID_HAND_POINTING.md`. Library (`com.google.mediapipe:tasks-vision`) and model (`hand_landmarker.task`) are Apache 2.0.
+   - The model and MediaPipe's test photos are fetched at build time against pinned hashes and not committed. The test fixture `hand_landmarks/mediapipe_photos.json` holds only landmark coordinates the model produced for those photos.
+
 ## Synthetic assets
 
 `lab-switch-01.synthetic.json` is an original fictional pack. Its port mapping, endpoint name and test outcomes describe only the constructed demo. Do not label synthetic statements as MikroTik/Cisco/other manufacturer facts.

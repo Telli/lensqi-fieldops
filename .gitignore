@@ -18,6 +18,9 @@ apps/android/local.properties
 apps/android/.idea/
 *.apk
 *.aab
+# Fetched by Gradle against a pinned hash: the hand model and the photos that test it.
+apps/android/app/src/main/assets/models/
+apps/android/app/src/androidTest/assets/hands/
 
 # Python (fixture validator)
 __pycache__/

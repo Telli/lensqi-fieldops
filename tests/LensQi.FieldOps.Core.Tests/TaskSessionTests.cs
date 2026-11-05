@@ -351,6 +351,34 @@ public class TaskSessionTests
     public void More_restricted_topics_are_recognised(string goal, RestrictedCategory expected) =>
         Assert.Equal(expected, RestrictedTopics.Classify(goal));
 
+    // The phone adds where a finger was to the question (domain/live/Pointing.kt). Pointing can bring a referral in, never take one away.
+    private const string PointingAtTestButton = "Can I do this? [Fingertip in the photo: 42% across, 61% down, on what the camera labelled \"test button\" (AI suggestion).]";
+    private const string PointingAtBreakerPanel = "What's this? [Fingertip in the photo: 42% across, 61% down, on what the camera labelled \"breaker panel\" (AI suggestion).]";
+
+    [Fact]
+    public void A_pointing_note_never_lifts_a_referral_on_professionals_only_work()
+    {
+        var s = TaskSession.Create("T-1", TaskMode.Diy, "Replace my main electrical panel", null, null, T0);
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(s.State, "Go ahead and remove the panel cover.", PointingAtTestButton));
+        Assert.Contains(TaskSafety.Referral, TaskSafety.Guard(s.State, "That is the test button.", PointingAtTestButton));
+    }
+
+    [Fact]
+    public void Pointing_at_a_part_labelled_restricted_brings_the_referral_in()
+    {
+        var s = Started();
+        Assert.Equal(RestrictedCategory.MainsElectrical, TaskSafety.Topic(s.State, PointingAtBreakerPanel));
+        Assert.Equal(TaskSafety.Referral, TaskSafety.Guard(s.State, "Open the panel and remove the breaker.", PointingAtBreakerPanel));
+    }
+
+    [Fact]
+    public void A_pointing_note_on_ordinary_work_changes_nothing()
+    {
+        var s = Started();
+        Assert.False(TaskSafety.IsRestricted(s.State, PointingAtTestButton));
+        Assert.Equal("That is the test button.", TaskSafety.Guard(s.State, "That is the test button.", PointingAtTestButton));
+    }
+
     private static TaskPlan Referral(string? summary = null, string? reason = null, string? caution = null, string? stopIf = null, string? check = null) =>
         new("Replace garage breaker panel - arrange professional", summary ?? "Observe and refer to an electrician.", RiskLevel.High, 5, RestrictedCategory.MainsElectrical, true, reason ?? "Only a licensed electrician may do this work.", [], [],
             [new TaskStep("s1", "Observe the panel", "Photograph the closed panel from a safe distance.", false, [], caution is null ? [] : [new Caution(CautionKind.Electrical, caution)], stopIf is null ? [] : [stopIf], check is null ? null : new StepPhotoCheck(true, check))], "AI-written plan");
