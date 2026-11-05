@@ -322,7 +322,8 @@ private fun CameraContent(
     val session = remember(liveEnabled) { if (liveEnabled) LiveCameraSession(analyze = analyzeLive) else null }
     // Distance coaching follows the current step's part, also when the step changes while live assist runs.
     SideEffect { session?.targetConcept = targetConcept; session?.framingCm = framingCm }
-    var pointingOn by rememberSaveable { mutableStateOf(true) }
+    // Experimental, and not yet run with a real hand on a phone: nobody gets it without asking for it, on each visit to the camera.
+    var pointingOn by rememberSaveable { mutableStateOf(false) }
     val pointingWanted = pointing == PointingUse.Allowed && pointingOn && liveAllowed
     val pointer = remember(pointingWanted) { if (pointingWanted) PointingSession(HandDetector(context)) else null }
     DisposableEffect(pointer) { onDispose { pointer?.close() } }
@@ -743,7 +744,7 @@ private fun CameraContent(
                                 pointing == PointingUse.OffForThisWork -> Text(POINTING_OFF_NOTE, fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Warning)
                                 pointing == PointingUse.Allowed -> {
                                     TextButton(onClick = { if (!pointingOn) HandDetector.retry(context); pointingOn = !pointingOn }, contentPadding = PaddingValues(0.dp)) {
-                                        Text(if (pointingOn) "Finger pointing: On" else "Finger pointing: Off", color = if (pointingOn) FoDark.Primary else FoDark.Muted, fontSize = 12.sp)
+                                        Text(if (pointingOn) "Finger pointing (experimental): On" else "Finger pointing (experimental): Off · tap to try", color = if (pointingOn) FoDark.Primary else FoDark.Muted, fontSize = 12.sp)
                                     }
                                     Text(if (pointingState.unavailable) "Finger pointing couldn't run here, so it is off. Turn it off and on to try again." else POINTING_LIMITS_NOTE, fontSize = 12.sp, lineHeight = 16.sp, color = FoDark.Muted)
                                 }

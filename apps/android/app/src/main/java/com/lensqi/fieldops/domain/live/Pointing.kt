@@ -320,4 +320,4 @@ fun pointingUse(restricted: String?, professionalRequired: Boolean): PointingUse
     if (professionalRequired || !(restricted.isNullOrBlank() || restricted.equals("None", ignoreCase = true))) PointingUse.OffForThisWork else PointingUse.Allowed
 
 const val POINTING_OFF_NOTE = "Finger pointing is off for this job. Keep your hands back; tap an outline to ask about a part."
-const val POINTING_LIMITS_NOTE = "Finger pointing runs on this phone. It works from the picture only: it can't tell whether you are touching anything, and it may miss gloved hands."
+const val POINTING_LIMITS_NOTE = "Experimental. Turn it on, point at a part, then ask about it. It runs on this phone and works from the picture only: it can't tell whether you are touching anything, and it may miss gloved hands."

@@ -3,7 +3,10 @@
 A person points at something on the camera and asks "is this the test button?". The phone finds the fingertip on device,
 works out which part it is on, shows that on screen, and sends the spot with the question.
 
-**Status: first slice on a branch. Not yet run with a real hand on a real phone.** See [What has been tested](#what-has-been-tested).
+**Status: experimental and off by default. Not yet run with a real hand on a real phone.** See [What has been tested](#what-has-been-tested).
+
+To try it, open Just ask or a guided step, tap **Details**, then tap **Finger pointing (experimental): Off · tap to try**. It goes back
+to off when you leave the camera. The [README](../README.md#what-you-can-do) has the full steps.
 
 ## Is it worth building? Yes
 
@@ -82,8 +85,8 @@ if it doesn't fit, the person's words go alone. Screens show the question in the
 - **Labels stay marked as AI suggestions** on screen and in the note. Muse is free to disagree, and in testing it did.
 - **Nothing here feeds the verification gate.** Only `TaskScreens` opts in. The inspection and evidence camera doesn't, and step
   check photos and the photo button never carry it. The person still decides when a step is done.
-- **Off or harmless with no hand.** With no hand there is no state on screen, and the search slows to 4 looks a second. It can be
-  turned off in Details. If the detector can't run, the camera works as before and Details says so.
+- **Off unless asked for, and harmless with no hand.** It starts off on every visit to the camera. Once on, with no hand there is no
+  state on screen and the search slows to 4 looks a second. If the detector can't run, the camera works as before and Details says so.
 
 ### Restricted work
 
@@ -118,7 +121,7 @@ until it runs there.
 | Full unit suite and `:app:assembleDebug` | Gradle | Pass |
 | Ring, part outline, on-screen state, kept state then expiry | Emulator, with the recorded hand replayed in a throwaway build | Works: [named part](evidence/android/hand-pointing-replay-part.png) |
 | Question and note reach real Muse | Same, against the real API | Server recorded the note above; Muse answered about that spot |
-| Off on a real professionals-only plan | Same, with the replayed hand still feeding in | No state shown: [screen](evidence/android/hand-pointing-off-restricted.png) |
+| Not offered on a real professionals-only plan | Same, with the replayed hand still feeding in | No state shown: [screen](evidence/android/hand-pointing-off-restricted.png) |
 | Detector can't run | Emulator | No crash; Details says it is off |
 
 **The emulator has never run the model.** No configuration on this Mac can: on the CPU it hits the SME fault, and on the GPU the
@@ -136,7 +139,7 @@ First, over USB:
 
 This runs the real model on the phone. It uninstalls the app afterwards, so install again before the checks below.
 
-1. **It runs at all.** Open Just ask: no crash, and Details shows "Finger pointing: On" without saying it couldn't run.
+1. **It runs at all.** Open Just ask and turn it on in Details: no crash, and Details doesn't say it couldn't run.
 2. **Speed and heat.** Turn on diagnostics and read the `hand … ms, …/s` figure in Details, with camera assistance off, on, and on with
    spatial guidance. Watch for heat over 10 minutes.
 3. **AR path.** Never exercised, because the emulator didn't enter AR. With spatial guidance on, is the ring on the fingertip?

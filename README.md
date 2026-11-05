@@ -69,9 +69,19 @@ calls. The web screens replay recorded inspections and use synthetic equipment i
 | **Web** | Browser camera and speech capabilities |
 | **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones, an optional Meta glasses integration, repair claims recorded with Muse Voice and experimental finger pointing |
 
-**Finger pointing (experimental).** On Android guided work and Just ask, point at a part and ask about it. The phone finds
-the fingertip on device, shows which part it is on and sends that spot with your question. It has not yet been run with a
-real hand on a phone. See [what has and hasn't been tested](docs/ANDROID_HAND_POINTING.md#what-has-been-tested).
+**Finger pointing (experimental, off by default).** On Android, point at a part and ask about it. The phone finds the
+fingertip on device, shows which part it is on and sends that spot with your question. It has not yet been run with a real
+hand on a phone, so it may not work and is off unless you turn it on. To try it on a 64-bit Android phone:
+
+1. Open **Just ask**, or a step of a guided task.
+2. Tap **Details** under the instruction, then tap **Finger pointing (experimental): Off · tap to try** so it says **On**.
+   It goes back to off when you leave the camera, and it isn't offered on professionals-only plans.
+3. Hold the phone in one hand and point your other index finger at something. A ring appears on your fingertip and a line says
+   what you are pointing at. To name a part, tap **Start camera assistance** first, which sends images through LensQi to Meta.
+4. Ask a question, such as "Is this the test button?". The spot goes with it.
+
+If the app closes when you turn it on, reopen it: pointing stays off and the rest of the app works as before. See
+[what has and hasn't been tested](docs/ANDROID_HAND_POINTING.md#what-has-been-tested).
 
 ## Quick start
 
