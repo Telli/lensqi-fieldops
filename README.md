@@ -67,7 +67,11 @@ calls. The web screens replay recorded inspections and use synthetic equipment i
 |---|---|
 | **Both** | Spoken guidance, optional hands-free questions and typed questions |
 | **Web** | Browser camera and speech capabilities |
-| **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones, an optional Meta glasses integration and repair claims recorded with Muse Voice |
+| **Android** | CameraX capture, on-device asset label recognition, ARCore on compatible phones, an optional Meta glasses integration, repair claims recorded with Muse Voice and experimental finger pointing |
+
+**Finger pointing (experimental).** On Android guided work and Just ask, point at a part and ask about it. The phone finds
+the fingertip on device, shows which part it is on and sends that spot with your question. It has not yet been run with a
+real hand on a phone. See [what has and hasn't been tested](docs/ANDROID_HAND_POINTING.md#what-has-been-tested).
 
 ## Quick start
 
@@ -234,6 +238,7 @@ cd apps/android
 - The emulator's default API address is `http://10.0.2.2:5199/`.
 - On a physical device, set a reachable API address in the app's settings.
 - ARCore is optional; unsupported devices use 2D assistance.
+- The first build downloads the 7.8 MB MediaPipe hand model and checks it against a pinned hash, so it needs network access.
 
 See [live AR](docs/LIVE_AR.md) and [Meta glasses setup](docs/GLASSES.md) for device-specific behavior and integration
 requirements.
@@ -317,6 +322,10 @@ response guards retain the restricted context of recorded questions. These wordi
 **Guidance is not proof.** Step checks, AR distances, model confidence and documentation citations do not establish
 that a repair succeeded. A live HTTP result proves only what that endpoint measured at that time.
 
+**Finger pointing can't tell whether you are touching anything.** It works from the picture only and may miss gloved hands.
+Detection stays on the phone and adds no uploads, but the spot and a camera frame go with any question you ask. It is off on
+professionals-only plans, and it never feeds a step check or a verification.
+
 **Photos and speech may leave the device.** Web and Android speech input sends bounded WAV audio through the LensQi
 server to Meta Voice Transcribe. It requires connectivity; there is no automatic fallback to another speech provider.
 LensQi does not persist transcription audio on the server; Android deletes its temporary recording after processing or
@@ -338,6 +347,7 @@ Uploaded evidence and question photos can be stored on the server, so camera que
 | [Live-probe runbook](docs/LIVE_PROBE_RUNBOOK.md) | Configure and verify an owned HTTP endpoint |
 | [Teaching recordings](docs/TEACHING_RECORDINGS.md) | Capture, review, consent and export format |
 | [Android voice claims](docs/ANDROID_VOICE.md) | Recording a repair claim, the transcribe API and what has been verified |
+| [Android finger pointing](docs/ANDROID_HAND_POINTING.md) | Feasibility, how it works, what has been tested and the checks a real phone still needs |
 | [Sources and rights](docs/SOURCES_AND_RIGHTS.md) | Project licensing, third-party terms and documentation rights |
 
 ## Project background
